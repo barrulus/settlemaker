@@ -18,6 +18,7 @@ import { Market } from '../wards/market.js';
 import { Castle } from '../wards/castle.js';
 import { Farm } from '../wards/farm.js';
 import { Slum } from '../wards/slum.js';
+import { Harbour } from '../wards/harbour.js';
 import { buildWardDistribution, type WardConstructor } from '../wards/ward-distribution.js';
 
 const MAX_ATTEMPTS = 20;
@@ -37,6 +38,7 @@ export class Model {
   inner: Patch[] = [];
   citadel: Patch | null = null;
   plaza: Patch | null = null;
+  harbour: Patch | null = null;
   center: Point = new Point();
 
   border: CurtainWall | null = null;
@@ -68,8 +70,10 @@ export class Model {
         // Reset state and retry
         this.patches = [];
         this.inner = [];
+        this.waterbody = [];
         this.citadel = null;
         this.plaza = null;
+        this.harbour = null;
         this.border = null;
         this.wall = null;
         this.gates = [];
@@ -89,6 +93,8 @@ export class Model {
     this.buildPatches();
     this.optimizeJunctions();
     this.buildWalls();
+    this.classifyWater();
+    this.placeHarbour();
     this.buildStreets();
     this.createWards();
     this.buildGeometry();
@@ -223,6 +229,91 @@ export class Model {
 
       this.gates = this.gates.concat(castle.wall.gates);
     }
+  }
+
+  // Phase 3.5: Classify water patches for port cities
+  private classifyWater(): void {
+    if (this.params.oceanBearing == null) return;
+
+    const rad = this.params.oceanBearing * Math.PI / 180;
+    const oceanDirX = Math.sin(rad);
+    const oceanDirY = -Math.cos(rad);
+    const threshold = this.border!.getRadius() * 0.3;
+
+    for (const patch of this.patches) {
+      if (patch.withinCity) continue;
+      if (patch.ward !== null) continue;
+
+      const centroid = patch.shape.center;
+      const projection = centroid.x * oceanDirX + centroid.y * oceanDirY;
+      if (projection > threshold) {
+        this.waterbody.push(patch);
+      }
+    }
+
+    // Mark wall segments facing water as inactive
+    if (this.wall !== null && this.waterbody.length > 0) {
+      this.wall.markWaterfrontSegments(this.waterbody);
+      // Rebuild towers since segments changed
+      this.wall.buildTowers();
+    }
+
+    // Remove border gates on the waterfront so no streets/roads extend into water
+    if (this.waterbody.length > 0) {
+      const isWaterfrontGate = (gate: Point): boolean =>
+        this.waterbody.some(wp => wp.shape.contains(gate));
+
+      const landGates = this.border!.gates.filter(g => !isWaterfrontGate(g));
+
+      // Only remove if at least one land gate remains
+      if (landGates.length > 0) {
+        const removed = new Set(this.border!.gates.filter(g => isWaterfrontGate(g)));
+        this.border!.gates = landGates;
+        this.gates = this.gates.filter(g => !removed.has(g));
+      }
+    }
+  }
+
+  // Phase 3.6: Place harbour ward on waterfront
+  private placeHarbour(): void {
+    if (this.params.harbourSize == null || this.waterbody.length === 0) return;
+
+    const large = this.params.harbourSize === 'large';
+
+    // Candidates: outer patches (not water, not already warded, not inner)
+    // that share at least one edge with a water patch
+    const candidates: Array<{ patch: Patch; waterfrontLength: number }> = [];
+
+    for (const patch of this.patches) {
+      if (patch.withinCity) continue;
+      if (patch.ward !== null) continue;
+      if (this.waterbody.includes(patch)) continue;
+
+      // Measure total shared edge length with water patches
+      let waterfrontLength = 0;
+      patch.shape.forEdge((v0, v1) => {
+        for (const wp of this.waterbody) {
+          if (wp.shape.findEdge(v1, v0) !== -1) {
+            waterfrontLength += Point.distance(v0, v1);
+            break;
+          }
+        }
+      });
+
+      if (waterfrontLength > 0) {
+        candidates.push({ patch, waterfrontLength });
+      }
+    }
+
+    if (candidates.length === 0) return;
+
+    // Pick the patch with the most waterfront edge length
+    candidates.sort((a, b) => b.waterfrontLength - a.waterfrontLength);
+    const best = candidates[0].patch;
+
+    best.withinCity = true;
+    best.ward = new Harbour(this, best, large);
+    this.harbour = best;
   }
 
   // Phase 4: Build streets
@@ -411,7 +502,7 @@ export class Model {
         for (const v of patch.shape.vertices) {
           this.cityRadius = Math.max(this.cityRadius, v.length);
         }
-      } else if (patch.ward === null) {
+      } else if (patch.ward === null && !this.waterbody.includes(patch)) {
         patch.ward = (rng.bool(0.2) && patch.shape.compactness >= 0.7)
           ? new Farm(this, patch)
           : new Ward(this, patch);
@@ -422,7 +513,7 @@ export class Model {
   // Phase 6: Build geometry
   private buildGeometry(): void {
     for (const patch of this.patches) {
-      if (patch.ward) {
+      if (patch.ward && !this.waterbody.includes(patch)) {
         patch.ward.createGeometry();
       }
     }

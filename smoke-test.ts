@@ -47,3 +47,20 @@ const city = generateFromBurg({
 }, { seed: 42 });
 writeFileSync('test-output.svg', city.svg);
 console.log(`\nSVG written: ${city.svg.length} chars`);
+
+// Port city with ocean to the east + large harbour
+console.log('\n=== Port City ===');
+const port = generateFromBurg({
+  name: 'Seahaven', population: 10000,
+  port: true, citadel: false, walls: true, plaza: true,
+  temple: true, shanty: false, capital: false,
+  oceanBearing: 90,
+  harbourSize: 'large',
+}, { seed: 42 });
+writeFileSync('test-output-port.svg', port.svg);
+const harbourWard = port.model.harbour?.ward;
+const harbourLabel = harbourWard?.getLabel() ?? 'none';
+const pierCount = harbourWard && 'piers' in harbourWard ? (harbourWard as any).piers.length : 0;
+console.log(`Port city: ${port.model.waterbody.length} water patches, ${port.model.wall?.segments.filter(s => !s).length ?? 0} inactive wall segments`);
+console.log(`Harbour: ${harbourLabel}, piers: ${pierCount}`);
+console.log(`Port SVG written: ${port.svg.length} chars`);

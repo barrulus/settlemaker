@@ -3,6 +3,7 @@ import type { Polygon } from '../geom/polygon.js';
 import type { Model } from '../generator/model.js';
 import type { CurtainWall } from '../generator/curtain-wall.js';
 import { Castle } from '../wards/castle.js';
+import { Harbour } from '../wards/harbour.js';
 
 /**
  * Convert a generated Model to a GeoJSON FeatureCollection.
@@ -43,6 +44,20 @@ export function generateGeoJson(model: Model): FeatureCollection {
         },
         geometry: polygonToGeoJson(building),
       });
+    }
+
+    // Piers (harbour ward only)
+    if (patch.ward instanceof Harbour) {
+      for (const pier of patch.ward.piers) {
+        features.push({
+          type: 'Feature',
+          properties: {
+            layer: 'pier',
+            wardType: patch.ward.type,
+          },
+          geometry: polygonToGeoJson(pier),
+        });
+      }
     }
   }
 

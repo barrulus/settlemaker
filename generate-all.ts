@@ -74,6 +74,40 @@ async function fetchAllBearings(worldId: string): Promise<Map<number, number[]>>
   return result;
 }
 
+/** Fetch burg IDs that have a majorSea route nearby. */
+async function fetchMajorSeaRoutes(worldId: string): Promise<Set<number>> {
+  const { rows } = await pool.query<{ burg_id: number }>(`
+    SELECT DISTINCT b.burg_id
+    FROM maps_burgs b
+    JOIN maps_routes rt ON rt.world_id = b.world_id
+      AND rt.type = 'majorSea'
+      AND ST_DWithin(b.geom, rt.geom, 50000)
+    WHERE b.world_id = $1 AND b.port = true
+  `, [worldId]);
+
+  return new Set(rows.map(r => r.burg_id));
+}
+
+/** Fetch ocean bearing for port burgs — compass bearing from burg to nearest ocean cell. */
+async function fetchOceanBearings(worldId: string): Promise<Map<number, number>> {
+  const { rows } = await pool.query<{ burg_id: number; ocean_bearing: number }>(`
+    SELECT b.burg_id, degrees(ST_Azimuth(b.geom, ST_Centroid(nearest_ocean.geom))) as ocean_bearing
+    FROM maps_burgs b
+    CROSS JOIN LATERAL (
+      SELECT c.geom FROM maps_cells c
+      WHERE c.world_id = b.world_id AND c.biome = 0
+      ORDER BY ST_Distance(b.geom, c.geom) LIMIT 1
+    ) nearest_ocean
+    WHERE b.world_id = $1 AND b.port = true
+  `, [worldId]);
+
+  const result = new Map<number, number>();
+  for (const row of rows) {
+    result.set(row.burg_id, row.ocean_bearing);
+  }
+  return result;
+}
+
 async function main() {
   const startTime = performance.now();
 
@@ -104,10 +138,20 @@ async function main() {
   // Get world_id (assuming single world)
   const worldId = rows[0]?.world_id;
   let bearingsMap = new Map<number, number[]>();
+  let oceanBearingsMap = new Map<number, number>();
+  let majorSeaBurgs = new Set<number>();
   if (worldId) {
     console.log('Fetching road bearings...');
     bearingsMap = await fetchAllBearings(worldId);
-    console.log(`Got bearings for ${bearingsMap.size} burgs\n`);
+    console.log(`Got bearings for ${bearingsMap.size} burgs`);
+
+    console.log('Fetching ocean bearings for port burgs...');
+    oceanBearingsMap = await fetchOceanBearings(worldId);
+    console.log(`Got ocean bearings for ${oceanBearingsMap.size} port burgs`);
+
+    console.log('Fetching major sea routes...');
+    majorSeaBurgs = await fetchMajorSeaRoutes(worldId);
+    console.log(`Got ${majorSeaBurgs.size} burgs with major sea routes\n`);
   }
 
   let successes = 0;
@@ -115,6 +159,10 @@ async function main() {
 
   for (const row of rows) {
     const roadBearings = bearingsMap.get(row.burg_id);
+    const oceanBearing = oceanBearingsMap.get(row.burg_id);
+    const harbourSize: 'large' | 'small' | undefined = row.port && oceanBearing != null
+      ? (majorSeaBurgs.has(row.burg_id) && row.population >= 5000 ? 'large' : 'small')
+      : undefined;
     const burg: AzgaarBurgInput = {
       name: row.name,
       population: row.population,
@@ -128,6 +176,8 @@ async function main() {
       culture: row.culture,
       elevation: row.elevation,
       roadBearings,
+      oceanBearing,
+      harbourSize,
     };
 
     const t0 = performance.now();
@@ -140,7 +190,11 @@ async function main() {
       const bearingStr = roadBearings
         ? `bearings=[${roadBearings.map(b => b.toFixed(0)).join(',')}]`
         : 'no bearings';
-      console.log(`  ${burg.name} (pop=${burg.population}, gates=${nGates}, ${bearingStr}) — ${elapsed}ms`);
+      const oceanStr = oceanBearing != null ? `, ocean=${oceanBearing.toFixed(0)}°` : '';
+      const nWater = result.model.waterbody.length;
+      const waterStr = nWater > 0 ? `, water=${nWater}` : '';
+      const harbourStr = result.model.harbour ? `, harbour=${harbourSize}` : '';
+      console.log(`  ${burg.name} (pop=${burg.population}, gates=${nGates}, ${bearingStr}${oceanStr}${waterStr}${harbourStr}) — ${elapsed}ms`);
       successes++;
     } catch (err) {
       const elapsed = (performance.now() - t0).toFixed(0);

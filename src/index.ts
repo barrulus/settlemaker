@@ -5,9 +5,24 @@ export { Patch } from './generator/patch.js';
 export { CurtainWall } from './generator/curtain-wall.js';
 
 export { AzgaarBurgInput, mapToGenerationParams } from './input/azgaar-input.js';
+export { Harbour } from './wards/harbour.js';
 
 export { generateSvg, SvgOptions } from './output/svg-builder.js';
 export { generateGeoJson } from './output/geojson-builder.js';
+export {
+  parseSvgViewBox,
+  computeSettlementScale,
+  computeTileInfo,
+  cropSvgToTile,
+  enumerateTiles,
+  totalTileCount,
+} from './output/settlement-tiler.js';
+export type {
+  SvgViewBox,
+  SettlementScale,
+  TileInfo,
+  TileCoord,
+} from './output/settlement-tiler.js';
 
 export { Palette, WardType, Street } from './types/interfaces.js';
 export { PALETTES, PALETTE_DEFAULT } from './output/palette.js';

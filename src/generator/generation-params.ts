@@ -23,8 +23,12 @@ export interface GenerationParams {
   roadEntryPoints?: Point[];
   /** Maximum number of gates on the border wall (default 4) */
   maxGates?: number;
+  /** Compass bearing (degrees, 0=N clockwise) to nearest ocean — enables coastline clipping */
+  oceanBearing?: number;
   /** River path through the settlement */
   riverPath?: Point[];
   /** Coastline geometry for harbour wards */
   coastlineGeometry?: Point[][];
+  /** Harbour size — 'large' for major sea routes + big pop, 'small' for minor ports */
+  harbourSize?: 'large' | 'small';
 }

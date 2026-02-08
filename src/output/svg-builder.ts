@@ -5,6 +5,7 @@ import type { Palette } from '../types/interfaces.js';
 import type { Model } from '../generator/model.js';
 import type { CurtainWall } from '../generator/curtain-wall.js';
 import { Castle } from '../wards/castle.js';
+import { Harbour } from '../wards/harbour.js';
 import { PALETTE_DEFAULT } from './palette.js';
 
 const NORMAL_STROKE = 0.3;
@@ -76,6 +77,13 @@ export function generateSvg(model: Model, options: SvgOptions = {}): string {
   // Background
   parts.push(`<rect x="${viewMinX.toFixed(1)}" y="${viewMinY.toFixed(1)}" width="${viewWidth.toFixed(1)}" height="${viewHeight.toFixed(1)}" fill="${colorToHex(palette.paper)}"/>`);
 
+  // Water
+  if (model.waterbody.length > 0 && palette.water != null) {
+    for (const patch of model.waterbody) {
+      parts.push(`<path d="${polygonToPath(patch.shape)}" fill="${colorToHex(palette.water)}" stroke="none"/>`);
+    }
+  }
+
   // Roads
   for (const road of model.roads) {
     const path = polylineToPath(road.vertices);
@@ -125,6 +133,19 @@ export function generateSvg(model: Model, options: SvgOptions = {}): string {
         }
         break;
 
+      case WardType.Harbour:
+        // Warehouse buildings
+        for (const building of ward.geometry) {
+          parts.push(`<path d="${polygonToPath(building)}" fill="${colorToHex(palette.light)}" stroke="${colorToHex(palette.dark)}" stroke-width="${NORMAL_STROKE.toFixed(2)}"/>`);
+        }
+        // Piers — thicker stroke for dock structures
+        if (ward instanceof Harbour) {
+          for (const pier of ward.piers) {
+            parts.push(`<path d="${polygonToPath(pier)}" fill="${colorToHex(palette.light)}" stroke="${colorToHex(palette.dark)}" stroke-width="${(NORMAL_STROKE * 2).toFixed(2)}"/>`);
+          }
+        }
+        break;
+
       default:
         // Craftsmen, Merchant, Slum, Patriciate, Administration, Military, Gate, Market, Farm
         for (const building of ward.geometry) {
@@ -146,14 +167,57 @@ export function generateSvg(model: Model, options: SvgOptions = {}): string {
   return parts.join('\n');
 }
 
+/** Group consecutive active wall segments into polylines. */
+function getActiveWallPolylines(wall: CurtainWall): Point[][] {
+  const len = wall.shape.length;
+  const allActive = wall.segments.every(s => s);
+
+  if (allActive) {
+    // Full closed wall — return all vertices plus close back to start
+    return [[...wall.shape.vertices, wall.shape.vertices[0]]];
+  }
+
+  const polylines: Point[][] = [];
+  let current: Point[] | null = null;
+
+  for (let i = 0; i < len; i++) {
+    if (wall.segments[i]) {
+      if (current === null) {
+        current = [wall.shape.vertices[i]];
+      }
+      current.push(wall.shape.vertices[(i + 1) % len]);
+    } else {
+      if (current !== null) {
+        polylines.push(current);
+        current = null;
+      }
+    }
+  }
+  if (current !== null) {
+    // Check if this run wraps around and connects to the first polyline
+    if (polylines.length > 0 && polylines[0][0] === current[current.length - 1]) {
+      // Prepend current to the first polyline
+      current.pop(); // remove the duplicate connecting vertex
+      polylines[0] = [...current, ...polylines[0]];
+    } else {
+      polylines.push(current);
+    }
+  }
+
+  return polylines;
+}
+
 function renderWall(
   parts: string[],
   wall: CurtainWall,
   large: boolean,
   palette: Palette,
 ): void {
-  // Wall outline
-  parts.push(`<path d="${polygonToPath(wall.shape)}" fill="none" stroke="${colorToHex(palette.dark)}" stroke-width="${THICK_STROKE.toFixed(2)}"/>`);
+  // Wall outline — draw only active segments as polylines
+  const polylines = getActiveWallPolylines(wall);
+  for (const polyline of polylines) {
+    parts.push(`<path d="${polylineToPath(polyline)}" fill="none" stroke="${colorToHex(palette.dark)}" stroke-width="${THICK_STROKE.toFixed(2)}" stroke-linecap="round"/>`);
+  }
 
   // Gates
   for (const gate of wall.gates) {

@@ -13,7 +13,9 @@ export enum WardType {
   Castle = 'castle',
   Park = 'park',
   Farm = 'farm',
+  Harbour = 'harbour',
   Empty = 'empty',
+  Water = 'water',
 }
 
 export type Street = Polygon;
@@ -23,4 +25,5 @@ export interface Palette {
   light: number;
   medium: number;
   dark: number;
+  water?: number;
 }

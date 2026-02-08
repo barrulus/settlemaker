@@ -19,6 +19,10 @@ export interface AzgaarBurgInput {
   temperature?: number;
   /** Compass bearings (degrees, 0=N clockwise) of roads approaching the burg */
   roadBearings?: number[];
+  /** Compass bearing (degrees, 0=N clockwise) to nearest ocean — enables coastline clipping for port cities */
+  oceanBearing?: number;
+  /** Harbour size for port cities — 'large' for major sea routes + big pop, 'small' otherwise */
+  harbourSize?: 'large' | 'small';
 }
 
 /**
@@ -75,6 +79,8 @@ export function mapToGenerationParams(
     seed,
     ...(roadEntryPoints && roadEntryPoints.length > 0 ? { roadEntryPoints } : {}),
     maxGates: populationToMaxGates(burg.population),
+    ...(burg.oceanBearing != null ? { oceanBearing: burg.oceanBearing } : {}),
+    ...(burg.harbourSize != null ? { harbourSize: burg.harbourSize } : {}),
   };
 }
 
