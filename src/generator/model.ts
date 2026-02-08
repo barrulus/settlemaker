@@ -280,14 +280,17 @@ export class Model {
 
     const large = this.params.harbourSize === 'large';
 
-    // Candidates: outer patches (not water, not already warded, not inner)
-    // that share at least one edge with a water patch
+    // Candidates: outer patches that border both water AND the city
     const candidates: Array<{ patch: Patch; waterfrontLength: number }> = [];
 
     for (const patch of this.patches) {
       if (patch.withinCity) continue;
       if (patch.ward !== null) continue;
       if (this.waterbody.includes(patch)) continue;
+
+      // Must border at least one city patch
+      const bordersCity = this.getNeighbours(patch).some(n => n.withinCity);
+      if (!bordersCity) continue;
 
       // Measure total shared edge length with water patches
       let waterfrontLength = 0;
@@ -314,6 +317,15 @@ export class Model {
     best.withinCity = true;
     best.ward = new Harbour(this, best, large);
     this.harbour = best;
+
+    // Add a gate where the harbour meets the wall so streets connect to it
+    if (this.border !== null) {
+      const wallVerts = this.border.shape.vertices;
+      const harbourGate = wallVerts.find(v => best.shape.contains(v));
+      if (harbourGate && !this.gates.includes(harbourGate)) {
+        this.gates.push(harbourGate);
+      }
+    }
   }
 
   // Phase 4: Build streets
