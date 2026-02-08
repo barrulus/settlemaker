@@ -127,7 +127,13 @@ export class CurtainWall {
       }
     }
 
-    // Fill remaining gates randomly (original behavior)
+    // Ensure at least one gate (preserves original do...while semantics)
+    if (this.gates.length === 0 && entrances.length > 0) {
+      const index = rng.int(0, entrances.length);
+      selectGate(entrances[index], index);
+    }
+
+    // Fill remaining gates randomly
     while (entrances.length >= 3) {
       const index = rng.int(0, entrances.length);
       selectGate(entrances[index], index);

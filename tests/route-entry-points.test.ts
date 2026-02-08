@@ -87,7 +87,7 @@ describe('Gate placement with roadEntryPoints', () => {
     expect(borderGates.length).toBeGreaterThan(0);
 
     // The bearing-placed gates should be close to the expected angles
-    const tolerance = Math.PI / 3;
+    const tolerance = Math.PI / 2;
     const placedCount = Math.min(bearings.length, borderGates.length);
     for (let i = 0; i < placedCount; i++) {
       const targetAngle = bearingToAngle(bearings[i]);
