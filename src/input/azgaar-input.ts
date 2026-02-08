@@ -40,6 +40,15 @@ function populationToPatches(population: number): number {
   return 40 + Math.min(10, Math.round(((population - 100000) / 200000) * 10));
 }
 
+/** Max border gates based on settlement size. */
+function populationToMaxGates(population: number): number {
+  if (population < 1000) return 2;
+  if (population < 5000) return 3;
+  if (population < 20000) return 4;
+  if (population < 100000) return 5;
+  return 6;
+}
+
 /**
  * Convert Azgaar burg data into generation parameters.
  * Uses a hash of the burg name as the random seed for deterministic output.
@@ -65,6 +74,7 @@ export function mapToGenerationParams(
     capitalNeeded: burg.capital,
     seed,
     ...(roadEntryPoints && roadEntryPoints.length > 0 ? { roadEntryPoints } : {}),
+    maxGates: populationToMaxGates(burg.population),
   };
 }
 

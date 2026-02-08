@@ -14,7 +14,7 @@ export class CurtainWall {
   private real: boolean;
   private patches: Patch[];
 
-  constructor(real: boolean, model: Model, patches: Patch[], reserved: Point[], rng: SeededRandom, roadEntryPoints?: Point[]) {
+  constructor(real: boolean, model: Model, patches: Patch[], reserved: Point[], rng: SeededRandom, roadEntryPoints?: Point[], maxGates?: number) {
     this.real = real;
     this.patches = patches;
     this.gates = [];
@@ -35,11 +35,12 @@ export class CurtainWall {
     }
 
     this.segments = this.shape.vertices.map(() => true);
-    this.buildGates(real, model, reserved, rng, roadEntryPoints);
+    this.buildGates(real, model, reserved, rng, roadEntryPoints, maxGates);
   }
 
-  private buildGates(real: boolean, model: Model, reserved: Point[], rng: SeededRandom, roadEntryPoints?: Point[]): void {
+  private buildGates(real: boolean, model: Model, reserved: Point[], rng: SeededRandom, roadEntryPoints?: Point[], maxGates?: number): void {
     this.gates = [];
+    const cap = maxGates ?? Infinity;
 
     // Entrances are wall vertices shared by more than one inner patch
     let entrances: Point[];
@@ -102,13 +103,14 @@ export class CurtainWall {
     };
 
     // Place gates at bearings matching roadEntryPoints
-    if (roadEntryPoints && roadEntryPoints.length > 0) {
+    const hasBearings = roadEntryPoints && roadEntryPoints.length > 0;
+    if (hasBearings) {
       const entryAngles = roadEntryPoints
         .map((p, i) => ({ angle: Math.atan2(p.y, p.x), index: i }))
         .sort((a, b) => a.angle - b.angle);
 
       for (const { angle: targetAngle } of entryAngles) {
-        if (entrances.length < 1) break;
+        if (entrances.length < 1 || this.gates.length >= cap) break;
 
         let bestIdx = 0;
         let bestDist = Infinity;
@@ -133,10 +135,12 @@ export class CurtainWall {
       selectGate(entrances[index], index);
     }
 
-    // Fill remaining gates randomly
-    while (entrances.length >= 3) {
-      const index = rng.int(0, entrances.length);
-      selectGate(entrances[index], index);
+    // Fill remaining gates randomly (skip when bearings already placed gates)
+    if (!hasBearings) {
+      while (entrances.length >= 3 && this.gates.length < cap) {
+        const index = rng.int(0, entrances.length);
+        selectGate(entrances[index], index);
+      }
     }
 
     if (this.gates.length === 0) {

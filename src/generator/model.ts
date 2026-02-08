@@ -199,7 +199,7 @@ export class Model {
   private buildWalls(): void {
     const reserved = this.citadel !== null ? this.citadel.shape.copy() : [];
 
-    this.border = new CurtainWall(this.wallsNeeded, this, this.inner, reserved, this.rng, this.params.roadEntryPoints);
+    this.border = new CurtainWall(this.wallsNeeded, this, this.inner, reserved, this.rng, this.params.roadEntryPoints, this.params.maxGates);
     if (this.wallsNeeded) {
       this.wall = this.border;
       this.wall.buildTowers();

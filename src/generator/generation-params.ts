@@ -19,8 +19,10 @@ export interface GenerationParams {
   seed: number;
 
   // Future extension points
-  /** Road entry points from external map data */
+  /** Road entry points from external map data (unit direction vectors) */
   roadEntryPoints?: Point[];
+  /** Maximum number of gates on the border wall (default 4) */
+  maxGates?: number;
   /** River path through the settlement */
   riverPath?: Point[];
   /** Coastline geometry for harbour wards */
