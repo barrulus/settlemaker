@@ -25,11 +25,6 @@ export class CommonWard extends Ward {
     const block = this.getCityBlock();
     this.geometry = createAlleys(block, this.rng, this.minSq, this.gridChaos, this.sizeChaos, this.emptyProb);
 
-    // Unwalled settlements get rectangular buildings only (no triangles)
-    if (this.model.wall === null) {
-      this.geometry = this.geometry.filter(b => b.length >= 4);
-    }
-
     if (!this.model.isEnclosed(this.patch)) {
       this.filterOutskirts();
     }

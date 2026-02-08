@@ -170,7 +170,7 @@ export function createAlleys(
   const buildings: Polygon[] = [];
   for (const half of halves) {
     if (half.square < minSq * Math.pow(2, 4 * sizeChaos * (rng.float() - 0.5))) {
-      if (!rng.bool(emptyProb)) {
+      if (half.length >= 4 && !rng.bool(emptyProb)) {
         buildings.push(half);
       }
     } else {
