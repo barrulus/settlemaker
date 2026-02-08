@@ -138,6 +138,18 @@ export class Ward {
   }
 }
 
+/** Check if a polygon is a degenerate wedge (looks triangular despite having 4+ vertices) */
+function isDegenerate(p: Polygon): boolean {
+  let minEdge = Infinity;
+  let maxEdge = 0;
+  p.forEdge((v0, v1) => {
+    const len = Point.distance(v0, v1);
+    if (len < minEdge) minEdge = len;
+    if (len > maxEdge) maxEdge = len;
+  });
+  return maxEdge > 0 && minEdge / maxEdge < 0.12;
+}
+
 /** Recursive alley-based building subdivision */
 export function createAlleys(
   p: Polygon,
@@ -170,7 +182,7 @@ export function createAlleys(
   const buildings: Polygon[] = [];
   for (const half of halves) {
     if (half.square < minSq * Math.pow(2, 4 * sizeChaos * (rng.float() - 0.5))) {
-      if (half.length >= 4 && !rng.bool(emptyProb)) {
+      if (half.length >= 4 && !isDegenerate(half) && !rng.bool(emptyProb)) {
         buildings.push(half);
       }
     } else {

@@ -8,7 +8,7 @@ import { Castle } from '../wards/castle.js';
 import { Harbour } from '../wards/harbour.js';
 import { PALETTE_DEFAULT } from './palette.js';
 
-const NORMAL_STROKE = 0.3;
+const NORMAL_STROKE = 0.15;
 const THICK_STROKE = 1.8;
 
 function colorToHex(c: number): string {

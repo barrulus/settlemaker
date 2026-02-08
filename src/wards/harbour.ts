@@ -22,13 +22,12 @@ export class Harbour extends Ward {
 
   private createWarehouses(): void {
     const block = this.getCityBlock();
-    // Warehouse-tuned params: large buildings, orderly grid, low variation
+    // Warehouse-tuned params: orderly grid, moderate building size
+    const rng = this.rng;
     const minSq = this.large
-      ? 50 + this.rng.float() * 20    // 50-70
-      : 40 + this.rng.float() * 15;   // 40-55
-    const gridChaos = this.large
-      ? 0.15 + this.rng.float() * 0.10  // 0.15-0.25
-      : 0.20 + this.rng.float() * 0.10; // 0.20-0.30
+      ? 20 + 40 * rng.float() * rng.float()  // ~20-35 typical
+      : 15 + 30 * rng.float() * rng.float(); // ~15-25 typical
+    const gridChaos = 0.15 + rng.float() * 0.15; // 0.15-0.30
     const sizeChaos = 0.3;
 
     this.geometry = createAlleys(block, this.rng, minSq, gridChaos, sizeChaos, 0.02);
