@@ -1,3 +1,4 @@
+import { Point } from '../types/point.js';
 import type { GenerationParams } from '../generator/generation-params.js';
 
 /**
@@ -16,6 +17,8 @@ export interface AzgaarBurgInput {
   culture?: string;
   elevation?: number;
   temperature?: number;
+  /** Compass bearings (degrees, 0=N clockwise) of roads approaching the burg */
+  roadBearings?: number[];
 }
 
 /**
@@ -47,6 +50,11 @@ export function mapToGenerationParams(
 ): GenerationParams {
   const seed = seedOverride ?? hashString(burg.name);
 
+  const roadEntryPoints = burg.roadBearings?.map(bearing => {
+    const rad = bearing * Math.PI / 180;
+    return new Point(Math.sin(rad), -Math.cos(rad));
+  });
+
   return {
     nPatches: populationToPatches(burg.population),
     plazaNeeded: burg.plaza,
@@ -56,6 +64,7 @@ export function mapToGenerationParams(
     shantyNeeded: burg.shanty,
     capitalNeeded: burg.capital,
     seed,
+    ...(roadEntryPoints && roadEntryPoints.length > 0 ? { roadEntryPoints } : {}),
   };
 }
 

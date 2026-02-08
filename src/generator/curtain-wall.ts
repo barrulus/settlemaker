@@ -14,7 +14,7 @@ export class CurtainWall {
   private real: boolean;
   private patches: Patch[];
 
-  constructor(real: boolean, model: Model, patches: Patch[], reserved: Point[], rng: SeededRandom) {
+  constructor(real: boolean, model: Model, patches: Patch[], reserved: Point[], rng: SeededRandom, roadEntryPoints?: Point[]) {
     this.real = real;
     this.patches = patches;
     this.gates = [];
@@ -35,10 +35,10 @@ export class CurtainWall {
     }
 
     this.segments = this.shape.vertices.map(() => true);
-    this.buildGates(real, model, reserved, rng);
+    this.buildGates(real, model, reserved, rng, roadEntryPoints);
   }
 
-  private buildGates(real: boolean, model: Model, reserved: Point[], rng: SeededRandom): void {
+  private buildGates(real: boolean, model: Model, reserved: Point[], rng: SeededRandom, roadEntryPoints?: Point[]): void {
     this.gates = [];
 
     // Entrances are wall vertices shared by more than one inner patch
@@ -56,9 +56,7 @@ export class CurtainWall {
       throw new Error('Bad walled area shape!');
     }
 
-    do {
-      const index = rng.int(0, entrances.length);
-      const gate = entrances[index];
+    const selectGate = (gate: Point, index: number) => {
       this.gates.push(gate);
 
       if (real) {
@@ -101,7 +99,39 @@ export class CurtainWall {
       } else {
         entrances.splice(index - 1, 3);
       }
-    } while (entrances.length >= 3);
+    };
+
+    // Place gates at bearings matching roadEntryPoints
+    if (roadEntryPoints && roadEntryPoints.length > 0) {
+      const entryAngles = roadEntryPoints
+        .map((p, i) => ({ angle: Math.atan2(p.y, p.x), index: i }))
+        .sort((a, b) => a.angle - b.angle);
+
+      for (const { angle: targetAngle } of entryAngles) {
+        if (entrances.length < 1) break;
+
+        let bestIdx = 0;
+        let bestDist = Infinity;
+        for (let i = 0; i < entrances.length; i++) {
+          const v = entrances[i];
+          const vAngle = Math.atan2(v.y, v.x);
+          let diff = Math.abs(vAngle - targetAngle);
+          if (diff > Math.PI) diff = 2 * Math.PI - diff;
+          if (diff < bestDist) {
+            bestDist = diff;
+            bestIdx = i;
+          }
+        }
+
+        selectGate(entrances[bestIdx], bestIdx);
+      }
+    }
+
+    // Fill remaining gates randomly (original behavior)
+    while (entrances.length >= 3) {
+      const index = rng.int(0, entrances.length);
+      selectGate(entrances[index], index);
+    }
 
     if (this.gates.length === 0) {
       throw new Error('Bad walled area shape!');
