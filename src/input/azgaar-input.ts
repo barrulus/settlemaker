@@ -1,0 +1,69 @@
+import type { GenerationParams } from '../generator/generation-params.js';
+
+/**
+ * Input data from Azgaar's Fantasy Map Generator (maps_burgs table).
+ */
+export interface AzgaarBurgInput {
+  name: string;
+  population: number;
+  port: boolean;
+  citadel: boolean;
+  walls: boolean;
+  plaza: boolean;
+  temple: boolean;
+  shanty: boolean;
+  capital: boolean;
+  culture?: string;
+  elevation?: number;
+  temperature?: number;
+}
+
+/**
+ * Map Azgaar population to nPatches count.
+ *
+ * <100 (hamlet)      → 3-4 patches
+ * 100-1000 (village) → 5-9
+ * 1000-5000 (town)   → 10-14
+ * 5000-20k (city)    → 15-24
+ * 20k-100k (large)   → 25-40
+ * 100k+ (metropolis)  → 40-50
+ */
+function populationToPatches(population: number): number {
+  if (population < 100) return 3 + Math.round((population / 100) * 1);
+  if (population < 1000) return 5 + Math.round(((population - 100) / 900) * 4);
+  if (population < 5000) return 10 + Math.round(((population - 1000) / 4000) * 4);
+  if (population < 20000) return 15 + Math.round(((population - 5000) / 15000) * 9);
+  if (population < 100000) return 25 + Math.round(((population - 20000) / 80000) * 15);
+  return 40 + Math.min(10, Math.round(((population - 100000) / 200000) * 10));
+}
+
+/**
+ * Convert Azgaar burg data into generation parameters.
+ * Uses a hash of the burg name as the random seed for deterministic output.
+ */
+export function mapToGenerationParams(
+  burg: AzgaarBurgInput,
+  seedOverride?: number,
+): GenerationParams {
+  const seed = seedOverride ?? hashString(burg.name);
+
+  return {
+    nPatches: populationToPatches(burg.population),
+    plazaNeeded: burg.plaza,
+    citadelNeeded: burg.citadel,
+    wallsNeeded: burg.walls,
+    templeNeeded: burg.temple,
+    shantyNeeded: burg.shanty,
+    capitalNeeded: burg.capital,
+    seed,
+  };
+}
+
+/** Simple string hash (djb2) for deterministic seeding */
+function hashString(s: string): number {
+  let hash = 5381;
+  for (let i = 0; i < s.length; i++) {
+    hash = ((hash << 5) + hash + s.charCodeAt(i)) & 0x7fffffff;
+  }
+  return hash || 1; // avoid zero seed
+}
