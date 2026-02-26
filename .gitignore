@@ -2,3 +2,5 @@ node_modules/
 dist/
 test-output.svg
 *.tsbuildinfo
+/output/
+tiles/

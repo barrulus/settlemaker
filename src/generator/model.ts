@@ -507,17 +507,47 @@ export class Model {
       }
     }
 
-    // Calculate city radius and process countryside
+    // Build farmland with sinusoidal boundary
+    this.buildFarms();
+  }
+
+  /**
+   * Assign countryside patches as Farm or wilderness using a sinusoidal boundary.
+   * Port of watabou's buildFarms — uses a*sin(θ+c) + b*sin(2θ+d) to create
+   * an organic farm/wilderness boundary around the city.
+   */
+  private buildFarms(): void {
+    const rng = this.rng;
+
+    // Random wave parameters (a uses normal-ish 3-sample average × 2)
+    const a = rng.normal() * 2;
+    const b = rng.normal();
+    const c = rng.float() * Math.PI * 2;
+    const d = rng.float() * Math.PI * 2;
+
+    // Calculate city radius from inner patches
     this.cityRadius = 0;
     for (const patch of this.patches) {
       if (patch.withinCity) {
         for (const v of patch.shape.vertices) {
           this.cityRadius = Math.max(this.cityRadius, v.length);
         }
-      } else if (patch.ward === null && !this.waterbody.includes(patch)) {
-        patch.ward = (rng.bool(0.2) && patch.shape.compactness >= 0.7)
-          ? new Farm(this, patch)
-          : new Ward(this, patch);
+      }
+    }
+
+    // Assign countryside wards using sinusoidal boundary
+    for (const patch of this.patches) {
+      if (patch.withinCity || patch.ward !== null || this.waterbody.includes(patch)) continue;
+
+      const center = patch.shape.center;
+      const dir = center.subtract(this.center);
+      const angle = Math.atan2(dir.y, dir.x);
+      const waveRadius = a * Math.sin(angle + c) + b * Math.sin(2 * angle + d);
+
+      if (dir.length < (waveRadius + 1) * this.cityRadius) {
+        patch.ward = new Farm(this, patch);
+      } else {
+        patch.ward = new Ward(this, patch);
       }
     }
   }

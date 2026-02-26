@@ -26,4 +26,6 @@ export interface Palette {
   medium: number;
   dark: number;
   water?: number;
+  green?: number;
+  tree?: number;
 }

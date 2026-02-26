@@ -6,6 +6,7 @@ import type { Model } from '../generator/model.js';
 import type { CurtainWall } from '../generator/curtain-wall.js';
 import { Castle } from '../wards/castle.js';
 import { Harbour } from '../wards/harbour.js';
+import { Farm } from '../wards/farm.js';
 import { PALETTE_DEFAULT } from './palette.js';
 
 const NORMAL_STROKE = 0.15;
@@ -127,11 +128,13 @@ export function generateSvg(model: Model, options: SvgOptions = {}): string {
         }
         break;
 
-      case WardType.Park:
+      case WardType.Park: {
+        const parkColor = palette.green ?? palette.medium;
         for (const grove of ward.geometry) {
-          parts.push(`<path d="${polygonToPath(grove)}" fill="${colorToHex(palette.medium)}" stroke="none"/>`);
+          parts.push(`<path d="${polygonToPath(grove)}" fill="${colorToHex(parkColor)}" stroke="none"/>`);
         }
         break;
+      }
 
       case WardType.Harbour:
         // Warehouse buildings
@@ -146,8 +149,31 @@ export function generateSvg(model: Model, options: SvgOptions = {}): string {
         }
         break;
 
+      case WardType.Farm: {
+        const farmWard = ward as Farm;
+        const greenColor = palette.green ?? palette.medium;
+
+        // Field subplots
+        for (const plot of farmWard.subPlots) {
+          if (plot.length >= 3) {
+            parts.push(`<path d="${polygonToPath(new Polygon(plot))}" fill="${colorToHex(greenColor)}" stroke="none"/>`);
+          }
+        }
+
+        // Furrow lines within fields
+        for (const furrow of farmWard.furrows) {
+          parts.push(`<line x1="${furrow.start.x.toFixed(2)}" y1="${furrow.start.y.toFixed(2)}" x2="${furrow.end.x.toFixed(2)}" y2="${furrow.end.y.toFixed(2)}" stroke="${colorToHex(greenColor)}" stroke-width="${NORMAL_STROKE.toFixed(2)}" opacity="0.5"/>`);
+        }
+
+        // Farmstead buildings on top
+        for (const building of farmWard.buildings) {
+          parts.push(`<path d="${polygonToPath(building)}" fill="${colorToHex(palette.light)}" stroke="${colorToHex(palette.dark)}" stroke-width="${NORMAL_STROKE.toFixed(2)}"/>`);
+        }
+        break;
+      }
+
       default:
-        // Craftsmen, Merchant, Slum, Patriciate, Administration, Military, Gate, Market, Farm
+        // Craftsmen, Merchant, Slum, Patriciate, Administration, Military, Gate, Market
         for (const building of ward.geometry) {
           parts.push(`<path d="${polygonToPath(building)}" fill="${colorToHex(palette.light)}" stroke="${colorToHex(palette.dark)}" stroke-width="${NORMAL_STROKE.toFixed(2)}"/>`);
         }
