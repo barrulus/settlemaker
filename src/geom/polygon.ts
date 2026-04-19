@@ -479,7 +479,12 @@ export class Polygon {
     ];
   }
 
-  /** Cut polygon by a line through p1→p2 */
+  /**
+   * Cut polygon by a line through p1→p2.
+   * Returns two halves on a successful cut, or a single polygon (same vertices as the
+   * input) when the line failed to cross two edges — callers should detect length===1
+   * and stop recursing, since bisecting the result would reproduce the same shape.
+   */
   cut(p1: Point, p2: Point, gap: number = 0): Polygon[] {
     const x1 = p1.x;
     const y1 = p1.y;

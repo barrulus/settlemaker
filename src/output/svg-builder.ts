@@ -75,8 +75,8 @@ export function generateSvg(model: Model, options: SvgOptions = {}): string {
 
   parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewMinX.toFixed(1)} ${viewMinY.toFixed(1)} ${viewWidth.toFixed(1)} ${viewHeight.toFixed(1)}">`);
 
-  // Background
-  parts.push(`<rect x="${viewMinX.toFixed(1)}" y="${viewMinY.toFixed(1)}" width="${viewWidth.toFixed(1)}" height="${viewHeight.toFixed(1)}" fill="${colorToHex(palette.paper)}"/>`);
+  // Background — use 100%/100% so the fill tracks the viewBox when tile croppers rewrite it
+  parts.push(`<rect x="0" y="0" width="100%" height="100%" fill="${colorToHex(palette.paper)}"/>`);
 
   // Water
   if (model.waterbody.length > 0 && palette.water != null) {

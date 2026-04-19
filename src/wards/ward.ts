@@ -138,8 +138,120 @@ export class Ward {
   }
 }
 
-/** Check if a polygon is a degenerate wedge (looks triangular despite having 4+ vertices) */
+/**
+ * Convert an irregular polygon to the largest inscribed rectangle aligned to its dominant edge.
+ * Returns null when no valid rectangle can be fit (polygon is too degenerate to salvage).
+ */
+function rectangularize(poly: Polygon): Polygon | null {
+  if (poly.length < 4) return null;
+
+  // Find longest edge direction (dominant axis)
+  let longestLen = -1;
+  let dx = 0, dy = 0;
+  poly.forEdge((v0, v1) => {
+    const len = Point.distance(v0, v1);
+    if (len > longestLen) {
+      longestLen = len;
+      dx = v1.x - v0.x;
+      dy = v1.y - v0.y;
+    }
+  });
+  if (longestLen <= 0) return null;
+
+  // Normalized along-axis and perpendicular
+  const ax = dx / longestLen;
+  const ay = dy / longestLen;
+  const px = -ay;
+  const py = ax;
+
+  const c = poly.centroid;
+
+  // For each edge, compute a linear constraint on the rectangle half-widths (hw, hh):
+  //   a_i * hw + b_i * hh <= d_i
+  // where d_i is perpendicular distance from centroid to edge line,
+  // and a_i, b_i are projections of the edge normal onto the two axes.
+  const constraints: Array<{ a: number; b: number; d: number }> = [];
+  poly.forEdge((v0, v1) => {
+    const ex = v1.x - v0.x;
+    const ey = v1.y - v0.y;
+    const eLen = Math.sqrt(ex * ex + ey * ey);
+    if (eLen <= 0) return;
+
+    // Perpendicular distance from centroid to edge line
+    const dist = Math.abs((c.x - v0.x) * ey - (c.y - v0.y) * ex) / eLen;
+    if (dist <= 0) return;
+
+    // Edge normal (direction doesn't matter since we use abs projections)
+    const nx = ey / eLen;
+    const ny = -ex / eLen;
+
+    constraints.push({
+      a: Math.abs(nx * ax + ny * ay),
+      b: Math.abs(nx * px + ny * py),
+      d: dist,
+    });
+  });
+
+  if (constraints.length < 2) return null;
+
+  // Find optimal hw, hh by checking intersections of all constraint pairs
+  let bestArea = 0;
+  let bestHw = 0, bestHh = 0;
+
+  for (let i = 0; i < constraints.length; i++) {
+    for (let j = i + 1; j < constraints.length; j++) {
+      const { a: ai, b: bi, d: di } = constraints[i];
+      const { a: aj, b: bj, d: dj } = constraints[j];
+      const det = ai * bj - aj * bi;
+      if (Math.abs(det) < 1e-10) continue;
+
+      const hw = (di * bj - dj * bi) / det;
+      const hh = (dj * ai - di * aj) / det;
+      if (hw <= 0 || hh <= 0) continue;
+
+      // Verify all constraints are satisfied
+      let valid = true;
+      for (const { a, b, d } of constraints) {
+        if (a * hw + b * hh > d + 1e-10) { valid = false; break; }
+      }
+      if (!valid) continue;
+
+      const area = hw * hh;
+      if (area > bestArea) {
+        bestArea = area;
+        bestHw = hw;
+        bestHh = hh;
+      }
+    }
+  }
+
+  if (bestArea <= 0) return null;
+
+  // Build rectangle centered on centroid
+  const corners = [
+    new Point(c.x - bestHw * ax - bestHh * px, c.y - bestHw * ay - bestHh * py),
+    new Point(c.x + bestHw * ax - bestHh * px, c.y + bestHw * ay - bestHh * py),
+    new Point(c.x + bestHw * ax + bestHh * px, c.y + bestHw * ay + bestHh * py),
+    new Point(c.x - bestHw * ax + bestHh * px, c.y - bestHw * ay + bestHh * py),
+  ];
+
+  // Ensure CCW winding (positive signed area)
+  const rect = new Polygon(corners);
+  if (rect.square < 0) corners.reverse();
+
+  return new Polygon(corners);
+}
+
+/**
+ * Check if a polygon is unsuitable as a building footprint — too few sides, a thin
+ * wedge, or irregular enough that it wouldn't read as a rectangle.
+ *
+ * Why: 4+ vertices alone isn't enough — a near-collinear 4-gon still looks triangular.
+ * Edge-ratio catches wedges; compactness catches irregular 5+ vertex slivers.
+ */
 function isDegenerate(p: Polygon): boolean {
+  if (p.length < 4) return true;
+
   let minEdge = Infinity;
   let maxEdge = 0;
   p.forEdge((v0, v1) => {
@@ -147,7 +259,11 @@ function isDegenerate(p: Polygon): boolean {
     if (len < minEdge) minEdge = len;
     if (len > maxEdge) maxEdge = len;
   });
-  return maxEdge > 0 && minEdge / maxEdge < 0.12;
+  if (maxEdge <= 0 || minEdge / maxEdge < 0.15) return true;
+
+  // Compactness = 4π·area/perimeter². Square ≈ 0.79, 1:5 rect ≈ 0.44, 1:8 rect ≈ 0.31.
+  // 0.3 threshold drops very elongated or irregular shapes but keeps ordinary rectangles.
+  return p.compactness < 0.3;
 }
 
 /** Recursive alley-based building subdivision */
@@ -178,13 +294,18 @@ export function createAlleys(
   const b = (rng.float() - 0.5) * angleSpread;
 
   const halves = bisect(p, v!, ratio, b, split ? ALLEY : 0);
-
   const buildings: Polygon[] = [];
+
+  // Bisect returns a single polygon when it couldn't find two edge intersections —
+  // recursing would loop on the same shape, so treat the input as a terminal leaf.
+  if (halves.length === 1) {
+    tryEmitBuilding(p, rng, emptyProb, buildings);
+    return buildings;
+  }
+
   for (const half of halves) {
     if (half.square < minSq * Math.pow(2, 4 * sizeChaos * (rng.float() - 0.5))) {
-      if (half.length >= 4 && !isDegenerate(half) && !rng.bool(emptyProb)) {
-        buildings.push(half);
-      }
+      tryEmitBuilding(half, rng, emptyProb, buildings);
     } else {
       buildings.push(
         ...createAlleys(
@@ -196,6 +317,19 @@ export function createAlleys(
   }
 
   return buildings;
+}
+
+/** Rectangularize, validate, and push a building if it survives the filter. */
+function tryEmitBuilding(
+  poly: Polygon,
+  rng: SeededRandom,
+  emptyProb: number,
+  out: Polygon[],
+): void {
+  if (rng.bool(emptyProb)) return;
+  const rect = rectangularize(poly);
+  if (rect === null || isDegenerate(rect)) return;
+  out.push(rect);
 }
 
 /** Orthogonal building subdivision */
@@ -222,9 +356,16 @@ export function createOrthoBuilding(
 
     const halves = p.cut(p1, p1.add(c));
     const buildings: Polygon[] = [];
+
+    // Cut returned uncut original — stop recursing and emit as a validated leaf.
+    if (halves.length === 1) {
+      if (!isDegenerate(p) && rng.bool(fill)) buildings.push(p);
+      return buildings;
+    }
+
     for (const half of halves) {
       if (half.square < minBlockSq * Math.pow(2, rng.normal() * 2 - 1)) {
-        if (rng.bool(fill)) buildings.push(half);
+        if (!isDegenerate(half) && rng.bool(fill)) buildings.push(half);
       } else {
         buildings.push(...slice(half, c1, c2));
       }

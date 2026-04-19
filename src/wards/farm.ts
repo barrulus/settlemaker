@@ -120,10 +120,13 @@ export class Farm extends Ward {
     const polyObj = new Polygon(poly.map(p => new Point(p.x, p.y)));
     const halves = polyObj.cut(splitPt, cutEnd, 2);
 
+    // cut returns a single polygon when the line missed both required edge intersections —
+    // recursing would loop on the same shape, so treat the current field as terminal.
+    if (halves.length === 1) return [poly];
+
     const result: Point[][] = [];
     for (const half of halves) {
       const pts = half.vertices;
-      // Skip degenerate halves produced by gap cutting
       if (pts.length < 3 || polygonArea(pts) < MIN_PLOT_AREA) continue;
       for (const sub of this.splitField(pts)) {
         result.push(sub);
