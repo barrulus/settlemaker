@@ -188,7 +188,7 @@ function gateFeatureFor(gate: Point, meta: GateMeta, border: CurtainWall, model:
   const subKind = isHarbour ? 'harbour' : (meta.kind === 'foot' ? 'foot' : 'road');
   const gateId = `g${meta.wallVertexIndex}`;
 
-  const neighbours = findNeighbourGates(gate, border, model.gates);
+  const neighbours = findNeighbourGates(gate, border);
 
   const properties: Record<string, unknown> = {
     layer: 'gate',
@@ -217,26 +217,29 @@ function isOnHarbourWater(gate: Point, model: Model): boolean {
 
 /**
  * Walk the wall polygon from the gate vertex outward in both directions until
- * the next gate is found. Returns the neighbour gate ids for the narrative
- * "patrol from gate A to gate B" use case the questables agent flagged.
+ * the next border gate is found. Returns the neighbour gate ids for the
+ * "patrol from gate A to gate B" narrative use case.
+ *
+ * Scoped to border gates only — citadel-wall gates can coincide with border
+ * vertices by identity, so walking over `model.gates` would spuriously stop
+ * at them even though they belong to a separate wall.
  */
 function findNeighbourGates(
   gate: Point,
   border: CurtainWall,
-  allGates: Point[],
 ): { prev?: string; next?: string } {
   const verts = border.shape.vertices;
   const n = verts.length;
   const startIdx = verts.indexOf(gate);
   if (startIdx === -1) return {};
 
-  const gateSet = new Set(allGates);
+  const borderGates = new Set(border.gateMeta.keys());
+
   const findInDirection = (step: 1 | -1): string | undefined => {
     for (let k = 1; k < n; k++) {
       const v = verts[((startIdx + step * k) % n + n) % n];
-      if (v !== gate && gateSet.has(v)) {
-        const m = border.gateMeta.get(v);
-        return m ? `g${m.wallVertexIndex}` : undefined;
+      if (v !== gate && borderGates.has(v)) {
+        return `g${border.gateMeta.get(v)!.wallVertexIndex}`;
       }
     }
     return undefined;
