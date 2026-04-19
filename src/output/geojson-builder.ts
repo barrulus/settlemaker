@@ -1,24 +1,45 @@
 import type { Feature, FeatureCollection, Polygon as GeoPolygon } from 'geojson';
 import type { Polygon } from '../geom/polygon.js';
 import type { Model } from '../generator/model.js';
-import type { CurtainWall } from '../generator/curtain-wall.js';
+import type { CurtainWall, GateMeta } from '../generator/curtain-wall.js';
+import type { GenerationParams } from '../generator/generation-params.js';
 import { Castle } from '../wards/castle.js';
 import { Harbour } from '../wards/harbour.js';
+import { Point } from '../types/point.js';
+
+/**
+ * Version of the output document shape. Bump whenever a breaking change lands
+ * (renamed properties, dropped fields) so consumers can gate their ingestion.
+ */
+export const GEOJSON_SCHEMA_VERSION = 1;
+
+/**
+ * Source-of-truth library version. Kept in sync with package.json manually —
+ * cheaper than a JSON import assertion and lets tests pin a deterministic value.
+ */
+export const SETTLEMAKER_VERSION = '0.2.0';
+
+export interface GenerateGeoJsonOptions {
+  /** ISO-8601 timestamp to stamp on the output. Defaults to `new Date().toISOString()`. */
+  generatedAt?: string;
+  /** Override the library version string (mostly for tests). */
+  settlemakerVersion?: string;
+}
 
 /**
  * Convert a generated Model to a GeoJSON FeatureCollection.
  *
- * Each ward patch becomes a Feature with:
- * - geometry: Polygon (from patch shape)
- * - properties: wardType, label, withinCity, withinWalls
+ * Coordinates are in settlement-local units: origin near the burg centroid,
+ * Y axis pointing DOWN (SVG convention). Consumers wanting compass-up rendering
+ * should mirror Y.
  *
- * Buildings within each ward become separate features.
- * Walls and streets also have feature representations.
+ * The top-level `metadata` block carries schema + generation-version info so
+ * downstream systems (e.g. questables) can detect stale output and upsert on
+ * a stable `gate_id` within each gate feature.
  */
-export function generateGeoJson(model: Model): FeatureCollection {
+export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = {}): FeatureCollection {
   const features: Feature[] = [];
 
-  // Ward patches
   for (const patch of model.patches) {
     if (!patch.ward) continue;
 
@@ -34,7 +55,6 @@ export function generateGeoJson(model: Model): FeatureCollection {
       geometry: polygonToGeoJson(patch.shape),
     });
 
-    // Buildings
     for (const building of patch.ward.geometry) {
       features.push({
         type: 'Feature',
@@ -46,7 +66,6 @@ export function generateGeoJson(model: Model): FeatureCollection {
       });
     }
 
-    // Piers (harbour ward only)
     if (patch.ward instanceof Harbour) {
       for (const pier of patch.ward.piers) {
         features.push({
@@ -61,36 +80,22 @@ export function generateGeoJson(model: Model): FeatureCollection {
     }
   }
 
-  // Streets
   for (const artery of model.arteries) {
     features.push({
       type: 'Feature',
-      properties: {
-        layer: 'street',
-        streetType: 'artery',
-      },
-      geometry: {
-        type: 'LineString',
-        coordinates: artery.vertices.map(v => [v.x, v.y]),
-      },
+      properties: { layer: 'street', streetType: 'artery' },
+      geometry: { type: 'LineString', coordinates: artery.vertices.map(v => [v.x, v.y]) },
     });
   }
 
   for (const road of model.roads) {
     features.push({
       type: 'Feature',
-      properties: {
-        layer: 'street',
-        streetType: 'road',
-      },
-      geometry: {
-        type: 'LineString',
-        coordinates: road.vertices.map(v => [v.x, v.y]),
-      },
+      properties: { layer: 'street', streetType: 'road' },
+      geometry: { type: 'LineString', coordinates: road.vertices.map(v => [v.x, v.y]) },
     });
   }
 
-  // Walls
   if (model.wall !== null) {
     addWallFeatures(features, model.wall, 'city_wall');
   }
@@ -98,59 +103,168 @@ export function generateGeoJson(model: Model): FeatureCollection {
     addWallFeatures(features, (model.citadel.ward as Castle).wall, 'citadel_wall');
   }
 
-  // Gates
-  for (const gate of model.gates) {
-    features.push({
-      type: 'Feature',
-      properties: {
-        layer: 'gate',
-      },
-      geometry: {
-        type: 'Point',
-        coordinates: [gate.x, gate.y],
-      },
-    });
-  }
+  addGateFeatures(features, model);
 
   return {
     type: 'FeatureCollection',
     features,
+    // Extra top-level keys are permitted by RFC 7946 §6.1 ("foreign members").
+    metadata: buildMetadata(model.params, options),
+  } as FeatureCollection & { metadata: OutputMetadata };
+}
+
+interface OutputMetadata {
+  schema_version: number;
+  settlemaker_version: string;
+  settlement_generation_version: string;
+  coordinate_system: string;
+  coordinate_units: string;
+  generated_at: string;
+}
+
+function buildMetadata(params: GenerationParams, options: GenerateGeoJsonOptions): OutputMetadata {
+  return {
+    schema_version: GEOJSON_SCHEMA_VERSION,
+    settlemaker_version: options.settlemakerVersion ?? SETTLEMAKER_VERSION,
+    settlement_generation_version: computeGenerationVersion(params),
+    coordinate_system: 'local_origin_y_down',
+    coordinate_units: 'settlement_units',
+    generated_at: options.generatedAt ?? new Date().toISOString(),
   };
+}
+
+/**
+ * Content hash of every input that influences gate placement. Stable across
+ * identical runs; changes the moment any gate-affecting input changes.
+ */
+function computeGenerationVersion(params: GenerationParams): string {
+  const relevant = {
+    schema: GEOJSON_SCHEMA_VERSION,
+    seed: params.seed,
+    nPatches: params.nPatches,
+    walls: params.wallsNeeded,
+    citadel: params.citadelNeeded,
+    plaza: params.plazaNeeded,
+    temple: params.templeNeeded,
+    shanty: params.shantyNeeded,
+    capital: params.capitalNeeded,
+    maxGates: params.maxGates ?? null,
+    oceanBearing: params.oceanBearing ?? null,
+    harbourSize: params.harbourSize ?? null,
+    roadBearings: params.roadEntryPoints?.map(r => ({
+      b: Math.round(r.bearingDeg * 10) / 10,
+      r: r.routeId ?? null,
+      k: r.kind ?? null,
+    })) ?? null,
+  };
+  return djb2(JSON.stringify(relevant)).toString(36);
+}
+
+function djb2(s: string): number {
+  let hash = 5381;
+  for (let i = 0; i < s.length; i++) {
+    hash = ((hash << 5) + hash + s.charCodeAt(i)) & 0x7fffffff;
+  }
+  return hash || 1;
+}
+
+function addGateFeatures(features: Feature[], model: Model): void {
+  // Only walled burgs emit gates in P0. Unwalled "approach point" synthesis is P1.
+  if (model.wall === null) return;
+  const border = model.wall;
+
+  for (const gate of model.gates) {
+    const meta = border.gateMeta.get(gate);
+    // Only emit gates we have metadata for (border wall + harbour). Citadel gates
+    // are omitted — they're internal and questables doesn't route to them.
+    if (!meta) continue;
+    features.push(gateFeatureFor(gate, meta, border, model));
+  }
+}
+
+function gateFeatureFor(gate: Point, meta: GateMeta, border: CurtainWall, model: Model): Feature {
+  const isHarbour = meta.kind === 'sea' || isOnHarbourWater(gate, model);
+  const kind: 'land' | 'harbour' = isHarbour ? 'harbour' : 'land';
+  const subKind = isHarbour ? 'harbour' : (meta.kind === 'foot' ? 'foot' : 'road');
+  const gateId = `g${meta.wallVertexIndex}`;
+
+  const neighbours = findNeighbourGates(gate, border, model.gates);
+
+  const properties: Record<string, unknown> = {
+    layer: 'gate',
+    gate_id: gateId,
+    kind,
+    sub_kind: subKind,
+    wall_vertex_index: meta.wallVertexIndex,
+    bearing_deg: meta.bearingDeg,
+  };
+  if (meta.routeId != null) properties.matched_route_id = meta.routeId;
+  if (meta.matchDeltaDeg != null) properties.bearing_match_delta_deg = meta.matchDeltaDeg;
+  if (neighbours.prev != null) properties.prev_gate_id = neighbours.prev;
+  if (neighbours.next != null) properties.next_gate_id = neighbours.next;
+
+  return {
+    type: 'Feature',
+    properties,
+    geometry: { type: 'Point', coordinates: [gate.x, gate.y] },
+  };
+}
+
+function isOnHarbourWater(gate: Point, model: Model): boolean {
+  if (model.harbour === null) return false;
+  return model.harbour.shape.contains(gate);
+}
+
+/**
+ * Walk the wall polygon from the gate vertex outward in both directions until
+ * the next gate is found. Returns the neighbour gate ids for the narrative
+ * "patrol from gate A to gate B" use case the questables agent flagged.
+ */
+function findNeighbourGates(
+  gate: Point,
+  border: CurtainWall,
+  allGates: Point[],
+): { prev?: string; next?: string } {
+  const verts = border.shape.vertices;
+  const n = verts.length;
+  const startIdx = verts.indexOf(gate);
+  if (startIdx === -1) return {};
+
+  const gateSet = new Set(allGates);
+  const findInDirection = (step: 1 | -1): string | undefined => {
+    for (let k = 1; k < n; k++) {
+      const v = verts[((startIdx + step * k) % n + n) % n];
+      if (v !== gate && gateSet.has(v)) {
+        const m = border.gateMeta.get(v);
+        return m ? `g${m.wallVertexIndex}` : undefined;
+      }
+    }
+    return undefined;
+  };
+
+  return { next: findInDirection(1), prev: findInDirection(-1) };
 }
 
 function addWallFeatures(features: Feature[], wall: CurtainWall, wallType: string): void {
   features.push({
     type: 'Feature',
-    properties: {
-      layer: 'wall',
-      wallType,
-    },
+    properties: { layer: 'wall', wallType },
     geometry: polygonToGeoJson(wall.shape),
   });
 
   for (const tower of wall.towers) {
     features.push({
       type: 'Feature',
-      properties: {
-        layer: 'tower',
-        wallType,
-      },
-      geometry: {
-        type: 'Point',
-        coordinates: [tower.x, tower.y],
-      },
+      properties: { layer: 'tower', wallType },
+      geometry: { type: 'Point', coordinates: [tower.x, tower.y] },
     });
   }
 }
 
 function polygonToGeoJson(poly: Polygon): GeoPolygon {
   const coords = poly.vertices.map(v => [v.x, v.y] as [number, number]);
-  // Close the ring
   if (coords.length > 0) {
     coords.push([coords[0][0], coords[0][1]]);
   }
-  return {
-    type: 'Polygon',
-    coordinates: [coords],
-  };
+  return { type: 'Polygon', coordinates: [coords] };
 }

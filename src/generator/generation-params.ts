@@ -1,5 +1,20 @@
 import { Point } from '../types/point.js';
 
+/** Narrative/transport category of an approaching route. */
+export type RouteKind = 'road' | 'foot' | 'sea';
+
+/**
+ * Road entry hint threaded from caller → curtain wall. `point` is a unit direction
+ * vector from the burg centroid (SVG coords, y-down); `bearingDeg` is the same
+ * information as a compass angle. `routeId` is echoed back on the matched gate.
+ */
+export interface RoadEntry {
+  point: Point;
+  bearingDeg: number;
+  routeId?: string;
+  kind?: RouteKind;
+}
+
 export interface GenerationParams {
   /** Number of Voronoi patches for the inner city */
   nPatches: number;
@@ -19,8 +34,11 @@ export interface GenerationParams {
   seed: number;
 
   // Future extension points
-  /** Road entry points from external map data (unit direction vectors) */
-  roadEntryPoints?: Point[];
+  /**
+   * Road entry hints from external map data. Each carries a unit direction vector
+   * plus optional routeId and kind so the gate output can echo them back.
+   */
+  roadEntryPoints?: RoadEntry[];
   /** Maximum number of gates on the border wall (default 4) */
   maxGates?: number;
   /** Compass bearing (degrees, 0=N clockwise) to nearest ocean — enables coastline clipping */

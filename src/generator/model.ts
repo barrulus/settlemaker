@@ -30,7 +30,7 @@ export class Model {
   private plazaNeeded: boolean;
   private citadelNeeded: boolean;
   private wallsNeeded: boolean;
-  private params: GenerationParams;
+  readonly params: GenerationParams;
 
   topology: Topology | null = null;
   patches: Patch[] = [];
@@ -270,6 +270,7 @@ export class Model {
         const removed = new Set(this.border!.gates.filter(g => isWaterfrontGate(g)));
         this.border!.gates = landGates;
         this.gates = this.gates.filter(g => !removed.has(g));
+        for (const g of removed) this.border!.gateMeta.delete(g);
       }
     }
   }
@@ -324,6 +325,14 @@ export class Model {
       const harbourGate = wallVerts.find(v => best.shape.contains(v));
       if (harbourGate && !this.gates.includes(harbourGate)) {
         this.gates.push(harbourGate);
+        // Tag it so the GeoJSON output can render it as a harbour-kind gate.
+        const vertexIndex = wallVerts.indexOf(harbourGate);
+        const bearingDeg = ((Math.atan2(harbourGate.x, -harbourGate.y) * 180 / Math.PI) % 360 + 360) % 360;
+        this.border.gateMeta.set(harbourGate, {
+          wallVertexIndex: vertexIndex,
+          bearingDeg: Math.round(bearingDeg * 10) / 10,
+          kind: 'sea',
+        });
       }
     }
   }

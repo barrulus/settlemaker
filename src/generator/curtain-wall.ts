@@ -4,17 +4,37 @@ import { SeededRandom } from '../utils/random.js';
 import { Patch } from './patch.js';
 import { maxBy } from '../utils/array-utils.js';
 import type { Model } from './model.js';
+import type { RoadEntry, RouteKind } from './generation-params.js';
+
+/**
+ * Per-gate metadata recorded during wall construction so the output layer can
+ * echo back the matched route and tag each gate with its wall-vertex index.
+ */
+export interface GateMeta {
+  /** Index of the gate vertex in `wall.shape.vertices`. Stable within a generation. */
+  wallVertexIndex: number;
+  /** Compass bearing from origin to gate (degrees, 0=N clockwise). */
+  bearingDeg: number;
+  /** Route id echoed from the matched input bearing, if any. */
+  routeId?: string;
+  /** Route kind echoed from the matched input bearing. Defaults to 'road'. */
+  kind?: RouteKind;
+  /** Absolute difference between the requested input bearing and placed gate bearing. */
+  matchDeltaDeg?: number;
+}
 
 export class CurtainWall {
   shape: Polygon;
   segments: boolean[];
   gates: Point[];
   towers: Point[];
+  /** Metadata per gate keyed by the gate Point (identity). */
+  gateMeta: Map<Point, GateMeta> = new Map();
 
   private real: boolean;
   private patches: Patch[];
 
-  constructor(real: boolean, model: Model, patches: Patch[], reserved: Point[], rng: SeededRandom, roadEntryPoints?: Point[], maxGates?: number) {
+  constructor(real: boolean, model: Model, patches: Patch[], reserved: Point[], rng: SeededRandom, roadEntryPoints?: RoadEntry[], maxGates?: number) {
     this.real = real;
     this.patches = patches;
     this.gates = [];
@@ -38,8 +58,9 @@ export class CurtainWall {
     this.buildGates(real, model, reserved, rng, roadEntryPoints, maxGates);
   }
 
-  private buildGates(real: boolean, model: Model, reserved: Point[], rng: SeededRandom, roadEntryPoints?: Point[], maxGates?: number): void {
+  private buildGates(real: boolean, model: Model, reserved: Point[], rng: SeededRandom, roadEntryPoints?: RoadEntry[], maxGates?: number): void {
     this.gates = [];
+    this.gateMeta = new Map();
     const cap = maxGates ?? Infinity;
 
     // Entrances are wall vertices shared by more than one inner patch
@@ -56,6 +77,9 @@ export class CurtainWall {
     if (entrances.length === 0) {
       throw new Error('Bad walled area shape!');
     }
+
+    // Filled in the route-bearing loop so we can re-read after wall smoothing moves vertices.
+    const pendingMatches = new Map<Point, { entry: RoadEntry; deltaRad: number }>();
 
     const selectGate = (gate: Point, index: number) => {
       this.gates.push(gate);
@@ -105,11 +129,15 @@ export class CurtainWall {
     // Place gates at bearings matching roadEntryPoints
     const hasBearings = roadEntryPoints && roadEntryPoints.length > 0;
     if (hasBearings) {
-      const entryAngles = roadEntryPoints
-        .map((p, i) => ({ angle: Math.atan2(p.y, p.x), index: i }))
+      const entries = roadEntryPoints
+        .map((entry, i) => ({
+          entry,
+          angle: Math.atan2(entry.point.y, entry.point.x),
+          index: i,
+        }))
         .sort((a, b) => a.angle - b.angle);
 
-      for (const { angle: targetAngle } of entryAngles) {
+      for (const { entry, angle: targetAngle } of entries) {
         if (entrances.length < 1 || this.gates.length >= cap) break;
 
         let bestIdx = 0;
@@ -125,7 +153,10 @@ export class CurtainWall {
           }
         }
 
-        selectGate(entrances[bestIdx], bestIdx);
+        const gate = entrances[bestIdx];
+        selectGate(gate, bestIdx);
+        // Stash the input bearing/route so post-selection metadata can echo it back.
+        pendingMatches.set(gate, { entry, deltaRad: bestDist });
       }
     }
 
@@ -151,6 +182,40 @@ export class CurtainWall {
     if (real) {
       for (const gate of this.gates) {
         gate.set(this.shape.smoothVertex(gate));
+      }
+    }
+
+    this.recordGateMeta(pendingMatches);
+  }
+
+  /** Build the `gateMeta` map after smoothing finalises gate positions. */
+  private recordGateMeta(pendingMatches: Map<Point, { entry: RoadEntry; deltaRad: number }>): void {
+    for (const gate of this.gates) {
+      const vertexIndex = this.shape.vertices.indexOf(gate);
+      const bearingDeg = normaliseBearing(Math.atan2(gate.x, -gate.y) * 180 / Math.PI);
+      const match = pendingMatches.get(gate);
+      const meta: GateMeta = { wallVertexIndex: vertexIndex, bearingDeg };
+      if (match) {
+        if (match.entry.routeId != null) meta.routeId = match.entry.routeId;
+        if (match.entry.kind != null) meta.kind = match.entry.kind;
+        meta.matchDeltaDeg = Math.round(match.deltaRad * 180 / Math.PI * 10) / 10;
+      }
+      this.gateMeta.set(gate, meta);
+    }
+  }
+
+  /** Mark wall segments adjacent to water patches as inactive (no wall on waterfront). */
+  markWaterfrontSegments(waterPatches: Patch[]): void {
+    const len = this.shape.length;
+    for (let i = 0; i < len; i++) {
+      const v0 = this.shape.vertices[i];
+      const v1 = this.shape.vertices[(i + 1) % len];
+      // The outer patch shares the reverse edge (v1→v0) with this wall segment
+      for (const wp of waterPatches) {
+        if (wp.shape.findEdge(v1, v0) !== -1) {
+          this.segments[i] = false;
+          break;
+        }
       }
     }
   }
@@ -184,6 +249,15 @@ export class CurtainWall {
     return index !== -1 && this.segments[index];
   }
 
+  /** Recompute metadata for an existing gate (e.g. after water filtering) using stored route matches. */
+  refreshGateMeta(gate: Point, override?: Partial<GateMeta>): void {
+    const existing = this.gateMeta.get(gate);
+    if (existing === undefined) return;
+    const vertexIndex = this.shape.vertices.indexOf(gate);
+    const bearingDeg = normaliseBearing(Math.atan2(gate.x, -gate.y) * 180 / Math.PI);
+    this.gateMeta.set(gate, { ...existing, wallVertexIndex: vertexIndex, bearingDeg, ...override });
+  }
+
   borders(p: Patch): boolean {
     const withinWalls = this.patches.includes(p);
     const length = this.shape.length;
@@ -199,4 +273,10 @@ export class CurtainWall {
     }
     return false;
   }
+}
+
+/** Normalise a compass bearing to the half-open range [0, 360). */
+function normaliseBearing(deg: number): number {
+  const mod = ((deg % 360) + 360) % 360;
+  return Math.round(mod * 10) / 10;
 }

@@ -47,20 +47,20 @@ describe('mapToGenerationParams: roadBearings conversion', () => {
     expect(params.roadEntryPoints!.length).toBe(4);
 
     // Bearing 0 (N) → (0, -1)
-    expect(params.roadEntryPoints![0].x).toBeCloseTo(0, 5);
-    expect(params.roadEntryPoints![0].y).toBeCloseTo(-1, 5);
+    expect(params.roadEntryPoints![0].point.x).toBeCloseTo(0, 5);
+    expect(params.roadEntryPoints![0].point.y).toBeCloseTo(-1, 5);
 
     // Bearing 90 (E) → (1, 0)
-    expect(params.roadEntryPoints![1].x).toBeCloseTo(1, 5);
-    expect(params.roadEntryPoints![1].y).toBeCloseTo(0, 5);
+    expect(params.roadEntryPoints![1].point.x).toBeCloseTo(1, 5);
+    expect(params.roadEntryPoints![1].point.y).toBeCloseTo(0, 5);
 
     // Bearing 180 (S) → (0, 1)
-    expect(params.roadEntryPoints![2].x).toBeCloseTo(0, 5);
-    expect(params.roadEntryPoints![2].y).toBeCloseTo(1, 5);
+    expect(params.roadEntryPoints![2].point.x).toBeCloseTo(0, 5);
+    expect(params.roadEntryPoints![2].point.y).toBeCloseTo(1, 5);
 
     // Bearing 270 (W) → (-1, 0)
-    expect(params.roadEntryPoints![3].x).toBeCloseTo(-1, 5);
-    expect(params.roadEntryPoints![3].y).toBeCloseTo(0, 5);
+    expect(params.roadEntryPoints![3].point.x).toBeCloseTo(-1, 5);
+    expect(params.roadEntryPoints![3].point.y).toBeCloseTo(0, 5);
   });
 
   it('omits roadEntryPoints when no bearings provided', () => {

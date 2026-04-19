@@ -1,5 +1,18 @@
 import { Point } from '../types/point.js';
-import type { GenerationParams } from '../generator/generation-params.js';
+import type { GenerationParams, RoadEntry, RouteKind } from '../generator/generation-params.js';
+
+/**
+ * A road bearing either as a plain compass angle (back-compat) or a richer record
+ * carrying the caller's route_id so questables-style consumers can round-trip
+ * the matched route on each gate output feature.
+ */
+export type RoadBearingInput =
+  | number
+  | {
+      bearing_deg: number;
+      route_id?: string;
+      kind?: RouteKind;
+    };
 
 /**
  * Input data from Azgaar's Fantasy Map Generator (maps_burgs table).
@@ -17,8 +30,12 @@ export interface AzgaarBurgInput {
   culture?: string;
   elevation?: number;
   temperature?: number;
-  /** Compass bearings (degrees, 0=N clockwise) of roads approaching the burg */
-  roadBearings?: number[];
+  /**
+   * Compass bearings (degrees, 0=N clockwise) of roads approaching the burg.
+   * Bare numbers work for back-compat; pass objects to have the matched
+   * `route_id` echoed back on the gate output feature.
+   */
+  roadBearings?: RoadBearingInput[];
   /** Compass bearing (degrees, 0=N clockwise) to nearest ocean — enables coastline clipping for port cities */
   oceanBearing?: number;
   /** Harbour size for port cities — 'large' for major sea routes + big pop, 'small' otherwise */
@@ -63,9 +80,12 @@ export function mapToGenerationParams(
 ): GenerationParams {
   const seed = seedOverride ?? hashString(burg.name);
 
-  const roadEntryPoints = burg.roadBearings?.map(bearing => {
-    const rad = bearing * Math.PI / 180;
-    return new Point(Math.sin(rad), -Math.cos(rad));
+  const roadEntryPoints: RoadEntry[] | undefined = burg.roadBearings?.map(b => {
+    const bearingDeg = typeof b === 'number' ? b : b.bearing_deg;
+    const rad = bearingDeg * Math.PI / 180;
+    const point = new Point(Math.sin(rad), -Math.cos(rad));
+    if (typeof b === 'number') return { point, bearingDeg };
+    return { point, bearingDeg, routeId: b.route_id, kind: b.kind };
   });
 
   return {
