@@ -90,6 +90,7 @@ export function mapToGenerationParams(
 
   return {
     nPatches: populationToPatches(burg.population),
+    population: burg.population,
     plazaNeeded: burg.plaza,
     citadelNeeded: burg.citadel,
     wallsNeeded: burg.walls,

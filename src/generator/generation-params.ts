@@ -18,6 +18,8 @@ export interface RoadEntry {
 export interface GenerationParams {
   /** Number of Voronoi patches for the inner city */
   nPatches: number;
+  /** Population used for scale emission in GeoJSON metadata. */
+  population: number;
   /** Whether to generate a central market plaza */
   plazaNeeded: boolean;
   /** Whether to generate a citadel/castle */
