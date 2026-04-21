@@ -242,3 +242,40 @@ describe('Direct generateGeoJson entry point', () => {
     expect(metadata(fc).generated_at).toBe('2030-12-31T23:59:59Z');
   });
 });
+
+describe('GeoJSON metadata — local_bounds and scale', () => {
+  it('emits schema_version 2', () => {
+    const result = generateFromBurg(makeBurg(), { seed: 42 });
+    expect(metadata(result.geojson).schema_version).toBe(2);
+  });
+
+  it('emits local_bounds with four numeric fields', () => {
+    const result = generateFromBurg(makeBurg(), { seed: 42 });
+    const lb = metadata(result.geojson).local_bounds as Record<string, number>;
+    expect(typeof lb.min_x).toBe('number');
+    expect(typeof lb.min_y).toBe('number');
+    expect(typeof lb.max_x).toBe('number');
+    expect(typeof lb.max_y).toBe('number');
+    expect(lb.max_x).toBeGreaterThan(lb.min_x);
+    expect(lb.max_y).toBeGreaterThan(lb.min_y);
+  });
+
+  it('emits scale with meters_per_unit = diameter_meters / diameter_local', () => {
+    const result = generateFromBurg(makeBurg({ population: 5000 }), { seed: 42 });
+    const scale = metadata(result.geojson).scale as Record<string, number | string>;
+    expect(typeof scale.meters_per_unit).toBe('number');
+    expect(typeof scale.diameter_meters).toBe('number');
+    expect(typeof scale.diameter_local).toBe('number');
+    expect(scale.source).toBe('population_heuristic_v1');
+    const ratio = (scale.diameter_meters as number) / (scale.diameter_local as number);
+    expect(scale.meters_per_unit as number).toBeCloseTo(ratio);
+  });
+
+  it('scale.diameter_meters matches computeSettlementScale(population)', () => {
+    const pop = 5000;
+    const expected = 200 * Math.pow(pop / 100, 0.4);
+    const result = generateFromBurg(makeBurg({ population: pop }), { seed: 42 });
+    const scale = metadata(result.geojson).scale as Record<string, number>;
+    expect(scale.diameter_meters).toBeCloseTo(expected);
+  });
+});

@@ -3,6 +3,9 @@ import type { Polygon } from '../geom/polygon.js';
 import type { Model } from '../generator/model.js';
 import type { CurtainWall, GateMeta } from '../generator/curtain-wall.js';
 import type { GenerationParams } from '../generator/generation-params.js';
+import { computeLocalBounds, computeDiameterLocal } from '../generator/bounds.js';
+import type { LocalBounds } from '../generator/bounds.js';
+import { computeSettlementScale } from './settlement-tiler.js';
 import { Castle } from '../wards/castle.js';
 import { Harbour } from '../wards/harbour.js';
 import { Point } from '../types/point.js';
@@ -11,7 +14,7 @@ import { Point } from '../types/point.js';
  * Version of the output document shape. Bump whenever a breaking change lands
  * (renamed properties, dropped fields) so consumers can gate their ingestion.
  */
-export const GEOJSON_SCHEMA_VERSION = 1;
+export const GEOJSON_SCHEMA_VERSION = 2;
 
 /**
  * Source-of-truth library version. Kept in sync with package.json manually —
@@ -24,6 +27,13 @@ export interface GenerateGeoJsonOptions {
   generatedAt?: string;
   /** Override the library version string (mostly for tests). */
   settlemakerVersion?: string;
+  /**
+   * Padding (local units) for `metadata.local_bounds`. MUST match
+   * `SvgOptions.padding` if both generators are invoked on the same model,
+   * otherwise the SVG viewBox and GeoJSON bounds will drift. Defaults to 20
+   * to match the SVG default.
+   */
+  padding?: number;
 }
 
 /**
@@ -109,7 +119,7 @@ export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = 
     type: 'FeatureCollection',
     features,
     // Extra top-level keys are permitted by RFC 7946 §6.1 ("foreign members").
-    metadata: buildMetadata(model.params, options),
+    metadata: buildMetadata(model, model.params, options),
   } as FeatureCollection & { metadata: OutputMetadata };
 }
 
@@ -120,9 +130,22 @@ interface OutputMetadata {
   coordinate_system: string;
   coordinate_units: string;
   generated_at: string;
+  local_bounds: LocalBounds;
+  scale: {
+    meters_per_unit: number;
+    diameter_meters: number;
+    diameter_local: number;
+    source: string;
+  };
 }
 
-function buildMetadata(params: GenerationParams, options: GenerateGeoJsonOptions): OutputMetadata {
+function buildMetadata(
+  model: Model,
+  params: GenerationParams,
+  options: GenerateGeoJsonOptions,
+): OutputMetadata {
+  const diameterMeters = computeSettlementScale(params.population).diameterMeters;
+  const diameterLocal = computeDiameterLocal(model);
   return {
     schema_version: GEOJSON_SCHEMA_VERSION,
     settlemaker_version: options.settlemakerVersion ?? SETTLEMAKER_VERSION,
@@ -130,6 +153,13 @@ function buildMetadata(params: GenerationParams, options: GenerateGeoJsonOptions
     coordinate_system: 'local_origin_y_down',
     coordinate_units: 'settlement_units',
     generated_at: options.generatedAt ?? new Date().toISOString(),
+    local_bounds: computeLocalBounds(model, options.padding ?? 20),
+    scale: {
+      meters_per_unit: diameterMeters / diameterLocal,
+      diameter_meters: diameterMeters,
+      diameter_local: diameterLocal,
+      source: 'population_heuristic_v1',
+    },
   };
 }
 
