@@ -174,6 +174,23 @@ describe('Entrance features', () => {
     }
   });
 
+  it('emits arrival_local offset inward from the entrance point', () => {
+    const result = generateFromBurg(makeBurg(), { seed: 42 });
+    const entrances = entranceFeatures(result.geojson);
+    expect(entrances.length).toBeGreaterThan(0);
+    for (const e of entrances) {
+      const arrival = e.properties!['arrival_local'] as [number, number];
+      expect(Array.isArray(arrival)).toBe(true);
+      expect(arrival).toHaveLength(2);
+
+      const coords = (e.geometry as unknown as { coordinates: [number, number] }).coordinates;
+      const entranceR = Math.hypot(coords[0], coords[1]);
+      const arrivalR = Math.hypot(arrival[0], arrival[1]);
+      expect(arrivalR).toBeLessThan(entranceR);
+      expect(arrivalR).toBeGreaterThan(0);
+    }
+  });
+
   it('neighbour gate ids link gates along the wall', () => {
     const result = generateFromBurg(
       makeBurg({ population: 15000 }),

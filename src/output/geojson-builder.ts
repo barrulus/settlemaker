@@ -204,21 +204,39 @@ function addEntranceFeatures(features: Feature[], model: Model): void {
   // CurtainWall and are excluded naturally by the gateMeta.get() filter.
   if (model.border === null) return;
   const border = model.border;
+  const diameterLocal = computeDiameterLocal(model);
 
   for (const gate of model.gates) {
     const meta = border.gateMeta.get(gate);
     if (!meta) continue;
-    features.push(entranceFeatureFor(gate, meta, border, model));
+    features.push(entranceFeatureFor(gate, meta, border, model, diameterLocal));
   }
 }
 
-function entranceFeatureFor(gate: Point, meta: GateMeta, border: CurtainWall, model: Model): Feature {
+function entranceFeatureFor(
+  gate: Point,
+  meta: GateMeta,
+  border: CurtainWall,
+  model: Model,
+  diameterLocal: number,
+): Feature {
   const isHarbour = meta.kind === 'sea' || isOnHarbourWater(gate, model);
   const kind: 'land' | 'harbour' = isHarbour ? 'harbour' : 'land';
   const subKind = isHarbour ? 'harbour' : (meta.kind === 'foot' ? 'foot' : 'road');
   const entranceId = `g${meta.wallVertexIndex}`;
 
   const neighbours = findNeighbourEntrances(gate, border);
+
+  // Offset arrival a short distance inward so tokens render inside the
+  // boundary, not on it. Cap the offset so tiny settlements don't overshoot
+  // the origin.
+  const r = Math.hypot(gate.x, gate.y);
+  const offset = Math.min(3, 0.05 * diameterLocal);
+  const arrivalScale = r > 0 ? (r - offset) / r : 0;
+  const arrivalLocal: [number, number] = [
+    Math.round(gate.x * arrivalScale * 100) / 100,
+    Math.round(gate.y * arrivalScale * 100) / 100,
+  ];
 
   const properties: Record<string, unknown> = {
     layer: 'entrance',
@@ -227,6 +245,7 @@ function entranceFeatureFor(gate: Point, meta: GateMeta, border: CurtainWall, mo
     sub_kind: subKind,
     wall_vertex_index: meta.wallVertexIndex,
     bearing_deg: meta.bearingDeg,
+    arrival_local: arrivalLocal,
   };
   if (meta.routeId != null) properties.matched_route_id = meta.routeId;
   if (meta.matchDeltaDeg != null) properties.bearing_match_delta_deg = meta.matchDeltaDeg;
