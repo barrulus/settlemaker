@@ -1,5 +1,7 @@
 import type { Model } from './model.js';
 import type { Point } from '../types/point.js';
+import { Castle } from '../wards/castle.js';
+import { Harbour } from '../wards/harbour.js';
 
 /** Axis-aligned bounding box in settlement-local coordinates (y-down). */
 export interface LocalBounds {
@@ -29,12 +31,20 @@ export function computeLocalBounds(model: Model, padding = 20): LocalBounds {
 
   for (const patch of model.patches) {
     for (const v of patch.shape.vertices) expand(v);
+    if (patch.ward instanceof Harbour) {
+      for (const pier of patch.ward.piers) {
+        for (const v of pier.vertices) expand(v);
+      }
+    }
   }
   if (model.wall !== null) {
     for (const v of model.wall.shape.vertices) expand(v);
   }
   if (model.border !== null) {
     for (const v of model.border.shape.vertices) expand(v);
+  }
+  if (model.citadel !== null && model.citadel.ward instanceof Castle) {
+    for (const v of model.citadel.ward.wall.shape.vertices) expand(v);
   }
   for (const artery of model.arteries) {
     for (const v of artery.vertices) expand(v);
