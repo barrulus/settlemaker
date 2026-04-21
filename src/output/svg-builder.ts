@@ -4,6 +4,7 @@ import { WardType } from '../types/interfaces.js';
 import type { Palette } from '../types/interfaces.js';
 import type { Model } from '../generator/model.js';
 import type { CurtainWall } from '../generator/curtain-wall.js';
+import { computeLocalBounds } from '../generator/bounds.js';
 import { Castle } from '../wards/castle.js';
 import { Harbour } from '../wards/harbour.js';
 import { Farm } from '../wards/farm.js';
@@ -54,22 +55,11 @@ export interface SvgOptions {
 export function generateSvg(model: Model, options: SvgOptions = {}): string {
   const palette = options.palette ?? PALETTE_DEFAULT;
   const padding = options.padding ?? 20;
-
-  // Calculate bounding box
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const patch of model.patches) {
-    for (const v of patch.shape.vertices) {
-      minX = Math.min(minX, v.x);
-      minY = Math.min(minY, v.y);
-      maxX = Math.max(maxX, v.x);
-      maxY = Math.max(maxY, v.y);
-    }
-  }
-
-  const viewMinX = minX - padding;
-  const viewMinY = minY - padding;
-  const viewWidth = (maxX - minX) + padding * 2;
-  const viewHeight = (maxY - minY) + padding * 2;
+  const bounds = computeLocalBounds(model, padding);
+  const viewMinX = bounds.min_x;
+  const viewMinY = bounds.min_y;
+  const viewWidth = bounds.max_x - bounds.min_x;
+  const viewHeight = bounds.max_y - bounds.min_y;
 
   const parts: string[] = [];
 
