@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   generateFromBurg,
   generateGeoJson,
+  parseSvgViewBox,
   GEOJSON_SCHEMA_VERSION,
   SETTLEMAKER_VERSION,
   type AzgaarBurgInput,
@@ -326,5 +327,38 @@ describe('GeoJSON metadata — local_bounds and scale', () => {
     const result = generateFromBurg(makeBurg({ population: pop }), { seed: 42 });
     const scale = metadata(result.geojson).scale as Record<string, number>;
     expect(scale.diameter_meters).toBeCloseTo(expected);
+  });
+});
+
+describe('Padding coupling invariant', () => {
+  // SVG viewBox is formatted to 1 decimal; metadata carries full precision.
+  // min-edges match within 0.05, but the max edge is (x + width) — a sum of
+  // two rounded values — so the worst-case divergence is 0.1. That's still
+  // sub-pixel for any downstream tiler.
+  const TOL = 0.1;
+  const close = (a: number, b: number) => expect(Math.abs(a - b)).toBeLessThanOrEqual(TOL);
+
+  it('SVG viewBox equals metadata.local_bounds for default padding', () => {
+    const result = generateFromBurg(makeBurg(), { seed: 42 });
+    const vb = parseSvgViewBox(result.svg)!;
+    const lb = metadata(result.geojson).local_bounds as Record<string, number>;
+    close(vb.x, lb.min_x);
+    close(vb.y, lb.min_y);
+    close(vb.x + vb.width, lb.max_x);
+    close(vb.y + vb.height, lb.max_y);
+  });
+
+  it('SVG viewBox equals metadata.local_bounds when custom padding is threaded via generateFromBurg', () => {
+    const result = generateFromBurg(makeBurg(), {
+      seed: 42,
+      svg: { padding: 50 },
+      geojson: { padding: 50 },
+    });
+    const vb = parseSvgViewBox(result.svg)!;
+    const lb = metadata(result.geojson).local_bounds as Record<string, number>;
+    close(vb.x, lb.min_x);
+    close(vb.y, lb.min_y);
+    close(vb.x + vb.width, lb.max_x);
+    close(vb.y + vb.height, lb.max_y);
   });
 });
