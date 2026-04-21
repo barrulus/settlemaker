@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { generateFromBurg, type AzgaarBurgInput } from '../src/index.js';
-import { computeLocalBounds } from '../src/generator/bounds.js';
+import { computeLocalBounds, computeDiameterLocal } from '../src/generator/bounds.js';
 import { Castle } from '../src/wards/castle.js';
 import { Harbour } from '../src/wards/harbour.js';
 
@@ -111,5 +111,33 @@ describe('computeLocalBounds', () => {
     const a = generateFromBurg(makeBurg(), { seed: 42 }).model;
     const b = generateFromBurg(makeBurg(), { seed: 42 }).model;
     expect(computeLocalBounds(a, 20)).toEqual(computeLocalBounds(b, 20));
+  });
+});
+
+describe('computeDiameterLocal', () => {
+  it('returns 2 * max vertex distance from origin on the border polygon', () => {
+    const { model } = generateFromBurg(makeBurg(), { seed: 42 });
+    expect(model.border).not.toBeNull();
+
+    let maxDist = 0;
+    for (const v of model.border!.shape.vertices) {
+      maxDist = Math.max(maxDist, v.length);
+    }
+
+    expect(computeDiameterLocal(model)).toBeCloseTo(maxDist * 2);
+  });
+
+  it('is non-zero for a tiny hamlet', () => {
+    const { model } = generateFromBurg(
+      makeBurg({ population: 80, walls: false, plaza: false }),
+      { seed: 42 },
+    );
+    expect(computeDiameterLocal(model)).toBeGreaterThan(0);
+  });
+
+  it('is deterministic for the same seed', () => {
+    const a = generateFromBurg(makeBurg(), { seed: 42 }).model;
+    const b = generateFromBurg(makeBurg(), { seed: 42 }).model;
+    expect(computeDiameterLocal(a)).toBeCloseTo(computeDiameterLocal(b));
   });
 });

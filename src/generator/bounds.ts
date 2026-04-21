@@ -63,3 +63,23 @@ export function computeLocalBounds(model: Model, padding = 20): LocalBounds {
     max_y: maxY + padding,
   };
 }
+
+/**
+ * Diameter (in local units) of the smallest origin-centred circle enclosing
+ * the settlement's outer perimeter. Divided into `diameter_meters` (from the
+ * population heuristic) this yields a tile-geometry-independent
+ * `meters_per_unit` ratio.
+ *
+ * `model.border` always exists post-`buildWalls()`, for both walled and
+ * unwalled burgs. Throws if called before generation completes.
+ */
+export function computeDiameterLocal(model: Model): number {
+  if (model.border === null) {
+    throw new Error('computeDiameterLocal called before buildWalls()');
+  }
+  let maxR = 0;
+  for (const v of model.border.shape.vertices) {
+    if (v.length > maxR) maxR = v.length;
+  }
+  return maxR * 2;
+}
