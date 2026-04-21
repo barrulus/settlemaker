@@ -46,7 +46,7 @@ describe('Integration: generateFromBurg', () => {
     expect(layers.has('building')).toBe(true);
     expect(layers.has('street')).toBe(true);
     expect(layers.has('wall')).toBe(true);
-    expect(layers.has('gate')).toBe(true);
+    expect(layers.has('entrance')).toBe(true);
   });
 
   it('is deterministic', () => {

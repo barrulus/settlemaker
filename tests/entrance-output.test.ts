@@ -24,8 +24,8 @@ function makeBurg(overrides: Partial<AzgaarBurgInput> = {}): AzgaarBurgInput {
   };
 }
 
-function gateFeatures(fc: FeatureCollection): Feature[] {
-  return fc.features.filter(f => f.properties?.['layer'] === 'gate');
+function entranceFeatures(fc: FeatureCollection): Feature[] {
+  return fc.features.filter(f => f.properties?.['layer'] === 'entrance');
 }
 
 function metadata(fc: FeatureCollection): Record<string, unknown> {
@@ -97,15 +97,15 @@ describe('settlement_generation_version', () => {
   });
 });
 
-describe('Gate features', () => {
-  it('every gate has gate_id, kind, sub_kind, bearing_deg, wall_vertex_index', () => {
+describe('Entrance features', () => {
+  it('every gate has entrance_id, kind, sub_kind, bearing_deg, wall_vertex_index', () => {
     const result = generateFromBurg(makeBurg(), { seed: 42 });
-    const gates = gateFeatures(result.geojson);
+    const gates = entranceFeatures(result.geojson);
     expect(gates.length).toBeGreaterThan(0);
     for (const g of gates) {
       const p = g.properties!;
-      expect(typeof p['gate_id']).toBe('string');
-      expect(p['gate_id']).toMatch(/^g\d+$/);
+      expect(typeof p['entrance_id']).toBe('string');
+      expect(p['entrance_id']).toMatch(/^g\d+$/);
       expect(['land', 'harbour']).toContain(p['kind']);
       expect(['road', 'foot', 'harbour']).toContain(p['sub_kind']);
       expect(typeof p['bearing_deg']).toBe('number');
@@ -124,7 +124,7 @@ describe('Gate features', () => {
       makeBurg({ roadBearings: bearings, population: 10000 }),
       { seed: 42 },
     );
-    const gates = gateFeatures(result.geojson);
+    const gates = entranceFeatures(result.geojson);
     const matched = gates
       .map(g => g.properties!['matched_route_id'])
       .filter((v): v is string => typeof v === 'string');
@@ -142,7 +142,7 @@ describe('Gate features', () => {
       makeBurg({ roadBearings: bearings, population: 10000 }),
       { seed: 42 },
     );
-    const matched = gateFeatures(result.geojson)
+    const matched = entranceFeatures(result.geojson)
       .find(g => g.properties!['matched_route_id'] === 'east');
     expect(matched).toBeDefined();
     expect(typeof matched!.properties!['bearing_match_delta_deg']).toBe('number');
@@ -155,7 +155,7 @@ describe('Gate features', () => {
       makeBurg({ roadBearings: bearings, population: 10000 }),
       { seed: 42 },
     );
-    const footGate = gateFeatures(result.geojson)
+    const footGate = entranceFeatures(result.geojson)
       .find(g => g.properties!['matched_route_id'] === 'trail');
     expect(footGate).toBeDefined();
     expect(footGate!.properties!['sub_kind']).toBe('foot');
@@ -166,7 +166,7 @@ describe('Gate features', () => {
       makeBurg({ roadBearings: [0, 90], population: 10000 }),
       { seed: 42 },
     );
-    const gates = gateFeatures(result.geojson);
+    const gates = entranceFeatures(result.geojson);
     expect(gates.length).toBeGreaterThan(0);
     // No matched_route_id without object form, but sub_kind defaults to road
     for (const g of gates) {
@@ -179,12 +179,12 @@ describe('Gate features', () => {
       makeBurg({ population: 15000 }),
       { seed: 42 },
     );
-    const gates = gateFeatures(result.geojson);
+    const gates = entranceFeatures(result.geojson);
     if (gates.length < 2) return;
-    const byId = new Map(gates.map(g => [g.properties!['gate_id'] as string, g]));
+    const byId = new Map(gates.map(g => [g.properties!['entrance_id'] as string, g]));
     for (const g of gates) {
-      const nextId = g.properties!['next_gate_id'];
-      const prevId = g.properties!['prev_gate_id'];
+      const nextId = g.properties!['next_entrance_id'];
+      const prevId = g.properties!['prev_entrance_id'];
       if (typeof nextId === 'string') expect(byId.has(nextId)).toBe(true);
       if (typeof prevId === 'string') expect(byId.has(prevId)).toBe(true);
     }
@@ -197,7 +197,7 @@ describe('Port cities', () => {
       makeBurg({ port: true, population: 15000, oceanBearing: 180, harbourSize: 'large' }),
       { seed: 42 },
     );
-    const gates = gateFeatures(result.geojson);
+    const gates = entranceFeatures(result.geojson);
     const harbourGates = gates.filter(g => g.properties!['kind'] === 'harbour');
     // Not every seed lands a harbour; assert at least that if present, it has the right shape.
     if (harbourGates.length > 0) {
@@ -207,12 +207,12 @@ describe('Port cities', () => {
 });
 
 describe('Unwalled burgs', () => {
-  it('emits no gate features when walls=false', () => {
+  it('emits no entrance features when walls=false', () => {
     const result = generateFromBurg(
       makeBurg({ walls: false, population: 300, citadel: false, plaza: false }),
       { seed: 42 },
     );
-    expect(gateFeatures(result.geojson).length).toBe(0);
+    expect(entranceFeatures(result.geojson).length).toBe(0);
   });
 
   it('still emits a valid metadata block for unwalled burgs', () => {

@@ -113,7 +113,7 @@ export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = 
     addWallFeatures(features, (model.citadel.ward as Castle).wall, 'citadel_wall');
   }
 
-  addGateFeatures(features, model);
+  addEntranceFeatures(features, model);
 
   return {
     type: 'FeatureCollection',
@@ -198,31 +198,31 @@ function djb2(s: string): number {
   return hash || 1;
 }
 
-function addGateFeatures(features: Feature[], model: Model): void {
-  // Only walled burgs emit gates in P0. Unwalled "approach point" synthesis is P1.
+function addEntranceFeatures(features: Feature[], model: Model): void {
+  // Only walled burgs emit entrances in P0. Unwalled "approach point" synthesis is P1.
   if (model.wall === null) return;
   const border = model.wall;
 
   for (const gate of model.gates) {
     const meta = border.gateMeta.get(gate);
-    // Only emit gates we have metadata for (border wall + harbour). Citadel gates
+    // Only emit entrances we have metadata for (border wall + harbour). Citadel gates
     // are omitted — they're internal and questables doesn't route to them.
     if (!meta) continue;
-    features.push(gateFeatureFor(gate, meta, border, model));
+    features.push(entranceFeatureFor(gate, meta, border, model));
   }
 }
 
-function gateFeatureFor(gate: Point, meta: GateMeta, border: CurtainWall, model: Model): Feature {
+function entranceFeatureFor(gate: Point, meta: GateMeta, border: CurtainWall, model: Model): Feature {
   const isHarbour = meta.kind === 'sea' || isOnHarbourWater(gate, model);
   const kind: 'land' | 'harbour' = isHarbour ? 'harbour' : 'land';
   const subKind = isHarbour ? 'harbour' : (meta.kind === 'foot' ? 'foot' : 'road');
-  const gateId = `g${meta.wallVertexIndex}`;
+  const entranceId = `g${meta.wallVertexIndex}`;
 
-  const neighbours = findNeighbourGates(gate, border);
+  const neighbours = findNeighbourEntrances(gate, border);
 
   const properties: Record<string, unknown> = {
-    layer: 'gate',
-    gate_id: gateId,
+    layer: 'entrance',
+    entrance_id: entranceId,
     kind,
     sub_kind: subKind,
     wall_vertex_index: meta.wallVertexIndex,
@@ -230,8 +230,8 @@ function gateFeatureFor(gate: Point, meta: GateMeta, border: CurtainWall, model:
   };
   if (meta.routeId != null) properties.matched_route_id = meta.routeId;
   if (meta.matchDeltaDeg != null) properties.bearing_match_delta_deg = meta.matchDeltaDeg;
-  if (neighbours.prev != null) properties.prev_gate_id = neighbours.prev;
-  if (neighbours.next != null) properties.next_gate_id = neighbours.next;
+  if (neighbours.prev != null) properties.prev_entrance_id = neighbours.prev;
+  if (neighbours.next != null) properties.next_entrance_id = neighbours.next;
 
   return {
     type: 'Feature',
@@ -254,7 +254,7 @@ function isOnHarbourWater(gate: Point, model: Model): boolean {
  * vertices by identity, so walking over `model.gates` would spuriously stop
  * at them even though they belong to a separate wall.
  */
-function findNeighbourGates(
+function findNeighbourEntrances(
   gate: Point,
   border: CurtainWall,
 ): { prev?: string; next?: string } {
