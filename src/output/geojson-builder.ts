@@ -199,14 +199,14 @@ function djb2(s: string): number {
 }
 
 function addEntranceFeatures(features: Feature[], model: Model): void {
-  // Only walled burgs emit entrances in P0. Unwalled "approach point" synthesis is P1.
-  if (model.wall === null) return;
-  const border = model.wall;
+  // model.border always exists post-buildWalls(); it holds gateMeta for
+  // walled AND unwalled burgs. Citadel-wall gates live on a different
+  // CurtainWall and are excluded naturally by the gateMeta.get() filter.
+  if (model.border === null) return;
+  const border = model.border;
 
   for (const gate of model.gates) {
     const meta = border.gateMeta.get(gate);
-    // Only emit entrances we have metadata for (border wall + harbour). Citadel gates
-    // are omitted — they're internal and questables doesn't route to them.
     if (!meta) continue;
     features.push(entranceFeatureFor(gate, meta, border, model));
   }

@@ -207,12 +207,42 @@ describe('Port cities', () => {
 });
 
 describe('Unwalled burgs', () => {
-  it('emits no entrance features when walls=false', () => {
+  it('emits entrance features matching roadBearings', () => {
+    const result = generateFromBurg(
+      makeBurg({
+        walls: false,
+        population: 400,
+        citadel: false,
+        plaza: false,
+        roadBearings: [
+          { bearing_deg: 0, route_id: 'route-north', kind: 'road' },
+          { bearing_deg: 180, route_id: 'route-south', kind: 'road' },
+        ],
+      }),
+      { seed: 42 },
+    );
+    const entrances = entranceFeatures(result.geojson);
+    expect(entrances.length).toBeGreaterThan(0);
+    const matched = entrances
+      .map(e => e.properties!['matched_route_id'])
+      .filter((v): v is string => typeof v === 'string');
+    expect(matched.length).toBeGreaterThan(0);
+    for (const id of matched) {
+      expect(['route-north', 'route-south']).toContain(id);
+    }
+  });
+
+  it('emits entrance features for unwalled burgs without bearings (random placement)', () => {
     const result = generateFromBurg(
       makeBurg({ walls: false, population: 300, citadel: false, plaza: false }),
       { seed: 42 },
     );
-    expect(entranceFeatures(result.geojson).length).toBe(0);
+    const entrances = entranceFeatures(result.geojson);
+    expect(entrances.length).toBeGreaterThan(0);
+    for (const e of entrances) {
+      expect(e.properties!['matched_route_id']).toBeUndefined();
+      expect(e.properties!['layer']).toBe('entrance');
+    }
   });
 
   it('still emits a valid metadata block for unwalled burgs', () => {
@@ -221,6 +251,8 @@ describe('Unwalled burgs', () => {
       { seed: 42 },
     );
     expect(metadata(result.geojson).schema_version).toBe(GEOJSON_SCHEMA_VERSION);
+    expect(metadata(result.geojson).local_bounds).toBeDefined();
+    expect(metadata(result.geojson).scale).toBeDefined();
   });
 });
 
