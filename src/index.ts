@@ -36,6 +36,9 @@ export { Point } from './types/point.js';
 export { Polygon } from './geom/polygon.js';
 export { SeededRandom } from './utils/random.js';
 
+export { computeLocalBounds, computeDiameterLocal } from './generator/bounds.js';
+export type { LocalBounds } from './generator/bounds.js';
+
 import type { AzgaarBurgInput } from './input/azgaar-input.js';
 import type { FeatureCollection } from 'geojson';
 import { mapToGenerationParams } from './input/azgaar-input.js';
