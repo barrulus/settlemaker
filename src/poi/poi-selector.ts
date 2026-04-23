@@ -145,6 +145,69 @@ function emitAdopted(
   }
 }
 
+function patchesWithWard(model: Model, type: WardType): Patch[] {
+  return model.patches.filter(p => p.ward?.type === type);
+}
+
+function emitTown(ctx: EmitCtx): void {
+  const P = ctx.population;
+
+  // Tier 1 (adoption-essential), alphabetical within tier:
+  //   cathedral, chapel, inn, market, mill, smithy, tavern
+  // (`chapel` is hamlet-only; `market` and `cathedral` are 1-per-ward.)
+
+  for (let i = 0; i < patchesWithWard(ctx.model, WardType.Cathedral).length; i++) {
+    emitAdopted(ctx, 'cathedral', new Set([WardType.Cathedral]), 1, { allowFallback: false });
+  }
+
+  emitAdopted(ctx, 'inn', new Set([WardType.Merchant]),
+    Math.max(1, Math.round(P / 1500)), { allowFallback: true });
+
+  for (let i = 0; i < patchesWithWard(ctx.model, WardType.Market).length; i++) {
+    emitAdopted(ctx, 'market', new Set([WardType.Market]), 1, { allowFallback: false });
+  }
+
+  if (isWaterAdjacent(ctx.model)) {
+    const wards = new Set(
+      waterAdjacentPatches(ctx.model).map(p => p.ward!.type),
+    );
+    emitAdopted(ctx, 'mill', wards, 1, { allowFallback: false });
+  }
+
+  emitAdopted(ctx, 'smithy', new Set([WardType.Craftsmen]),
+    Math.max(1, Math.round(P / 2000)), { allowFallback: true });
+  emitAdopted(ctx, 'tavern',
+    new Set([WardType.Craftsmen, WardType.Slum, WardType.Harbour]),
+    Math.max(2, Math.round(P / 1200)), { allowFallback: true });
+
+  // Tier 2, alphabetical: bathhouse, guardhouse, guildhall, shop, stable, temple
+  if (P >= 5000) {
+    emitAdopted(ctx, 'bathhouse', new Set([WardType.Merchant, WardType.Patriciate]),
+      1, { allowFallback: false });
+  }
+  for (let i = 0; i < patchesWithWard(ctx.model, WardType.Administration).length; i++) {
+    emitAdopted(ctx, 'guardhouse', new Set([WardType.Administration]), 1, { allowFallback: false });
+  }
+  for (let i = 0; i < patchesWithWard(ctx.model, WardType.Military).length; i++) {
+    emitAdopted(ctx, 'guardhouse', new Set([WardType.Military]), 1, { allowFallback: false });
+  }
+  for (let i = 0; i < patchesWithWard(ctx.model, WardType.GateWard).length; i++) {
+    emitAdopted(ctx, 'guardhouse', new Set([WardType.GateWard]), 1, { allowFallback: false });
+  }
+  for (let i = 0; i < patchesWithWard(ctx.model, WardType.Administration).length; i++) {
+    emitAdopted(ctx, 'guildhall', new Set([WardType.Administration]), 1, { allowFallback: false });
+  }
+  emitAdopted(ctx, 'shop', new Set([WardType.Merchant, WardType.Market]),
+    Math.max(1, Math.round(P / 800)), { allowFallback: true });
+  emitAdopted(ctx, 'stable', new Set([WardType.Craftsmen, WardType.GateWard]),
+    Math.max(1, Math.round(P / 3000)), { allowFallback: false });
+  if (P >= 8000) {
+    for (let i = 0; i < patchesWithWard(ctx.model, WardType.Patriciate).length; i++) {
+      emitAdopted(ctx, 'temple', new Set([WardType.Patriciate]), 1, { allowFallback: false });
+    }
+  }
+}
+
 function emitHamlet(ctx: EmitCtx): void {
   const P = ctx.population;
   const ALL: ReadonlySet<WardType> = new Set(Object.values(WardType));
@@ -185,6 +248,7 @@ export function selectPois(
     pois: [],
   };
   if (regimeFor(population) === 'hamlet') emitHamlet(ctx);
-  // Town regime + harbour + piers added in later tasks.
+  else emitTown(ctx);
+  // Harbour warehouses + piers added in Task 7.
   return ctx.pois;
 }
