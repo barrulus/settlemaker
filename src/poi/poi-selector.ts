@@ -157,12 +157,13 @@ function emitHamlet(ctx: EmitCtx): void {
   }
 
   const gateCount = ctx.model.border?.gateMeta.size ?? 0;
-  const innEmitted =
-    P >= 150 && gateCount >= 2
-      ? (emitAdopted(ctx, 'inn', ALL, 1, { allowFallback: true }),
-         ctx.pois.some(p => p.kind === 'inn'))
-      : false;
-  if (innEmitted) emitAdopted(ctx, 'stable', ALL, 1, { allowFallback: true });
+  if (P >= 150 && gateCount >= 2) {
+    const before = ctx.pois.length;
+    emitAdopted(ctx, 'inn', ALL, 1, { allowFallback: true });
+    if (ctx.pois.length > before) {
+      emitAdopted(ctx, 'stable', ALL, 1, { allowFallback: true });
+    }
+  }
 
   if (P >= 30) {
     const point = ctx.model.plaza ? ctx.model.plaza.shape.center : ctx.model.center;
