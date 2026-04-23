@@ -127,6 +127,12 @@ export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = 
   // 4. POIs: selected after the rest of the map is built.
   const pois = selectPois(model, model.params.population, allocator, buildingIdMap);
   for (const poi of pois) {
+    // Per spec: floating POIs are only `pier` and `well`; all other kinds must
+    // have a non-null building_id or be omitted entirely (the selector enforces this).
+    // Validate BEFORE allocating an id so the allocator stays in sync on failure.
+    if (poi.buildingId === null && !FLOATING_POI_KINDS.has(poi.kind)) {
+      throw new Error(`POI kind ${poi.kind} emitted without a building_id — selector bug`);
+    }
     const props: Record<string, unknown> = {
       layer: 'poi',
       poi_id: allocator.alloc('p'),
@@ -134,11 +140,6 @@ export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = 
       ward_type: poi.wardType,
       building_id: poi.buildingId,
     };
-    // Per spec: floating POIs are only `pier` and `well`; all other kinds must
-    // have a non-null building_id or be omitted entirely (the selector enforces this).
-    if (poi.buildingId === null && !FLOATING_POI_KINDS.has(poi.kind)) {
-      throw new Error(`POI kind ${poi.kind} emitted without a building_id — selector bug`);
-    }
     features.push({
       type: 'Feature',
       properties: props,

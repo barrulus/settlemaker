@@ -93,7 +93,7 @@ describe('GeoJSON schema v3 — feature IDs', () => {
     }
   });
 
-  it('no POI feature has a name property in v1', () => {
+  it('no POI feature has a name property', () => {
     const { geojson } = generateFromBurg(makeBurg(), { seed: 1 });
     for (const f of layer(geojson, 'poi')) {
       expect(f.properties).not.toHaveProperty('name');
@@ -119,7 +119,8 @@ describe('GeoJSON schema v3 — feature IDs', () => {
 });
 
 describe('GeoJSON schema v3 — unchanged layers', () => {
-  it('wall / tower / ward / pier / water / entrance keep their v2 property keysets', () => {
+  it('wall / tower / ward / pier keep their v2 property keysets', () => {
+    // Entrance properties vary based on optional fields; covered elsewhere in entrance-output.test.ts. Water features are not currently emitted.
     const { geojson } = generateFromBurg(makeBurg({ port: true }), { seed: 1 });
     const expectedKeys: Record<string, Set<string>> = {
       wall: new Set(['layer', 'wallType']),
