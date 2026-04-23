@@ -1,6 +1,6 @@
 {
   "name": "settlemaker",
-  "version": "0.3.0-rc.1",
+  "version": "0.3.0-rc.2",
   "description": "Medieval fantasy settlement map generator — TypeScript port of watabou's Medieval Fantasy City Generator",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

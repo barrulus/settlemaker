@@ -65,8 +65,10 @@ export function generateSvg(model: Model, options: SvgOptions = {}): string {
 
   parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewMinX.toFixed(1)} ${viewMinY.toFixed(1)} ${viewWidth.toFixed(1)} ${viewHeight.toFixed(1)}">`);
 
-  // Background — use 100%/100% so the fill tracks the viewBox when tile croppers rewrite it
-  parts.push(`<rect x="0" y="0" width="100%" height="100%" fill="${colorToHex(palette.paper)}"/>`);
+  // Background — span the full viewBox in user coords. 100%/100% resolves against viewBox
+  // width/height but x/y are user coords, so "0,0 + 100%,100%" covers only the +x/+y quadrant
+  // when the viewBox starts at negative coords.
+  parts.push(`<rect x="${viewMinX.toFixed(1)}" y="${viewMinY.toFixed(1)}" width="${viewWidth.toFixed(1)}" height="${viewHeight.toFixed(1)}" fill="${colorToHex(palette.paper)}"/>`);
 
   // Water
   if (model.waterbody.length > 0 && palette.water != null) {
