@@ -294,9 +294,9 @@ describe('Direct generateGeoJson entry point', () => {
 });
 
 describe('GeoJSON metadata — local_bounds and scale', () => {
-  it('emits schema_version 2', () => {
+  it('emits schema_version 3', () => {
     const result = generateFromBurg(makeBurg(), { seed: 42 });
-    expect(metadata(result.geojson).schema_version).toBe(2);
+    expect(metadata(result.geojson).schema_version).toBe(3);
   });
 
   it('emits local_bounds with four numeric fields', () => {

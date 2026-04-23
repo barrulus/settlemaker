@@ -9,18 +9,21 @@ import { computeSettlementScale } from './settlement-tiler.js';
 import { Castle } from '../wards/castle.js';
 import { Harbour } from '../wards/harbour.js';
 import { Point } from '../types/point.js';
+import { IdAllocator } from './id-allocator.js';
+import { selectPois, regimeFor } from '../poi/poi-selector.js';
+import { FLOATING_POI_KINDS } from '../poi/poi-kinds.js';
 
 /**
  * Version of the output document shape. Bump whenever a breaking change lands
  * (renamed properties, dropped fields) so consumers can gate their ingestion.
  */
-export const GEOJSON_SCHEMA_VERSION = 2;
+export const GEOJSON_SCHEMA_VERSION = 3;
 
 /**
  * Source-of-truth library version. Kept in sync with package.json manually —
  * cheaper than a JSON import assertion and lets tests pin a deterministic value.
  */
-export const SETTLEMAKER_VERSION = '0.3.0-rc.1';
+export const SETTLEMAKER_VERSION = '0.4.0';
 
 export interface GenerateGeoJsonOptions {
   /** ISO-8601 timestamp to stamp on the output. Defaults to `new Date().toISOString()`. */
@@ -49,7 +52,10 @@ export interface GenerateGeoJsonOptions {
  */
 export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = {}): FeatureCollection {
   const features: Feature[] = [];
+  const allocator = new IdAllocator();
+  const buildingIdMap = new Map<Polygon, string>();
 
+  // 1. Wards + buildings (buildings get building_id; populate map for POI linking).
   for (const patch of model.patches) {
     if (!patch.ward) continue;
 
@@ -66,11 +72,14 @@ export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = 
     });
 
     for (const building of patch.ward.geometry) {
+      const buildingId = allocator.alloc('b');
+      buildingIdMap.set(building, buildingId);
       features.push({
         type: 'Feature',
         properties: {
           layer: 'building',
           wardType: patch.ward.type,
+          building_id: buildingId,
         },
         geometry: polygonToGeoJson(building),
       });
@@ -90,30 +99,53 @@ export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = 
     }
   }
 
+  // 2. Streets: arteries then roads, each with a stable street_id.
   for (const artery of model.arteries) {
     features.push({
       type: 'Feature',
-      properties: { layer: 'street', streetType: 'artery' },
+      properties: { layer: 'street', streetType: 'artery', street_id: allocator.alloc('s') },
       geometry: { type: 'LineString', coordinates: artery.vertices.map(v => [v.x, v.y]) },
     });
   }
-
   for (const road of model.roads) {
     features.push({
       type: 'Feature',
-      properties: { layer: 'street', streetType: 'road' },
+      properties: { layer: 'street', streetType: 'road', street_id: allocator.alloc('s') },
       geometry: { type: 'LineString', coordinates: road.vertices.map(v => [v.x, v.y]) },
     });
   }
 
+  // 3. Walls + entrances (unchanged).
   if (model.wall !== null) {
     addWallFeatures(features, model.wall, 'city_wall');
   }
   if (model.citadel !== null && model.citadel.ward instanceof Castle) {
     addWallFeatures(features, (model.citadel.ward as Castle).wall, 'citadel_wall');
   }
-
   addEntranceFeatures(features, model);
+
+  // 4. POIs: selected after the rest of the map is built.
+  const pois = selectPois(model, model.params.population, allocator, buildingIdMap);
+  let poiIdx = 0;
+  for (const poi of pois) {
+    const props: Record<string, unknown> = {
+      layer: 'poi',
+      poi_id: `p${poiIdx++}`,
+      kind: poi.kind,
+      ward_type: poi.wardType,
+      building_id: poi.buildingId,
+    };
+    // Per spec: floating POIs are only `pier` and `well`; all other kinds must
+    // have a non-null building_id or be omitted entirely (the selector enforces this).
+    if (poi.buildingId === null && !FLOATING_POI_KINDS.has(poi.kind)) {
+      throw new Error(`POI kind ${poi.kind} emitted without a building_id — selector bug`);
+    }
+    features.push({
+      type: 'Feature',
+      properties: props,
+      geometry: { type: 'Point', coordinates: [poi.point.x, poi.point.y] },
+    });
+  }
 
   return {
     type: 'FeatureCollection',
@@ -137,6 +169,8 @@ interface OutputMetadata {
     diameter_local: number;
     source: string;
   };
+  stable_ids: { prefixes: { entrance: 'g'; poi: 'p'; street: 's'; building: 'b' } };
+  poi_density: 'hamlet' | 'town';
 }
 
 function buildMetadata(
@@ -160,6 +194,8 @@ function buildMetadata(
       diameter_local: diameterLocal,
       source: 'population_heuristic_v1',
     },
+    stable_ids: { prefixes: { entrance: 'g', poi: 'p', street: 's', building: 'b' } },
+    poi_density: regimeFor(params.population),
   };
 }
 
