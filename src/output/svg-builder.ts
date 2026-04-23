@@ -67,8 +67,9 @@ export function generateSvg(model: Model, options: SvgOptions = {}): string {
 
   // Background — span the full viewBox in user coords. 100%/100% resolves against viewBox
   // width/height but x/y are user coords, so "0,0 + 100%,100%" covers only the +x/+y quadrant
-  // when the viewBox starts at negative coords.
-  parts.push(`<rect x="${viewMinX.toFixed(1)}" y="${viewMinY.toFixed(1)}" width="${viewWidth.toFixed(1)}" height="${viewHeight.toFixed(1)}" fill="${colorToHex(palette.paper)}"/>`);
+  // when the viewBox starts at negative coords. The data-bg tag lets cropSvgToTile rewrite
+  // these coords to match the tile's (square-padded) viewBox.
+  parts.push(`<rect data-bg="paper" x="${viewMinX.toFixed(1)}" y="${viewMinY.toFixed(1)}" width="${viewWidth.toFixed(1)}" height="${viewHeight.toFixed(1)}" fill="${colorToHex(palette.paper)}"/>`);
 
   // Water
   if (model.waterbody.length > 0 && palette.water != null) {
