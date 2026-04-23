@@ -47,12 +47,14 @@ describe('selectPois — town regime (P >= 300)', () => {
   });
 
   it('emits 1 cathedral per Cathedral ward', () => {
+    // pop=90000 + seed=42 reliably produces exactly 1 Cathedral ward
     const { model } = generateFromBurg(
-      makeBurg({ population: 20000, temple: true, capital: true }),
-      { seed: 7 },
+      makeBurg({ population: 90000, temple: true, capital: true }),
+      { seed: 42 },
     );
     const cathedralWards = model.patches.filter(p => p.ward?.type === WardType.Cathedral).length;
-    const pois = selectPois(model, 20000, new IdAllocator(), buildingMap(model));
+    expect(cathedralWards).toBeGreaterThan(0);
+    const pois = selectPois(model, 90000, new IdAllocator(), buildingMap(model));
     const emitted = pois.filter(p => p.kind === 'cathedral').length;
     expect(emitted).toBe(cathedralWards);
   });

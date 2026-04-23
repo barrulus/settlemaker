@@ -156,21 +156,19 @@ function emitTown(ctx: EmitCtx): void {
   //   cathedral, chapel, inn, market, mill, smithy, tavern
   // (`chapel` is hamlet-only; `market` and `cathedral` are 1-per-ward.)
 
-  for (let i = 0; i < patchesWithWard(ctx.model, WardType.Cathedral).length; i++) {
+  for (const _ of patchesWithWard(ctx.model, WardType.Cathedral)) {
     emitAdopted(ctx, 'cathedral', new Set([WardType.Cathedral]), 1, { allowFallback: false });
   }
 
   emitAdopted(ctx, 'inn', new Set([WardType.Merchant]),
     Math.max(1, Math.round(P / 1500)), { allowFallback: true });
 
-  for (let i = 0; i < patchesWithWard(ctx.model, WardType.Market).length; i++) {
+  for (const _ of patchesWithWard(ctx.model, WardType.Market)) {
     emitAdopted(ctx, 'market', new Set([WardType.Market]), 1, { allowFallback: false });
   }
 
   if (isWaterAdjacent(ctx.model)) {
-    const wards = new Set(
-      waterAdjacentPatches(ctx.model).map(p => p.ward!.type),
-    );
+    const wards = new Set(waterAdjacentPatches(ctx.model).map(p => p.ward!.type));
     emitAdopted(ctx, 'mill', wards, 1, { allowFallback: false });
   }
 
@@ -185,16 +183,13 @@ function emitTown(ctx: EmitCtx): void {
     emitAdopted(ctx, 'bathhouse', new Set([WardType.Merchant, WardType.Patriciate]),
       1, { allowFallback: false });
   }
-  for (let i = 0; i < patchesWithWard(ctx.model, WardType.Administration).length; i++) {
-    emitAdopted(ctx, 'guardhouse', new Set([WardType.Administration]), 1, { allowFallback: false });
+  // 1 guardhouse per Admin/Military/GateWard ward — collapsed from three loops.
+  for (const t of [WardType.Administration, WardType.Military, WardType.GateWard]) {
+    for (const _ of patchesWithWard(ctx.model, t)) {
+      emitAdopted(ctx, 'guardhouse', new Set([t]), 1, { allowFallback: false });
+    }
   }
-  for (let i = 0; i < patchesWithWard(ctx.model, WardType.Military).length; i++) {
-    emitAdopted(ctx, 'guardhouse', new Set([WardType.Military]), 1, { allowFallback: false });
-  }
-  for (let i = 0; i < patchesWithWard(ctx.model, WardType.GateWard).length; i++) {
-    emitAdopted(ctx, 'guardhouse', new Set([WardType.GateWard]), 1, { allowFallback: false });
-  }
-  for (let i = 0; i < patchesWithWard(ctx.model, WardType.Administration).length; i++) {
+  for (const _ of patchesWithWard(ctx.model, WardType.Administration)) {
     emitAdopted(ctx, 'guildhall', new Set([WardType.Administration]), 1, { allowFallback: false });
   }
   emitAdopted(ctx, 'shop', new Set([WardType.Merchant, WardType.Market]),
@@ -202,7 +197,7 @@ function emitTown(ctx: EmitCtx): void {
   emitAdopted(ctx, 'stable', new Set([WardType.Craftsmen, WardType.GateWard]),
     Math.max(1, Math.round(P / 3000)), { allowFallback: false });
   if (P >= 8000) {
-    for (let i = 0; i < patchesWithWard(ctx.model, WardType.Patriciate).length; i++) {
+    for (const _ of patchesWithWard(ctx.model, WardType.Patriciate)) {
       emitAdopted(ctx, 'temple', new Set([WardType.Patriciate]), 1, { allowFallback: false });
     }
   }
