@@ -12,6 +12,8 @@ function makePort(large: boolean, overrides: Partial<AzgaarBurgInput> = {}): Azg
     population: large ? 20000 : 2000,
     port: true, citadel: false,
     walls: true, plaza: true, temple: false, shanty: false, capital: false,
+    oceanBearing: 90,
+    harbourSize: large ? 'large' : 'small',
     ...overrides,
   };
 }
@@ -29,14 +31,11 @@ function buildingMap(model: ReturnType<typeof generateFromBurg>['model']): Map<P
 describe('selectPois — harbour', () => {
   it('emits one pier POI per pier polygon, ward_type=harbour, buildingId=null', () => {
     const { model } = generateFromBurg(makePort(true), { seed: 3 });
-    if (model.harbour === null) {
-      // Some seeds may not produce a harbour; bail gracefully.
-      expect(true).toBe(true);
-      return;
-    }
+    expect(model.harbour).not.toBeNull();
     const pois = selectPois(model, 20000, new IdAllocator(), buildingMap(model));
     const piers = pois.filter(p => p.kind === 'pier');
-    const harbour = model.harbour.ward as Harbour;
+    const harbour = model.harbour!.ward as Harbour;
+    expect(harbour.piers.length).toBeGreaterThan(0);
     expect(piers).toHaveLength(harbour.piers.length);
     for (const p of piers) {
       expect(p.wardType).toBe(WardType.Harbour);
@@ -44,24 +43,29 @@ describe('selectPois — harbour', () => {
     }
   });
 
-  it('emits 2 warehouse POIs for a large harbour', () => {
+  it('emits 2 warehouse POIs for a large harbour (>= 3 piers)', () => {
     const { model } = generateFromBurg(makePort(true), { seed: 3 });
-    if (model.harbour === null) return;
+    expect(model.harbour).not.toBeNull();
+    const harbour = model.harbour!.ward as Harbour;
+    expect(harbour.piers.length).toBeGreaterThanOrEqual(3);
     const pois = selectPois(model, 20000, new IdAllocator(), buildingMap(model));
     const warehouses = pois.filter(p => p.kind === 'warehouse');
-    expect(warehouses.length).toBeGreaterThanOrEqual(1);
-    expect(warehouses.length).toBeLessThanOrEqual(2);
+    expect(warehouses).toHaveLength(2);
     for (const w of warehouses) {
       expect(w.wardType).toBe(WardType.Harbour);
       expect(w.buildingId).not.toBeNull();
     }
   });
 
-  it('emits 1 warehouse POI for a small harbour', () => {
+  it('emits 1 warehouse POI for a small harbour (< 3 piers)', () => {
     const { model } = generateFromBurg(makePort(false), { seed: 3 });
-    if (model.harbour === null) return;
+    expect(model.harbour).not.toBeNull();
+    const harbour = model.harbour!.ward as Harbour;
+    expect(harbour.piers.length).toBeLessThan(3);
     const pois = selectPois(model, 2000, new IdAllocator(), buildingMap(model));
     const warehouses = pois.filter(p => p.kind === 'warehouse');
-    expect(warehouses.length).toBeLessThanOrEqual(1);
+    expect(warehouses).toHaveLength(1);
+    expect(warehouses[0].wardType).toBe(WardType.Harbour);
+    expect(warehouses[0].buildingId).not.toBeNull();
   });
 });
