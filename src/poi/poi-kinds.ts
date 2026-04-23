@@ -26,5 +26,5 @@ export const POI_TIER: Record<PoiKind, 1 | 2 | 3> = {
   bathhouse: 2, guardhouse: 2, guildhall: 2, shop: 2, stable: 2, temple: 2,
   warehouse: 3,
   // Floating kinds always emit (they don't consume buildings), but give them a tier for completeness.
-  pier: 2, well: 2,
+  pier: 3, well: 3,
 };

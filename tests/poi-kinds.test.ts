@@ -27,10 +27,11 @@ describe('PoiKind constants', () => {
     expect(tier1).toEqual(['cathedral', 'chapel', 'inn', 'market', 'mill', 'smithy', 'tavern']);
   });
 
-  it('Tier 3 contains only warehouse', () => {
+  it('Tier 3 contains warehouse plus floating kinds pier and well', () => {
     const tier3 = Object.entries(POI_TIER)
       .filter(([, t]) => t === 3)
-      .map(([k]) => k);
-    expect(tier3).toEqual(['warehouse']);
+      .map(([k]) => k)
+      .sort();
+    expect(tier3).toEqual(['pier', 'warehouse', 'well']);
   });
 });
