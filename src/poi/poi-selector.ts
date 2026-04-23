@@ -30,9 +30,9 @@ export function scoreBuildings(buildings: Polygon[], reference: Point): Polygon[
 }
 
 /**
- * Reference point for scoring: centroid of the nearest artery vertex to the
- * burg center, or the burg center itself if no arteries exist (tiny unwalled
- * hamlets may have only approach roads).
+ * Reference point for scoring: the artery vertex closest to the burg center,
+ * or the burg center itself if no arteries exist (tiny unwalled hamlets may
+ * have only approach roads).
  */
 export function scoringReference(model: Model): Point {
   if (model.arteries.length === 0) return model.center;

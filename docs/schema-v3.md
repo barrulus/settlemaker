@@ -18,6 +18,12 @@ Bumped in release `0.4.0`. `metadata.schema_version: 3`.
 `wall`, `tower`, `entrance`, `ward`, `pier`, `water` layers keep their exact v2 property keysets.
 Entrance IDs continue to use the `g<wallVertexIndex>` scheme.
 
+### A note on camelCase vs snake_case
+
+Existing v2 layers (`building`, `street`, `ward`, `pier`) use **camelCase** properties (`wardType`, `streetType`). The new v3 properties use **snake_case** (`building_id`, `street_id`, `poi_id`, `ward_type`, `stable_ids`, `poi_density`). This is a deliberate compromise: the v2 properties stayed camelCase to preserve the "unchanged layers" contract, while new v3 fields follow the existing `entrance_id` / `wall_vertex_index` / `sub_kind` convention already established on entrance features.
+
+Consumers should accept both casings and not assume a uniform style across fields.
+
 ## Stable-ID contract
 
 All feature IDs (`entrance_id`, `poi_id`, `street_id`, `building_id`) are stable across re-runs with the same seed and same inputs. Form: `<prefix><sequentialIdx>` where the index reflects generation order and the prefix disambiguates feature type.

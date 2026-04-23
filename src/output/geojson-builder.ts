@@ -202,11 +202,15 @@ function buildMetadata(
 /**
  * Content hash of every input that influences gate placement. Stable across
  * identical runs; changes the moment any gate-affecting input changes.
+ *
+ * population is a hash input because a burg crossing the P=300 regime boundary
+ * produces a different POI set.
  */
 function computeGenerationVersion(params: GenerationParams): string {
   const relevant = {
     schema: GEOJSON_SCHEMA_VERSION,
     seed: params.seed,
+    population: params.population,
     nPatches: params.nPatches,
     walls: params.wallsNeeded,
     citadel: params.citadelNeeded,

@@ -44,6 +44,19 @@ describe('GeoJSON schema v3 — metadata', () => {
     const small = generateFromBurg(makeBurg({ population: 100, walls: false, plaza: false }), { seed: 1 });
     expect(metadata(small.geojson).poi_density).toBe('hamlet');
   });
+
+  it('flips poi_density at the exact P=299/300 boundary', () => {
+    const hamlet = generateFromBurg(
+      makeBurg({ population: 299, walls: false, plaza: false }),
+      { seed: 1 },
+    );
+    const town = generateFromBurg(
+      makeBurg({ population: 300 }),
+      { seed: 1 },
+    );
+    expect(metadata(hamlet.geojson).poi_density).toBe('hamlet');
+    expect(metadata(town.geojson).poi_density).toBe('town');
+  });
 });
 
 describe('GeoJSON schema v3 — feature IDs', () => {
