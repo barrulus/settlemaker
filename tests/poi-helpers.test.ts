@@ -32,6 +32,7 @@ describe('isWaterAdjacent', () => {
       makeBurg({ port: true, population: 8000, oceanBearing: 90, harbourSize: 'large' }),
       { seed: 1 },
     );
+    expect(model.harbour).not.toBeNull();
     expect(isWaterAdjacent(model)).toBe(true);
   });
 });

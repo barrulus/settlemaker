@@ -57,25 +57,11 @@ export function regimeFor(population: number): PoiDensity {
 }
 
 /**
- * True iff the burg has any patch adjacent to open water or a harbour.
- * Used to gate mill placement in both regimes.
+ * True iff the burg has any ward-bearing patch adjacent to open water or the
+ * harbour. Used to gate mill placement in both regimes.
  */
 export function isWaterAdjacent(model: Model): boolean {
-  if (model.harbour !== null) return true;
-  if (model.waterbody.length === 0) return false;
-  for (const patch of model.patches) {
-    if (patch.ward === null) continue;
-    for (const wp of model.waterbody) {
-      // forEdge iterates v0 → v1 on THIS polygon; the shared edge on the
-      // neighbour runs v1 → v0, matching how Model.ts builds harbour adjacency.
-      let adjacent = false;
-      patch.shape.forEdge((v0, v1) => {
-        if (!adjacent && wp.shape.findEdge(v1, v0) !== -1) adjacent = true;
-      });
-      if (adjacent) return true;
-    }
-  }
-  return false;
+  return waterAdjacentPatches(model).length > 0;
 }
 
 /** Returns patches whose ward is present and borders open water or the harbour. */
