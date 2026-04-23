@@ -3,7 +3,8 @@ import type { Patch } from '../generator/patch.js';
 import type { Polygon } from '../geom/polygon.js';
 import { Point } from '../types/point.js';
 import type { IdAllocator } from '../output/id-allocator.js';
-import type { Poi } from './poi-kinds.js';
+import { WardType } from '../types/interfaces.js';
+import type { Poi, PoiKind } from './poi-kinds.js';
 
 /**
  * Order buildings by desirability: largest first, tiebreak by shortest distance
@@ -82,13 +83,107 @@ export function waterAdjacentPatches(model: Model): Patch[] {
   return out;
 }
 
-// `selectPois` implementation lands in Task 5. This stub keeps the module compiling
-// until then — deleted in Task 5, not a permanent placeholder.
+interface EmitCtx {
+  model: Model;
+  population: number;
+  allocator: IdAllocator;
+  buildingIdMap: Map<Polygon, string>;
+  usedBuildings: Set<Polygon>;
+  pois: Poi[];
+}
+
+function allBuildings(model: Model): Array<{ building: Polygon; patch: Patch }> {
+  const out: Array<{ building: Polygon; patch: Patch }> = [];
+  for (const patch of model.patches) {
+    if (!patch.ward) continue;
+    for (const b of patch.ward.geometry) out.push({ building: b, patch });
+  }
+  return out;
+}
+
+function buildingsInWards(
+  model: Model,
+  wardTypes: ReadonlySet<WardType>,
+): Array<{ building: Polygon; patch: Patch }> {
+  return allBuildings(model).filter(({ patch }) => wardTypes.has(patch.ward!.type));
+}
+
+function adoptBest(
+  ctx: EmitCtx,
+  pool: Array<{ building: Polygon; patch: Patch }>,
+  ref: Point,
+): { building: Polygon; patch: Patch } | null {
+  const available = pool.filter(p => !ctx.usedBuildings.has(p.building));
+  if (available.length === 0) return null;
+  const ordered = scoreBuildings(available.map(a => a.building), ref);
+  const chosen = ordered[0];
+  return available.find(a => a.building === chosen) ?? null;
+}
+
+function emitAdopted(
+  ctx: EmitCtx,
+  kind: PoiKind,
+  preferredWards: ReadonlySet<WardType>,
+  count: number,
+  opts: { allowFallback: boolean },
+): void {
+  const ref = scoringReference(ctx.model);
+  for (let i = 0; i < count; i++) {
+    let target = adoptBest(ctx, buildingsInWards(ctx.model, preferredWards), ref);
+    if (target === null && opts.allowFallback) {
+      target = adoptBest(ctx, allBuildings(ctx.model), ref);
+    }
+    if (target === null) return; // skip remaining counts of this kind
+    ctx.usedBuildings.add(target.building);
+    ctx.pois.push({
+      kind,
+      point: target.building.centroid,
+      wardType: target.patch.ward!.type,
+      buildingId: ctx.buildingIdMap.get(target.building) ?? null,
+    });
+    ctx.allocator.alloc('p');
+  }
+}
+
+function emitHamlet(ctx: EmitCtx): void {
+  const P = ctx.population;
+  const ALL: ReadonlySet<WardType> = new Set(Object.values(WardType));
+
+  if (P >= 30) emitAdopted(ctx, 'tavern', ALL, 1, { allowFallback: true });
+  if (P >= 50) emitAdopted(ctx, 'chapel', ALL, 1, { allowFallback: true });
+  if (P >= 80) emitAdopted(ctx, 'smithy', ALL, 1, { allowFallback: true });
+  if (isWaterAdjacent(ctx.model)) {
+    emitAdopted(ctx, 'mill', ALL, 1, { allowFallback: true });
+  }
+
+  const gateCount = ctx.model.border?.gateMeta.size ?? 0;
+  const innEmitted =
+    P >= 150 && gateCount >= 2
+      ? (emitAdopted(ctx, 'inn', ALL, 1, { allowFallback: true }),
+         ctx.pois.some(p => p.kind === 'inn'))
+      : false;
+  if (innEmitted) emitAdopted(ctx, 'stable', ALL, 1, { allowFallback: true });
+
+  if (P >= 30) {
+    const point = ctx.model.plaza ? ctx.model.plaza.shape.center : ctx.model.center;
+    const wardType = ctx.model.plaza ? ctx.model.plaza.ward?.type ?? null : null;
+    ctx.pois.push({ kind: 'well', point, wardType, buildingId: null });
+    ctx.allocator.alloc('p');
+  }
+}
+
 export function selectPois(
-  _model: Model,
-  _population: number,
-  _allocator: IdAllocator,
-  _buildingIdMap: Map<Polygon, string>,
+  model: Model,
+  population: number,
+  allocator: IdAllocator,
+  buildingIdMap: Map<Polygon, string>,
 ): Poi[] {
-  return [];
+  const ctx: EmitCtx = {
+    model, population, allocator, buildingIdMap,
+    usedBuildings: new Set(),
+    pois: [],
+  };
+  if (regimeFor(population) === 'hamlet') emitHamlet(ctx);
+  // Town regime + harbour + piers added in later tasks.
+  return ctx.pois;
 }
