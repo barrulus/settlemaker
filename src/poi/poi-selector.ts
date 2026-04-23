@@ -142,7 +142,6 @@ function emitAdopted(
       wardType: target.patch.ward!.type,
       buildingId: ctx.buildingIdMap.get(target.building) ?? null,
     });
-    ctx.allocator.alloc('p');
   }
 }
 
@@ -228,7 +227,6 @@ function emitHamlet(ctx: EmitCtx): void {
     const point = ctx.model.plaza ? ctx.model.plaza.shape.center : ctx.model.center;
     const wardType = ctx.model.plaza ? ctx.model.plaza.ward?.type ?? null : null;
     ctx.pois.push({ kind: 'well', point, wardType, buildingId: null });
-    ctx.allocator.alloc('p');
   }
 }
 
@@ -270,7 +268,6 @@ function emitHarbour(ctx: EmitCtx): void {
       wardType: WardType.Harbour,
       buildingId: ctx.buildingIdMap.get(target.building) ?? null,
     });
-    ctx.allocator.alloc('p');
   }
 
   // Piers: one POI per pier, point = outer-edge midpoint.
@@ -281,7 +278,6 @@ function emitHarbour(ctx: EmitCtx): void {
       wardType: WardType.Harbour,
       buildingId: null,
     });
-    ctx.allocator.alloc('p');
   }
 }
 

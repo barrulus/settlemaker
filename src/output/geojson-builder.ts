@@ -126,11 +126,10 @@ export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = 
 
   // 4. POIs: selected after the rest of the map is built.
   const pois = selectPois(model, model.params.population, allocator, buildingIdMap);
-  let poiIdx = 0;
   for (const poi of pois) {
     const props: Record<string, unknown> = {
       layer: 'poi',
-      poi_id: `p${poiIdx++}`,
+      poi_id: allocator.alloc('p'),
       kind: poi.kind,
       ward_type: poi.wardType,
       building_id: poi.buildingId,
