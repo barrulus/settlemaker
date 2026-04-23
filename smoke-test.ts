@@ -1,5 +1,6 @@
 import { generateFromBurg, type AzgaarBurgInput } from './src/index.js';
 import { writeFileSync } from 'fs';
+import type { FeatureCollection } from 'geojson';
 
 function test(name: string, pop: number, flags: Partial<AzgaarBurgInput> = {}) {
   const burg: AzgaarBurgInput = {
@@ -64,3 +65,35 @@ const pierCount = harbourWard && 'piers' in harbourWard ? (harbourWard as any).p
 console.log(`Port city: ${port.model.waterbody.length} water patches, ${port.model.wall?.segments.filter(s => !s).length ?? 0} inactive wall segments`);
 console.log(`Harbour: ${harbourLabel}, piers: ${pierCount}`);
 console.log(`Port SVG written: ${port.svg.length} chars`);
+
+function dumpPoiCounts(label: string, fc: FeatureCollection): void {
+  const counts = new Map<string, number>();
+  for (const f of fc.features) {
+    if (f.properties?.['layer'] !== 'poi') continue;
+    const kind = f.properties!['kind'] as string;
+    counts.set(kind, (counts.get(kind) ?? 0) + 1);
+  }
+  const sorted = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  console.log(`[${label}] POIs:`, sorted.map(([k, n]) => `${k}=${n}`).join(', ') || '(none)');
+}
+
+console.log('\n=== POI counts per regime ===');
+for (const [label, population, port] of [
+  ['hamlet', 100, false] as const,
+  ['town',   500, false] as const,
+  ['city',   20000, true] as const,
+]) {
+  const { geojson } = generateFromBurg({
+    name: label,
+    population,
+    port,
+    citadel: false,
+    walls: population >= 300,
+    plaza: population >= 300,
+    temple: population >= 5000,
+    shanty: false,
+    capital: population >= 10000,
+    ...(port ? { oceanBearing: 90, harbourSize: 'large' as const } : {}),
+  }, { seed: 99 });
+  dumpPoiCounts(label, geojson);
+}
