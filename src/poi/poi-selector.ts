@@ -5,6 +5,7 @@ import { Point } from '../types/point.js';
 import type { IdAllocator } from '../output/id-allocator.js';
 import { WardType } from '../types/interfaces.js';
 import type { Poi, PoiKind } from './poi-kinds.js';
+import { Harbour } from '../wards/harbour.js';
 
 /**
  * Order buildings by desirability: largest first, tiebreak by shortest distance
@@ -231,6 +232,59 @@ function emitHamlet(ctx: EmitCtx): void {
   }
 }
 
+/** Midpoint of a pier's outer edge (the edge farthest from the burg center). */
+export function pierOuterMidpoint(pier: Polygon, burgCenter: Point): Point {
+  // Pier is always a 4-vertex rectangle (see src/wards/harbour.ts#createPiers).
+  // Find the edge whose midpoint is farthest from the burg center.
+  let best: Point | null = null;
+  let bestD2 = -1;
+  pier.forEdge((v0, v1) => {
+    const mx = (v0.x + v1.x) / 2;
+    const my = (v0.y + v1.y) / 2;
+    const dx = mx - burgCenter.x;
+    const dy = my - burgCenter.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 > bestD2) { bestD2 = d2; best = new Point(mx, my); }
+  });
+  return best ?? burgCenter;
+}
+
+function emitHarbour(ctx: EmitCtx): void {
+  const harbourPatch = ctx.model.harbour;
+  if (harbourPatch === null || !(harbourPatch.ward instanceof Harbour)) return;
+  const harbour = harbourPatch.ward;
+
+  // Warehouses: top-N by area (nearest-to-pier tiebreak baked into scoreBuildings via pier reference).
+  const n = harbour.piers.length >= 3 ? 2 : 1; // `large` harbours get 3+ piers (see createPiers).
+  const pierRef = harbour.piers.length > 0
+    ? pierOuterMidpoint(harbour.piers[0], ctx.model.center)
+    : ctx.model.center;
+  const pool = harbourPatch.ward.geometry.map(b => ({ building: b, patch: harbourPatch }));
+  for (let i = 0; i < n; i++) {
+    const target = adoptBest(ctx, pool, pierRef);
+    if (target === null) break;
+    ctx.usedBuildings.add(target.building);
+    ctx.pois.push({
+      kind: 'warehouse',
+      point: target.building.centroid,
+      wardType: WardType.Harbour,
+      buildingId: ctx.buildingIdMap.get(target.building) ?? null,
+    });
+    ctx.allocator.alloc('p');
+  }
+
+  // Piers: one POI per pier, point = outer-edge midpoint.
+  for (const pier of harbour.piers) {
+    ctx.pois.push({
+      kind: 'pier',
+      point: pierOuterMidpoint(pier, ctx.model.center),
+      wardType: WardType.Harbour,
+      buildingId: null,
+    });
+    ctx.allocator.alloc('p');
+  }
+}
+
 export function selectPois(
   model: Model,
   population: number,
@@ -244,6 +298,6 @@ export function selectPois(
   };
   if (regimeFor(population) === 'hamlet') emitHamlet(ctx);
   else emitTown(ctx);
-  // Harbour warehouses + piers added in Task 7.
+  emitHarbour(ctx);
   return ctx.pois;
 }
