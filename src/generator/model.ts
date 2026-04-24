@@ -24,7 +24,6 @@ import { buildWardDistribution, type WardConstructor } from '../wards/ward-distr
 
 const MAX_ATTEMPTS = 20;
 const MIN_POPULATION_FOR_WALLS = 150;
-const MIN_CITADEL_COMPACTNESS = 0.75;
 
 export class Model {
   rng: SeededRandom;
