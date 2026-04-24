@@ -1,5 +1,6 @@
 import type { Model } from './model.js';
 import type { Point } from '../types/point.js';
+import type { OriginShift } from './origin-shift.js';
 import { Castle } from '../wards/castle.js';
 import { Harbour } from '../wards/harbour.js';
 
@@ -19,7 +20,7 @@ export interface LocalBounds {
  * Both the SVG viewBox and the GeoJSON `metadata.local_bounds` derive from
  * this so they cannot drift. Pass the same padding to both callers.
  */
-export function computeLocalBounds(model: Model, padding = 20): LocalBounds {
+export function computeLocalBounds(model: Model, padding = 20, shift?: OriginShift): LocalBounds {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 
   const expand = (p: Point) => {
@@ -56,12 +57,21 @@ export function computeLocalBounds(model: Model, padding = 20): LocalBounds {
     for (const v of street.vertices) expand(v);
   }
 
-  return {
+  const raw: LocalBounds = {
     min_x: minX - padding,
     min_y: minY - padding,
     max_x: maxX + padding,
     max_y: maxY + padding,
   };
+  if (shift && (shift.dx !== 0 || shift.dy !== 0)) {
+    return {
+      min_x: raw.min_x + shift.dx,
+      min_y: raw.min_y + shift.dy,
+      max_x: raw.max_x + shift.dx,
+      max_y: raw.max_y + shift.dy,
+    };
+  }
+  return raw;
 }
 
 /**

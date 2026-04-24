@@ -7,7 +7,7 @@ import type { Feature, FeatureCollection } from 'geojson';
 
 function makeBurg(overrides: Partial<AzgaarBurgInput> = {}): AzgaarBurgInput {
   return {
-    name: 'V3', population: 5000, port: false, citadel: false,
+    name: 'V4', population: 5000, port: false, citadel: false,
     walls: true, plaza: true, temple: true, shanty: false, capital: false,
     ...overrides,
   };
@@ -21,13 +21,13 @@ function layer(fc: FeatureCollection, name: string): Feature[] {
   return fc.features.filter(f => f.properties?.['layer'] === name);
 }
 
-describe('GeoJSON schema v3 — metadata', () => {
-  it('emits schema_version 3 and version 0.5.0', () => {
+describe('GeoJSON schema v4 — metadata', () => {
+  it('emits schema_version 4 and version 0.6.0', () => {
     const { geojson } = generateFromBurg(makeBurg(), { seed: 1 });
-    expect(GEOJSON_SCHEMA_VERSION).toBe(3);
-    expect(SETTLEMAKER_VERSION).toBe('0.5.0');
-    expect(metadata(geojson).schema_version).toBe(3);
-    expect(metadata(geojson).settlemaker_version).toBe('0.5.0');
+    expect(GEOJSON_SCHEMA_VERSION).toBe(4);
+    expect(SETTLEMAKER_VERSION).toBe('0.6.0');
+    expect(metadata(geojson).schema_version).toBe(4);
+    expect(metadata(geojson).settlemaker_version).toBe('0.6.0');
   });
 
   it('emits stable_ids.prefixes with exactly four entries', () => {
@@ -59,7 +59,7 @@ describe('GeoJSON schema v3 — metadata', () => {
   });
 });
 
-describe('GeoJSON schema v3 — feature IDs', () => {
+describe('GeoJSON schema v4 — feature IDs', () => {
   it('every building has a unique building_id matching /^b\\d+$/', () => {
     const { geojson } = generateFromBurg(makeBurg(), { seed: 1 });
     const ids = layer(geojson, 'building').map(f => f.properties!['building_id'] as string);
@@ -131,7 +131,7 @@ describe('GeoJSON schema v3 — feature IDs', () => {
   });
 });
 
-describe('GeoJSON schema v3 — unchanged layers', () => {
+describe('GeoJSON schema v4 — unchanged layers', () => {
   it('wall / tower / ward / pier keep their v2 property keysets', () => {
     // Entrance properties vary based on optional fields; covered elsewhere in entrance-output.test.ts. Water features are not currently emitted.
     const { geojson } = generateFromBurg(makeBurg({ port: true }), { seed: 1 });

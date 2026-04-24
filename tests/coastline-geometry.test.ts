@@ -82,7 +82,10 @@ describe('coastlineGeometry drives water classification', () => {
   });
 
   it('patches outside every coastline polygon stay non-water', () => {
-    // Tiny water polygon far off to the side — no patch centroid should land in it.
+    // Coastline at ~707 units from origin. 707 exceeds the
+    // coast_too_far cut-off (MAX_SHIFT_MULTIPLIER * wallRadius) for any
+    // realistic pop-5000 wall radius, so settlemaker declines to shift and
+    // the polygon fails to contain any city-adjacent patch centroid.
     const farAway = rect(500, 500, 600, 600);
     const result = generateFromBurg(
       makeBurg({
@@ -91,7 +94,29 @@ describe('coastlineGeometry drives water classification', () => {
       }),
       { seed: 42 },
     );
+    expect(result.originShift.source).toBe('coast_too_far');
     expect(result.model.waterbody).toHaveLength(0);
+  });
+
+  it('pulls a coast that sits at ~1.5× wall radius', () => {
+    // Use the pass-1 wall radius to size the coastline: ~1.5 R puts the
+    // polygon well inside the coast-pull band (between 0.44 R and 3 R).
+    const probe = generateFromBurg(
+      makeBurg({ coastlineGeometry: [], harbourSize: 'small' }),
+      { seed: 42 },
+    );
+    const R = probe.model.border!.getRadius();
+    const nearEdge = -R * 1.5;
+    const strip = rect(nearEdge - 100, -100, nearEdge, 100);
+    const result = generateFromBurg(
+      makeBurg({
+        coastlineGeometry: [strip],
+        harbourSize: 'small',
+      }),
+      { seed: 42 },
+    );
+    expect(result.originShift.source).toBe('coast_pull');
+    expect(result.originShift.dx).toBeLessThan(0);
   });
 
   it('supports multiple water bodies', () => {

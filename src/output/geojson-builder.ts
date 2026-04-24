@@ -12,18 +12,19 @@ import { Point } from '../types/point.js';
 import { IdAllocator } from './id-allocator.js';
 import { selectPois, regimeFor } from '../poi/poi-selector.js';
 import { FLOATING_POI_KINDS } from '../poi/poi-kinds.js';
+import { NO_SHIFT, applyOutputShift, type OriginShift } from '../generator/origin-shift.js';
 
 /**
  * Version of the output document shape. Bump whenever a breaking change lands
  * (renamed properties, dropped fields) so consumers can gate their ingestion.
  */
-export const GEOJSON_SCHEMA_VERSION = 3;
+export const GEOJSON_SCHEMA_VERSION = 4;
 
 /**
  * Source-of-truth library version. Kept in sync with package.json manually —
  * cheaper than a JSON import assertion and lets tests pin a deterministic value.
  */
-export const SETTLEMAKER_VERSION = '0.5.0';
+export const SETTLEMAKER_VERSION = '0.6.0';
 
 export interface GenerateGeoJsonOptions {
   /** ISO-8601 timestamp to stamp on the output. Defaults to `new Date().toISOString()`. */
@@ -37,6 +38,8 @@ export interface GenerateGeoJsonOptions {
    * to match the SVG default.
    */
   padding?: number;
+  /** Translation applied to every emitted coordinate; defaults to `NO_SHIFT`. */
+  shift?: OriginShift;
 }
 
 /**
@@ -50,10 +53,16 @@ export interface GenerateGeoJsonOptions {
  * downstream systems (e.g. questables) can detect stale output and upsert on
  * a stable `gate_id` within each gate feature.
  */
+/** Shorthand: translate a model-frame point into the output frame. */
+function sc(p: { x: number; y: number }, shift: OriginShift): [number, number] {
+  return applyOutputShift(p.x, p.y, shift);
+}
+
 export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = {}): FeatureCollection {
   const features: Feature[] = [];
   const allocator = new IdAllocator();
   const buildingIdMap = new Map<Polygon, string>();
+  const shift = options.shift ?? NO_SHIFT;
 
   // 1. Wards + buildings (buildings get building_id; populate map for POI linking).
   for (const patch of model.patches) {
@@ -68,7 +77,7 @@ export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = 
         withinCity: patch.withinCity,
         withinWalls: patch.withinWalls,
       },
-      geometry: polygonToGeoJson(patch.shape),
+      geometry: polygonToGeoJson(patch.shape, shift),
     });
 
     for (const building of patch.ward.geometry) {
@@ -81,7 +90,7 @@ export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = 
           wardType: patch.ward.type,
           building_id: buildingId,
         },
-        geometry: polygonToGeoJson(building),
+        geometry: polygonToGeoJson(building, shift),
       });
     }
 
@@ -93,7 +102,7 @@ export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = 
             layer: 'pier',
             wardType: patch.ward.type,
           },
-          geometry: polygonToGeoJson(pier),
+          geometry: polygonToGeoJson(pier, shift),
         });
       }
     }
@@ -104,25 +113,25 @@ export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = 
     features.push({
       type: 'Feature',
       properties: { layer: 'street', streetType: 'artery', street_id: allocator.alloc('s') },
-      geometry: { type: 'LineString', coordinates: artery.vertices.map(v => [v.x, v.y]) },
+      geometry: { type: 'LineString', coordinates: artery.vertices.map(v => sc(v, shift)) },
     });
   }
   for (const road of model.roads) {
     features.push({
       type: 'Feature',
       properties: { layer: 'street', streetType: 'road', street_id: allocator.alloc('s') },
-      geometry: { type: 'LineString', coordinates: road.vertices.map(v => [v.x, v.y]) },
+      geometry: { type: 'LineString', coordinates: road.vertices.map(v => sc(v, shift)) },
     });
   }
 
-  // 3. Walls + entrances (unchanged).
+  // 3. Walls + entrances.
   if (model.wall !== null) {
-    addWallFeatures(features, model.wall, 'city_wall');
+    addWallFeatures(features, model.wall, 'city_wall', shift);
   }
   if (model.citadel !== null && model.citadel.ward instanceof Castle) {
-    addWallFeatures(features, (model.citadel.ward as Castle).wall, 'citadel_wall');
+    addWallFeatures(features, (model.citadel.ward as Castle).wall, 'citadel_wall', shift);
   }
-  addEntranceFeatures(features, model);
+  addEntranceFeatures(features, model, shift);
 
   // 4. POIs: selected after the rest of the map is built.
   const pois = selectPois(model, model.params.population, allocator, buildingIdMap);
@@ -143,7 +152,7 @@ export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = 
     features.push({
       type: 'Feature',
       properties: props,
-      geometry: { type: 'Point', coordinates: [poi.point.x, poi.point.y] },
+      geometry: { type: 'Point', coordinates: sc(poi.point, shift) },
     });
   }
 
@@ -151,7 +160,7 @@ export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = 
     type: 'FeatureCollection',
     features,
     // Extra top-level keys are permitted by RFC 7946 §6.1 ("foreign members").
-    metadata: buildMetadata(model, model.params, options),
+    metadata: buildMetadata(model, model.params, options, shift),
   } as FeatureCollection & { metadata: OutputMetadata };
 }
 
@@ -172,23 +181,25 @@ interface OutputMetadata {
   stable_ids: { prefixes: { entrance: 'g'; poi: 'p'; street: 's'; building: 'b' } };
   poi_density: 'hamlet' | 'town';
   degraded_flags: string[];
+  local_origin_shift: OriginShift;
 }
 
 function buildMetadata(
   model: Model,
   params: GenerationParams,
   options: GenerateGeoJsonOptions,
+  shift: OriginShift,
 ): OutputMetadata {
   const diameterMeters = computeSettlementScale(params.population).diameterMeters;
   const diameterLocal = computeDiameterLocal(model);
   return {
     schema_version: GEOJSON_SCHEMA_VERSION,
     settlemaker_version: options.settlemakerVersion ?? SETTLEMAKER_VERSION,
-    settlement_generation_version: computeGenerationVersion(params),
+    settlement_generation_version: computeGenerationVersion(params, shift),
     coordinate_system: 'local_origin_y_down',
     coordinate_units: 'settlement_units',
     generated_at: options.generatedAt ?? new Date().toISOString(),
-    local_bounds: computeLocalBounds(model, options.padding ?? 20),
+    local_bounds: computeLocalBounds(model, options.padding ?? 20, shift),
     scale: {
       meters_per_unit: diameterMeters / diameterLocal,
       diameter_meters: diameterMeters,
@@ -198,6 +209,7 @@ function buildMetadata(
     stable_ids: { prefixes: { entrance: 'g', poi: 'p', street: 's', building: 'b' } },
     poi_density: regimeFor(params.population),
     degraded_flags: [...model.degradedFlags].sort(),
+    local_origin_shift: shift,
   };
 }
 
@@ -208,7 +220,7 @@ function buildMetadata(
  * population is a hash input because a burg crossing the P=300 regime boundary
  * produces a different POI set.
  */
-function computeGenerationVersion(params: GenerationParams): string {
+function computeGenerationVersion(params: GenerationParams, shift: OriginShift): string {
   const relevant = {
     schema: GEOJSON_SCHEMA_VERSION,
     seed: params.seed,
@@ -230,6 +242,11 @@ function computeGenerationVersion(params: GenerationParams): string {
     coastlineGeometry: params.coastlineGeometry?.map(ring =>
       ring.map(p => [Math.round(p.x * 100) / 100, Math.round(p.y * 100) / 100]),
     ) ?? null,
+    originShift: {
+      dx: Math.round(shift.dx * 100) / 100,
+      dy: Math.round(shift.dy * 100) / 100,
+      source: shift.source,
+    },
   };
   return djb2(JSON.stringify(relevant)).toString(36);
 }
@@ -242,7 +259,7 @@ function djb2(s: string): number {
   return hash || 1;
 }
 
-function addEntranceFeatures(features: Feature[], model: Model): void {
+function addEntranceFeatures(features: Feature[], model: Model, shift: OriginShift): void {
   // model.border always exists post-buildWalls(); it holds gateMeta for
   // walled AND unwalled burgs. Citadel-wall gates live on a different
   // CurtainWall and are excluded naturally by the gateMeta.get() filter.
@@ -253,7 +270,7 @@ function addEntranceFeatures(features: Feature[], model: Model): void {
   for (const gate of model.gates) {
     const meta = border.gateMeta.get(gate);
     if (!meta) continue;
-    features.push(entranceFeatureFor(gate, meta, border, model, diameterLocal));
+    features.push(entranceFeatureFor(gate, meta, border, model, diameterLocal, shift));
   }
 }
 
@@ -263,6 +280,7 @@ function entranceFeatureFor(
   border: CurtainWall,
   model: Model,
   diameterLocal: number,
+  shift: OriginShift,
 ): Feature {
   const isHarbour = meta.kind === 'sea' || isOnHarbourWater(gate, model);
   const kind: 'land' | 'harbour' = isHarbour ? 'harbour' : 'land';
@@ -277,10 +295,11 @@ function entranceFeatureFor(
   const r = Math.hypot(gate.x, gate.y);
   const offset = Math.min(3, 0.05 * diameterLocal);
   const arrivalScale = r > 0 ? (r - offset) / r : 0;
-  const arrivalLocal: [number, number] = [
+  const arrivalModelFrame: [number, number] = [
     Math.round(gate.x * arrivalScale * 100) / 100,
     Math.round(gate.y * arrivalScale * 100) / 100,
   ];
+  const arrivalLocal = sc({ x: arrivalModelFrame[0], y: arrivalModelFrame[1] }, shift);
 
   const properties: Record<string, unknown> = {
     layer: 'entrance',
@@ -312,7 +331,7 @@ function entranceFeatureFor(
   return {
     type: 'Feature',
     properties,
-    geometry: { type: 'Point', coordinates: [gate.x, gate.y] },
+    geometry: { type: 'Point', coordinates: sc(gate, shift) },
   };
 }
 
@@ -354,24 +373,24 @@ function findNeighbourEntrances(
   return { next: findInDirection(1), prev: findInDirection(-1) };
 }
 
-function addWallFeatures(features: Feature[], wall: CurtainWall, wallType: string): void {
+function addWallFeatures(features: Feature[], wall: CurtainWall, wallType: string, shift: OriginShift): void {
   features.push({
     type: 'Feature',
     properties: { layer: 'wall', wallType },
-    geometry: polygonToGeoJson(wall.shape),
+    geometry: polygonToGeoJson(wall.shape, shift),
   });
 
   for (const tower of wall.towers) {
     features.push({
       type: 'Feature',
       properties: { layer: 'tower', wallType },
-      geometry: { type: 'Point', coordinates: [tower.x, tower.y] },
+      geometry: { type: 'Point', coordinates: sc(tower, shift) },
     });
   }
 }
 
-function polygonToGeoJson(poly: Polygon): GeoPolygon {
-  const coords = poly.vertices.map(v => [v.x, v.y] as [number, number]);
+function polygonToGeoJson(poly: Polygon, shift: OriginShift): GeoPolygon {
+  const coords = poly.vertices.map(v => sc(v, shift));
   if (coords.length > 0) {
     coords.push([coords[0][0], coords[0][1]]);
   }
