@@ -60,3 +60,10 @@ export interface GenerationParams {
   /** Harbour size — 'large' for major sea routes + big pop, 'small' for minor ports */
   harbourSize?: 'large' | 'small';
 }
+
+/**
+ * Flags the generator may auto-disable when the requested feature is
+ * geometrically infeasible. Surfaced on the output so consumers can
+ * distinguish "FMG didn't ask for this" from "settlemaker couldn't build it".
+ */
+export type DegradedFlag = 'walls' | 'citadel';

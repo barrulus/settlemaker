@@ -10,7 +10,7 @@ import { Patch } from './patch.js';
 import { CurtainWall } from './curtain-wall.js';
 import { Topology } from './topology.js';
 import { pointInPolygon } from '../geom/point-in-polygon.js';
-import type { GenerationParams } from './generation-params.js';
+import type { GenerationParams, DegradedFlag } from './generation-params.js';
 import type { Street } from '../types/interfaces.js';
 
 import { Ward } from '../wards/ward.js';
@@ -23,6 +23,8 @@ import { Harbour } from '../wards/harbour.js';
 import { buildWardDistribution, type WardConstructor } from '../wards/ward-distribution.js';
 
 const MAX_ATTEMPTS = 20;
+const MIN_POPULATION_FOR_WALLS = 150;
+const MIN_CITADEL_COMPACTNESS = 0.75;
 
 export class Model {
   rng: SeededRandom;
@@ -47,6 +49,7 @@ export class Model {
 
   cityRadius: number = 0;
   gates: Point[] = [];
+  readonly degradedFlags: Set<DegradedFlag> = new Set();
 
   arteries: Street[] = [];
   streets: Street[] = [];
