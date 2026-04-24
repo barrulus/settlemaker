@@ -62,6 +62,11 @@ export class Model {
     this.plazaNeeded = params.plazaNeeded;
     this.citadelNeeded = params.citadelNeeded;
     this.wallsNeeded = params.wallsNeeded;
+
+    if (this.wallsNeeded && params.population < MIN_POPULATION_FOR_WALLS) {
+      this.wallsNeeded = false;
+      this.degradedFlags.add('walls');
+    }
   }
 
   /** Run the full 6-phase generation pipeline. Retries on failure up to MAX_ATTEMPTS. */
