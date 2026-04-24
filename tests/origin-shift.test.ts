@@ -252,3 +252,51 @@ describe('tiler honours shifted viewBox', () => {
     expect(tiles.length).toBeGreaterThan(0);
   });
 });
+
+describe('acceptance: Ertelenlik-like coastal burg', () => {
+  it('post-shift nearestEdgeDistance sits in [0.3R, 0.5R]', () => {
+    const result = generateFromBurg(coastalBurg());
+    const R = result.model.border!.getRadius();
+    // Shifted origin (in the output frame) = (originShift.dx, dy).
+    // The original coastline's nearest edge is at x = -50 (west strip).
+    // Distance from (dx, dy) to that edge = |-50 - dx|.
+    const d = Math.abs(-50 - result.originShift.dx);
+    expect(Math.abs(result.originShift.dy)).toBeLessThan(1e-6);
+    expect(d).toBeGreaterThanOrEqual(0.3 * R);
+    expect(d).toBeLessThanOrEqual(0.5 * R);
+    expect(result.originShift.source).toBe('coast_pull');
+  });
+});
+
+describe('fuzz: rectangular water strip, vary population', () => {
+  it('wall stays close to coast across populations (after shift if any)', () => {
+    const populations = [500, 1000, 5000, 12000, 30000, 80000];
+    const failures: string[] = [];
+    for (const population of populations) {
+      const result = generateFromBurg({
+        name: `Fuzz-${population}`,
+        population,
+        port: true,
+        citadel: false,
+        walls: true,
+        plaza: true,
+        temple: false,
+        shanty: false,
+        capital: false,
+        coastlineGeometry: [[
+          { x: -400, y: -100 }, { x: -20, y: -100 },
+          { x: -20, y: 100 },   { x: -400, y: 100 },
+        ]],
+        harbourSize: 'large',
+      });
+      const R = result.model.border!.getRadius();
+      const d = Math.abs(-20 - result.originShift.dx);
+      // Invariant: wall reaches (or overlaps) the coast. d <= R means
+      // the wall's west-arc either touches or crosses the coastline.
+      if (d > R) {
+        failures.push(`pop=${population}: d=${d.toFixed(1)} > R=${R.toFixed(1)}, shift=${JSON.stringify(result.originShift)}`);
+      }
+    }
+    expect(failures, failures.join('\n')).toEqual([]);
+  });
+});
