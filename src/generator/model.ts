@@ -76,23 +76,26 @@ export class Model {
         this.build();
         return this;
       } catch (e) {
-        // Reset state and retry
-        this.patches = [];
-        this.inner = [];
-        this.waterbody = [];
-        this.citadel = null;
-        this.plaza = null;
-        this.harbour = null;
-        this.border = null;
-        this.wall = null;
-        this.gates = [];
-        this.streets = [];
-        this.roads = [];
-        this.arteries = [];
-        this.topology = null;
+        this.reset();
       }
     }
     throw new Error(`Failed to generate after ${MAX_ATTEMPTS} attempts`);
+  }
+
+  private reset(): void {
+    this.patches = [];
+    this.inner = [];
+    this.waterbody = [];
+    this.citadel = null;
+    this.plaza = null;
+    this.harbour = null;
+    this.border = null;
+    this.wall = null;
+    this.gates = [];
+    this.streets = [];
+    this.roads = [];
+    this.arteries = [];
+    this.topology = null;
   }
 
   private build(): void {
