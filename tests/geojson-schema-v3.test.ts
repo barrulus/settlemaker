@@ -22,12 +22,12 @@ function layer(fc: FeatureCollection, name: string): Feature[] {
 }
 
 describe('GeoJSON schema v3 — metadata', () => {
-  it('emits schema_version 3 and version 0.4.0', () => {
+  it('emits schema_version 3 and version 0.5.0', () => {
     const { geojson } = generateFromBurg(makeBurg(), { seed: 1 });
     expect(GEOJSON_SCHEMA_VERSION).toBe(3);
-    expect(SETTLEMAKER_VERSION).toBe('0.4.0');
+    expect(SETTLEMAKER_VERSION).toBe('0.5.0');
     expect(metadata(geojson).schema_version).toBe(3);
-    expect(metadata(geojson).settlemaker_version).toBe('0.4.0');
+    expect(metadata(geojson).settlemaker_version).toBe('0.5.0');
   });
 
   it('emits stable_ids.prefixes with exactly four entries', () => {

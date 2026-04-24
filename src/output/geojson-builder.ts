@@ -23,7 +23,7 @@ export const GEOJSON_SCHEMA_VERSION = 3;
  * Source-of-truth library version. Kept in sync with package.json manually —
  * cheaper than a JSON import assertion and lets tests pin a deterministic value.
  */
-export const SETTLEMAKER_VERSION = '0.4.0';
+export const SETTLEMAKER_VERSION = '0.5.0';
 
 export interface GenerateGeoJsonOptions {
   /** ISO-8601 timestamp to stamp on the output. Defaults to `new Date().toISOString()`. */
@@ -171,6 +171,7 @@ interface OutputMetadata {
   };
   stable_ids: { prefixes: { entrance: 'g'; poi: 'p'; street: 's'; building: 'b' } };
   poi_density: 'hamlet' | 'town';
+  degraded_flags: string[];
 }
 
 function buildMetadata(
@@ -196,6 +197,7 @@ function buildMetadata(
     },
     stable_ids: { prefixes: { entrance: 'g', poi: 'p', street: 's', building: 'b' } },
     poi_density: regimeFor(params.population),
+    degraded_flags: [...model.degradedFlags].sort(),
   };
 }
 

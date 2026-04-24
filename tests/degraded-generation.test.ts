@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { Model, mapToGenerationParams, generateFromBurg, type AzgaarBurgInput } from '../src/index.js';
+import { Model, mapToGenerationParams, generateFromBurg, SETTLEMAKER_VERSION, type AzgaarBurgInput } from '../src/index.js';
+import type { FeatureCollection } from 'geojson';
+
+function meta(fc: FeatureCollection): Record<string, unknown> {
+  return (fc as unknown as { metadata: Record<string, unknown> }).metadata;
+}
 
 function burg(overrides: Partial<AzgaarBurgInput>): AzgaarBurgInput {
   return {
@@ -121,5 +126,31 @@ describe('degradedFlags on generateFromBurg result', () => {
       citadel: false,
     }));
     expect(result.degradedFlags).toEqual([]);
+  });
+});
+
+describe('degraded_flags in GeoJSON metadata', () => {
+  it('includes degraded_flags in metadata for a degraded generation', () => {
+    const result = generateFromBurg(burg({
+      name: 'Tiny',
+      population: 50,
+      walls: true,
+    }));
+    const m = meta(result.geojson);
+    expect(m.degraded_flags).toEqual(['walls']);
+  });
+
+  it('emits an empty degraded_flags array when nothing is degraded', () => {
+    const result = generateFromBurg(burg({
+      name: 'Clean',
+      population: 5000,
+    }));
+    expect(meta(result.geojson).degraded_flags).toEqual([]);
+  });
+
+  it('bumps settlemaker_version to 0.5.0', () => {
+    expect(SETTLEMAKER_VERSION).toBe('0.5.0');
+    const result = generateFromBurg(burg({ name: 'V', population: 5000 }));
+    expect(meta(result.geojson).settlemaker_version).toBe('0.5.0');
   });
 });
