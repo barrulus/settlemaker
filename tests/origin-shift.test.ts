@@ -157,6 +157,42 @@ describe('generateFromBurg two-pass shift', () => {
   });
 });
 
+describe('SVG output reflects shift', () => {
+  it('SVG viewBox shifts with the origin', () => {
+    const inland = generateFromBurg(coastalBurg({
+      coastlineGeometry: undefined,
+      harbourSize: undefined,
+    }));
+    const coastal = generateFromBurg(coastalBurg());
+
+    // viewBox="minX minY width height" — extract minX from each.
+    const extract = (svg: string): number => {
+      const m = svg.match(/viewBox="([\-0-9.eE]+) /);
+      return m ? parseFloat(m[1]) : NaN;
+    };
+    const inlandMin = extract(inland.svg);
+    const coastalMin = extract(coastal.svg);
+    // Same pop, same seed (name hash), same nPatches — only difference is the shift.
+    expect(coastalMin - inlandMin).toBeCloseTo(coastal.originShift.dx, 0);
+  });
+
+  it('SVG wall path coordinates are shifted', () => {
+    const result = generateFromBurg(coastalBurg());
+    // Wall is emitted as a <path>; every vertex coord should equal
+    // model-vertex + shift (within float tolerance). Easiest check:
+    // the path string should contain at least one explicitly negative
+    // x value matching the wall's westernmost vertex + shift.dx.
+    const wall = result.model.wall!.shape.vertices;
+    const minModelX = Math.min(...wall.map(v => v.x));
+    const expectedMinOutputX = minModelX + result.originShift.dx;
+    // Parse all number pairs from the SVG; at least one x should be within
+    // 1 unit of expectedMinOutputX.
+    const nums = [...result.svg.matchAll(/(-?\d+(?:\.\d+)?)/g)].map(m => parseFloat(m[1]));
+    const hasExpectedX = nums.some(n => Math.abs(n - expectedMinOutputX) < 1);
+    expect(hasExpectedX).toBe(true);
+  });
+});
+
 describe('GeoJSON output reflects shift', () => {
   it('emits local_origin_shift metadata', () => {
     const result = generateFromBurg(coastalBurg());

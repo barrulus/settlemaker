@@ -113,7 +113,7 @@ export function generateFromBurg(
     : paramsPass1;
   const model = new Model(paramsPass2).generate();
 
-  const svg = generateSvg(model, options?.svg);
+  const svg = generateSvg(model, { ...options?.svg, shift });
   const geojson = generateGeoJson(model, { ...options?.geojson, shift });
   const degradedFlags = [...model.degradedFlags].sort() as DegradedFlag[];
   return { model, svg, geojson, degradedFlags, originShift: shift };
