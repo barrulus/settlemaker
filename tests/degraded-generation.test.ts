@@ -97,3 +97,29 @@ describe('walls fallback for pop ≥ threshold cases', () => {
     });
   }
 });
+
+describe('degradedFlags on generateFromBurg result', () => {
+  it('exposes degradedFlags as a sorted array', () => {
+    const result = generateFromBurg(burg({
+      name: 'BothDegraded',
+      population: 50,   // forces walls drop via the up-front threshold
+      walls: true,
+      citadel: true,    // may or may not degrade depending on geometry — walls is the guaranteed entry
+    }));
+    expect(Array.isArray(result.degradedFlags)).toBe(true);
+    expect(result.degradedFlags).toContain('walls');
+    // Sorted for deterministic consumer output.
+    const copy = [...result.degradedFlags].sort();
+    expect(result.degradedFlags).toEqual(copy);
+  });
+
+  it('returns an empty array when nothing is degraded', () => {
+    const result = generateFromBurg(burg({
+      name: 'Clean',
+      population: 5000,
+      walls: true,
+      citadel: false,
+    }));
+    expect(result.degradedFlags).toEqual([]);
+  });
+});

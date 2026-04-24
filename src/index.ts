@@ -1,6 +1,6 @@
 // Public API
 export { Model } from './generator/model.js';
-export { GenerationParams, RoadEntry, RouteKind } from './generator/generation-params.js';
+export { GenerationParams, RoadEntry, RouteKind, DegradedFlag } from './generator/generation-params.js';
 export { Patch } from './generator/patch.js';
 export { CurtainWall, GateMeta, GateRouteAssignment } from './generator/curtain-wall.js';
 
@@ -43,6 +43,7 @@ export type { Poi, PoiKind } from './poi/poi-kinds.js';
 
 import type { AzgaarBurgInput } from './input/azgaar-input.js';
 import type { FeatureCollection } from 'geojson';
+import type { DegradedFlag } from './generator/generation-params.js';
 import { mapToGenerationParams } from './input/azgaar-input.js';
 import { Model } from './generator/model.js';
 import { generateSvg, type SvgOptions } from './output/svg-builder.js';
@@ -52,6 +53,13 @@ export interface GenerateFromBurgResult {
   model: Model;
   svg: string;
   geojson: FeatureCollection;
+  /**
+   * Input flags that settlemaker was forced to disable because the requested
+   * feature wasn't geometrically feasible (e.g. walls on a population-50
+   * hamlet, citadel on a very non-compact patch). Sorted, stable order so
+   * consumer persistence is deterministic.
+   */
+  degradedFlags: DegradedFlag[];
 }
 
 /**
@@ -65,5 +73,6 @@ export function generateFromBurg(
   const model = new Model(params).generate();
   const svg = generateSvg(model, options?.svg);
   const geojson = generateGeoJson(model, options?.geojson);
-  return { model, svg, geojson };
+  const degradedFlags = [...model.degradedFlags].sort() as DegradedFlag[];
+  return { model, svg, geojson, degradedFlags };
 }
