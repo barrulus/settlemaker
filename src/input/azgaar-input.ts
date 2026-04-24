@@ -40,6 +40,18 @@ export interface AzgaarBurgInput {
   oceanBearing?: number;
   /** Harbour size for port cities — 'large' for major sea routes + big pop, 'small' otherwise */
   harbourSize?: 'large' | 'small';
+  /**
+   * Water polygons surrounding the burg, in burg-local coordinates (origin at
+   * burg centre, same scale as the generated mesh — roughly the wall radius).
+   * Each entry is a closed polygon of water (ocean, lake, cove, etc.); a patch
+   * whose centroid lies inside any polygon is classified as water.
+   *
+   * When set, this replaces the `oceanBearing` half-plane heuristic with
+   * fidelity-preserving classification against the actual world geometry.
+   * `oceanBearing` remains an acceptable fallback when vector coastlines are
+   * not available.
+   */
+  coastlineGeometry?: Array<Array<{ x: number; y: number }>>;
 }
 
 /**
@@ -59,15 +71,6 @@ function populationToPatches(population: number): number {
   if (population < 20000) return 15 + Math.round(((population - 5000) / 15000) * 9);
   if (population < 100000) return 25 + Math.round(((population - 20000) / 80000) * 15);
   return 40 + Math.min(10, Math.round(((population - 100000) / 200000) * 10));
-}
-
-/** Max border gates based on settlement size. */
-function populationToMaxGates(population: number): number {
-  if (population < 1000) return 2;
-  if (population < 5000) return 3;
-  if (population < 20000) return 4;
-  if (population < 100000) return 5;
-  return 6;
 }
 
 /**
@@ -99,9 +102,11 @@ export function mapToGenerationParams(
     capitalNeeded: burg.capital,
     seed,
     ...(roadEntryPoints && roadEntryPoints.length > 0 ? { roadEntryPoints } : {}),
-    maxGates: populationToMaxGates(burg.population),
     ...(burg.oceanBearing != null ? { oceanBearing: burg.oceanBearing } : {}),
     ...(burg.harbourSize != null ? { harbourSize: burg.harbourSize } : {}),
+    ...(burg.coastlineGeometry != null
+      ? { coastlineGeometry: burg.coastlineGeometry.map(ring => ring.map(p => new Point(p.x, p.y))) }
+      : {}),
   };
 }
 

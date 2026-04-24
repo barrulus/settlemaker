@@ -192,6 +192,54 @@ describe('Entrance features', () => {
     }
   });
 
+  it('every caller-supplied route is echoed back, even on small walls', () => {
+    // A pop-1128 burg with 5 routes used to drop 2-3 of them because
+    // populationToMaxGates capped gates at 3. The cap is gone; every route
+    // must surface in matched_route_ids somewhere.
+    const bearings: RoadBearingInput[] = [
+      { bearing_deg: 15, route_id: 'market-n', kind: 'road' },
+      { bearing_deg: 75, route_id: 'market-e', kind: 'road' },
+      { bearing_deg: 150, route_id: 'market-se', kind: 'road' },
+      { bearing_deg: 210, route_id: 'footpath-sw', kind: 'foot' },
+      { bearing_deg: 300, route_id: 'sea-nw', kind: 'sea' },
+    ];
+    const result = generateFromBurg(
+      makeBurg({ roadBearings: bearings, population: 1128 }),
+      { seed: 42 },
+    );
+    const gates = entranceFeatures(result.geojson);
+    const echoed = new Set<string>();
+    for (const g of gates) {
+      const ids = g.properties!['matched_route_ids'] as string[] | undefined;
+      for (const id of ids ?? []) echoed.add(id);
+    }
+    for (const b of bearings) {
+      expect(echoed.has((b as { route_id: string }).route_id)).toBe(true);
+    }
+  });
+
+  it('tightly clustered bearings share a single gate with a multi-route id list', () => {
+    // Two routes arriving within ~10° of each other should map to the same
+    // gate; the gate reports both route ids.
+    const bearings: RoadBearingInput[] = [
+      { bearing_deg: 85, route_id: 'road-east-a', kind: 'road' },
+      { bearing_deg: 95, route_id: 'road-east-b', kind: 'road' },
+    ];
+    const result = generateFromBurg(
+      makeBurg({ roadBearings: bearings, population: 10000 }),
+      { seed: 42 },
+    );
+    const multi = entranceFeatures(result.geojson)
+      .find(g => {
+        const ids = g.properties!['matched_route_ids'] as string[] | undefined;
+        return ids != null && ids.length >= 2;
+      });
+    expect(multi).toBeDefined();
+    const ids = multi!.properties!['matched_route_ids'] as string[];
+    expect(ids).toContain('road-east-a');
+    expect(ids).toContain('road-east-b');
+  });
+
   it('neighbour gate ids link gates along the wall', () => {
     const result = generateFromBurg(
       makeBurg({ population: 15000 }),

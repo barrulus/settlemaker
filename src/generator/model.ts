@@ -9,6 +9,7 @@ import { minBy, randomElement, last } from '../utils/array-utils.js';
 import { Patch } from './patch.js';
 import { CurtainWall } from './curtain-wall.js';
 import { Topology } from './topology.js';
+import { pointInPolygon } from '../geom/point-in-polygon.js';
 import type { GenerationParams } from './generation-params.js';
 import type { Street } from '../types/interfaces.js';
 
@@ -205,7 +206,7 @@ export class Model {
   private buildWalls(): void {
     const reserved = this.citadel !== null ? this.citadel.shape.copy() : [];
 
-    this.border = new CurtainWall(this.wallsNeeded, this, this.inner, reserved, this.rng, this.params.roadEntryPoints, this.params.maxGates);
+    this.border = new CurtainWall(this.wallsNeeded, this, this.inner, reserved, this.rng, this.params.roadEntryPoints);
     if (this.wallsNeeded) {
       this.wall = this.border;
       this.wall.buildTowers();
@@ -233,22 +234,39 @@ export class Model {
 
   // Phase 3.5: Classify water patches for port cities
   private classifyWater(): void {
-    if (this.params.oceanBearing == null) return;
+    const coast = this.params.coastlineGeometry;
+    const hasCoast = coast != null && coast.length > 0 && coast.some(p => p.length >= 3);
+    const hasBearing = this.params.oceanBearing != null;
+    if (!hasCoast && !hasBearing) return;
 
-    const rad = this.params.oceanBearing * Math.PI / 180;
-    const oceanDirX = Math.sin(rad);
-    const oceanDirY = -Math.cos(rad);
-    const threshold = this.border!.getRadius() * 0.3;
+    // Prefer the caller-supplied coastline: patch is water iff its centroid
+    // lies inside any of the supplied water polygons. This produces bays and
+    // headlands that match the source world map instead of the half-plane
+    // approximation driven by a single bearing.
+    let isWater: (patch: Patch) => boolean;
+    if (hasCoast) {
+      isWater = (patch) => {
+        const c = patch.shape.center;
+        for (const poly of coast!) {
+          if (poly.length >= 3 && pointInPolygon(c, poly)) return true;
+        }
+        return false;
+      };
+    } else {
+      const rad = this.params.oceanBearing! * Math.PI / 180;
+      const oceanDirX = Math.sin(rad);
+      const oceanDirY = -Math.cos(rad);
+      const threshold = this.border!.getRadius() * 0.3;
+      isWater = (patch) => {
+        const c = patch.shape.center;
+        return c.x * oceanDirX + c.y * oceanDirY > threshold;
+      };
+    }
 
     for (const patch of this.patches) {
       if (patch.withinCity) continue;
       if (patch.ward !== null) continue;
-
-      const centroid = patch.shape.center;
-      const projection = centroid.x * oceanDirX + centroid.y * oceanDirY;
-      if (projection > threshold) {
-        this.waterbody.push(patch);
-      }
+      if (isWater(patch)) this.waterbody.push(patch);
     }
 
     // Mark wall segments facing water as inactive
@@ -328,10 +346,16 @@ export class Model {
         // Tag it so the GeoJSON output can render it as a harbour-kind gate.
         const vertexIndex = wallVerts.indexOf(harbourGate);
         const bearingDeg = ((Math.atan2(harbourGate.x, -harbourGate.y) * 180 / Math.PI) % 360 + 360) % 360;
+        const normalisedBearing = Math.round(bearingDeg * 10) / 10;
         this.border.gateMeta.set(harbourGate, {
           wallVertexIndex: vertexIndex,
-          bearingDeg: Math.round(bearingDeg * 10) / 10,
+          bearingDeg: normalisedBearing,
           kind: 'sea',
+          routes: [{
+            kind: 'sea',
+            requestedBearingDeg: normalisedBearing,
+            matchDeltaDeg: 0,
+          }],
         });
       }
     }

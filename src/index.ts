@@ -2,7 +2,7 @@
 export { Model } from './generator/model.js';
 export { GenerationParams, RoadEntry, RouteKind } from './generator/generation-params.js';
 export { Patch } from './generator/patch.js';
-export { CurtainWall, GateMeta } from './generator/curtain-wall.js';
+export { CurtainWall, GateMeta, GateRouteAssignment } from './generator/curtain-wall.js';
 
 export { AzgaarBurgInput, RoadBearingInput, mapToGenerationParams } from './input/azgaar-input.js';
 export { Harbour } from './wards/harbour.js';

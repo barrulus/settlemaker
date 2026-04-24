@@ -218,7 +218,6 @@ function computeGenerationVersion(params: GenerationParams): string {
     temple: params.templeNeeded,
     shanty: params.shantyNeeded,
     capital: params.capitalNeeded,
-    maxGates: params.maxGates ?? null,
     oceanBearing: params.oceanBearing ?? null,
     harbourSize: params.harbourSize ?? null,
     roadBearings: params.roadEntryPoints?.map(r => ({
@@ -226,6 +225,9 @@ function computeGenerationVersion(params: GenerationParams): string {
       r: r.routeId ?? null,
       k: r.kind ?? null,
     })) ?? null,
+    coastlineGeometry: params.coastlineGeometry?.map(ring =>
+      ring.map(p => [Math.round(p.x * 100) / 100, Math.round(p.y * 100) / 100]),
+    ) ?? null,
   };
   return djb2(JSON.stringify(relevant)).toString(36);
 }
@@ -289,6 +291,19 @@ function entranceFeatureFor(
   };
   if (meta.routeId != null) properties.matched_route_id = meta.routeId;
   if (meta.matchDeltaDeg != null) properties.bearing_match_delta_deg = meta.matchDeltaDeg;
+  const routeIds = meta.routes.map(r => r.routeId).filter((id): id is string => id != null);
+  if (routeIds.length > 0) properties.matched_route_ids = routeIds;
+  if (meta.routes.length > 0) {
+    properties.matched_routes = meta.routes.map(r => {
+      const out: Record<string, unknown> = {
+        requested_bearing_deg: Math.round(r.requestedBearingDeg * 10) / 10,
+        match_delta_deg: r.matchDeltaDeg,
+      };
+      if (r.routeId != null) out.route_id = r.routeId;
+      if (r.kind != null) out.kind = r.kind;
+      return out;
+    });
+  }
   if (neighbours.prev != null) properties.prev_entrance_id = neighbours.prev;
   if (neighbours.next != null) properties.next_entrance_id = neighbours.next;
 

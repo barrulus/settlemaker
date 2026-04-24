@@ -38,16 +38,24 @@ export interface GenerationParams {
   // Future extension points
   /**
    * Road entry hints from external map data. Each carries a unit direction vector
-   * plus optional routeId and kind so the gate output can echo them back.
+   * plus optional routeId and kind so the gate output can echo them back. Multiple
+   * routes whose bearings cluster closely together will share a single gate and
+   * have their route ids echoed back on the same entrance feature.
    */
   roadEntryPoints?: RoadEntry[];
-  /** Maximum number of gates on the border wall (default 4) */
-  maxGates?: number;
   /** Compass bearing (degrees, 0=N clockwise) to nearest ocean — enables coastline clipping */
   oceanBearing?: number;
   /** River path through the settlement */
   riverPath?: Point[];
-  /** Coastline geometry for harbour wards */
+  /**
+   * Water-body polygons in burg-local coordinates (origin = burg centre, same
+   * scale as the generated mesh). Each entry is a closed polygon representing
+   * a water region; a patch whose centroid lies inside any polygon is marked
+   * as water. When provided, replaces the `oceanBearing` half-plane
+   * classification with shape-faithful coastline handling (bays, coves,
+   * peninsulas all surface correctly and the harbour ward settles on the
+   * longest waterfront edge).
+   */
   coastlineGeometry?: Point[][];
   /** Harbour size — 'large' for major sea routes + big pop, 'small' for minor ports */
   harbourSize?: 'large' | 'small';
