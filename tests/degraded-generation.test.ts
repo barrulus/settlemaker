@@ -154,3 +154,48 @@ describe('degraded_flags in GeoJSON metadata', () => {
     expect(meta(result.geojson).settlemaker_version).toBe('0.5.0');
   });
 });
+
+describe('acceptance: the five named failing burgs', () => {
+  // The user's instruction listed five burgs that previously threw
+  // "Failed to generate after 20 attempts". Every input must now return a
+  // sidecar; `degradedFlags` reflects which flags were auto-dropped (empty
+  // when the default retry loop happens to find a valid geometry before
+  // any fallback kicks in).
+  const cases: Array<{
+    input: AzgaarBurgInput;
+    expectDegraded: Array<'walls' | 'citadel'>;
+  }> = [
+    // Atarten's hashString seed happens to find compactness ≥ 0.75 on a
+    // retry within the default loop, so no degradation is applied. Success
+    // here = sidecar returned without throwing.
+    {
+      input: burg({ name: 'Atarten',      population: 199, walls: false, citadel: true }),
+      expectDegraded: [],
+    },
+    {
+      input: burg({ name: 'Monmouth',     population: 50,  walls: true,  citadel: false }),
+      expectDegraded: ['walls'],
+    },
+    {
+      input: burg({ name: 'Wargmore',     population: 50,  walls: true,  citadel: false }),
+      expectDegraded: ['walls'],
+    },
+    {
+      input: burg({ name: 'Skipton',      population: 50,  walls: true,  citadel: false }),
+      expectDegraded: ['walls'],
+    },
+    // Undraladrynn: every retry produces compactness < 0.75, so the
+    // citadel fallback drops it.
+    {
+      input: burg({ name: 'Undraladrynn', population: 181, walls: false, citadel: true }),
+      expectDegraded: ['citadel'],
+    },
+  ];
+
+  for (const { input, expectDegraded } of cases) {
+    it(`generates ${input.name} with degradedFlags = ${JSON.stringify(expectDegraded)}`, () => {
+      const result = generateFromBurg(input);
+      expect(result.degradedFlags).toEqual(expectDegraded);
+    });
+  }
+});
