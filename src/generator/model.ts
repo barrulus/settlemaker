@@ -69,17 +69,43 @@ export class Model {
     }
   }
 
-  /** Run the full 6-phase generation pipeline. Retries on failure up to MAX_ATTEMPTS. */
+  /**
+   * Run the 6-phase generation pipeline. Retries up to MAX_ATTEMPTS per pass;
+   * if that exhausts, drops `walls` and retries, then drops `citadel` and
+   * retries. Only throws when every fallback has been exhausted. Every drop
+   * is recorded on `degradedFlags` so consumers can tell "FMG didn't ask for
+   * this" from "settlemaker couldn't build it".
+   */
   generate(): Model {
+    if (this.tryGenerate()) return this;
+
+    if (this.wallsNeeded) {
+      this.wallsNeeded = false;
+      this.degradedFlags.add('walls');
+      if (this.tryGenerate()) return this;
+    }
+
+    if (this.citadelNeeded) {
+      this.citadelNeeded = false;
+      this.degradedFlags.add('citadel');
+      if (this.tryGenerate()) return this;
+    }
+
+    throw new Error(
+      `Failed to generate after ${MAX_ATTEMPTS} attempts with walls/citadel fallbacks`,
+    );
+  }
+
+  private tryGenerate(): boolean {
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       try {
         this.build();
-        return this;
+        return true;
       } catch (e) {
         this.reset();
       }
     }
-    throw new Error(`Failed to generate after ${MAX_ATTEMPTS} attempts`);
+    return false;
   }
 
   private reset(): void {
