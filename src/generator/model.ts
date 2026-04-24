@@ -231,18 +231,15 @@ export class Model {
     this.gates = this.border.gates.slice();
 
     if (this.citadel !== null) {
-      if (this.citadel.shape.compactness < MIN_CITADEL_COMPACTNESS) {
-        this.citadel.withinCity = false;
-        this.citadel = null;
-        this.citadelNeeded = false;
-        this.degradedFlags.add('citadel');
-      } else {
-        const castle = new Castle(this, this.citadel);
-        castle.wall.buildTowers();
-        this.citadel.ward = castle;
+      const castle = new Castle(this, this.citadel);
+      castle.wall.buildTowers();
+      this.citadel.ward = castle;
 
-        this.gates = this.gates.concat(castle.wall.gates);
+      if (this.citadel.shape.compactness < 0.75) {
+        throw new Error('Bad citadel shape!');
       }
+
+      this.gates = this.gates.concat(castle.wall.gates);
     }
   }
 
