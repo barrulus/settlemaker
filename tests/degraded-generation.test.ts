@@ -199,3 +199,35 @@ describe('acceptance: the five named failing burgs', () => {
     });
   }
 });
+
+describe('fuzz: population × walls × citadel', () => {
+  // 271 × 4 = 1084 cases. Each burg generates in ~5-20 ms on a warm process,
+  // which keeps total fuzz under a few seconds. If CI tightens we can step
+  // population by 5.
+  const populations = Array.from({ length: 271 }, (_, i) => 30 + i);
+  const flags = [
+    { walls: false, citadel: false },
+    { walls: true,  citadel: false },
+    { walls: false, citadel: true  },
+    { walls: true,  citadel: true  },
+  ];
+
+  it('produces zero throws across the full grid', () => {
+    const failures: string[] = [];
+    for (const population of populations) {
+      for (const f of flags) {
+        try {
+          generateFromBurg(burg({
+            name: `Fuzz-${population}-${f.walls}-${f.citadel}`,
+            population,
+            walls: f.walls,
+            citadel: f.citadel,
+          }));
+        } catch (e) {
+          failures.push(`pop=${population} walls=${f.walls} citadel=${f.citadel}: ${(e as Error).message}`);
+        }
+      }
+    }
+    expect(failures, failures.slice(0, 5).join('\n')).toEqual([]);
+  }, 120_000); // 120s safety ceiling
+});
