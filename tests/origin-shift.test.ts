@@ -106,7 +106,14 @@ describe('constants', () => {
   it('MAX_SHIFT_MULTIPLIER = 3.0', () => expect(MAX_SHIFT_MULTIPLIER).toBe(3.0));
 });
 
-import { generateFromBurg, computeLocalBounds, type AzgaarBurgInput } from '../src/index.js';
+import {
+  generateFromBurg,
+  computeLocalBounds,
+  parseSvgViewBox,
+  computeTileInfo,
+  enumerateTiles,
+  type AzgaarBurgInput,
+} from '../src/index.js';
 // SHIFT_FACTOR already imported at top of file.
 
 function coastalBurg(overrides: Partial<AzgaarBurgInput> = {}): AzgaarBurgInput {
@@ -232,5 +239,16 @@ describe('GeoJSON output reflects shift', () => {
     // The shifted bounds should differ from the model's unshifted bounds by exactly the shift.
     const unshiftedBounds = computeLocalBounds(coastal.model, 20);
     expect(shiftedBounds.min_x - unshiftedBounds.min_x).toBeCloseTo(coastal.originShift.dx, 4);
+  });
+});
+
+describe('tiler honours shifted viewBox', () => {
+  it('enumerates tiles for a coastal (shifted) burg without errors', () => {
+    const result = generateFromBurg(coastalBurg());
+    const vb = parseSvgViewBox(result.svg);
+    expect(vb).not.toBeNull();
+    const tileInfo = computeTileInfo(vb!, 12000);
+    const tiles = enumerateTiles(tileInfo.maxZoom);
+    expect(tiles.length).toBeGreaterThan(0);
   });
 });
