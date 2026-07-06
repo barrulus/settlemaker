@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { cssHex, blend, darken, themeFrom } from '../src/output/render-theme.js';
-import { PALETTE_DEFAULT } from '../src/output/palette.js';
+import { PALETTE_DEFAULT, PALETTES, PALETTE_PARCHMENT } from '../src/output/palette.js';
 import type { Palette } from '../src/types/interfaces.js';
 
 describe('color helpers', () => {
@@ -53,5 +53,14 @@ describe('themeFrom', () => {
     const t = themeFrom(p);
     expect(t.greenFill).toBe(cssHex(0x888888));
     expect(t.fieldFill).toBe(cssHex(blend(0xffffff, 0x888888, 0.08)));
+  });
+});
+
+describe('parchment palette', () => {
+  it('is the new default and keeps the old default as classic', () => {
+    expect(PALETTES.default).toBe(PALETTE_PARCHMENT);
+    expect(PALETTES.classic).toBe(PALETTE_DEFAULT);
+    expect(PALETTE_PARCHMENT.paper).toBe(0xfff2c8);
+    expect(PALETTE_PARCHMENT.water).toBe(0x85bcb2);
   });
 });

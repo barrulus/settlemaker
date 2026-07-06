@@ -9,8 +9,13 @@ export const PALETTE_ANCIENT: Palette   = { paper: 0xccc5a3, light: 0xa69974, me
 export const PALETTE_COLOUR: Palette    = { paper: 0xfff2c8, light: 0xd6a36e, medium: 0x869a81, dark: 0x4c5950, water: 0x7cb5c9, green: 0xb0c890 };
 export const PALETTE_SIMPLE: Palette    = { paper: 0xffffff, light: 0x000000, medium: 0x000000, dark: 0x000000, water: 0xcccccc, green: 0xcccccc };
 
+/** MFCG-style warm parchment. Values sampled from watabou MFCG 0.11.5 renders. */
+export const PALETTE_PARCHMENT: Palette = { paper: 0xfff2c8, light: 0xd5ad6e, medium: 0xa08a5a, dark: 0x4a3f2a, water: 0x85bcb2, green: 0x8fa26a };
+
 export const PALETTES: Record<string, Palette> = {
-  default: PALETTE_DEFAULT,
+  default: PALETTE_PARCHMENT,
+  classic: PALETTE_DEFAULT,
+  parchment: PALETTE_PARCHMENT,
   blueprint: PALETTE_BLUEPRINT,
   bw: PALETTE_BW,
   ink: PALETTE_INK,
