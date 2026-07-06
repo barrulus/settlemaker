@@ -276,17 +276,21 @@ export class Model {
     if (!hasCoast && !hasBearing) return;
 
     // Prefer the caller-supplied coastline: patch is water iff its centroid
-    // lies inside any of the supplied water polygons. This produces bays and
-    // headlands that match the source world map instead of the half-plane
-    // approximation driven by a single bearing.
+    // lies inside an ODD number of the supplied rings (even-odd fill rule).
+    // Callers may pass polygon holes as additional rings: a centroid inside
+    // a lake's outer ring AND inside an island hole counts twice → land.
+    // Hole-less inputs degrade to the old "inside any ring" behavior, since
+    // disjoint water bodies can't nest. Rings must not partially overlap
+    // (PostGIS ST_Union output satisfies this).
     let isWater: (patch: Patch) => boolean;
     if (hasCoast) {
       isWater = (patch) => {
         const c = patch.shape.center;
+        let containing = 0;
         for (const poly of coast!) {
-          if (poly.length >= 3 && pointInPolygon(c, poly)) return true;
+          if (poly.length >= 3 && pointInPolygon(c, poly)) containing++;
         }
-        return false;
+        return containing % 2 === 1;
       };
     } else {
       const rad = this.params.oceanBearing! * Math.PI / 180;

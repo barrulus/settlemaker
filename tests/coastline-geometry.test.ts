@@ -81,6 +81,26 @@ describe('coastlineGeometry drives water classification', () => {
     }
   });
 
+  it('treats nested rings as holes (even-odd rule): island inside a lake stays land', () => {
+    // Lake covers the northern half-plane; a large island hole sits inside
+    // it. Centroids inside BOTH rings (y < -50) are inside an even number
+    // of rings → land. Centroids inside only the lake (-50 < y < -10) → water.
+    const lakeOuter = rect(-1000, -1000, 1000, -10);
+    const islandHole = rect(-900, -900, 900, -50);
+    const result = generateFromBurg(
+      makeBurg({
+        coastlineGeometry: [lakeOuter, islandHole],
+        harbourSize: 'large',
+      }),
+      { seed: 42 },
+    );
+    expect(result.model.waterbody.length).toBeGreaterThan(0);
+    for (const wp of result.model.waterbody) {
+      expect(wp.shape.center.y).toBeLessThan(-10);
+      expect(wp.shape.center.y).toBeGreaterThan(-50);
+    }
+  });
+
   it('patches outside every coastline polygon stay non-water', () => {
     // Coastline at ~707 units from origin. 707 exceeds the
     // coast_too_far cut-off (MAX_SHIFT_MULTIPLIER * wallRadius) for any
