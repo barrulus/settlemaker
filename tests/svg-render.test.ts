@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { generateFromBurg, type AzgaarBurgInput } from '../src/index.js';
 import { generateSvg } from '../src/output/svg-builder.js';
-import { PALETTE_PARCHMENT } from '../src/output/palette.js';
 
 function makeBurg(overrides: Partial<AzgaarBurgInput> = {}): AzgaarBurgInput {
   return {
@@ -132,5 +131,39 @@ describe('svg render: shadows, buildings, landmarks', () => {
       // b 110+145×0.45=175.25→175 (af) → #e8d2af
       expect(svg).toContain('fill="#e8d2af"');
     }
+  });
+});
+
+import { themeFrom } from '../src/index.js';
+
+describe('svg render: overrides + determinism', () => {
+  it('honors options.theme overrides', () => {
+    const { model } = generateFromBurg(makeBurg(), { seed: 42 });
+    const svg = generateSvg(model, { theme: { buildingFill: '#ff0000' } });
+    expect(svg).toContain('fill="#ff0000"');
+    expect(svg).not.toContain('fill="#d5ad6e"');
+  });
+
+  it('honors options.palette via themeFrom', () => {
+    const { model } = generateFromBurg(makeBurg(), { seed: 42 });
+    const svg = generateSvg(model, { palette: { paper: 0x111111, light: 0x222222, medium: 0x333333, dark: 0x444444 } });
+    expect(svg).toContain('fill="#111111"');
+  });
+
+  it('is byte-identical across runs (determinism)', () => {
+    const a = generateFromBurg(makeBurg({ port: true, oceanBearing: 90 }), { seed: 777 });
+    const b = generateFromBurg(makeBurg({ port: true, oceanBearing: 90 }), { seed: 777 });
+    expect(a.svg).toBe(b.svg);
+  });
+
+  it('walls paint after buildings', () => {
+    const { svg } = generateFromBurg(makeBurg({ walls: true }), { seed: 42 });
+    const lastBuilding = svg.lastIndexOf('fill="#d5ad6e"');
+    const wall = svg.lastIndexOf('stroke-width="1.80"');
+    expect(wall).toBeGreaterThan(lastBuilding);
+  });
+
+  it('exports themeFrom from the package root', () => {
+    expect(typeof themeFrom).toBe('function');
   });
 });

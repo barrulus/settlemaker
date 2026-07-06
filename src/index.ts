@@ -32,6 +32,8 @@ export type {
 
 export { Palette, WardType, Street } from './types/interfaces.js';
 export { PALETTES, PALETTE_DEFAULT } from './output/palette.js';
+export { themeFrom } from './output/render-theme.js';
+export type { RenderTheme } from './output/render-theme.js';
 
 export { Point } from './types/point.js';
 export { Polygon } from './geom/polygon.js';

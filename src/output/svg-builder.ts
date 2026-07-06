@@ -61,11 +61,16 @@ export interface SvgOptions {
  * Generate an SVG string from a generated Model.
  * Port of CityMap.hx rendering logic.
  *
- * Rendering order:
+ * Rendering order (paint passes, back to front):
  * 1. Background
- * 2. Roads (double-stroke: thick outline + thin fill)
- * 3. Buildings/patches (ward-type-specific styling)
- * 4. Walls + towers + gates
+ * 2. Fields
+ * 3. Greens
+ * 4. Water
+ * 5. Roads (double-stroke: thick outline + thin fill)
+ * 6. Building shadows
+ * 7. Buildings (ward-type-specific styling)
+ * 8. Landmarks
+ * 9. Walls + towers + gates
  */
 export function generateSvg(model: Model, options: SvgOptions = {}): string {
   const palette = options.palette ?? PALETTES.default;
@@ -73,44 +78,29 @@ export function generateSvg(model: Model, options: SvgOptions = {}): string {
   const padding = options.padding ?? 20;
   const shift = options.shift ?? NO_SHIFT;
   const bounds = computeLocalBounds(model, padding, shift);
-  const viewMinX = bounds.min_x;
-  const viewMinY = bounds.min_y;
-  const viewWidth = bounds.max_x - bounds.min_x;
-  const viewHeight = bounds.max_y - bounds.min_y;
 
   const parts: string[] = [];
-
-  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewMinX.toFixed(1)} ${viewMinY.toFixed(1)} ${viewWidth.toFixed(1)} ${viewHeight.toFixed(1)}">`);
-
-  // Background — span the full viewBox in user coords. 100%/100% resolves against viewBox
-  // width/height but x/y are user coords, so "0,0 + 100%,100%" covers only the +x/+y quadrant
-  // when the viewBox starts at negative coords. The data-bg tag lets cropSvgToTile rewrite
-  // these coords to match the tile's (square-padded) viewBox.
+  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${bounds.min_x.toFixed(1)} ${bounds.min_y.toFixed(1)} ${(bounds.max_x - bounds.min_x).toFixed(1)} ${(bounds.max_y - bounds.min_y).toFixed(1)}">`);
   paintBackground(parts, bounds, theme);
-
-  // Fields, greens, then water — matches the pass order for tasks 4-5.
   paintFields(parts, model, theme, shift);
   paintGreens(parts, model, theme, shift);
   paintWater(parts, model, theme, shift);
-
-  // Roads
   paintRoads(parts, model, theme, shift);
-
-  // Building shadows, buildings, landmarks
   paintShadows(parts, model, theme, shift);
   paintBuildings(parts, model, theme, shift);
   paintLandmarks(parts, model, theme, shift);
+  paintWalls(parts, model, theme, shift);
+  parts.push('</svg>');
+  return parts.join('\n');
+}
 
-  // Walls
+function paintWalls(parts: string[], model: Model, theme: RenderTheme, shift: OriginShift): void {
   if (model.wall !== null) {
     renderWall(parts, model.wall, false, theme, shift);
   }
   if (model.citadel !== null && model.citadel.ward instanceof Castle) {
     renderWall(parts, (model.citadel.ward as Castle).wall, true, theme, shift);
   }
-
-  parts.push('</svg>');
-  return parts.join('\n');
 }
 
 function paintBackground(
