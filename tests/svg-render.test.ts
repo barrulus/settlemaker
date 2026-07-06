@@ -92,3 +92,45 @@ describe('svg render: roads', () => {
     expect(svg).toContain('stroke-linejoin="round"');
   });
 });
+
+describe('svg render: shadows, buildings, landmarks', () => {
+  it('emits one shadow group before buildings, after roads', () => {
+    const { svg } = generateFromBurg(makeBurg({ population: 12000 }), { seed: 42 });
+    const shadow = svg.indexOf('<g transform="translate(0.40,0.60)" fill="#4a3f2a" opacity="0.18">');
+    const lastRoadCore = svg.lastIndexOf('stroke-width="1.60"');
+    const firstBuilding = svg.indexOf('fill="#d5ad6e"');
+    expect(shadow).toBeGreaterThan(lastRoadCore);
+    expect(firstBuilding).toBeGreaterThan(shadow);
+  });
+
+  it('shadow count matches building count', () => {
+    const { model, svg } = generateFromBurg(makeBurg({ population: 12000 }), { seed: 42 });
+    const shadowGroup = svg.slice(
+      svg.indexOf('opacity="0.18">'),
+      svg.indexOf('</g>'),
+    );
+    const shadowPaths = (shadowGroup.match(/<path /g) ?? []).length;
+    let buildings = 0;
+    for (const patch of model.patches) {
+      if (!patch.ward) continue;
+      buildings += patch.ward.geometry.length;
+    }
+    expect(shadowPaths).toBe(buildings);
+  });
+
+  it('landmark wards use the landmark fill', () => {
+    const { model, svg } = generateFromBurg(
+      makeBurg({ citadel: true, temple: true, population: 12000 }),
+      { seed: 42 },
+    );
+    const hasLandmarkWard = model.patches.some(
+      p => p.ward && ['castle', 'cathedral', 'market'].includes(String(p.ward.type)),
+    );
+    if (hasLandmarkWard) {
+      // landmarkFill parchment = blend(0xd5ad6e, 0xffffff, 0.45):
+      // r 213+42×0.45=231.9→232 (e8), g 173+82×0.45=209.9→210 (d2),
+      // b 110+145×0.45=175.25→175 (af) → #e8d2af
+      expect(svg).toContain('fill="#e8d2af"');
+    }
+  });
+});

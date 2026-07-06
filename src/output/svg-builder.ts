@@ -96,54 +96,10 @@ export function generateSvg(model: Model, options: SvgOptions = {}): string {
   // Roads
   paintRoads(parts, model, theme, shift);
 
-  // Patches/buildings
-  for (const patch of model.patches) {
-    if (!patch.ward || patch.ward.geometry.length === 0) continue;
-
-    const ward = patch.ward;
-    const wardType = ward.type;
-
-    switch (wardType) {
-      case WardType.Castle:
-        // Double render: stroke first, then fill
-        for (const block of ward.geometry) {
-          parts.push(`<path d="${polygonToPath(block, shift)}" fill="none" stroke="${theme.buildingStroke}" stroke-width="${(NORMAL_STROKE * 4).toFixed(2)}"/>`);
-        }
-        for (const block of ward.geometry) {
-          parts.push(`<path d="${polygonToPath(block, shift)}" fill="${theme.buildingFill}" stroke="none"/>`);
-        }
-        break;
-
-      case WardType.Cathedral:
-        for (const block of ward.geometry) {
-          parts.push(`<path d="${polygonToPath(block, shift)}" fill="none" stroke="${theme.buildingStroke}" stroke-width="${(NORMAL_STROKE * 2).toFixed(2)}"/>`);
-        }
-        for (const block of ward.geometry) {
-          parts.push(`<path d="${polygonToPath(block, shift)}" fill="${theme.buildingFill}" stroke="none"/>`);
-        }
-        break;
-
-      case WardType.Harbour:
-        // Warehouse buildings
-        for (const building of ward.geometry) {
-          parts.push(`<path d="${polygonToPath(building, shift)}" fill="${theme.buildingFill}" stroke="${theme.buildingStroke}" stroke-width="${NORMAL_STROKE.toFixed(2)}"/>`);
-        }
-        // Piers — thicker stroke for dock structures
-        if (ward instanceof Harbour) {
-          for (const pier of ward.piers) {
-            parts.push(`<path d="${polygonToPath(pier, shift)}" fill="${theme.buildingFill}" stroke="${theme.buildingStroke}" stroke-width="${(NORMAL_STROKE * 2).toFixed(2)}"/>`);
-          }
-        }
-        break;
-
-      default:
-        // Craftsmen, Merchant, Slum, Patriciate, Administration, Military, Gate, Market, Farm
-        for (const building of ward.geometry) {
-          parts.push(`<path d="${polygonToPath(building, shift)}" fill="${theme.buildingFill}" stroke="${theme.buildingStroke}" stroke-width="${NORMAL_STROKE.toFixed(2)}"/>`);
-        }
-        break;
-    }
-  }
+  // Building shadows, buildings, landmarks
+  paintShadows(parts, model, theme, shift);
+  paintBuildings(parts, model, theme, shift);
+  paintLandmarks(parts, model, theme, shift);
 
   // Walls
   if (model.wall !== null) {
@@ -227,6 +183,71 @@ function paintRoads(parts: string[], model: Model, theme: RenderTheme, shift: Or
   }
   for (const lane of lanes) {
     parts.push(`<path d="${lane.path}" fill="none" stroke="${theme.roadCore}" stroke-width="${lane.width.toFixed(2)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+  }
+}
+
+interface BuildingGroup {
+  landmark: boolean;
+  strokeWidth: number;
+  polys: Polygon[];
+}
+
+const LANDMARK_STROKE: Partial<Record<WardType, number>> = {
+  [WardType.Castle]: NORMAL_STROKE * 4,
+  [WardType.Cathedral]: NORMAL_STROKE * 2,
+  [WardType.Market]: NORMAL_STROKE,
+};
+
+function collectBuildings(model: Model): BuildingGroup[] {
+  const groups: BuildingGroup[] = [];
+  for (const patch of model.patches) {
+    if (!patch.ward || patch.ward.geometry.length === 0) continue;
+    const landmarkStroke = LANDMARK_STROKE[patch.ward.type];
+    groups.push({
+      landmark: landmarkStroke !== undefined,
+      strokeWidth: landmarkStroke ?? NORMAL_STROKE,
+      polys: patch.ward.geometry,
+    });
+  }
+  return groups;
+}
+
+function paintShadows(parts: string[], model: Model, theme: RenderTheme, shift: OriginShift): void {
+  const groups = collectBuildings(model);
+  if (groups.length === 0) return;
+  const { dx, dy } = theme.shadowOffset;
+  parts.push(`<g transform="translate(${dx.toFixed(2)},${dy.toFixed(2)})" fill="${theme.shadowColor}" opacity="${theme.shadowOpacity.toFixed(2)}">`);
+  for (const group of groups) {
+    for (const poly of group.polys) {
+      parts.push(`<path d="${polygonToPath(poly, shift)}"/>`);
+    }
+  }
+  parts.push('</g>');
+}
+
+function paintBuildings(parts: string[], model: Model, theme: RenderTheme, shift: OriginShift): void {
+  for (const group of collectBuildings(model)) {
+    if (group.landmark) continue;
+    for (const poly of group.polys) {
+      parts.push(`<path d="${polygonToPath(poly, shift)}" fill="${theme.buildingFill}" stroke="${theme.buildingStroke}" stroke-width="${group.strokeWidth.toFixed(2)}"/>`);
+    }
+  }
+  // Harbour piers: sit on water, no shadow, slightly heavier stroke.
+  for (const patch of model.patches) {
+    if (patch.ward instanceof Harbour) {
+      for (const pier of patch.ward.piers) {
+        parts.push(`<path d="${polygonToPath(pier, shift)}" fill="${theme.buildingFill}" stroke="${theme.buildingStroke}" stroke-width="${(NORMAL_STROKE * 2).toFixed(2)}"/>`);
+      }
+    }
+  }
+}
+
+function paintLandmarks(parts: string[], model: Model, theme: RenderTheme, shift: OriginShift): void {
+  for (const group of collectBuildings(model)) {
+    if (!group.landmark) continue;
+    for (const poly of group.polys) {
+      parts.push(`<path d="${polygonToPath(poly, shift)}" fill="${theme.landmarkFill}" stroke="${theme.buildingStroke}" stroke-width="${group.strokeWidth.toFixed(2)}"/>`);
+    }
   }
 }
 
