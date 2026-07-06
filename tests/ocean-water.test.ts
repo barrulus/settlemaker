@@ -125,13 +125,13 @@ describe('SVG rendering with water', () => {
       makeBurg({ oceanBearing: 90 }),
       { seed: 42 },
     );
-    // Default palette water color is #8fbbc9
-    expect(result.svg).toContain('#8fbbc9');
+    // Default palette (parchment) water color is #85bcb2
+    expect(result.svg).toContain('#85bcb2');
   });
 
   it('SVG does not contain water color without ocean', () => {
     const result = generateFromBurg(makeBurg(), { seed: 42 });
-    expect(result.svg).not.toContain('#8fbbc9');
+    expect(result.svg).not.toContain('#85bcb2');
   });
 
   it('generates valid SVG with water', () => {

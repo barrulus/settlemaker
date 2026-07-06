@@ -8,15 +8,12 @@ import { computeLocalBounds } from '../generator/bounds.js';
 import { Castle } from '../wards/castle.js';
 import { Harbour } from '../wards/harbour.js';
 import { Farm } from '../wards/farm.js';
-import { PALETTE_DEFAULT } from './palette.js';
+import { PALETTES } from './palette.js';
+import { themeFrom, type RenderTheme } from './render-theme.js';
 import { NO_SHIFT, applyOutputShift, type OriginShift } from '../generator/origin-shift.js';
 
 const NORMAL_STROKE = 0.15;
 const THICK_STROKE = 1.8;
-
-function colorToHex(c: number): string {
-  return '#' + c.toString(16).padStart(6, '0');
-}
 
 /** Shift a single point into the output frame. */
 function sc(p: { x: number; y: number }, shift: OriginShift): [number, number] {
@@ -50,6 +47,8 @@ export interface SvgOptions {
   palette?: Palette;
   /** Additional padding around the city bounds */
   padding?: number;
+  /** Fine-grained overrides applied on top of the palette-derived theme. */
+  theme?: Partial<RenderTheme>;
   /**
    * Translation applied to every emitted coordinate. Defaults to
    * `NO_SHIFT`. Set by `generateFromBurg` after its coast-pull
@@ -69,7 +68,8 @@ export interface SvgOptions {
  * 4. Walls + towers + gates
  */
 export function generateSvg(model: Model, options: SvgOptions = {}): string {
-  const palette = options.palette ?? PALETTE_DEFAULT;
+  const palette = options.palette ?? PALETTES.default;
+  const theme: RenderTheme = { ...themeFrom(palette), ...options.theme };
   const padding = options.padding ?? 20;
   const shift = options.shift ?? NO_SHIFT;
   const bounds = computeLocalBounds(model, padding, shift);
@@ -86,29 +86,27 @@ export function generateSvg(model: Model, options: SvgOptions = {}): string {
   // width/height but x/y are user coords, so "0,0 + 100%,100%" covers only the +x/+y quadrant
   // when the viewBox starts at negative coords. The data-bg tag lets cropSvgToTile rewrite
   // these coords to match the tile's (square-padded) viewBox.
-  parts.push(`<rect data-bg="paper" x="${viewMinX.toFixed(1)}" y="${viewMinY.toFixed(1)}" width="${viewWidth.toFixed(1)}" height="${viewHeight.toFixed(1)}" fill="${colorToHex(palette.paper)}"/>`);
+  paintBackground(parts, bounds, theme);
 
-  // Water
-  if (model.waterbody.length > 0 && palette.water != null) {
-    for (const patch of model.waterbody) {
-      parts.push(`<path d="${polygonToPath(patch.shape, shift)}" fill="${colorToHex(palette.water)}" stroke="none"/>`);
-    }
-  }
+  // Fields, greens, then water — matches the pass order for tasks 4-5.
+  paintFields(parts, model, theme, shift);
+  paintGreens(parts, model, theme, shift);
+  paintWater(parts, model, theme, shift);
 
   // Roads
   for (const road of model.roads) {
     const path = polylineToPath(road.vertices, shift);
     // Outer stroke
-    parts.push(`<path d="${path}" fill="none" stroke="${colorToHex(palette.medium)}" stroke-width="${(2 + NORMAL_STROKE).toFixed(2)}" stroke-linecap="butt"/>`);
+    parts.push(`<path d="${path}" fill="none" stroke="${theme.roadCasing}" stroke-width="${(2 + NORMAL_STROKE).toFixed(2)}" stroke-linecap="butt"/>`);
     // Inner fill
-    parts.push(`<path d="${path}" fill="none" stroke="${colorToHex(palette.paper)}" stroke-width="${(2 - NORMAL_STROKE).toFixed(2)}"/>`);
+    parts.push(`<path d="${path}" fill="none" stroke="${theme.roadCore}" stroke-width="${(2 - NORMAL_STROKE).toFixed(2)}"/>`);
   }
 
   // Streets/arteries
   for (const artery of model.arteries) {
     const path = polylineToPath(artery.vertices, shift);
-    parts.push(`<path d="${path}" fill="none" stroke="${colorToHex(palette.medium)}" stroke-width="${(2 + NORMAL_STROKE).toFixed(2)}" stroke-linecap="butt"/>`);
-    parts.push(`<path d="${path}" fill="none" stroke="${colorToHex(palette.paper)}" stroke-width="${(2 - NORMAL_STROKE).toFixed(2)}"/>`);
+    parts.push(`<path d="${path}" fill="none" stroke="${theme.roadCasing}" stroke-width="${(2 + NORMAL_STROKE).toFixed(2)}" stroke-linecap="butt"/>`);
+    parts.push(`<path d="${path}" fill="none" stroke="${theme.roadCore}" stroke-width="${(2 - NORMAL_STROKE).toFixed(2)}"/>`);
   }
 
   // Patches/buildings
@@ -122,72 +120,39 @@ export function generateSvg(model: Model, options: SvgOptions = {}): string {
       case WardType.Castle:
         // Double render: stroke first, then fill
         for (const block of ward.geometry) {
-          parts.push(`<path d="${polygonToPath(block, shift)}" fill="none" stroke="${colorToHex(palette.dark)}" stroke-width="${(NORMAL_STROKE * 4).toFixed(2)}"/>`);
+          parts.push(`<path d="${polygonToPath(block, shift)}" fill="none" stroke="${theme.buildingStroke}" stroke-width="${(NORMAL_STROKE * 4).toFixed(2)}"/>`);
         }
         for (const block of ward.geometry) {
-          parts.push(`<path d="${polygonToPath(block, shift)}" fill="${colorToHex(palette.light)}" stroke="none"/>`);
+          parts.push(`<path d="${polygonToPath(block, shift)}" fill="${theme.buildingFill}" stroke="none"/>`);
         }
         break;
 
       case WardType.Cathedral:
         for (const block of ward.geometry) {
-          parts.push(`<path d="${polygonToPath(block, shift)}" fill="none" stroke="${colorToHex(palette.dark)}" stroke-width="${(NORMAL_STROKE * 2).toFixed(2)}"/>`);
+          parts.push(`<path d="${polygonToPath(block, shift)}" fill="none" stroke="${theme.buildingStroke}" stroke-width="${(NORMAL_STROKE * 2).toFixed(2)}"/>`);
         }
         for (const block of ward.geometry) {
-          parts.push(`<path d="${polygonToPath(block, shift)}" fill="${colorToHex(palette.light)}" stroke="none"/>`);
+          parts.push(`<path d="${polygonToPath(block, shift)}" fill="${theme.buildingFill}" stroke="none"/>`);
         }
         break;
-
-      case WardType.Park: {
-        const parkColor = palette.green ?? palette.medium;
-        for (const grove of ward.geometry) {
-          parts.push(`<path d="${polygonToPath(grove, shift)}" fill="${colorToHex(parkColor)}" stroke="none"/>`);
-        }
-        break;
-      }
 
       case WardType.Harbour:
         // Warehouse buildings
         for (const building of ward.geometry) {
-          parts.push(`<path d="${polygonToPath(building, shift)}" fill="${colorToHex(palette.light)}" stroke="${colorToHex(palette.dark)}" stroke-width="${NORMAL_STROKE.toFixed(2)}"/>`);
+          parts.push(`<path d="${polygonToPath(building, shift)}" fill="${theme.buildingFill}" stroke="${theme.buildingStroke}" stroke-width="${NORMAL_STROKE.toFixed(2)}"/>`);
         }
         // Piers — thicker stroke for dock structures
         if (ward instanceof Harbour) {
           for (const pier of ward.piers) {
-            parts.push(`<path d="${polygonToPath(pier, shift)}" fill="${colorToHex(palette.light)}" stroke="${colorToHex(palette.dark)}" stroke-width="${(NORMAL_STROKE * 2).toFixed(2)}"/>`);
+            parts.push(`<path d="${polygonToPath(pier, shift)}" fill="${theme.buildingFill}" stroke="${theme.buildingStroke}" stroke-width="${(NORMAL_STROKE * 2).toFixed(2)}"/>`);
           }
         }
         break;
-
-      case WardType.Farm: {
-        const farmWard = ward as Farm;
-        const greenColor = palette.green ?? palette.medium;
-
-        // Field subplots
-        for (const plot of farmWard.subPlots) {
-          if (plot.length >= 3) {
-            parts.push(`<path d="${polygonToPath(new Polygon(plot), shift)}" fill="${colorToHex(greenColor)}" stroke="none"/>`);
-          }
-        }
-
-        // Furrow lines within fields
-        for (const furrow of farmWard.furrows) {
-          const [x1, y1] = sc(furrow.start, shift);
-          const [x2, y2] = sc(furrow.end, shift);
-          parts.push(`<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="${colorToHex(greenColor)}" stroke-width="${NORMAL_STROKE.toFixed(2)}" opacity="0.5"/>`);
-        }
-
-        // Farmstead buildings on top
-        for (const building of farmWard.buildings) {
-          parts.push(`<path d="${polygonToPath(building, shift)}" fill="${colorToHex(palette.light)}" stroke="${colorToHex(palette.dark)}" stroke-width="${NORMAL_STROKE.toFixed(2)}"/>`);
-        }
-        break;
-      }
 
       default:
-        // Craftsmen, Merchant, Slum, Patriciate, Administration, Military, Gate, Market
+        // Craftsmen, Merchant, Slum, Patriciate, Administration, Military, Gate, Market, Farm
         for (const building of ward.geometry) {
-          parts.push(`<path d="${polygonToPath(building, shift)}" fill="${colorToHex(palette.light)}" stroke="${colorToHex(palette.dark)}" stroke-width="${NORMAL_STROKE.toFixed(2)}"/>`);
+          parts.push(`<path d="${polygonToPath(building, shift)}" fill="${theme.buildingFill}" stroke="${theme.buildingStroke}" stroke-width="${NORMAL_STROKE.toFixed(2)}"/>`);
         }
         break;
     }
@@ -195,14 +160,97 @@ export function generateSvg(model: Model, options: SvgOptions = {}): string {
 
   // Walls
   if (model.wall !== null) {
-    renderWall(parts, model.wall, false, palette, shift);
+    renderWall(parts, model.wall, false, theme, shift);
   }
   if (model.citadel !== null && model.citadel.ward instanceof Castle) {
-    renderWall(parts, (model.citadel.ward as Castle).wall, true, palette, shift);
+    renderWall(parts, (model.citadel.ward as Castle).wall, true, theme, shift);
   }
 
   parts.push('</svg>');
   return parts.join('\n');
+}
+
+function paintBackground(
+  parts: string[],
+  bounds: { min_x: number; min_y: number; max_x: number; max_y: number },
+  theme: RenderTheme,
+): void {
+  const w = bounds.max_x - bounds.min_x;
+  const h = bounds.max_y - bounds.min_y;
+  parts.push(`<rect data-bg="paper" x="${bounds.min_x.toFixed(1)}" y="${bounds.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="${theme.paper}"/>`);
+}
+
+function paintFields(parts: string[], model: Model, theme: RenderTheme, shift: OriginShift): void {
+  for (const patch of model.patches) {
+    if (!(patch.ward instanceof Farm)) continue;
+    const farm = patch.ward;
+    for (const plot of farm.subPlots) {
+      if (plot.length >= 3) {
+        parts.push(`<path d="${polygonToPath(new Polygon(plot), shift)}" fill="${theme.fieldFill}" stroke="none"/>`);
+      }
+    }
+    for (const furrow of farm.furrows) {
+      const [x1, y1] = sc(furrow.start, shift);
+      const [x2, y2] = sc(furrow.end, shift);
+      parts.push(`<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="${theme.fieldFurrow}" stroke-width="0.15" opacity="0.3"/>`);
+    }
+  }
+}
+
+function paintGreens(parts: string[], model: Model, theme: RenderTheme, shift: OriginShift): void {
+  for (const patch of model.patches) {
+    if (!patch.ward || patch.ward.type !== WardType.Park) continue;
+    for (const grove of patch.ward.geometry) {
+      parts.push(`<path d="${polygonToPath(grove, shift)}" fill="${theme.greenFill}" stroke="none"/>`);
+    }
+  }
+}
+
+function paintWater(parts: string[], model: Model, theme: RenderTheme, shift: OriginShift): void {
+  if (theme.water === null || model.waterbody.length === 0) return;
+  // Same-color stroke fills the antialiasing seams between adjacent
+  // Voronoi water patches — visually one continuous body, no union math.
+  for (const patch of model.waterbody) {
+    parts.push(`<path d="${polygonToPath(patch.shape, shift)}" fill="${theme.water}" stroke="${theme.water}" stroke-width="${theme.seamStroke.toFixed(2)}"/>`);
+  }
+  // Shore stroke: only edges NOT shared between two water patches (identity-
+  // based vertex semantics — adjacent patches share Point instances).
+  if (theme.waterEdge !== null) {
+    for (const [a, b] of outerWaterEdges(model)) {
+      const [x1, y1] = sc(a, shift);
+      const [x2, y2] = sc(b, shift);
+      parts.push(`<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="${theme.waterEdge}" stroke-width="${theme.shoreWidth.toFixed(2)}" stroke-linecap="round"/>`);
+    }
+  }
+}
+
+/** Water-patch edges that belong to exactly one water patch (the coast). */
+function outerWaterEdges(model: Model): Array<[Point, Point]> {
+  const ids = new Map<Point, number>();
+  let nextId = 0;
+  const idOf = (p: Point): number => {
+    let i = ids.get(p);
+    if (i === undefined) { i = nextId++; ids.set(p, i); }
+    return i;
+  };
+  const counts = new Map<string, number>();
+  const firstSeen = new Map<string, [Point, Point]>();
+  for (const patch of model.waterbody) {
+    const vs = patch.shape.vertices;
+    for (let i = 0; i < vs.length; i++) {
+      const a = vs[i];
+      const b = vs[(i + 1) % vs.length];
+      const ia = idOf(a), ib = idOf(b);
+      const key = ia < ib ? `${ia}:${ib}` : `${ib}:${ia}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+      if (!firstSeen.has(key)) firstSeen.set(key, [a, b]);
+    }
+  }
+  const out: Array<[Point, Point]> = [];
+  for (const [key, seg] of firstSeen) {
+    if (counts.get(key) === 1) out.push(seg);
+  }
+  return out;
 }
 
 /** Group consecutive active wall segments into polylines. */
@@ -249,34 +297,34 @@ function renderWall(
   parts: string[],
   wall: CurtainWall,
   large: boolean,
-  palette: Palette,
+  theme: RenderTheme,
   shift: OriginShift,
 ): void {
   // Wall outline — draw only active segments as polylines
   const polylines = getActiveWallPolylines(wall);
   for (const polyline of polylines) {
-    parts.push(`<path d="${polylineToPath(polyline, shift)}" fill="none" stroke="${colorToHex(palette.dark)}" stroke-width="${THICK_STROKE.toFixed(2)}" stroke-linecap="round"/>`);
+    parts.push(`<path d="${polylineToPath(polyline, shift)}" fill="none" stroke="${theme.buildingStroke}" stroke-width="${THICK_STROKE.toFixed(2)}" stroke-linecap="round"/>`);
   }
 
   // Gates
   for (const gate of wall.gates) {
-    renderGate(parts, wall.shape, gate, palette, shift);
+    renderGate(parts, wall.shape, gate, theme, shift);
   }
 
   // Towers
   const r = THICK_STROKE * (large ? 1.5 : 1);
   for (const t of wall.towers) {
     const [cx, cy] = sc(t, shift);
-    parts.push(`<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${r.toFixed(2)}" fill="${colorToHex(palette.dark)}"/>`);
+    parts.push(`<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${r.toFixed(2)}" fill="${theme.buildingStroke}"/>`);
   }
 }
 
-function renderGate(parts: string[], wall: Polygon, gate: Point, palette: Palette, shift: OriginShift): void {
+function renderGate(parts: string[], wall: Polygon, gate: Point, theme: RenderTheme, shift: OriginShift): void {
   const dir = wall.next(gate).subtract(wall.prev(gate));
   dir.normalize(THICK_STROKE * 1.5);
   const p1 = gate.subtract(dir);
   const p2 = gate.add(dir);
   const [x1, y1] = sc(p1, shift);
   const [x2, y2] = sc(p2, shift);
-  parts.push(`<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="${colorToHex(palette.dark)}" stroke-width="${(THICK_STROKE * 2).toFixed(2)}" stroke-linecap="butt"/>`);
+  parts.push(`<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="${theme.buildingStroke}" stroke-width="${(THICK_STROKE * 2).toFixed(2)}" stroke-linecap="butt"/>`);
 }
