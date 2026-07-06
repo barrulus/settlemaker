@@ -131,9 +131,8 @@ describe('svg render: shadows, buildings, landmarks', () => {
     // greenFill for parchment (default palette) = cssHex(0x8fa26a) = '#8fa26a'
     const greenFill = '#8fa26a';
     const paths = ward.geometry.map(poly => {
-      const [first, ...rest] = poly.vertices;
-      const start = `M${first.x.toFixed(2)},${first.y.toFixed(2)}`;
-      return start;
+      const [first] = poly.vertices;
+      return `M${first.x.toFixed(2)},${first.y.toFixed(2)}`;
     });
 
     // Every geometry path should appear painted with greenFill.
