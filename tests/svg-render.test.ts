@@ -68,3 +68,27 @@ describe('svg render: fields and water', () => {
     expect(building).toBeGreaterThan(water);
   });
 });
+
+describe('svg render: roads', () => {
+  it('paints all casings before any core, arteries wider than roads', () => {
+    const { model, svg } = generateFromBurg(makeBurg({ population: 12000 }), { seed: 42 });
+    expect(model.arteries.length).toBeGreaterThan(0);
+    // artery casing 2.4+0.6=3.00, artery core 2.40; road casing 1.6+0.6=2.20, core 1.60
+    const lastCasing = Math.max(
+      svg.lastIndexOf('stroke-width="3.00"'),
+      svg.lastIndexOf('stroke-width="2.20"'),
+    );
+    const firstCore = Math.min(
+      ...['stroke-width="2.40"', 'stroke-width="1.60"']
+        .map(s => svg.indexOf(s))
+        .filter(i => i >= 0),
+    );
+    expect(lastCasing).toBeGreaterThan(-1);
+    expect(firstCore).toBeGreaterThan(lastCasing);
+  });
+
+  it('uses round joins for road strokes', () => {
+    const { svg } = generateFromBurg(makeBurg({ population: 12000 }), { seed: 42 });
+    expect(svg).toContain('stroke-linejoin="round"');
+  });
+});

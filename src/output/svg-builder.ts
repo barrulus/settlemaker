@@ -94,20 +94,7 @@ export function generateSvg(model: Model, options: SvgOptions = {}): string {
   paintWater(parts, model, theme, shift);
 
   // Roads
-  for (const road of model.roads) {
-    const path = polylineToPath(road.vertices, shift);
-    // Outer stroke
-    parts.push(`<path d="${path}" fill="none" stroke="${theme.roadCasing}" stroke-width="${(2 + NORMAL_STROKE).toFixed(2)}" stroke-linecap="butt"/>`);
-    // Inner fill
-    parts.push(`<path d="${path}" fill="none" stroke="${theme.roadCore}" stroke-width="${(2 - NORMAL_STROKE).toFixed(2)}"/>`);
-  }
-
-  // Streets/arteries
-  for (const artery of model.arteries) {
-    const path = polylineToPath(artery.vertices, shift);
-    parts.push(`<path d="${path}" fill="none" stroke="${theme.roadCasing}" stroke-width="${(2 + NORMAL_STROKE).toFixed(2)}" stroke-linecap="butt"/>`);
-    parts.push(`<path d="${path}" fill="none" stroke="${theme.roadCore}" stroke-width="${(2 - NORMAL_STROKE).toFixed(2)}"/>`);
-  }
+  paintRoads(parts, model, theme, shift);
 
   // Patches/buildings
   for (const patch of model.patches) {
@@ -221,6 +208,25 @@ function paintWater(parts: string[], model: Model, theme: RenderTheme, shift: Or
       const [x2, y2] = sc(b, shift);
       parts.push(`<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="${theme.waterEdge}" stroke-width="${theme.shoreWidth.toFixed(2)}" stroke-linecap="round"/>`);
     }
+  }
+}
+
+function paintRoads(parts: string[], model: Model, theme: RenderTheme, shift: OriginShift): void {
+  const lanes: Array<{ path: string; width: number }> = [];
+  for (const artery of model.arteries) {
+    lanes.push({ path: polylineToPath(artery.vertices, shift), width: theme.arteryWidth });
+  }
+  for (const road of model.roads) {
+    lanes.push({ path: polylineToPath(road.vertices, shift), width: theme.roadWidth });
+  }
+  // Casings first, then cores: cores merge at junctions instead of being
+  // overpainted by the next lane's casing.
+  for (const lane of lanes) {
+    const casing = lane.width + theme.casingDelta * 2;
+    parts.push(`<path d="${lane.path}" fill="none" stroke="${theme.roadCasing}" stroke-width="${casing.toFixed(2)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+  }
+  for (const lane of lanes) {
+    parts.push(`<path d="${lane.path}" fill="none" stroke="${theme.roadCore}" stroke-width="${lane.width.toFixed(2)}" stroke-linecap="round" stroke-linejoin="round"/>`);
   }
 }
 
