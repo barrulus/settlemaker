@@ -74,7 +74,10 @@ export interface SvgOptions {
  */
 export function generateSvg(model: Model, options: SvgOptions = {}): string {
   const palette = options.palette ?? PALETTES.default;
-  const theme: RenderTheme = { ...themeFrom(palette), ...options.theme };
+  const themeOverrides = Object.fromEntries(
+    Object.entries(options.theme ?? {}).filter(([, v]) => v !== undefined),
+  );
+  const theme: RenderTheme = { ...themeFrom(palette), ...themeOverrides };
   const padding = options.padding ?? 20;
   const shift = options.shift ?? NO_SHIFT;
   const bounds = computeLocalBounds(model, padding, shift);
@@ -110,6 +113,10 @@ function paintBackground(
 ): void {
   const w = bounds.max_x - bounds.min_x;
   const h = bounds.max_y - bounds.min_y;
+  // The rect spans the viewBox in USER coords (not 100%/100%, which would
+  // only cover the +x/+y quadrant when the viewBox origin is negative).
+  // data-bg="paper" is a contract with cropSvgToTile in settlement-tiler.ts,
+  // which rewrites these coords per tile.
   parts.push(`<rect data-bg="paper" x="${bounds.min_x.toFixed(1)}" y="${bounds.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="${theme.paper}"/>`);
 }
 
@@ -192,6 +199,9 @@ function collectBuildings(model: Model): BuildingGroup[] {
   const groups: BuildingGroup[] = [];
   for (const patch of model.patches) {
     if (!patch.ward || patch.ward.geometry.length === 0) continue;
+    // Park geometry (groves) is painted green by paintGreens; including it
+    // here would shadow it and repaint it tan on top.
+    if (patch.ward.type === WardType.Park) continue;
     const landmarkStroke = LANDMARK_STROKE[patch.ward.type];
     groups.push({
       landmark: landmarkStroke !== undefined,

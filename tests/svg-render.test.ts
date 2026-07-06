@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { generateFromBurg, type AzgaarBurgInput } from '../src/index.js';
+import { generateFromBurg, themeFrom, type AzgaarBurgInput } from '../src/index.js';
 import { generateSvg } from '../src/output/svg-builder.js';
+import { WardType } from '../src/types/interfaces.js';
 
 function makeBurg(overrides: Partial<AzgaarBurgInput> = {}): AzgaarBurgInput {
   return {
@@ -112,9 +113,48 @@ describe('svg render: shadows, buildings, landmarks', () => {
     let buildings = 0;
     for (const patch of model.patches) {
       if (!patch.ward) continue;
+      // Park geometry (groves) is painted by paintGreens, not shadowed.
+      if (patch.ward.type === WardType.Park) continue;
       buildings += patch.ward.geometry.length;
     }
     expect(shadowPaths).toBe(buildings);
+  });
+
+  it('does not shadow or repaint Park ward geometry (park overpaint regression)', () => {
+    const { model } = generateFromBurg(makeBurg({ population: 12000 }), { seed: 42 });
+    const parkPatch = model.patches.find(p => p.ward && p.ward.geometry.length > 0);
+    expect(parkPatch).toBeDefined();
+    const ward = parkPatch!.ward!;
+    ward.type = WardType.Park;
+    const svg = generateSvg(model);
+
+    // greenFill for parchment (default palette) = cssHex(0x8fa26a) = '#8fa26a'
+    const greenFill = '#8fa26a';
+    const paths = ward.geometry.map(poly => {
+      const [first, ...rest] = poly.vertices;
+      const start = `M${first.x.toFixed(2)},${first.y.toFixed(2)}`;
+      return start;
+    });
+
+    // Every geometry path should appear painted with greenFill.
+    for (const start of paths) {
+      const idx = svg.indexOf(start);
+      expect(idx).toBeGreaterThan(-1);
+    }
+
+    // None of those paths should also appear with the building tan fill.
+    const shadowGroup = svg.slice(
+      svg.indexOf('opacity="0.18">'),
+      svg.indexOf('</g>'),
+    );
+    for (const start of paths) {
+      expect(shadowGroup).not.toContain(start);
+      const buildingRegex = new RegExp(
+        `<path d="${start.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^"]*" fill="#d5ad6e"`,
+      );
+      expect(svg).not.toMatch(buildingRegex);
+    }
+    expect(svg).toContain(`fill="${greenFill}"`);
   });
 
   it('landmark wards use the landmark fill', () => {
@@ -133,8 +173,6 @@ describe('svg render: shadows, buildings, landmarks', () => {
     }
   });
 });
-
-import { themeFrom } from '../src/index.js';
 
 describe('svg render: overrides + determinism', () => {
   it('honors options.theme overrides', () => {
@@ -165,5 +203,14 @@ describe('svg render: overrides + determinism', () => {
 
   it('exports themeFrom from the package root', () => {
     expect(typeof themeFrom).toBe('function');
+  });
+
+  it('ignores explicit-undefined theme overrides instead of clobbering the default', () => {
+    const { model } = generateFromBurg(makeBurg({ port: true, oceanBearing: 90 }), { seed: 42 });
+    const svg = generateSvg(model, { theme: { water: undefined } });
+    expect(svg).not.toContain('fill="undefined"');
+    expect(svg).not.toContain('stroke="undefined"');
+    // Default parchment water color still renders.
+    expect(svg).toContain('fill="#85bcb2"');
   });
 });

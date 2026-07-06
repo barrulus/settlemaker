@@ -60,6 +60,7 @@ describe('parchment palette', () => {
   it('is the new default and keeps the old default as classic', () => {
     expect(PALETTES.default).toBe(PALETTE_PARCHMENT);
     expect(PALETTES.classic).toBe(PALETTE_DEFAULT);
+    expect(PALETTES.parchment).toBe(PALETTE_PARCHMENT);
     expect(PALETTE_PARCHMENT.paper).toBe(0xfff2c8);
     expect(PALETTE_PARCHMENT.water).toBe(0x85bcb2);
   });
