@@ -68,9 +68,9 @@ describe('mapToGenerationParams: roadBearings conversion', () => {
     expect(params.roadEntryPoints).toBeUndefined();
   });
 
-  it('omits roadEntryPoints for empty array', () => {
+  it('passes through empty array as authoritative zero-routes', () => {
     const params = mapToGenerationParams(makeBurg({ roadBearings: [] }), 42);
-    expect(params.roadEntryPoints).toBeUndefined();
+    expect(params.roadEntryPoints).toEqual([]);
   });
 });
 

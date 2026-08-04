@@ -173,7 +173,7 @@ export class CurtainWall {
       }
     };
 
-    const hasBearings = roadEntryPoints && roadEntryPoints.length > 0;
+    const hasBearings = roadEntryPoints != null;
     if (hasBearings) {
       const entries = roadEntryPoints
         .map(entry => ({

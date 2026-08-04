@@ -103,7 +103,7 @@ export function mapToGenerationParams(
     shantyNeeded: burg.shanty,
     capitalNeeded: burg.capital,
     seed,
-    ...(roadEntryPoints && roadEntryPoints.length > 0 ? { roadEntryPoints } : {}),
+    ...(roadEntryPoints != null ? { roadEntryPoints } : {}),
     ...(burg.oceanBearing != null ? { oceanBearing: burg.oceanBearing } : {}),
     ...(burg.harbourSize != null ? { harbourSize: burg.harbourSize } : {}),
     ...(burg.urbanDensity != null ? { urbanDensity: burg.urbanDensity } : {}),

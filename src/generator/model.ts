@@ -421,6 +421,8 @@ export class Model {
 
   // Phase 4: Build streets
   private buildStreets(): void {
+    const routeAware = this.params.roadEntryPoints != null;
+
     const smoothStreet = (street: Polygon) => {
       const smoothed = street.smoothVertexEq(3);
       for (let i = 1; i < street.length - 1; i++) {
@@ -440,21 +442,24 @@ export class Model {
         this.streets.push(new Polygon(street));
 
         if (this.border!.gates.includes(gate)) {
-          const dir = gate.norm(1000);
-          let start: Point | null = null;
-          let dist = Infinity;
-          for (const [, pt] of this.topology.node2pt) {
-            const d = Point.distance(pt, dir);
-            if (d < dist) {
-              dist = d;
-              start = pt;
+          const hasRoute = (this.border!.gateMeta.get(gate)?.routes.length ?? 0) > 0;
+          if (!routeAware || hasRoute) {
+            const dir = gate.norm(1000);
+            let start: Point | null = null;
+            let dist = Infinity;
+            for (const [, pt] of this.topology.node2pt) {
+              const d = Point.distance(pt, dir);
+              if (d < dist) {
+                dist = d;
+                start = pt;
+              }
             }
-          }
 
-          if (start) {
-            const road = this.topology.buildPath(start, gate, this.topology.inner);
-            if (road !== null) {
-              this.roads.push(new Polygon(road));
+            if (start) {
+              const road = this.topology.buildPath(start, gate, this.topology.inner);
+              if (road !== null) {
+                this.roads.push(new Polygon(road));
+              }
             }
           }
         }
