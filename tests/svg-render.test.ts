@@ -26,18 +26,18 @@ describe('svg render: fields and water', () => {
     expect(svg).toContain('fill="#f6ecc0"');
   });
 
-  it('gives every water patch a same-color seam stroke', () => {
+  it('renders oceanBearing water as one clipped geometry path (synthetic half-plane)', () => {
     const { model, svg } = generateFromBurg(
       makeBurg({ port: true, oceanBearing: 90 }),
       { seed: 42 },
     );
+    // Patch classification still drives placement (harbour needs waterbody)…
     expect(model.waterbody.length).toBeGreaterThan(0);
-    const waterPaths = svg.match(/<path[^>]*fill="#85bcb2"[^>]*\/>/g) ?? [];
-    expect(waterPaths.length).toBeGreaterThan(0);
-    for (const p of waterPaths) {
-      expect(p).toContain('stroke="#85bcb2"');
-      expect(p).toContain('stroke-width="0.50"');
-    }
+    // …but the painted water is the synthesized half-plane, not patch shapes:
+    // exactly one even-odd fill path, no per-patch seam strokes.
+    const waterFills = svg.match(/<path[^>]*fill="#85bcb2"[^>]*\/>/g) ?? [];
+    expect(waterFills.length).toBe(1);
+    expect(waterFills[0]).toContain('fill-rule="evenodd"');
   });
 
   it('draws shore strokes on outer water edges only', () => {

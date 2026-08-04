@@ -68,6 +68,15 @@ export class Model {
   gates: Point[] = [];
   readonly degradedFlags: Set<DegradedFlag> = new Set();
 
+  /**
+   * Half-plane coastline synthesized from `oceanBearing` when no vector
+   * coastline was supplied, so bearing-only burgs share the geometry water
+   * pipeline (render, drowning filter, road clipping) instead of the old
+   * enclosed-lake patch painting. Null when a real coastline exists or the
+   * burg is landlocked.
+   */
+  syntheticCoast: Point[][] | null = null;
+
   arteries: Street[] = [];
   streets: Street[] = [];
   roads: Street[] = [];
@@ -139,6 +148,7 @@ export class Model {
     this.roads = [];
     this.arteries = [];
     this.topology = null;
+    this.syntheticCoast = null;
   }
 
   private build(): void {
@@ -319,6 +329,17 @@ export class Model {
         const c = patch.shape.center;
         return c.x * oceanDirX + c.y * oceanDirY > threshold;
       };
+      // Synthesize the same half-plane as a coastline ring so the render,
+      // drowning filter, and road clip all see ocean, not a patch lake.
+      const R = this.border!.getRadius() * 20;
+      const sx = oceanDirX * threshold, sy = oceanDirY * threshold;
+      const tx = -oceanDirY, ty = oceanDirX;
+      this.syntheticCoast = [[
+        new Point(sx + tx * R, sy + ty * R),
+        new Point(sx - tx * R, sy - ty * R),
+        new Point(sx - tx * R + oceanDirX * R, sy - ty * R + oceanDirY * R),
+        new Point(sx + tx * R + oceanDirX * R, sy + ty * R + oceanDirY * R),
+      ]];
     }
 
     for (const patch of this.patches) {
@@ -468,11 +489,32 @@ export class Model {
       }
     }
 
+    this.clipRoadsAtWater();
     this.tidyUpRoads();
 
     for (const a of this.arteries) {
       smoothStreet(a);
     }
+  }
+
+  /**
+   * Truncate external roads at the waterline: keep only the contiguous dry
+   * tail ending at the gate, dropping the road entirely if fewer than two
+   * dry vertices remain. Cheap placeholder for shore-aware routing — a road
+   * simply stops at the coast instead of walking on the sea. Runs before
+   * tidyUpRoads so arteries inherit the clipped geometry.
+   */
+  private clipRoadsAtWater(): void {
+    if (this.getWaterRings().length === 0) return;
+    this.roads = this.roads.flatMap(road => {
+      let lastWet = -1;
+      road.vertices.forEach((v, i) => {
+        if (this.isWaterAt(v)) lastWet = i;
+      });
+      if (lastWet === -1) return [road];
+      const dryTail = road.vertices.slice(lastWet + 1);
+      return dryTail.length >= 2 ? [new Polygon(dryTail)] : [];
+    });
   }
 
   private tidyUpRoads(): void {
@@ -660,6 +702,26 @@ export class Model {
   }
 
   /**
+   * Water rings for rendering and placement: the caller's vector coastline
+   * when supplied, else the half-plane synthesized from `oceanBearing`,
+   * else empty (landlocked).
+   */
+  getWaterRings(): Point[][] {
+    const rings = this.params.coastlineGeometry?.filter(r => r.length >= 3) ?? [];
+    if (rings.length > 0) return rings;
+    return this.syntheticCoast ?? [];
+  }
+
+  /** Even-odd test against getWaterRings() — same rule as classifyWater. */
+  isWaterAt(p: Point): boolean {
+    let containing = 0;
+    for (const ring of this.getWaterRings()) {
+      if (pointInPolygon(p, ring)) containing++;
+    }
+    return containing % 2 === 1;
+  }
+
+  /**
    * Drop geometry that overhangs the supplied water. Patch classification is
    * centroid-based, so a "land" patch can still cross the true shoreline and
    * spill buildings into the sea. Runs before the budget trim so the budget
@@ -667,17 +729,9 @@ export class Model {
    * construction (Harbour keeps them outside ward.geometry).
    */
   private removeDrownedGeometry(): void {
-    const rings = this.params.coastlineGeometry?.filter(r => r.length >= 3) ?? [];
-    if (rings.length === 0) return;
+    if (this.getWaterRings().length === 0) return;
 
-    // Same even-odd rule as classifyWater: inside an odd number of rings = water.
-    const inWater = (p: Point): boolean => {
-      let containing = 0;
-      for (const ring of rings) {
-        if (pointInPolygon(p, ring)) containing++;
-      }
-      return containing % 2 === 1;
-    };
+    const inWater = (p: Point): boolean => this.isWaterAt(p);
     const drowned = (poly: Polygon): boolean =>
       inWater(poly.center) || poly.vertices.some(v => inWater(v));
 

@@ -158,8 +158,9 @@ function paintGreens(parts: string[], model: Model, theme: RenderTheme, shift: O
 function paintWater(parts: string[], model: Model, theme: RenderTheme, shift: OriginShift, clipId: string): void {
   if (theme.water === null) return;
 
-  const coast = model.params.coastlineGeometry;
-  const rings = coast?.filter(ring => ring.length >= 3) ?? [];
+  // Caller's vector coastline, or the half-plane synthesized from
+  // oceanBearing — either way the water is geometry, not patch paint.
+  const rings = model.getWaterRings();
 
   if (rings.length > 0) {
     // Fidelity contract (spec: "Water is world geometry, not patch paint"):
