@@ -53,6 +53,9 @@ export type {
 export { buildScene } from './scene/build-scene.js';
 export type { BuildSceneOptions } from './scene/build-scene.js';
 
+export { assembleSvg, themeToCss } from './output/assemble-svg.js';
+export type { AssembleOptions } from './output/assemble-svg.js';
+
 import type { AzgaarBurgInput } from './input/azgaar-input.js';
 import type { FeatureCollection } from 'geojson';
 import type { DegradedFlag } from './generator/generation-params.js';
