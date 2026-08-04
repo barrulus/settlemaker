@@ -141,6 +141,31 @@ labels) to support both families without schema changes; scale-adaptive
 treatment (pictorial for small settlements, schematic for metropolises) is a
 property of asset-set selection, not the schema.
 
+## Fidelity requirements (v1 acceptance criteria)
+
+Motivating case: burg **Toprak** (snoopia map, pop 13, coastal, one trail) —
+world map vs settlement render diverge badly (2026-08-04 screenshots). The
+settlement must be recognizable as the same place shown on the world map.
+
+1. **Water is world geometry, not patch paint.** The rendered water outline
+   is built from the supplied `coastlineGeometry`, clipped to the local
+   frame — open sea/rivers extend to the frame edge; a closed pond appears
+   only when the world actually has a lake. Patch water-classification
+   remains placement logic (nothing builds in water) but never defines the
+   rendered shape. Orientation must match the world map.
+2. **Population → building budget.** Building count derives from population
+   (baseline ≈ one household per 4–6 people; use FMG's `urbanDensityInput`
+   when supplied). Pop 13 ⇒ a handful of buildings, not a filled town mesh.
+   Patch count alone must not control built density — `createAlleys` needs a
+   budget, and patches may render mostly empty.
+3. **Route fidelity.** External roads rendered = routes supplied: same
+   count, bearings, and kinds. One trail in ⇒ exactly one path out. The
+   generator invents no additional external connections (internal lanes are
+   fine).
+4. **Regression fixture.** Capture Toprak's exact burg input as a test
+   fixture; assertions cover water-reaches-frame-edge, building count within
+   budget, and external-road count == supplied route count.
+
 ## Testing
 
 - Vitest round-trip tests for `i=` and `style=` encode/decode and flat-param
