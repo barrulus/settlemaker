@@ -117,6 +117,30 @@ pattern, water). This proves symbol resolution end-to-end; a designer can
 replace or add sets without code changes. Real per-biome art is farmed to a
 community artist later (Azgaar to help recruit).
 
+### Visual reference (watabou examples, 2026-08-04)
+
+Reference screenshots from watabou's Village and City generators establish
+the target vocabulary and confirm two **style families**, both expressible as
+asset sets over the same scene schema:
+
+- **Pictorial (village scale):** individual tree/canopy symbols with
+  scale/rotation jitter, plowed-field furrow patterns inside bordered plots,
+  water depth banding (concentric coastline offsets) plus a shore/sand
+  strip, piers, building drop shadows and roof ridge lines, biome palettes
+  (tropical sand vs temperate green vs somber).
+- **Schematic (city scale):** flat block-fill buildings, hatched out-of-wall
+  field plots, dark landmark silhouettes (castle), wall lines with towers,
+  district/street labels set along curved paths.
+
+The paired same-village/two-themes examples confirm the core contract: theme
+swap changes only the asset set/palette, never the scene. The v1 starter set
+is schematic (closest to current output); the pictorial village set is the
+first community-art target. The scene schema must carry enough semantics
+(vegetation instances, field plots with crop, shore, piers, landmarks,
+labels) to support both families without schema changes; scale-adaptive
+treatment (pictorial for small settlements, schematic for metropolises) is a
+property of asset-set selection, not the schema.
+
 ## Testing
 
 - Vitest round-trip tests for `i=` and `style=` encode/decode and flat-param
