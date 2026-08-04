@@ -655,7 +655,43 @@ export class Model {
         patch.ward.createGeometry();
       }
     }
+    this.removeDrownedGeometry();
     this.applyBuildingBudget();
+  }
+
+  /**
+   * Drop geometry that overhangs the supplied water. Patch classification is
+   * centroid-based, so a "land" patch can still cross the true shoreline and
+   * spill buildings into the sea. Runs before the budget trim so the budget
+   * is spent on buildings that actually stand on land. Piers are exempt by
+   * construction (Harbour keeps them outside ward.geometry).
+   */
+  private removeDrownedGeometry(): void {
+    const rings = this.params.coastlineGeometry?.filter(r => r.length >= 3) ?? [];
+    if (rings.length === 0) return;
+
+    // Same even-odd rule as classifyWater: inside an odd number of rings = water.
+    const inWater = (p: Point): boolean => {
+      let containing = 0;
+      for (const ring of rings) {
+        if (pointInPolygon(p, ring)) containing++;
+      }
+      return containing % 2 === 1;
+    };
+    const drowned = (poly: Polygon): boolean =>
+      inWater(poly.center) || poly.vertices.some(v => inWater(v));
+
+    for (const patch of this.patches) {
+      const ward = patch.ward;
+      if (!ward) continue;
+      if (ward.geometry.length > 0) {
+        ward.geometry = ward.geometry.filter(p => !drowned(p));
+      }
+      if (ward instanceof Farm) {
+        ward.subPlots = ward.subPlots.filter(plot => !plot.some(v => inWater(v)));
+        ward.furrows = ward.furrows.filter(f => !inWater(f.start) && !inWater(f.end));
+      }
+    }
   }
 
   /**

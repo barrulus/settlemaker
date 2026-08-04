@@ -54,6 +54,21 @@ describe('water rendered from coastline geometry', () => {
     expect(1500).toBeGreaterThan(vb.maxX);
   });
 
+  it('no building or farm plot overhangs the supplied water', () => {
+    const { model } = generateFromBurg(coastalBurg);
+    // Model-frame check: params rings and ward geometry share the same frame.
+    const ring = model.params.coastlineGeometry![0];
+    const shoreX = Math.min(...ring.map(p => p.x)); // rectangle sea: straight shoreline
+    for (const patch of model.patches) {
+      if (!patch.ward) continue;
+      for (const poly of patch.ward.geometry) {
+        for (const v of poly.vertices) {
+          expect(v.x).toBeLessThanOrEqual(shoreX + 1e-6);
+        }
+      }
+    }
+  });
+
   it('clipId option renames the clipPath and its reference (multi-SVG documents)', () => {
     const { svg } = generateFromBurg(coastalBurg, { svg: { clipId: 'frame-clip-watertest' } });
     expect(svg).toContain('<clipPath id="frame-clip-watertest">');
