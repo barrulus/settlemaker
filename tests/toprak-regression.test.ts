@@ -26,12 +26,19 @@ describe('Toprak fidelity regression (spec acceptance criteria)', () => {
     const maxX = parseFloat(m[1]) + parseFloat(m[3]);
     expect(40).toBeLessThan(maxX);      // shoreline inside the frame
     expect(1500).toBeGreaterThan(maxX); // sea continues past the frame edge
+    // Orientation guard: the even-odd water path's westmost vertex must sit at
+    // the supplied shoreline (x=40) — catches double-applied origin shifts or
+    // mirrored coordinates that the marker/viewBox checks cannot see.
+    const water = result.svg.match(/<path d="([^"]+)" fill="[^"]*" fill-rule="evenodd"/);
+    expect(water).not.toBeNull();
+    const xs = [...water![1].matchAll(/[ML](-?[\d.]+),/g)].map(mm => parseFloat(mm[1]));
+    expect(Math.min(...xs)).toBeCloseTo(40, 0);
   });
 
   it('pop 13 yields a handful of buildings', () => {
     const n = countOrdinaryBuildings(result.model);
     expect(n).toBeGreaterThan(0);
-    expect(n).toBeLessThanOrEqual(buildingBudget(13)); // 3
+    expect(n).toBeLessThanOrEqual(buildingBudget(13));
   });
 
   it('exactly one external road, echoing the supplied trail', () => {

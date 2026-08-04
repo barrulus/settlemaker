@@ -649,7 +649,6 @@ export class Model {
   }
 
   // Phase 6: Build geometry
-  // Phase 6: Build geometry
   private buildGeometry(): void {
     for (const patch of this.patches) {
       if (patch.ward && !this.waterbody.includes(patch)) {
