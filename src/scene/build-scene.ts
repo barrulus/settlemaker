@@ -180,8 +180,8 @@ function scatterVegetation(
       }
       let placed = 0;
       for (let attempt = 0; attempt < n * 10 && placed < n; attempt++) {
-        const p = { x: minX + rng.float() * (maxX - minX), y: minY + rng.float() * (maxY - minY) };
-        if (!pointInPolygon(p as never, grove.vertices)) continue;
+        const p = new Point(minX + rng.float() * (maxX - minX), minY + rng.float() * (maxY - minY));
+        if (!pointInPolygon(p, grove.vertices)) continue;
         scene.layers.vegetation.push({
           at: sc(p),
           kind: 'tree',
