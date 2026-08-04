@@ -84,6 +84,7 @@ export function generateSvg(model: Model, options: SvgOptions = {}): string {
 
   const parts: string[] = [];
   parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${bounds.min_x.toFixed(1)} ${bounds.min_y.toFixed(1)} ${(bounds.max_x - bounds.min_x).toFixed(1)} ${(bounds.max_y - bounds.min_y).toFixed(1)}">`);
+  parts.push(`<defs><clipPath id="frame-clip"><rect x="${bounds.min_x.toFixed(1)}" y="${bounds.min_y.toFixed(1)}" width="${(bounds.max_x - bounds.min_x).toFixed(1)}" height="${(bounds.max_y - bounds.min_y).toFixed(1)}"/></clipPath></defs>`);
   paintBackground(parts, bounds, theme);
   paintFields(parts, model, theme, shift);
   paintGreens(parts, model, theme, shift);
@@ -147,14 +148,32 @@ function paintGreens(parts: string[], model: Model, theme: RenderTheme, shift: O
 }
 
 function paintWater(parts: string[], model: Model, theme: RenderTheme, shift: OriginShift): void {
-  if (theme.water === null || model.waterbody.length === 0) return;
-  // Same-color stroke fills the antialiasing seams between adjacent
-  // Voronoi water patches — visually one continuous body, no union math.
+  if (theme.water === null) return;
+
+  const coast = model.params.coastlineGeometry;
+  const rings = coast?.filter(ring => ring.length >= 3) ?? [];
+
+  if (rings.length > 0) {
+    // Fidelity contract (spec: "Water is world geometry, not patch paint"):
+    // paint the caller's rings as ONE even-odd path — holes stay land — and
+    // clip to the frame so open water bleeds off the map edge instead of
+    // closing into a pond. Patch classification stays placement-only.
+    const d = rings.map(ring => polygonToPath(new Polygon(ring), shift)).join(' ');
+    parts.push(`<g clip-path="url(#frame-clip)">`);
+    parts.push(`<path d="${d}" fill="${theme.water}" fill-rule="evenodd" stroke="none"/>`);
+    if (theme.waterEdge !== null) {
+      parts.push(`<path d="${d}" fill="none" stroke="${theme.waterEdge}" stroke-width="${theme.shoreWidth.toFixed(2)}" stroke-linejoin="round"/>`);
+    }
+    parts.push('</g>');
+    return;
+  }
+
+  if (model.waterbody.length === 0) return;
+  // oceanBearing-only fallback: same-color stroke fills the antialiasing
+  // seams between adjacent Voronoi water patches.
   for (const patch of model.waterbody) {
     parts.push(`<path d="${polygonToPath(patch.shape, shift)}" fill="${theme.water}" stroke="${theme.water}" stroke-width="${theme.seamStroke.toFixed(2)}"/>`);
   }
-  // Shore stroke: only edges NOT shared between two water patches (identity-
-  // based vertex semantics — adjacent patches share Point instances).
   if (theme.waterEdge !== null) {
     for (const [a, b] of outerWaterEdges(model)) {
       const [x1, y1] = sc(a, shift);
