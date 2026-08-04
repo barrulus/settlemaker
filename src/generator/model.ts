@@ -11,6 +11,7 @@ import { CurtainWall } from './curtain-wall.js';
 import { Topology } from './topology.js';
 import { pointInPolygon } from '../geom/point-in-polygon.js';
 import type { GenerationParams, DegradedFlag } from './generation-params.js';
+import { WardType } from '../types/interfaces.js';
 import type { Street } from '../types/interfaces.js';
 
 import { Ward } from '../wards/ward.js';
@@ -24,6 +25,23 @@ import { buildWardDistribution, type WardConstructor } from '../wards/ward-distr
 
 const MAX_ATTEMPTS = 20;
 const MIN_POPULATION_FOR_WALLS = 150;
+
+/** Ward types whose buildings are feature landmarks, exempt from the population budget. */
+const BUDGET_EXEMPT_WARD_TYPES = new Set<WardType>([
+  WardType.Castle,
+  WardType.Cathedral,
+  WardType.Market,
+  WardType.Harbour,
+]);
+
+/**
+ * Population-derived cap on ordinary buildings: ≈ one household per
+ * `urbanDensity` people (FMG's urbanDensityInput; default 4), floored at 2
+ * so even a pop-1 burg reads as a settlement.
+ */
+export function buildingBudget(population: number, urbanDensity = 4): number {
+  return Math.max(2, Math.round(population / urbanDensity));
+}
 
 export class Model {
   rng: SeededRandom;
@@ -626,11 +644,48 @@ export class Model {
   }
 
   // Phase 6: Build geometry
+  // Phase 6: Build geometry
   private buildGeometry(): void {
     for (const patch of this.patches) {
       if (patch.ward && !this.waterbody.includes(patch)) {
         patch.ward.createGeometry();
       }
+    }
+    this.applyBuildingBudget();
+  }
+
+  /**
+   * Trim ordinary buildings down to the population budget, keeping the ones
+   * closest to the centre so small settlements read as a tight cluster.
+   * Landmark wards and park groves are exempt; farm plots/furrows live
+   * outside ward.geometry. Deterministic: distance sort with coordinate
+   * tiebreaks, no rng.
+   */
+  private applyBuildingBudget(): void {
+    const budget = buildingBudget(this.params.population, this.params.urbanDensity);
+
+    const isBudgeted = (ward: Ward): boolean =>
+      ward.type !== WardType.Park && !BUDGET_EXEMPT_WARD_TYPES.has(ward.type);
+
+    const entries: Array<{ poly: Polygon; dist: number }> = [];
+    for (const patch of this.patches) {
+      if (!patch.ward || !isBudgeted(patch.ward)) continue;
+      for (const poly of patch.ward.geometry) {
+        entries.push({ poly, dist: Point.distance(poly.center, this.center) });
+      }
+    }
+    if (entries.length <= budget) return;
+
+    entries.sort((a, b) =>
+      a.dist - b.dist ||
+      a.poly.center.x - b.poly.center.x ||
+      a.poly.center.y - b.poly.center.y,
+    );
+    const keep = new Set(entries.slice(0, budget).map(e => e.poly));
+
+    for (const patch of this.patches) {
+      if (!patch.ward || !isBudgeted(patch.ward)) continue;
+      patch.ward.geometry = patch.ward.geometry.filter(p => keep.has(p));
     }
   }
 

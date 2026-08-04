@@ -59,6 +59,8 @@ export interface GenerationParams {
   coastlineGeometry?: Point[][];
   /** Harbour size — 'large' for major sea routes + big pop, 'small' for minor ports */
   harbourSize?: 'large' | 'small';
+  /** People per household — FMG's urbanDensityInput. Drives the building budget. Default 4. */
+  urbanDensity?: number;
 }
 
 /**

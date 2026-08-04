@@ -40,6 +40,8 @@ export interface AzgaarBurgInput {
   oceanBearing?: number;
   /** Harbour size for port cities — 'large' for major sea routes + big pop, 'small' otherwise */
   harbourSize?: 'large' | 'small';
+  /** People per household — FMG's urbanDensityInput. Drives the building budget. */
+  urbanDensity?: number;
   /**
    * Water polygons surrounding the burg, in burg-local coordinates (origin at
    * burg centre, same scale as the generated mesh — roughly the wall radius).
@@ -104,6 +106,7 @@ export function mapToGenerationParams(
     ...(roadEntryPoints && roadEntryPoints.length > 0 ? { roadEntryPoints } : {}),
     ...(burg.oceanBearing != null ? { oceanBearing: burg.oceanBearing } : {}),
     ...(burg.harbourSize != null ? { harbourSize: burg.harbourSize } : {}),
+    ...(burg.urbanDensity != null ? { urbanDensity: burg.urbanDensity } : {}),
     ...(burg.coastlineGeometry != null
       ? { coastlineGeometry: burg.coastlineGeometry.map(ring => ring.map(p => new Point(p.x, p.y))) }
       : {}),
