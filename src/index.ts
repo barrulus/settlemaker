@@ -44,6 +44,15 @@ export type { LocalBounds } from './generator/bounds.js';
 
 export type { Poi, PoiKind } from './poi/poi-kinds.js';
 
+export { SCENE_VERSION } from './scene/scene.js';
+export type {
+  Scene, ScenePoint, WaterLayer, FieldPlot, Furrow, GreenFeature,
+  VegetationInstance, RoadFeature, BuildingFeature, PierFeature,
+  WallFeature, WallGate,
+} from './scene/scene.js';
+export { buildScene } from './scene/build-scene.js';
+export type { BuildSceneOptions } from './scene/build-scene.js';
+
 import type { AzgaarBurgInput } from './input/azgaar-input.js';
 import type { FeatureCollection } from 'geojson';
 import type { DegradedFlag } from './generator/generation-params.js';
