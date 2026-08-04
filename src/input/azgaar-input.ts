@@ -57,22 +57,21 @@ export interface AzgaarBurgInput {
 }
 
 /**
- * Map Azgaar population to nPatches count.
- *
- * <100 (hamlet)      → 3-4 patches
- * 100-1000 (village) → 5-9
- * 1000-5000 (town)   → 10-14
- * 5000-20k (city)    → 15-24
- * 20k-100k (large)   → 25-40
- * 100k+ (metropolis)  → 40-50
+ * Calibration: observed ordinary-buildings-per-patch at default minSq.
+ * Task 6 of this plan may tune within [7, 12] after visual review.
  */
-function populationToPatches(population: number): number {
-  if (population < 100) return 3 + Math.round((population / 100) * 1);
-  if (population < 1000) return 5 + Math.round(((population - 100) / 900) * 4);
-  if (population < 5000) return 10 + Math.round(((population - 1000) / 4000) * 4);
-  if (population < 20000) return 15 + Math.round(((population - 5000) / 15000) * 9);
-  if (population < 100000) return 25 + Math.round(((population - 20000) / 80000) * 15);
-  return 40 + Math.min(10, Math.round(((population - 100000) / 200000) * 10));
+export const BUILDINGS_PER_PATCH = 9;
+
+/**
+ * Patch count derives from the household target (pop / urbanDensity) so the
+ * settlement's footprint scales with how many buildings it must hold —
+ * "looks like a home for X people". Floor 3 keeps tiny meshes viable
+ * (Voronoi with <3 patches degenerates); cap 60 bounds cost for
+ * metropolises, where the adaptive minSq refinement makes up the rest.
+ */
+function populationToPatches(population: number, urbanDensity?: number): number {
+  const households = Math.max(2, Math.round(population / (urbanDensity ?? 4)));
+  return Math.max(3, Math.min(60, Math.ceil(households / BUILDINGS_PER_PATCH)));
 }
 
 /**
@@ -94,7 +93,7 @@ export function mapToGenerationParams(
   });
 
   return {
-    nPatches: populationToPatches(burg.population),
+    nPatches: populationToPatches(burg.population, burg.urbanDensity),
     population: burg.population,
     plazaNeeded: burg.plaza,
     citadelNeeded: burg.citadel,

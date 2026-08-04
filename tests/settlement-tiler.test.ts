@@ -263,6 +263,10 @@ describe('Round-trip integration', () => {
     };
   }
 
+  // Density-targeting Task 1 derives nPatches from the household target;
+  // pop=5000 now saturates the 60-patch cap (was ~10-14 patches under the
+  // old population bands), so a single generation costs several seconds —
+  // timeout widened accordingly.
   it('generateFromBurg → parse → compute → crop produces valid SVG tiles', () => {
     const result = generateFromBurg(makeBurg(), { seed: 99 });
     const vb = parseSvgViewBox(result.svg);
@@ -284,7 +288,7 @@ describe('Round-trip integration', () => {
     const tile1 = cropSvgToTile(result.svg, info, 1, 0, 0);
     const tileVb1 = parseSvgViewBox(tile1);
     expect(tileVb1!.width).toBeCloseTo(info.squareViewBox.width / 2, 5);
-  });
+  }, 15000);
 
   it('total tile count matches expected for different populations', () => {
     for (const pop of [50, 500, 5000, 20000]) {

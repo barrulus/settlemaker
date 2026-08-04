@@ -53,13 +53,15 @@ describe('up-front walls threshold', () => {
 });
 
 describe('citadel fallback via staged retries', () => {
-  // Yarwick: pop=199, citadel=true. With its hashString("Yarwick") seed,
+  // Yarwick: pop=170, citadel=true. With its hashString("Yarwick") seed,
   // every retry in the 20-attempt loop produces compactness < 0.75 — the
   // default retry loop exhausts and the citadel-drop fallback must kick in.
+  // (Density-targeting Task 1 changed nPatches at pop=199, which now
+  // succeeds without the fallback; pop=170 still exercises it.)
   it('drops citadel for the Yarwick case via fallback instead of throwing', () => {
     const result = generateFromBurg(burg({
       name: 'Yarwick',
-      population: 199,
+      population: 170,
       citadel: true,
       walls: false,
     }));
