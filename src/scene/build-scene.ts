@@ -7,6 +7,9 @@ import { applyOutputShift, NO_SHIFT, type OriginShift } from '../generator/origi
 import { Farm } from '../wards/farm.js';
 import { Harbour } from '../wards/harbour.js';
 import { Castle } from '../wards/castle.js';
+import { SeededRandom } from '../utils/random.js';
+import { pointInPolygon } from '../geom/point-in-polygon.js';
+import { Polygon } from '../geom/polygon.js';
 import {
   SCENE_VERSION,
   type Scene, type ScenePoint, type RoadFeature, type BuildingFeature,
@@ -92,6 +95,8 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
     scene.layers.walls.push(wallFeature(model.citadel.ward.wall, true, sc, model));
   }
 
+  scatterVegetation(model, scene, sc);
+
   return scene;
 }
 
@@ -145,4 +150,46 @@ export function activeWallPolylines(wall: CurtainWall): Point[][] {
     }
   }
   return polylines;
+}
+
+/**
+ * Deterministic tree scatter in park groves. Uses its own SeededRandom
+ * derived arithmetically from the model seed so the generation stream is
+ * untouched: scenes can be rebuilt any number of times with identical
+ * results and zero effect on layout.
+ */
+function scatterVegetation(
+  model: Model,
+  scene: Scene,
+  sc: (p: { x: number; y: number }) => ScenePoint,
+): void {
+  const rng = new SeededRandom((model.params.seed ^ 0x5eed) >>> 0 || 1);
+  for (const patch of model.patches) {
+    const ward = patch.ward;
+    if (!ward || ward.type !== WardType.Park) continue;
+    for (const grove of ward.geometry) {
+      const poly = new Polygon(grove.vertices);
+      const area = Math.abs(poly.square);
+      const n = Math.max(1, Math.min(24, Math.round(area / 12)));
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const v of grove.vertices) {
+        if (v.x < minX) minX = v.x;
+        if (v.y < minY) minY = v.y;
+        if (v.x > maxX) maxX = v.x;
+        if (v.y > maxY) maxY = v.y;
+      }
+      let placed = 0;
+      for (let attempt = 0; attempt < n * 10 && placed < n; attempt++) {
+        const p = { x: minX + rng.float() * (maxX - minX), y: minY + rng.float() * (maxY - minY) };
+        if (!pointInPolygon(p as never, grove.vertices)) continue;
+        scene.layers.vegetation.push({
+          at: sc(p),
+          kind: 'tree',
+          scale: 1.6 + rng.float() * 1.2,
+          rotationDeg: Math.round(rng.float() * 360),
+        });
+        placed++;
+      }
+    }
+  }
 }

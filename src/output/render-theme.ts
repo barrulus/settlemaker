@@ -36,6 +36,7 @@ export interface RenderTheme {
   fieldFill: string;         // paper blended 8% toward green
   fieldFurrow: string;       // furrow lines, rendered at 30% opacity
   greenFill: string;         // parks
+  treeFill: string;          // vegetation symbols; darkened green
   roadCasing: string;
   roadCore: string;
   buildingFill: string;
@@ -61,6 +62,7 @@ export function themeFrom(palette: Palette): RenderTheme {
     fieldFill: cssHex(blend(palette.paper, green, 0.08)),
     fieldFurrow: cssHex(green),
     greenFill: cssHex(green),
+    treeFill: cssHex(darken(palette.tree ?? palette.green ?? palette.medium, 0.15)),
     roadCasing: cssHex(palette.medium),
     roadCore: cssHex(palette.paper),
     buildingFill: cssHex(palette.light),

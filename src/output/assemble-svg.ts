@@ -1,5 +1,7 @@
 import type { Palette } from '../types/interfaces.js';
 import type { Scene, ScenePoint } from '../scene/scene.js';
+import type { AssetSet } from '../assets/asset-sets.js';
+import { assetSetFor } from '../assets/asset-sets.js';
 import { PALETTES } from './palette.js';
 import { themeFrom, type RenderTheme } from './render-theme.js';
 
@@ -9,6 +11,7 @@ const THICK_STROKE = 1.8;
 export interface AssembleOptions {
   palette?: Palette;
   theme?: Partial<RenderTheme>;
+  assetSet?: AssetSet;
   clipId?: string;
 }
 
@@ -35,6 +38,7 @@ export function themeToCss(theme: RenderTheme): string {
     `#fields path{fill:${theme.fieldFill};stroke:none}`,
     `#fields line{stroke:${theme.fieldFurrow};stroke-width:0.15;opacity:0.3}`,
     `#greens path{fill:${theme.greenFill};stroke:none}`,
+    `#greens use{fill:${theme.treeFill}}`,
     theme.water !== null ? `#water .fill{fill:${theme.water};stroke:none}` : '',
     theme.waterEdge !== null ? `#water .shore{fill:none;stroke:${theme.waterEdge};stroke-width:${fmt(theme.shoreWidth)};stroke-linejoin:round}` : '',
     `#roads path{fill:none;stroke-linecap:round;stroke-linejoin:round}`,
@@ -65,14 +69,21 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     Object.entries(options.theme ?? {}).filter(([, v]) => v !== undefined),
   );
   const theme: RenderTheme = { ...themeFrom(palette), ...overrides };
+  const assets = options.assetSet ?? assetSetFor(scene.biome);
   const clipId = options.clipId ?? 'frame-clip';
   const b = scene.bounds;
   const w = b.max_x - b.min_x, h = b.max_y - b.min_y;
   const L = scene.layers;
 
+  const usedKinds = [...new Set(L.vegetation.map(v => v.kind))];
+  const symbolDefs = usedKinds
+    .filter(k => assets.symbols[k] !== undefined)
+    .map(k => `<symbol id="asset-${k}" viewBox="-1 -1 2 2">${assets.symbols[k]}</symbol>`)
+    .join('');
+
   const parts: string[] = [];
   parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${b.min_x.toFixed(1)} ${b.min_y.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}">`);
-  parts.push(`<defs><clipPath id="${clipId}"><rect x="${b.min_x.toFixed(1)}" y="${b.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"/></clipPath></defs>`);
+  parts.push(`<defs><clipPath id="${clipId}"><rect x="${b.min_x.toFixed(1)}" y="${b.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"/></clipPath>${symbolDefs}</defs>`);
   parts.push(`<style>\n${themeToCss(theme)}\n</style>`);
   // data-bg contract with cropSvgToTile: attribute markup + inline fill.
   parts.push(`<rect data-bg="paper" x="${b.min_x.toFixed(1)}" y="${b.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="${theme.paper}"/>`);
@@ -86,9 +97,13 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     parts.push('</g>');
   }
 
-  if (L.greens.length > 0) {
+  if (L.greens.length > 0 || L.vegetation.length > 0) {
     parts.push('<g id="greens">');
     for (const g of L.greens) parts.push(`<path d="${ringPath(g.ring)}"/>`);
+    for (const v of L.vegetation) {
+      const s = v.scale;
+      parts.push(`<use href="#asset-${v.kind}" x="${fmt(-1)}" y="${fmt(-1)}" width="2" height="2" transform="translate(${fmt(v.at.x)},${fmt(v.at.y)}) scale(${fmt(s / 2)}) rotate(${v.rotationDeg})"/>`);
+    }
     parts.push('</g>');
   }
 
