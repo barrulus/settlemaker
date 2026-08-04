@@ -55,6 +55,13 @@ export interface SvgOptions {
    * computation so the SVG viewport tracks the shifted geometry.
    */
   shift?: OriginShift;
+  /**
+   * Id of the frame clipPath (default "frame-clip"). SVG ids are
+   * document-global: override with a unique value whenever multiple
+   * settlement SVGs are inlined into one HTML document, or each water
+   * layer clips against whichever #frame-clip appears first.
+   */
+  clipId?: string;
 }
 
 /**
@@ -80,15 +87,16 @@ export function generateSvg(model: Model, options: SvgOptions = {}): string {
   const theme: RenderTheme = { ...themeFrom(palette), ...themeOverrides };
   const padding = options.padding ?? 20;
   const shift = options.shift ?? NO_SHIFT;
+  const clipId = options.clipId ?? 'frame-clip';
   const bounds = computeLocalBounds(model, padding, shift);
 
   const parts: string[] = [];
   parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${bounds.min_x.toFixed(1)} ${bounds.min_y.toFixed(1)} ${(bounds.max_x - bounds.min_x).toFixed(1)} ${(bounds.max_y - bounds.min_y).toFixed(1)}">`);
-  parts.push(`<defs><clipPath id="frame-clip"><rect x="${bounds.min_x.toFixed(1)}" y="${bounds.min_y.toFixed(1)}" width="${(bounds.max_x - bounds.min_x).toFixed(1)}" height="${(bounds.max_y - bounds.min_y).toFixed(1)}"/></clipPath></defs>`);
+  parts.push(`<defs><clipPath id="${clipId}"><rect x="${bounds.min_x.toFixed(1)}" y="${bounds.min_y.toFixed(1)}" width="${(bounds.max_x - bounds.min_x).toFixed(1)}" height="${(bounds.max_y - bounds.min_y).toFixed(1)}"/></clipPath></defs>`);
   paintBackground(parts, bounds, theme);
   paintFields(parts, model, theme, shift);
   paintGreens(parts, model, theme, shift);
-  paintWater(parts, model, theme, shift);
+  paintWater(parts, model, theme, shift, clipId);
   paintRoads(parts, model, theme, shift);
   paintShadows(parts, model, theme, shift);
   paintBuildings(parts, model, theme, shift);
@@ -147,7 +155,7 @@ function paintGreens(parts: string[], model: Model, theme: RenderTheme, shift: O
   }
 }
 
-function paintWater(parts: string[], model: Model, theme: RenderTheme, shift: OriginShift): void {
+function paintWater(parts: string[], model: Model, theme: RenderTheme, shift: OriginShift, clipId: string): void {
   if (theme.water === null) return;
 
   const coast = model.params.coastlineGeometry;
@@ -159,7 +167,7 @@ function paintWater(parts: string[], model: Model, theme: RenderTheme, shift: Or
     // clip to the frame so open water bleeds off the map edge instead of
     // closing into a pond. Patch classification stays placement-only.
     const d = rings.map(ring => polygonToPath(new Polygon(ring), shift)).join(' ');
-    parts.push(`<g clip-path="url(#frame-clip)">`);
+    parts.push(`<g clip-path="url(#${clipId})">`);
     parts.push(`<path d="${d}" fill="${theme.water}" fill-rule="evenodd" stroke="none"/>`);
     if (theme.waterEdge !== null) {
       parts.push(`<path d="${d}" fill="none" stroke="${theme.waterEdge}" stroke-width="${theme.shoreWidth.toFixed(2)}" stroke-linejoin="round"/>`);

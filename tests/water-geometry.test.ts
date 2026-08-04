@@ -54,6 +54,13 @@ describe('water rendered from coastline geometry', () => {
     expect(1500).toBeGreaterThan(vb.maxX);
   });
 
+  it('clipId option renames the clipPath and its reference (multi-SVG documents)', () => {
+    const { svg } = generateFromBurg(coastalBurg, { svg: { clipId: 'frame-clip-watertest' } });
+    expect(svg).toContain('<clipPath id="frame-clip-watertest">');
+    expect(svg).toContain('clip-path="url(#frame-clip-watertest)"');
+    expect(svg).not.toContain('"frame-clip"');
+  });
+
   it('oceanBearing-only burgs keep the patch-painted fallback', () => {
     const { svg } = generateFromBurg({
       ...coastalBurg,
