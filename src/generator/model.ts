@@ -43,6 +43,41 @@ export function buildingBudget(population: number, urbanDensity = 4): number {
   return Math.max(2, Math.round(population / urbanDensity));
 }
 
+/**
+ * A pier whose every vertex is in water is detached from the visible shore.
+ * Slide it along its long axis toward land in small steps until its base
+ * makes landfall (tip stays wet — we stop at the first dry vertex). Returns
+ * null when no landfall exists within ~3 pier-lengths: a true detached raft.
+ * Deterministic; no rng.
+ */
+function rescueDetachedPier(pier: Polygon, inWater: (p: Point) => boolean): Polygon | null {
+  if (pier.vertices.some(v => !inWater(v))) return pier;
+
+  let dx = 0, dy = 0, longest = -1;
+  pier.forEdge((a, b) => {
+    const len = Point.distance(a, b);
+    if (len > longest) {
+      longest = len;
+      dx = (b.x - a.x) / len;
+      dy = (b.y - a.y) / len;
+    }
+  });
+  if (longest <= 0) return null;
+
+  const step = longest / 4;
+  for (let k = 1; k <= 12; k++) {
+    for (const dir of [1, -1]) {
+      const ox = dir * dx * step * k;
+      const oy = dir * dy * step * k;
+      const moved = pier.vertices.map(v => new Point(v.x + ox, v.y + oy));
+      if (moved.some(v => !inWater(v))) {
+        return new Polygon(moved);
+      }
+    }
+  }
+  return null;
+}
+
 export class Model {
   rng: SeededRandom;
 
@@ -321,25 +356,35 @@ export class Model {
         return containing % 2 === 1;
       };
     } else {
+      // Synthesize an organic coastline from the bearing, then classify
+      // against it exactly like a caller-supplied ring — one water
+      // definition for placement, drowning, road clipping, AND painting.
+      // Wobble phases derive from the seed arithmetically so the rng
+      // stream is untouched (bearing burgs keep their layouts per seed).
       const rad = this.params.oceanBearing! * Math.PI / 180;
       const oceanDirX = Math.sin(rad);
       const oceanDirY = -Math.cos(rad);
-      const threshold = this.border!.getRadius() * 0.3;
-      isWater = (patch) => {
-        const c = patch.shape.center;
-        return c.x * oceanDirX + c.y * oceanDirY > threshold;
-      };
-      // Synthesize the same half-plane as a coastline ring so the render,
-      // drowning filter, and road clip all see ocean, not a patch lake.
-      const R = this.border!.getRadius() * 20;
-      const sx = oceanDirX * threshold, sy = oceanDirY * threshold;
+      const radius = this.border!.getRadius();
+      const threshold = radius * 0.3;
+      const R = radius * 20;
       const tx = -oceanDirY, ty = oceanDirX;
-      this.syntheticCoast = [[
-        new Point(sx + tx * R, sy + ty * R),
-        new Point(sx - tx * R, sy - ty * R),
-        new Point(sx - tx * R + oceanDirX * R, sy - ty * R + oceanDirY * R),
-        new Point(sx + tx * R + oceanDirX * R, sy + ty * R + oceanDirY * R),
-      ]];
+      const seed = this.params.seed;
+      const p1 = (seed % 97) * 0.13, p2 = (seed % 71) * 0.29, p3 = (seed % 53) * 0.41;
+      const ring: Point[] = [];
+      const step = radius * 0.2;
+      for (let s = -R; s <= R; s += step) {
+        const w = radius * (
+          0.09 * Math.sin(s / (radius * 0.9) + p1) +
+          0.05 * Math.sin(s / (radius * 0.31) + p2) +
+          0.02 * Math.sin(s / (radius * 0.11) + p3)
+        );
+        const d = threshold + w;
+        ring.push(new Point(tx * s + oceanDirX * d, ty * s + oceanDirY * d));
+      }
+      ring.push(new Point(tx * R + oceanDirX * R, ty * R + oceanDirY * R));
+      ring.push(new Point(-tx * R + oceanDirX * R, -ty * R + oceanDirY * R));
+      this.syntheticCoast = [ring];
+      isWater = (patch) => this.isWaterAt(patch.shape.center);
     }
 
     for (const patch of this.patches) {
@@ -744,6 +789,16 @@ export class Model {
       if (ward instanceof Farm) {
         ward.subPlots = ward.subPlots.filter(plot => !plot.some(v => inWater(v)));
         ward.furrows = ward.furrows.filter(f => !inWater(f.start) && !inWater(f.end));
+      }
+      if (ward instanceof Harbour) {
+        // Piers may (and should) extend over water, but they must touch
+        // land. Piers anchor to patch edges, which can sit seaward of the
+        // painted shoreline (especially in oceanBearing mode) — slide those
+        // to the shore; drop only true detached rafts.
+        ward.piers = ward.piers.flatMap(pier => {
+          const rescued = rescueDetachedPier(pier, inWater);
+          return rescued ? [rescued] : [];
+        });
       }
     }
   }
