@@ -15,8 +15,8 @@
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
             nodejs_22
-            nodePackages.typescript
-            nodePackages.typescript-language-server
+            typescript
+            typescript-language-server
           ];
 
           shellHook = ''
