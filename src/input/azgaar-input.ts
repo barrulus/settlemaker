@@ -1,6 +1,6 @@
 import { Point } from '../types/point.js';
 import type { GenerationParams, RoadEntry, RouteKind } from '../generator/generation-params.js';
-import { densityCurve } from '../generator/generation-params.js';
+import { densityCurve, perPatchDensity } from '../generator/generation-params.js';
 
 /**
  * A road bearing either as a plain compass angle (back-compat) or a richer record
@@ -61,22 +61,35 @@ export interface AzgaarBurgInput {
   coastlineGeometry?: Array<Array<{ x: number; y: number }>>;
 }
 
-/**
- * Calibration: observed ordinary-buildings-per-patch at default minSq.
- * Task 6 of this plan may tune within [7, 12] after visual review.
- */
-export const BUILDINGS_PER_PATCH = 9;
+/** Hard footprint cap, chosen from round-4 calibration against the ≤8 s
+ * generation budget (see docs/superpowers/plans/2026-08-05-fidelity-round-4.md
+ * and task-2-report.md). Latitude [120, 400] — landed at the floor, not the
+ * brief's suggested 250, because calibration surfaced a pre-existing (not
+ * Task-2-introduced) `findCircumference`/`buildWalls` defect: on certain
+ * seed/patch-count draws it used to silently return an undersized wall
+ * polygon instead of throwing (fixed in `Model.buildWalls` with an enclosure
+ * check — see its comment), which now correctly retries instead, but each
+ * retry's cost scales with patch count (the O(n²) circumference walk), so
+ * above ~150-180 patches occasional retries can push a single generation
+ * past the 8 s budget. A 60-seed stress test at pop 200000 (which always
+ * saturates the cap) measured a worst case of 12.4 s and 2/60 over-budget
+ * runs at cap 220, 9.7 s and 1/60 at cap 180, vs. zero over-budget runs and
+ * a tight ~3.2-4.1 s spread across 33+ seeds at cap 120 — see task-2-report.md
+ * for the full tables. Optimizing `findCircumference` to avoid the O(n²)
+ * cost (making retries cheap regardless of n) would let this cap move back
+ * up the latitude; that's out of this task's scope. */
+export const MAX_PATCHES = 120;
 
 /**
  * Patch count derives from the household target (pop / urbanDensity) so the
  * settlement's footprint scales with how many buildings it must hold —
  * "looks like a home for X people". Floor 3 keeps tiny meshes viable
- * (Voronoi with <3 patches degenerates); cap 60 bounds cost for
+ * (Voronoi with <3 patches degenerates); cap MAX_PATCHES bounds cost for
  * metropolises, where the adaptive minSq refinement makes up the rest.
  */
 function populationToPatches(population: number, urbanDensity?: number): number {
   const households = Math.max(2, Math.round(population / (urbanDensity ?? densityCurve(population))));
-  return Math.max(3, Math.min(60, Math.ceil(households / BUILDINGS_PER_PATCH)));
+  return Math.max(3, Math.min(MAX_PATCHES, Math.ceil(households / perPatchDensity(population))));
 }
 
 /**

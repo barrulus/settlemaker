@@ -11,7 +11,7 @@ import { CurtainWall } from './curtain-wall.js';
 import { Topology } from './topology.js';
 import { pointInPolygon } from '../geom/point-in-polygon.js';
 import type { GenerationParams, DegradedFlag } from './generation-params.js';
-import { densityCurve } from './generation-params.js';
+import { densityCurve, perPatchDensity } from './generation-params.js';
 import { WardType } from '../types/interfaces.js';
 import type { Street } from '../types/interfaces.js';
 
@@ -29,9 +29,14 @@ const MAX_ATTEMPTS = 20;
 const MIN_POPULATION_FOR_WALLS = 150;
 
 /** Voronoi points per requested patch. Countryside ring (farms/wilderness)
- * comes from the surplus. Round-4 Task 2 may scale this down for large
- * meshes based on calibration; keep 8 for nPatches ≤ 60 regardless. */
-const VORONOI_POINT_MULTIPLIER = (nPatches: number): number => 8;
+ * comes from the surplus. Scaled down for large meshes per round-4 Task 2
+ * calibration (see task-2-report.md): at nPatches ≤ 60 the 8x multiplier is
+ * unchanged (small/medium settlements untouched); above that it tapers
+ * toward a floor of 4x so the Voronoi build cost (which scales with the
+ * number of points, not just nPatches) stays bounded for the largest
+ * footprints admitted by MAX_PATCHES. */
+const VORONOI_POINT_MULTIPLIER = (nPatches: number): number =>
+  nPatches <= 60 ? 8 : Math.max(4, Math.round(480 / nPatches) + 3);
 
 /** Ward types whose buildings are feature landmarks, exempt from the population budget. */
 const BUDGET_EXEMPT_WARD_TYPES = new Set<WardType>([
@@ -130,9 +135,19 @@ export class Model {
   /**
    * Multiplier applied to CommonWard minSq during geometry builds. Set by
    * refineDensity's second pass to shrink block size when the first build
-   * lands far below the household target; 1 otherwise.
+   * lands far below the household target; restored to `baseMinSqScale`
+   * otherwise (village-airy 1.0 down to city-packed 0.3, from
+   * `perPatchDensity`).
    */
-  minSqScale = 1;
+  minSqScale: number;
+
+  /**
+   * Base texture scale for this settlement's population, derived once in
+   * the constructor from `perPatchDensity`: 9/9 = 1.0 for villages down to
+   * 9/30 = 0.3 for the densest cities. `minSqScale` always returns to this
+   * value outside of `refineDensity`'s corrective pass.
+   */
+  private readonly baseMinSqScale: number;
 
   arteries: Street[] = [];
   streets: Street[] = [];
@@ -145,6 +160,8 @@ export class Model {
     this.plazaNeeded = params.plazaNeeded;
     this.citadelNeeded = params.citadelNeeded;
     this.wallsNeeded = params.wallsNeeded;
+    this.baseMinSqScale = 9 / perPatchDensity(params.population);
+    this.minSqScale = this.baseMinSqScale;
 
     if (this.wallsNeeded && params.population < MIN_POPULATION_FOR_WALLS) {
       this.wallsNeeded = false;
@@ -248,7 +265,7 @@ export class Model {
     this.arteries = [];
     this.topology = null;
     this.syntheticCoast = null;
-    this.minSqScale = 1;
+    this.minSqScale = this.baseMinSqScale;
   }
 
   private build(): void {
@@ -371,6 +388,26 @@ export class Model {
     const reserved = this.citadel !== null ? this.citadel.shape.copy() : [];
 
     this.border = new CurtainWall(this.wallsNeeded, this, this.inner, reserved, this.rng, this.params.roadEntryPoints);
+
+    // `findCircumference`'s O(n^2) edge walk can — rarely, and pre-existing
+    // (confirmed present even at the historical n≤60 scale, just more likely
+    // to surface at round-4's larger footprints) — close its loop on a
+    // spurious inner cycle instead of the true outer boundary, silently
+    // returning a tiny polygon that encloses none of the requested inner
+    // patches instead of throwing. That corrupt-but-exception-free result
+    // would otherwise sail past the existing retry/degrade ladder in
+    // `generate()`/`probeWallRadius()`, which only catches thrown errors.
+    // Enclosure is the cheapest reliable tell: a correct circumference must
+    // contain nearly every inner patch's centroid. Failing that, throw so
+    // the ladder retries with the rng advanced past the bad draw, exactly
+    // like any other recoverable generation failure.
+    const enclosed = this.inner.filter(
+      p => pointInPolygon(p.shape.center, this.border!.shape.vertices),
+    ).length;
+    if (this.inner.length > 0 && enclosed < this.inner.length * 0.9) {
+      throw new Error('Bad walled area shape: circumference does not enclose the inner patches!');
+    }
+
     if (this.wallsNeeded) {
       this.wall = this.border;
       this.wall.buildTowers();
@@ -853,13 +890,13 @@ export class Model {
     const count = this.countOrdinaryBuildings();
     if (count === 0 || count >= target * 0.65) return;
 
-    this.minSqScale = Math.max(0.25, count / target);
+    this.minSqScale = Math.max(0.2, this.baseMinSqScale * Math.max(0.25, count / target));
     for (const patch of this.patches) {
       if (patch.ward instanceof CommonWard && !this.waterbody.includes(patch)) {
         patch.ward.createGeometry();
       }
     }
-    this.minSqScale = 1;
+    this.minSqScale = this.baseMinSqScale;
   }
 
   /**

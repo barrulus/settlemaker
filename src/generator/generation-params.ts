@@ -26,6 +26,18 @@ export function densityCurve(population: number): number {
   return Math.min(12, 4 + 8 * Math.log10(population / 500) / Math.log10(40));
 }
 
+/**
+ * Ordinary buildings a patch holds at this settlement's texture. Villages
+ * are airy (~9 detached houses per patch, the watabou village look);
+ * cities pack ~30 tight blocks per patch (the watabou city look),
+ * log-scaled between pop 1 000 and 20 000. Drives BOTH the patch count
+ * (footprint) and the default block size (texture) so they stay coherent.
+ */
+export function perPatchDensity(population: number): number {
+  if (population <= 1000) return 9;
+  return Math.min(30, 9 + 21 * Math.log10(population / 1000) / Math.log10(20));
+}
+
 export interface GenerationParams {
   /** Number of Voronoi patches for the inner city */
   nPatches: number;

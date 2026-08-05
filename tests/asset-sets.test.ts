@@ -4,7 +4,11 @@ import { SCHEMATIC_SET, assetSetFor } from '../src/assets/asset-sets.js';
 
 const parky: AzgaarBurgInput = {
   name: 'Parkville',
-  population: 2500,
+  // Round 4 Task 2: perPatchDensity shrank the footprint at pop 2500 from
+  // 38 to 22 patches, and this seed no longer rolls a Park ward at 22.
+  // Bumped to 8000 (nPatches 34, close to the original 38) per this file's
+  // own "adjust the fixture ... until one exists" maintenance note below.
+  population: 8000,
   port: false, citadel: false, walls: true,
   plaza: true, temple: true, shanty: false, capital: false,
 };

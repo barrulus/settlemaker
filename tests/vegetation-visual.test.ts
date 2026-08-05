@@ -5,7 +5,11 @@ describe('vegetation visual output', () => {
   it('parkville renders trees in SVG', () => {
     const burg = {
       name: 'Parkville',
-      population: 2500,
+      // Round 4 Task 2: perPatchDensity shrank this fixture's footprint at
+      // pop 2500 from 38 to 22 patches, and at 22 this seed no longer rolls
+      // a Park ward. Bumped to 8000 (nPatches 34, close to the original 38)
+      // to restore a reliable park — see asset-sets.test.ts's matching note.
+      population: 8000,
       port: false, citadel: false, walls: true,
       plaza: true, temple: true, shanty: false, capital: false,
     };
@@ -33,7 +37,11 @@ describe('vegetation visual output', () => {
   it('trees are positioned inside greens group', () => {
     const burg = {
       name: 'Parkville',
-      population: 2500,
+      // Round 4 Task 2: perPatchDensity shrank this fixture's footprint at
+      // pop 2500 from 38 to 22 patches, and at 22 this seed no longer rolls
+      // a Park ward. Bumped to 8000 (nPatches 34, close to the original 38)
+      // to restore a reliable park — see asset-sets.test.ts's matching note.
+      population: 8000,
       port: false, citadel: false, walls: true,
       plaza: true, temple: true, shanty: false, capital: false,
     };
