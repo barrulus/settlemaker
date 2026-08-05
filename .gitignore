@@ -4,3 +4,5 @@ test-output.svg
 *.tsbuildinfo
 /output/
 tiles/
+web/node_modules/
+web/dist/
