@@ -15,6 +15,17 @@ export interface RoadEntry {
   kind?: RouteKind;
 }
 
+/**
+ * Default people-per-building. Villages are ~4/household; urban buildings
+ * house more people (historically true, and matches watabou's visual scale),
+ * rising log-linearly to 12 at pop ≥ 20 000. Explicit urbanDensity (FMG's
+ * urbanDensityInput) always overrides this default.
+ */
+export function densityCurve(population: number): number {
+  if (population <= 500) return 4;
+  return Math.min(12, 4 + 8 * Math.log10(population / 500) / Math.log10(40));
+}
+
 export interface GenerationParams {
   /** Number of Voronoi patches for the inner city */
   nPatches: number;

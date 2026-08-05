@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { generateFromBurg, WardType, type AzgaarBurgInput, type Model } from '../src/index.js';
 import { buildingBudget } from '../src/generator/model.js';
+import { densityCurve } from '../src/generator/generation-params.js';
 
 const BUDGET_EXEMPT = new Set<WardType>([
   WardType.Castle, WardType.Cathedral, WardType.Market, WardType.Harbour, WardType.Park,
@@ -32,7 +33,7 @@ describe('population → building budget', () => {
     expect(buildingBudget(13)).toBe(3);      // 13 / 4 ≈ 3 households
     expect(buildingBudget(13, 6.5)).toBe(2); // FMG urbanDensityInput override
     expect(buildingBudget(1)).toBe(2);       // floor: a burg is ≥ 2 buildings
-    expect(buildingBudget(8000)).toBe(2000);
+    expect(buildingBudget(8000)).toBe(Math.round(8000 / densityCurve(8000))); // curve-derived, not flat /4
   });
 
   it('a pop-13 hamlet renders a handful of buildings, not a filled town', () => {

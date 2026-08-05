@@ -1,5 +1,6 @@
 import { Point } from '../types/point.js';
 import type { GenerationParams, RoadEntry, RouteKind } from '../generator/generation-params.js';
+import { densityCurve } from '../generator/generation-params.js';
 
 /**
  * A road bearing either as a plain compass angle (back-compat) or a richer record
@@ -74,7 +75,7 @@ export const BUILDINGS_PER_PATCH = 9;
  * metropolises, where the adaptive minSq refinement makes up the rest.
  */
 function populationToPatches(population: number, urbanDensity?: number): number {
-  const households = Math.max(2, Math.round(population / (urbanDensity ?? 4)));
+  const households = Math.max(2, Math.round(population / (urbanDensity ?? densityCurve(population))));
   return Math.max(3, Math.min(60, Math.ceil(households / BUILDINGS_PER_PATCH)));
 }
 

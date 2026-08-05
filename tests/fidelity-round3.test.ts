@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { generateFromBurg, generateSvg, type AzgaarBurgInput } from '../src/index.js';
+import { generateFromBurg, generateSvg, type AzgaarBurgInput, WardType, type Model } from '../src/index.js';
 import { Farm } from '../src/wards/farm.js';
+import { densityCurve } from '../src/generator/generation-params.js';
+import { buildingBudget } from '../src/generator/model.js';
+import { CommonWard } from '../src/wards/common-ward.js';
 
 const fenwick: AzgaarBurgInput = {
   name: 'Fenwick', population: 90, port: false, citadel: false, walls: false,
@@ -48,5 +51,37 @@ describe('fidelity round 3: fields as assets', () => {
     const svg = generateSvg(model, { clipId: 'zzz' });
     expect(svg).toMatch(/<pattern id="zzz-field-a\d+"/);
     expect(svg).not.toContain('frame-clip-field');
+  });
+});
+
+describe('fidelity round 3: sublinear density — dense towns, smaller walls', () => {
+  it('densityCurve reference points', () => {
+    expect(densityCurve(13)).toBeCloseTo(4, 5);
+    expect(densityCurve(500)).toBeCloseTo(4, 5);
+    expect(densityCurve(2600)).toBeCloseTo(7.58, 1);
+    expect(densityCurve(4200)).toBeCloseTo(8.61, 1);
+    expect(densityCurve(20000)).toBeCloseTo(12, 5);
+    expect(densityCurve(100000)).toBeCloseTo(12, 5);
+  });
+
+  it('explicit urbanDensity still overrides the curve', () => {
+    expect(buildingBudget(4200, 4)).toBe(1050);
+    expect(buildingBudget(4200)).toBe(Math.round(4200 / densityCurve(4200)));
+  });
+
+  it('a walled town is DENSE: walled CommonWard patches average ≥ 5 buildings', () => {
+    const { model } = generateFromBurg({
+      name: 'Highbury', population: 2600, port: false, citadel: true, walls: true,
+      plaza: true, temple: true, shanty: false, capital: true,
+      roadBearings: [45, 135, 225, 315],
+    }, { seed: 4 });
+    let wards = 0, buildings = 0;
+    for (const patch of model.patches) {
+      if (!(patch.ward instanceof CommonWard) || !patch.withinWalls) continue;
+      wards++;
+      buildings += patch.ward.geometry.length;
+    }
+    expect(wards).toBeGreaterThan(0);
+    expect(buildings / wards).toBeGreaterThanOrEqual(5); // was ~sparse dots before
   });
 });

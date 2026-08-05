@@ -11,6 +11,7 @@ import { CurtainWall } from './curtain-wall.js';
 import { Topology } from './topology.js';
 import { pointInPolygon } from '../geom/point-in-polygon.js';
 import type { GenerationParams, DegradedFlag } from './generation-params.js';
+import { densityCurve } from './generation-params.js';
 import { WardType } from '../types/interfaces.js';
 import type { Street } from '../types/interfaces.js';
 
@@ -44,11 +45,12 @@ const HAMLET_TRIM_MAX_BUDGET = 40;
 
 /**
  * Population-derived cap on ordinary buildings: ≈ one household per
- * `urbanDensity` people (FMG's urbanDensityInput; default 4), floored at 2
- * so even a pop-1 burg reads as a settlement.
+ * `urbanDensity` people (FMG's urbanDensityInput; default follows
+ * `densityCurve`), floored at 2 so even a pop-1 burg reads as a settlement.
  */
-export function buildingBudget(population: number, urbanDensity = 4): number {
-  return Math.max(2, Math.round(population / urbanDensity));
+export function buildingBudget(population: number, urbanDensity?: number): number {
+  const d = urbanDensity ?? densityCurve(population);
+  return Math.max(2, Math.round(population / d));
 }
 
 /**
