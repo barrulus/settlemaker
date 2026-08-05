@@ -31,7 +31,7 @@ export type {
 } from './output/settlement-tiler.js';
 
 export { Palette, WardType, Street } from './types/interfaces.js';
-export { PALETTES, PALETTE_DEFAULT } from './output/palette.js';
+export { PALETTES, PALETTE_DEFAULT, paletteForBiome } from './output/palette.js';
 export { themeFrom } from './output/render-theme.js';
 export type { RenderTheme } from './output/render-theme.js';
 

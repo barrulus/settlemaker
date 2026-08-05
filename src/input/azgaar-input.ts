@@ -42,6 +42,10 @@ export interface AzgaarBurgInput {
   harbourSize?: 'large' | 'small';
   /** People per household — FMG's urbanDensityInput. Drives the building budget. */
   urbanDensity?: number;
+  /** Azgaar biome name (e.g. "desert", "temperate") — selects default asset set + palette. */
+  biome?: string;
+  /** Trade-center burg — guarantees a market/plaza ward (Azgaar wishlist). */
+  trade?: boolean;
   /**
    * Water polygons surrounding the burg, in burg-local coordinates (origin at
    * burg centre, same scale as the generated mesh — roughly the wall radius).
@@ -95,7 +99,7 @@ export function mapToGenerationParams(
   return {
     nPatches: populationToPatches(burg.population, burg.urbanDensity),
     population: burg.population,
-    plazaNeeded: burg.plaza,
+    plazaNeeded: burg.plaza || burg.trade === true,
     citadelNeeded: burg.citadel,
     wallsNeeded: burg.walls,
     templeNeeded: burg.temple,
@@ -106,6 +110,7 @@ export function mapToGenerationParams(
     ...(burg.oceanBearing != null ? { oceanBearing: burg.oceanBearing } : {}),
     ...(burg.harbourSize != null ? { harbourSize: burg.harbourSize } : {}),
     ...(burg.urbanDensity != null ? { urbanDensity: burg.urbanDensity } : {}),
+    ...(burg.biome != null ? { biome: burg.biome } : {}),
     ...(burg.coastlineGeometry != null
       ? { coastlineGeometry: burg.coastlineGeometry.map(ring => ring.map(p => new Point(p.x, p.y))) }
       : {}),

@@ -38,6 +38,7 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
     version: SCENE_VERSION,
     seed: model.params.seed,
     population: model.params.population,
+    ...(model.params.biome != null ? { biome: model.params.biome } : {}),
     bounds: computeLocalBounds(model, padding, shift),
     layers: {
       water: {

@@ -2,7 +2,7 @@ import type { Palette } from '../types/interfaces.js';
 import type { Scene, ScenePoint } from '../scene/scene.js';
 import type { AssetSet } from '../assets/asset-sets.js';
 import { assetSetFor } from '../assets/asset-sets.js';
-import { PALETTES } from './palette.js';
+import { paletteForBiome } from './palette.js';
 import { themeFrom, type RenderTheme } from './render-theme.js';
 
 const NORMAL_STROKE = 0.15;
@@ -64,7 +64,7 @@ export function themeToCss(theme: RenderTheme): string {
  * #fields #greens #water #roads #shadows #buildings #landmarks #walls.
  */
 export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string {
-  const palette = options.palette ?? PALETTES.default;
+  const palette = options.palette ?? paletteForBiome(scene.biome);
   const overrides = Object.fromEntries(
     Object.entries(options.theme ?? {}).filter(([, v]) => v !== undefined),
   );
