@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { generateFromBurg, WardType, type AzgaarBurgInput, type Model } from '../src/index.js';
 import { buildingBudget } from '../src/generator/model.js';
 import { CommonWard } from '../src/wards/common-ward.js';
+import { Harbour } from '../src/wards/harbour.js';
 
 const EXEMPT = new Set<WardType>([
   WardType.Castle, WardType.Cathedral, WardType.Market, WardType.Harbour, WardType.Park,
@@ -106,7 +107,31 @@ describe('fidelity round 2: harbour at the painted shoreline', () => {
       coastlineGeometry: coast, harbourSize: 'small',
     });
     expect(model.harbour).not.toBeNull();
-    const piers = (model.harbour!.ward as { piers: unknown[] }).piers;
+    const piers = (model.harbour!.ward as Harbour).piers;
     expect(piers.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // Pier drop-off is silent and seed-dependent (see task-2-report.md): a
+  // straddling harbour patch can carry a shared edge that lies entirely on
+  // the wet side, and if a pier anchors there with no dry land nearby,
+  // rescueDetachedPier drops it without error. Pin survival across a seed
+  // sweep so a regression here fails loudly instead of needing another
+  // manual sweep to rediscover. Swept seeds 1-10 for saltHarbour by hand
+  // (~1s total for all 10) before writing this test: every one produced a
+  // harbour with >=1 pier, so no seed is expected-null here. If a future
+  // change legitimately makes some seed fall back to no harbour, add that
+  // seed number to NO_HARBOUR_EXPECTED with a comment explaining why.
+  const NO_HARBOUR_EXPECTED = new Set<number>();
+
+  it('harbour survives with >=1 pier across a seed sweep (1-10)', () => {
+    for (let seed = 1; seed <= 10; seed++) {
+      const { model } = generateFromBurg(saltHarbour, { seed });
+      if (model.harbour === null) {
+        expect(NO_HARBOUR_EXPECTED.has(seed), `seed ${seed}: unexpected missing harbour`).toBe(true);
+        continue;
+      }
+      const piers = (model.harbour.ward as Harbour).piers;
+      expect(piers.length, `seed ${seed}: harbour has no piers`).toBeGreaterThanOrEqual(1);
+    }
   });
 });
