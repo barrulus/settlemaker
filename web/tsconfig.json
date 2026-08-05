@@ -8,7 +8,14 @@
     "noEmit": true,
     "isolatedModules": true,
     "allowImportingTsExtensions": false,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      // The library (../src) type-imports 'geojson'. tsc resolves bare
+      // imports from the IMPORTING file's directory, so ../src files never
+      // find web/node_modules on their walk up — map the specifier here.
+      "geojson": ["./node_modules/@types/geojson"]
+    }
   },
   "include": ["src", "vite.config.ts", "../src"]
 }
