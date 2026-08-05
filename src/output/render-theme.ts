@@ -67,7 +67,11 @@ export function themeFrom(palette: Palette): RenderTheme {
     roadCore: cssHex(palette.paper),
     buildingFill: cssHex(palette.light),
     buildingStroke: cssHex(palette.dark),
-    landmarkFill: cssHex(blend(palette.light, palette.dark, 0.3)),
+    landmarkFill: cssHex(
+      palette.light === palette.dark
+        ? blend(palette.light, 0xffffff, 0.45)  // degenerate 2-tone palette: old formula kept landmarks distinct
+        : blend(palette.light, palette.dark, 0.3),
+    ),
     shadowColor: cssHex(palette.dark),
     shadowOpacity: 0.18,
     shadowOffset: { dx: 0.4, dy: 0.6 },

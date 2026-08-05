@@ -91,7 +91,6 @@ describe('fidelity round 3: sublinear density — dense towns, smaller walls', (
 describe('fidelity round 3: visual grooming', () => {
   it('landmarkFill has real contrast against paper and ordinary buildings', () => {
     for (const name of Object.keys(PALETTES)) {
-      if (name === 'simple') continue; // 2-color palette; can't achieve landmark contrast
       const t = themeFrom(PALETTES[name]);
       expect(t.landmarkFill, `palette ${name}`).not.toBe(t.paper);
       expect(t.landmarkFill, `palette ${name}`).not.toBe(t.buildingFill);
