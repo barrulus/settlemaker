@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@types/geojson": "^7946.0.16",
     "typescript": "^5.7.0",
     "vite": "^6.0.0"
   }
