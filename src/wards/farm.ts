@@ -2,6 +2,7 @@ import { Point } from '../types/point.js';
 import { Polygon } from '../geom/polygon.js';
 import { WardType } from '../types/interfaces.js';
 import { interpolate, obb, pierce } from '../geom/geom-utils.js';
+import { pointInPolygon } from '../geom/point-in-polygon.js';
 import { Ward, createOrthoBuilding } from './ward.js';
 import type { Model } from '../generator/model.js';
 import type { Patch } from '../generator/patch.js';
@@ -57,12 +58,25 @@ export class Farm extends Ward {
         const lineEnd = interpolate(box[3], box[2], t);
 
         const hits = pierce(renderPlot, lineStart, lineEnd);
-        while (hits.length >= 2) {
-          const p = hits.shift()!;
-          const q = hits.shift()!;
-          if (Point.distance(p, q) > 1.2) {
-            this.furrows.push({ start: p, end: q });
-          }
+        // pierce() gives boundary intersections in polygon-edge order, not
+        // scan-line order — pair them along the line, or concave plots get
+        // segments spanning the OUTSIDE (mispaired in/out points). Sort by
+        // parameter along the scan line, then keep only pairs whose midpoint
+        // is actually inside the plot (also guards odd counts from vertex
+        // tangencies).
+        const dirX = lineEnd.x - lineStart.x;
+        const dirY = lineEnd.y - lineStart.y;
+        hits.sort((a, b) =>
+          ((a.x - lineStart.x) * dirX + (a.y - lineStart.y) * dirY) -
+          ((b.x - lineStart.x) * dirX + (b.y - lineStart.y) * dirY),
+        );
+        for (let h = 0; h + 1 < hits.length; h += 2) {
+          const p = hits[h];
+          const q = hits[h + 1];
+          if (Point.distance(p, q) <= 1.2) continue;
+          const mid = new Point((p.x + q.x) / 2, (p.y + q.y) / 2);
+          if (!pointInPolygon(mid, renderPlot)) continue;
+          this.furrows.push({ start: p, end: q });
         }
       }
     }
