@@ -17,7 +17,9 @@ function showError(title: string, detail: string): void {
 async function main(): Promise<void> {
   try {
     const parsed = await parseSettlementUrl(new URLSearchParams(location.search));
-    const palette = parsed.paletteName !== undefined ? PALETTES[parsed.paletteName] : undefined;
+    const palette = parsed.paletteName !== undefined && Object.hasOwn(PALETTES, parsed.paletteName)
+      ? PALETTES[parsed.paletteName]
+      : undefined;
     if (parsed.paletteName !== undefined && palette === undefined) {
       showError('Unknown theme', `theme="${parsed.paletteName}" — known presets: ${Object.keys(PALETTES).join(', ')}`);
       return;
@@ -30,6 +32,7 @@ async function main(): Promise<void> {
       },
     });
     const app = document.getElementById('app')!;
+    // Safe: the assembler embeds no input-derived strings (names are never rendered; theme values are sanitized). Re-audit before ever rendering burg names into the SVG.
     app.innerHTML = svg;
     app.querySelector('svg')?.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     document.title = `${parsed.burg.name} — settlemaker`;

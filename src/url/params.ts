@@ -84,7 +84,7 @@ function bool(params: URLSearchParams, key: string): boolean {
 
 function num(params: URLSearchParams, key: string): number | undefined {
   const v = params.get(key);
-  if (v === null) return undefined;
+  if (v === null || v === '') return undefined;
   const n = Number(v);
   return Number.isFinite(n) ? n : undefined;
 }

@@ -68,6 +68,15 @@ The result is placed in the `i` query parameter: `?i=<result>`.
 - "base64url" is standard base64 with `+` → `-`, `/` → `_`, and `=` padding
   stripped.
 
+**Practical size bound.** `i=` has no hard length limit enforced by this
+renderer, but very large payloads (mainly `coastlineGeometry`, which is the
+only field whose size scales with map detail) risk hitting URL-length limits
+in intermediary infrastructure (proxies, CDNs, logging). Two practical
+mitigations: round coastline coordinates to about 1 decimal place before
+encoding — the renderer's own output only carries 2-decimal precision
+anyway, so extra input precision buys nothing — and keep the encoded `i=`
+value under roughly 8 KB for safety margin against intermediary limits.
+
 ### The `AzgaarBurgInput` interface
 
 Copied verbatim from `src/input/azgaar-input.ts`:
@@ -294,9 +303,13 @@ apply and the palette default shows through instead.
 
 ## 6. Guarantees
 
-- **Determinism.** The same URL (same `i=`/flat params, same `theme=`/`style=`)
-  always renders byte-identical SVG. Nothing in the pipeline consults wall-clock
-  time or unseeded randomness once a seed is resolved.
+- **Determinism.** This guarantee applies to any URL carrying at least one
+  data param (`i=` or any flat data param from §4, with or without
+  `theme=`/`style=`): the same URL always renders byte-identical SVG.
+  Nothing in the pipeline consults wall-clock time or unseeded randomness
+  once a seed is resolved. The bare no-param URL is the deliberate
+  exception — it seeds itself from the page load (see §2 "Bare URL") and is
+  *intentionally* random on every visit, not a violation of this guarantee.
 - **Versioned envelope.** The `i=` envelope's `v` field is checked exactly;
   an envelope with any other value than the currently supported version
   produces a visible error, never a best-effort guess at reinterpreting an

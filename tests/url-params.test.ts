@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseSettlementUrl, sanitizeThemeOverrides } from '../src/url/params.js';
 import { encodeBurgParam, encodeJsonParam } from '../src/url/codec.js';
+import { paletteForBiome, PALETTES } from '../src/output/palette.js';
 import { toprak } from './fixtures/toprak.js';
 
 const sp = (q: string) => new URLSearchParams(q);
@@ -44,6 +45,21 @@ describe('parseSettlementUrl', () => {
     expect(a.seedOverride).toBe(424242);
     expect(a.burg).toEqual(b.burg);
     expect(a.burg.population).toBeGreaterThan(0);
+  });
+
+  it('empty pop= falls back to the default population', async () => {
+    const p = await parseSettlementUrl(sp('name=X&pop=&port=1'));
+    expect(p.burg.population).toBe(300);
+  });
+
+  it('biome=constructor is carried through as data but never used for prototype-chain lookup', async () => {
+    const p = await parseSettlementUrl(sp('name=X&pop=100&biome=constructor'));
+    expect(p.burg.biome).toBe('constructor');
+    // The rendering path (web/main.ts) has no test harness here; its
+    // Object.hasOwn guard on PALETTES is verified by review. What we can
+    // test directly is the biome->palette lookup used elsewhere.
+    expect(paletteForBiome('constructor')).toBe(PALETTES.default);
+    expect(paletteForBiome('__proto__')).toBe(PALETTES.default);
   });
 
   it('invalid harbourSize is dropped, not passed through', async () => {
