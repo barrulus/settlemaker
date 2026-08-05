@@ -20,6 +20,22 @@ function ordinaryStats(model: Model): { count: number; maxR: number } {
   return { count, maxR };
 }
 
+// Farm buildings legitimately sit far outside the wall by design, so they
+// must not dilute the "does the periphery hollow out" measurement — that
+// defect lives specifically in walled CommonWard blocks. Using ordinaryStats
+// (which includes Farm) here would make the gap assertion pass vacuously
+// even with the fix reverted, since farmhouses alone push maxR past wallR.
+function walledCommonWardMaxR(model: Model): number {
+  let maxR = 0;
+  for (const patch of model.patches) {
+    if (!(patch.ward instanceof CommonWard) || !patch.withinWalls) continue;
+    for (const poly of patch.ward.geometry) {
+      maxR = Math.max(maxR, Math.hypot(poly.center.x, poly.center.y));
+    }
+  }
+  return maxR;
+}
+
 // The live-site defect reproduction: Salt Harbour, walled port, pop 4200.
 const saltHarbour: AzgaarBurgInput = {
   name: 'Salt Harbour', population: 4200, port: true, citadel: false, walls: true,
@@ -32,7 +48,10 @@ describe('fidelity round 2: wall gap', () => {
 
   it('the built town reaches near the wall (no hollow periphery)', () => {
     const wallR = model.wall!.getRadius();
-    const { maxR } = ordinaryStats(model);
+    // Measured over walled CommonWard buildings only — that is where the
+    // defect lives. Including Farm (which sits outside the wall by design)
+    // would make this assertion pass vacuously regardless of the trim policy.
+    const maxR = walledCommonWardMaxR(model);
     // Baseline defect: gap was 46% of wall radius (wall 214, buildings 116).
     expect(wallR - maxR).toBeLessThan(wallR * 0.25);
   });

@@ -36,6 +36,13 @@ const BUDGET_EXEMPT_WARD_TYPES = new Set<WardType>([
 ]);
 
 /**
+ * Above this budget (and for any walled settlement, regardless of budget),
+ * applyBuildingBudget switches from the hamlet's global nearest-centre trim
+ * to the proportional per-patch policy — see applyBuildingBudget doc comment.
+ */
+const HAMLET_TRIM_MAX_BUDGET = 40;
+
+/**
  * Population-derived cap on ordinary buildings: ≈ one household per
  * `urbanDensity` people (FMG's urbanDensityInput; default 4), floored at 2
  * so even a pop-1 burg reads as a settlement.
@@ -881,7 +888,7 @@ export class Model {
     }
     if (total <= budget) return;
 
-    if (this.wall === null && budget <= 40) {
+    if (this.wall === null && budget <= HAMLET_TRIM_MAX_BUDGET) {
       // Hamlet policy: global nearest-centre (Plan A behavior, byte-stable).
       const entries: Array<{ poly: Polygon; dist: number }> = [];
       for (const { ward } of perPatch) {
