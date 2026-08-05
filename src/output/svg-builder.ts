@@ -21,7 +21,8 @@ export interface SvgOptions {
    * Id of the frame clipPath (default "frame-clip"). SVG ids are
    * document-global: override with a unique value whenever multiple
    * settlement SVGs are inlined into one HTML document, or each water
-   * layer clips against whichever #frame-clip appears first.
+   * layer clips against whichever #frame-clip appears first. Characters
+   * outside `[A-Za-z0-9_-]` are replaced with '-' before use.
    */
   clipId?: string;
 }

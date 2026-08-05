@@ -70,7 +70,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   );
   const theme: RenderTheme = { ...themeFrom(palette), ...overrides };
   const assets = options.assetSet ?? assetSetFor(scene.biome);
-  const clipId = options.clipId ?? 'frame-clip';
+  const clipId = (options.clipId ?? 'frame-clip').replace(/[^A-Za-z0-9_-]/g, '-');
   const b = scene.bounds;
   const w = b.max_x - b.min_x, h = b.max_y - b.min_y;
   const L = scene.layers;

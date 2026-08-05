@@ -45,7 +45,7 @@ export interface FieldPlot {
   /** Furrow-hatch direction in degrees, from the plot's OBB. */
   angleDeg: number;
 }
-/** @deprecated Always empty since scene v1.1 — fields carry angleDeg instead of furrow segments. */
+/** @deprecated Always empty since settlemaker 0.8.0 — fields carry angleDeg instead of furrow segments. */
 export interface Furrow { start: ScenePoint; end: ScenePoint }
 export interface GreenFeature { ring: ScenePoint[] }
 
@@ -97,7 +97,7 @@ export interface Scene {
   layers: {
     water: WaterLayer;
     fields: FieldPlot[];
-    /** @deprecated Always empty since scene v1.1 — fields carry angleDeg instead. */
+    /** @deprecated Always empty since settlemaker 0.8.0 — fields carry angleDeg instead. */
     furrows: Furrow[];
     greens: GreenFeature[];
     vegetation: VegetationInstance[];
@@ -282,8 +282,11 @@ against your output.
 polygon doesn't paint outside the settlement frame. **Every SVG document
 that embeds more than one settlement must pass a distinct `clipId` per
 settlement** — SVG ids are global to the document, and a collision means the
-second settlement's water clips against the first settlement's frame. See
-`compare-versions.ts`'s `clipId: 'frame-clip-${name}'` for the pattern.
+second settlement's water clips against the first settlement's frame.
+Characters outside `[A-Za-z0-9_-]` are sanitized to `'-'` inside
+`assembleSvg`, so callers don't need to pre-slugify — though
+`compare-versions.ts` still does so itself for readability, building
+`clipId: 'frame-clip-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-')`.
 
 ## 4. The `AssetSet` manifest — worked example: the field pattern
 

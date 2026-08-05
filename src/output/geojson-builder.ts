@@ -223,6 +223,7 @@ function buildMetadata(
 function computeGenerationVersion(params: GenerationParams, shift: OriginShift): string {
   const relevant = {
     schema: GEOJSON_SCHEMA_VERSION,
+    settlemakerVersion: SETTLEMAKER_VERSION,
     seed: params.seed,
     population: params.population,
     nPatches: params.nPatches,

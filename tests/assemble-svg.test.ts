@@ -41,4 +41,10 @@ describe('assembleSvg group/style contract', () => {
   it('is deterministic', () => {
     expect(generateSvg(model)).toBe(generateSvg(model));
   });
+
+  it('sanitizes clipId characters unsafe for an SVG id', () => {
+    const dirty = generateSvg(model, { clipId: 'has space!' });
+    expect(dirty).toContain('id="has-space-"');
+    expect(dirty).not.toContain('has space');
+  });
 });

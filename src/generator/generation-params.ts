@@ -70,7 +70,7 @@ export interface GenerationParams {
   coastlineGeometry?: Point[][];
   /** Harbour size — 'large' for major sea routes + big pop, 'small' for minor ports */
   harbourSize?: 'large' | 'small';
-  /** People per household — FMG's urbanDensityInput. Drives the building budget. Default 4. */
+  /** People per household — FMG's urbanDensityInput. Drives the building budget. Defaults to densityCurve(population) (villages ≈4 → cities 12); explicit values override. */
   urbanDensity?: number;
   /** Azgaar biome name; flows to the scene for asset-set/palette defaults. */
   biome?: string;

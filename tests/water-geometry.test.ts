@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { generateFromBurg, type AzgaarBurgInput } from '../src/index.js';
 import { pointInPolygon } from '../src/geom/point-in-polygon.js';
+import { Farm } from '../src/wards/farm.js';
 
 // Open sea east of the burg: shoreline at x=40 (inside the frame), far edge at
 // x=1500 (far beyond it). Output coords equal input coords: generateFromBurg
@@ -66,6 +67,12 @@ describe('water rendered from coastline geometry', () => {
         for (const v of poly.vertices) {
           expect(v.x).toBeLessThanOrEqual(shoreX + 1e-6);
         }
+      }
+      // The drowning filter (removeDrownedGeometry) must keep plotAngles and
+      // subPlots in lockstep — one angle per surviving subplot — even on a
+      // coastal burg where whole farm plots get dropped for overlapping water.
+      if (patch.ward instanceof Farm) {
+        expect(patch.ward.plotAngles.length).toBe(patch.ward.subPlots.length);
       }
     }
   });
