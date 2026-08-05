@@ -310,9 +310,16 @@ apply and the palette default shows through instead.
   `roadBearings` exactly: same count, bearings, and kinds, with any
   `route_id` you attached echoed back on the matching gate output feature.
   The generator invents no additional external connections beyond what's
-  supplied — an empty or omitted `roadBearings` means zero external roads
-  (internal lanes within the settlement are a separate, unrelated concern
-  and are not counted here).
+  supplied. The two "no data" cases are distinct and matter:
+  - `roadBearings: []` (present, empty) is authoritative — "this burg
+    genuinely has no roads" — and yields zero external roads.
+  - Omitting `roadBearings` entirely means "route data unknown", and
+    settlemaker falls back to legacy behavior: it invents plausible random
+    gates and roads rather than assuming routelessness.
+
+  Send `[]` when you know the burg has no roads; omit the field only when
+  you have no route data at all. (Internal lanes within the settlement are
+  a separate, unrelated concern and are not counted here.)
 - **Water fidelity.** When `coastlineGeometry` is supplied, the rendered
   water outline follows that geometry (clipped to the local frame) rather
   than Voronoi patch shapes — open sea/rivers reach the frame edge, matching
