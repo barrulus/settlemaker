@@ -17,7 +17,12 @@ export interface WaterLayer {
   synthetic: boolean;
 }
 
-export interface FieldPlot { ring: ScenePoint[] }
+export interface FieldPlot {
+  ring: ScenePoint[];
+  /** Furrow-hatch direction in degrees, from the plot's OBB. */
+  angleDeg: number;
+}
+/** @deprecated Always empty since scene v1.1 — fields carry angleDeg instead of furrow segments. */
 export interface Furrow { start: ScenePoint; end: ScenePoint }
 export interface GreenFeature { ring: ScenePoint[] }
 
@@ -69,6 +74,7 @@ export interface Scene {
   layers: {
     water: WaterLayer;
     fields: FieldPlot[];
+    /** @deprecated Always empty since scene v1.1 — fields carry angleDeg instead. */
     furrows: Furrow[];
     greens: GreenFeature[];
     vegetation: VegetationInstance[];

@@ -22,8 +22,8 @@ describe('svg render: fields and water', () => {
   it('renders farm subplots with the pale field wash, not the loud green', () => {
     const { model } = generateFromBurg(makeBurg({ population: 12000 }), { seed: 42 });
     const svg = generateSvg(model);
-    // fieldFill for parchment = blend(0xfff2c8, 0x8fa26a, 0.08) = #f6ecc0
-    expect(svg).toContain('#fields path{fill:#f6ecc0');
+    // fieldFill for parchment = blend(0xfff2c8, 0x8fa26a, 0.18) = #ebe4b7
+    expect(svg).toContain('#fields .plot{fill:#ebe4b7');
   });
 
   it('renders oceanBearing water as one clipped geometry path (synthetic half-plane)', () => {

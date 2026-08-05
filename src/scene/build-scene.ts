@@ -61,12 +61,13 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
     const ward = patch.ward;
     if (!ward) continue;
     if (ward instanceof Farm) {
-      for (const plot of ward.subPlots) {
-        if (plot.length >= 3) scene.layers.fields.push({ ring: ring(plot) });
+      for (let i = 0; i < ward.subPlots.length; i++) {
+        const plot = ward.subPlots[i];
+        if (plot.length >= 3) {
+          scene.layers.fields.push({ ring: ring(plot), angleDeg: ward.plotAngles[i] ?? 0 });
+        }
       }
-      for (const f of ward.furrows) {
-        scene.layers.furrows.push({ start: sc(f.start), end: sc(f.end) });
-      }
+      // furrows layer stays empty — see Furrow deprecation note in scene.ts.
       // Farm buildings still land in `buildings` via the geometry loop below.
     }
     if (ward.type === WardType.Park) {

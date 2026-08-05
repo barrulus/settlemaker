@@ -1,8 +1,7 @@
 import { Point } from '../types/point.js';
 import { Polygon } from '../geom/polygon.js';
 import { WardType } from '../types/interfaces.js';
-import { interpolate, obb, pierce } from '../geom/geom-utils.js';
-import { pointInPolygon } from '../geom/point-in-polygon.js';
+import { interpolate, obb } from '../geom/geom-utils.js';
 import { Ward, createOrthoBuilding } from './ward.js';
 import type { Model } from '../generator/model.js';
 import type { Patch } from '../generator/patch.js';
@@ -14,7 +13,10 @@ const MIN_PLOT_AREA = 20;
 
 export class Farm extends Ward {
   subPlots: Point[][] = [];
+  /** Always empty — furrow segments were replaced by rendered hatch patterns; see plotAngles. */
   furrows: { start: Point; end: Point }[] = [];
+  /** Angle (degrees) of the furrow direction per surviving subplot, parallel to subPlots. */
+  plotAngles: number[] = [];
   buildings: Polygon[] = [];
 
   constructor(model: Model, patch: Patch) {
@@ -27,12 +29,13 @@ export class Farm extends Ward {
     const available = this.patch.shape.vertices.slice();
 
     this.furrows = [];
+    this.plotAngles = [];
     this.subPlots = this.splitField(available);
 
     // Filter out degenerate subplots before processing
     this.subPlots = this.subPlots.filter(p => p.length >= 3 && polygonArea(p) >= MIN_PLOT_AREA);
 
-    // Round subplots and generate furrows
+    // Round subplots and record furrow-direction angle from each plot's OBB.
     for (let i = 0; i < this.subPlots.length; i++) {
       const plot = this.subPlots[i];
       const box = obb(plot);
@@ -46,39 +49,7 @@ export class Farm extends Ward {
       }
       // else keep the original unrounded plot
 
-      const renderPlot = this.subPlots[i];
-
-      // Furrow lines along the short axis of the OBB
-      const d0 = Point.distance(box[0], box[1]);
-      const furrowCount = Math.ceil(d0 / MIN_FURROW);
-
-      for (let f = 0; f < furrowCount; f++) {
-        const t = (f + 0.5) / furrowCount;
-        const lineStart = interpolate(box[0], box[1], t);
-        const lineEnd = interpolate(box[3], box[2], t);
-
-        const hits = pierce(renderPlot, lineStart, lineEnd);
-        // pierce() gives boundary intersections in polygon-edge order, not
-        // scan-line order — pair them along the line, or concave plots get
-        // segments spanning the OUTSIDE (mispaired in/out points). Sort by
-        // parameter along the scan line, then keep only pairs whose midpoint
-        // is actually inside the plot (also guards odd counts from vertex
-        // tangencies).
-        const dirX = lineEnd.x - lineStart.x;
-        const dirY = lineEnd.y - lineStart.y;
-        hits.sort((a, b) =>
-          ((a.x - lineStart.x) * dirX + (a.y - lineStart.y) * dirY) -
-          ((b.x - lineStart.x) * dirX + (b.y - lineStart.y) * dirY),
-        );
-        for (let h = 0; h + 1 < hits.length; h += 2) {
-          const p = hits[h];
-          const q = hits[h + 1];
-          if (Point.distance(p, q) <= 1.2) continue;
-          const mid = new Point((p.x + q.x) / 2, (p.y + q.y) / 2);
-          if (!pointInPolygon(mid, renderPlot)) continue;
-          this.furrows.push({ start: p, end: q });
-        }
-      }
+      this.plotAngles.push(angleOf(box));
     }
 
     // Generate farmstead buildings (20% per subplot)
@@ -222,6 +193,11 @@ export class Farm extends Ward {
   }
 
   override getLabel() { return 'Farmland'; }
+}
+
+/** Furrow-direction angle (degrees) from a plot's OBB: direction box[3] - box[0]. */
+function angleOf(box: Point[]): number {
+  return Math.atan2(box[3].y - box[0].y, box[3].x - box[0].x) * 180 / Math.PI;
 }
 
 /** Signed area of a point array (shoelace formula) */

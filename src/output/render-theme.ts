@@ -33,8 +33,8 @@ export interface RenderTheme {
   paper: string;
   water: string | null;      // null → water passes are skipped
   waterEdge: string | null;  // shore stroke; null when water is null
-  fieldFill: string;         // paper blended 8% toward green
-  fieldFurrow: string;       // furrow lines, rendered at 30% opacity
+  fieldFill: string;         // paper blended 18% toward green
+  fieldFurrow: string;       // plot border + pattern hatch lines (50% opacity)
   greenFill: string;         // parks
   treeFill: string;          // vegetation symbols; darkened green
   roadCasing: string;
@@ -59,7 +59,7 @@ export function themeFrom(palette: Palette): RenderTheme {
     paper: cssHex(palette.paper),
     water: water === null ? null : cssHex(water),
     waterEdge: water === null ? null : cssHex(darken(water, 0.2)),
-    fieldFill: cssHex(blend(palette.paper, green, 0.08)),
+    fieldFill: cssHex(blend(palette.paper, green, 0.18)),
     fieldFurrow: cssHex(green),
     greenFill: cssHex(green),
     treeFill: cssHex(darken(palette.tree ?? palette.green ?? palette.medium, 0.15)),

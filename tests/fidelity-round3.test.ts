@@ -1,35 +1,52 @@
 import { describe, it, expect } from 'vitest';
-import { generateFromBurg, type AzgaarBurgInput } from '../src/index.js';
-import { pointInPolygon } from '../src/geom/point-in-polygon.js';
+import { generateFromBurg, generateSvg, type AzgaarBurgInput } from '../src/index.js';
 import { Farm } from '../src/wards/farm.js';
-import { Point } from '../src/types/point.js';
 
 const fenwick: AzgaarBurgInput = {
   name: 'Fenwick', population: 90, port: false, citadel: false, walls: false,
   plaza: false, temple: false, shanty: false, capital: false, roadBearings: [],
 };
 
-describe('fidelity round 3: furrows stay inside their plots', () => {
-  // Baseline defect (seed 21): 65/76 furrows had an endpoint outside every
-  // plot — mispaired pierce() hits spanning the outside of concave plots.
-  it.each([21, 4, 7])('seed %i: every furrow lies inside its own plot', (seed) => {
-    const { model } = generateFromBurg(fenwick, { seed });
-    let checked = 0;
+describe('fidelity round 3: fields as assets', () => {
+  it('Farm emits plots with angles and NO furrow segments', () => {
+    const { model } = generateFromBurg(fenwick, { seed: 21 });
+    let plots = 0;
     for (const patch of model.patches) {
       const ward = patch.ward;
       if (!(ward instanceof Farm)) continue;
-      for (const f of ward.furrows) {
-        checked++;
-        for (const t of [0.1, 0.25, 0.5, 0.75, 0.9]) {
-          const p = new Point(
-            f.start.x + (f.end.x - f.start.x) * t,
-            f.start.y + (f.end.y - f.start.y) * t,
-          );
-          const inSomePlot = ward.subPlots.some(plot => pointInPolygon(p, plot));
-          expect(inSomePlot, `seed ${seed}: furrow sample t=${t} outside all plots`).toBe(true);
-        }
-      }
+      expect(ward.furrows.length).toBe(0);
+      expect(ward.plotAngles.length).toBe(ward.subPlots.length);
+      for (const a of ward.plotAngles) expect(Number.isFinite(a)).toBe(true);
+      plots += ward.subPlots.length;
     }
-    expect(checked).toBeGreaterThan(0);
+    expect(plots).toBeGreaterThan(0);
+  });
+
+  it('scene fields carry angleDeg; furrows layer is empty', async () => {
+    const r = generateFromBurg(fenwick, { seed: 21 });
+    const { buildScene } = await import('../src/scene/build-scene.js');
+    const scene = buildScene(r.model, { shift: r.originShift });
+    expect(scene.layers.furrows).toEqual([]);
+    expect(scene.layers.fields.length).toBeGreaterThan(0);
+    for (const f of scene.layers.fields) {
+      expect(Number.isFinite(f.angleDeg)).toBe(true);
+    }
+  });
+
+  it('SVG renders parcels as bordered plots with rotated hatch patterns', () => {
+    const { svg } = generateFromBurg(fenwick, { seed: 21 });
+    expect(svg).toMatch(/<pattern id="frame-clip-field-a\d+"/);
+    expect(svg).toMatch(/patternTransform="rotate\(\d+\)"/);
+    const fields = svg.match(/<g id="fields">([\s\S]*?)<\/g>/)![1];
+    expect(fields).toContain('class="plot"');
+    expect(fields).toMatch(/class="hatch" d="[^"]+" fill="url\(#frame-clip-field-a\d+\)"/);
+    expect(fields).not.toContain('<line'); // furrow line segments are gone
+  });
+
+  it('pattern ids follow a custom clipId (multi-SVG documents)', () => {
+    const { model } = generateFromBurg(fenwick, { seed: 21 });
+    const svg = generateSvg(model, { clipId: 'zzz' });
+    expect(svg).toMatch(/<pattern id="zzz-field-a\d+"/);
+    expect(svg).not.toContain('frame-clip-field');
   });
 });

@@ -28,7 +28,7 @@ describe('themeFrom', () => {
     expect(t.paper).toBe(cssHex(PALETTE_DEFAULT.paper));
     expect(t.water).toBe(cssHex(PALETTE_DEFAULT.water!));
     expect(t.waterEdge).toBe(cssHex(darken(PALETTE_DEFAULT.water!, 0.2)));
-    expect(t.fieldFill).toBe(cssHex(blend(PALETTE_DEFAULT.paper, PALETTE_DEFAULT.green!, 0.08)));
+    expect(t.fieldFill).toBe(cssHex(blend(PALETTE_DEFAULT.paper, PALETTE_DEFAULT.green!, 0.18)));
     expect(t.buildingFill).toBe(cssHex(PALETTE_DEFAULT.light));
     expect(t.buildingStroke).toBe(cssHex(PALETTE_DEFAULT.dark));
     expect(t.landmarkFill).toBe(cssHex(blend(PALETTE_DEFAULT.light, 0xffffff, 0.45)));
@@ -52,7 +52,7 @@ describe('themeFrom', () => {
     const p: Palette = { paper: 0xffffff, light: 0xcccccc, medium: 0x888888, dark: 0x000000 };
     const t = themeFrom(p);
     expect(t.greenFill).toBe(cssHex(0x888888));
-    expect(t.fieldFill).toBe(cssHex(blend(0xffffff, 0x888888, 0.08)));
+    expect(t.fieldFill).toBe(cssHex(blend(0xffffff, 0x888888, 0.18)));
   });
 
   it('treeFill darkens tree or falls back to green/medium', () => {

@@ -854,16 +854,18 @@ export class Model {
         ward.geometry = ward.geometry.filter(p => !drowned(p));
       }
       if (ward instanceof Farm) {
-        ward.subPlots = ward.subPlots.filter(plot => !plot.some(v => inWater(v)));
-        // Furrows belong to plots but live in a flat array: when a shoreline
-        // plot is dropped above, its furrows must go too or they render as
-        // orphan hatching on bare ground. Keep a furrow only if it is dry AND
-        // its midpoint still lies inside a surviving plot.
-        ward.furrows = ward.furrows.filter(f => {
-          if (inWater(f.start) || inWater(f.end)) return false;
-          const mid = new Point((f.start.x + f.end.x) / 2, (f.start.y + f.end.y) / 2);
-          return ward.subPlots.some(plot => pointInPolygon(mid, plot));
-        });
+        // subPlots and plotAngles are parallel arrays — filter both by the
+        // same index set so a surviving plot keeps its own furrow angle.
+        const keptPlots: Point[][] = [];
+        const keptAngles: number[] = [];
+        for (let i = 0; i < ward.subPlots.length; i++) {
+          const plot = ward.subPlots[i];
+          if (plot.some(v => inWater(v))) continue;
+          keptPlots.push(plot);
+          keptAngles.push(ward.plotAngles[i]);
+        }
+        ward.subPlots = keptPlots;
+        ward.plotAngles = keptAngles;
       }
       if (ward instanceof Harbour) {
         // Piers may (and should) extend over water, but they must touch
@@ -887,8 +889,8 @@ export class Model {
    *   centre. The wall is built around the full patch footprint in phase 3,
    *   so a global nearest-centre trim would hollow the periphery inside it
    *   (live-site defect: wall r=214 vs outermost building r=116).
-   * Landmark wards and park groves are exempt; farm plots/furrows live
-   * outside ward.geometry. Deterministic: sorts with coordinate tiebreaks,
+   * Landmark wards and park groves are exempt; farm plots live outside
+   * ward.geometry. Deterministic: sorts with coordinate tiebreaks,
    * no rng.
    */
   private applyBuildingBudget(): void {

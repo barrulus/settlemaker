@@ -35,8 +35,8 @@ function linePath(pts: ScenePoint[]): string {
 /** All theme-derived colors/opacities as rules keyed to the spec groups. */
 export function themeToCss(theme: RenderTheme): string {
   const rules = [
-    `#fields path{fill:${theme.fieldFill};stroke:none}`,
-    `#fields line{stroke:${theme.fieldFurrow};stroke-width:0.15;opacity:0.3}`,
+    `#fields .plot{fill:${theme.fieldFill};stroke:${theme.fieldFurrow};stroke-width:0.2}`,
+    `.furrow{stroke:${theme.fieldFurrow};stroke-width:0.15;opacity:0.5}`,
     `#greens path{fill:${theme.greenFill};stroke:none}`,
     `#greens use{fill:${theme.treeFill}}`,
     theme.water !== null ? `#water .fill{fill:${theme.water};stroke:none}` : '',
@@ -81,18 +81,32 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     .map(k => `<symbol id="asset-${k}" viewBox="-1 -1 2 2">${assets.symbols[k]}</symbol>`)
     .join('');
 
+  // 15°-quantized angle buckets actually used by field plots, so we only
+  // emit the pattern defs the document needs.
+  const bucketOf = (a: number): number => ((Math.round(a / 15) * 15) % 180 + 180) % 180;
+  const usedBuckets = [...new Set(L.fields.map(f => bucketOf(f.angleDeg)))].sort((a, b) => a - b);
+  const fieldPattern = assets.patterns?.field;
+  const patternDefs = fieldPattern
+    ? usedBuckets
+      .map(bucket => `<pattern id="${clipId}-field-a${bucket}" patternUnits="userSpaceOnUse" width="${fieldPattern.width}" height="${fieldPattern.height}" patternTransform="rotate(${bucket})">${fieldPattern.content}</pattern>`)
+      .join('')
+    : '';
+
   const parts: string[] = [];
   parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${b.min_x.toFixed(1)} ${b.min_y.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}">`);
-  parts.push(`<defs><clipPath id="${clipId}"><rect x="${b.min_x.toFixed(1)}" y="${b.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"/></clipPath>${symbolDefs}</defs>`);
+  parts.push(`<defs><clipPath id="${clipId}"><rect x="${b.min_x.toFixed(1)}" y="${b.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"/></clipPath>${patternDefs}${symbolDefs}</defs>`);
   parts.push(`<style>\n${themeToCss(theme)}\n</style>`);
   // data-bg contract with cropSvgToTile: attribute markup + inline fill.
   parts.push(`<rect data-bg="paper" x="${b.min_x.toFixed(1)}" y="${b.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="${theme.paper}"/>`);
 
-  if (L.fields.length > 0 || L.furrows.length > 0) {
+  if (L.fields.length > 0) {
     parts.push('<g id="fields">');
-    for (const f of L.fields) parts.push(`<path d="${ringPath(f.ring)}"/>`);
-    for (const fu of L.furrows) {
-      parts.push(`<line x1="${fmt(fu.start.x)}" y1="${fmt(fu.start.y)}" x2="${fmt(fu.end.x)}" y2="${fmt(fu.end.y)}"/>`);
+    for (const f of L.fields) parts.push(`<path class="plot" d="${ringPath(f.ring)}"/>`);
+    if (fieldPattern) {
+      for (const f of L.fields) {
+        const bucket = bucketOf(f.angleDeg);
+        parts.push(`<path class="hatch" d="${ringPath(f.ring)}" fill="url(#${clipId}-field-a${bucket})"/>`);
+      }
     }
     parts.push('</g>');
   }
