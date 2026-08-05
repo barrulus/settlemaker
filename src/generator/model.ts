@@ -854,11 +854,17 @@ export class Model {
   }
 
   /**
-   * Trim ordinary buildings down to the population budget, keeping the ones
-   * closest to the centre so small settlements read as a tight cluster.
+   * Trim ordinary buildings down to the population budget. Two policies:
+   * — Small unwalled settlements (budget ≤ 40, no wall): keep the buildings
+   *   closest to the town centre — hamlets read as one tight cluster.
+   * — Walled or large settlements: trim each patch proportionally
+   *   (largest-remainder quotas), keeping buildings nearest each patch's own
+   *   centre. The wall is built around the full patch footprint in phase 3,
+   *   so a global nearest-centre trim would hollow the periphery inside it
+   *   (live-site defect: wall r=214 vs outermost building r=116).
    * Landmark wards and park groves are exempt; farm plots/furrows live
-   * outside ward.geometry. Deterministic: distance sort with coordinate
-   * tiebreaks, no rng.
+   * outside ward.geometry. Deterministic: sorts with coordinate tiebreaks,
+   * no rng.
    */
   private applyBuildingBudget(): void {
     const budget = buildingBudget(this.params.population, this.params.urbanDensity);
@@ -866,25 +872,62 @@ export class Model {
     const isBudgeted = (ward: Ward): boolean =>
       ward.type !== WardType.Park && !BUDGET_EXEMPT_WARD_TYPES.has(ward.type);
 
-    const entries: Array<{ poly: Polygon; dist: number }> = [];
+    const perPatch: Array<{ ward: Ward; count: number }> = [];
+    let total = 0;
     for (const patch of this.patches) {
-      if (!patch.ward || !isBudgeted(patch.ward)) continue;
-      for (const poly of patch.ward.geometry) {
-        entries.push({ poly, dist: Point.distance(poly.center, this.center) });
-      }
+      if (!patch.ward || !isBudgeted(patch.ward) || patch.ward.geometry.length === 0) continue;
+      perPatch.push({ ward: patch.ward, count: patch.ward.geometry.length });
+      total += patch.ward.geometry.length;
     }
-    if (entries.length <= budget) return;
+    if (total <= budget) return;
 
-    entries.sort((a, b) =>
-      a.dist - b.dist ||
-      a.poly.center.x - b.poly.center.x ||
-      a.poly.center.y - b.poly.center.y,
-    );
-    const keep = new Set(entries.slice(0, budget).map(e => e.poly));
+    if (this.wall === null && budget <= 40) {
+      // Hamlet policy: global nearest-centre (Plan A behavior, byte-stable).
+      const entries: Array<{ poly: Polygon; dist: number }> = [];
+      for (const { ward } of perPatch) {
+        for (const poly of ward.geometry) {
+          entries.push({ poly, dist: Point.distance(poly.center, this.center) });
+        }
+      }
+      entries.sort((a, b) =>
+        a.dist - b.dist ||
+        a.poly.center.x - b.poly.center.x ||
+        a.poly.center.y - b.poly.center.y,
+      );
+      const keep = new Set(entries.slice(0, budget).map(e => e.poly));
+      for (const { ward } of perPatch) {
+        ward.geometry = ward.geometry.filter(p => keep.has(p));
+      }
+      return;
+    }
 
-    for (const patch of this.patches) {
-      if (!patch.ward || !isBudgeted(patch.ward)) continue;
-      patch.ward.geometry = patch.ward.geometry.filter(p => keep.has(p));
+    // Proportional policy: quota per patch by largest remainder.
+    const scale = budget / total;
+    const quotas = perPatch.map(e => Math.floor(e.count * scale));
+    let assigned = quotas.reduce((a, b) => a + b, 0);
+    const byRemainder = perPatch
+      .map((e, i) => ({ i, frac: e.count * scale - quotas[i] }))
+      .sort((a, b) => b.frac - a.frac || a.i - b.i);
+    for (let k = 0; assigned < budget && k < byRemainder.length; k++, assigned++) {
+      quotas[byRemainder[k].i]++;
+    }
+
+    for (let i = 0; i < perPatch.length; i++) {
+      const { ward } = perPatch[i];
+      if (quotas[i] >= ward.geometry.length) continue;
+      const centre = ward.patch.shape.center;
+      const keep = new Set(
+        ward.geometry
+          .map(poly => ({ poly, d: Point.distance(poly.center, centre) }))
+          .sort((a, b) =>
+            a.d - b.d ||
+            a.poly.center.x - b.poly.center.x ||
+            a.poly.center.y - b.poly.center.y,
+          )
+          .slice(0, quotas[i])
+          .map(e => e.poly),
+      );
+      ward.geometry = ward.geometry.filter(p => keep.has(p));
     }
   }
 
