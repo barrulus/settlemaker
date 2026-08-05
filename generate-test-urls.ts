@@ -100,9 +100,16 @@ external roads.
 ## Known issues to NOT report twice (fidelity round 2 backlog)
 
 - Settlement outlines are still quite circular.
-- A thin single-patch gap can still show between the outermost building
-  row and the wall on some seeds — the proportional per-patch trim
-  floors the empty band at roughly the low single digits, not zero.
+- When no patch straddles the painted shoreline (mesh-dependent, e.g. some
+  seeds in oceanBearing mode), harbour placement falls back to patch
+  adjacency and the district can sit inland of the visible waterline; piers
+  are rescued to the shore, warehouses are not.
+- A thin single-patch gap can still show between the outermost building row
+  and the wall on some seeds — the proportional trim leaves a small empty
+  band inside walls (measured ≈9% of wall radius on the reference fixture;
+  test ceiling 25%).
+- Piers on obliquely-crossing shores can occasionally sit fully on land (they
+  extend along the patch edge normal, not toward the water).
 `;
 
   writeFileSync('docs/test-urls.md', md);
