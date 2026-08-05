@@ -29,7 +29,7 @@ describe('Toprak fidelity regression (spec acceptance criteria)', () => {
     // Orientation guard: the even-odd water path's westmost vertex must sit at
     // the supplied shoreline (x=40) — catches double-applied origin shifts or
     // mirrored coordinates that the marker/viewBox checks cannot see.
-    const water = result.svg.match(/<path d="([^"]+)" fill="[^"]*" fill-rule="evenodd"/);
+    const water = result.svg.match(/<path class="fill" d="([^"]+)" fill-rule="evenodd"/);
     expect(water).not.toBeNull();
     const xs = [...water![1].matchAll(/[ML](-?[\d.]+),/g)].map(mm => parseFloat(mm[1]));
     expect(Math.min(...xs)).toBeCloseTo(40, 0);

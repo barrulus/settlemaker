@@ -23,7 +23,7 @@ export class CommonWard extends Ward {
 
   override createGeometry(): void {
     const block = this.getCityBlock();
-    this.geometry = createAlleys(block, this.rng, this.minSq, this.gridChaos, this.sizeChaos, this.emptyProb);
+    this.geometry = createAlleys(block, this.rng, this.minSq * this.model.minSqScale, this.gridChaos, this.sizeChaos, this.emptyProb);
 
     if (!this.model.isEnclosed(this.patch)) {
       this.filterOutskirts();

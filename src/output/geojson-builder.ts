@@ -24,7 +24,7 @@ export const GEOJSON_SCHEMA_VERSION = 4;
  * Source-of-truth library version. Kept in sync with package.json manually —
  * cheaper than a JSON import assertion and lets tests pin a deterministic value.
  */
-export const SETTLEMAKER_VERSION = '0.6.0';
+export const SETTLEMAKER_VERSION = '0.7.0';
 
 export interface GenerateGeoJsonOptions {
   /** ISO-8601 timestamp to stamp on the output. Defaults to `new Date().toISOString()`. */
@@ -226,6 +226,7 @@ function computeGenerationVersion(params: GenerationParams, shift: OriginShift):
     seed: params.seed,
     population: params.population,
     nPatches: params.nPatches,
+    urbanDensity: params.urbanDensity ?? null,
     walls: params.wallsNeeded,
     citadel: params.citadelNeeded,
     plaza: params.plazaNeeded,

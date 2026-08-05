@@ -117,9 +117,10 @@ import {
 // SHIFT_FACTOR already imported at top of file.
 
 function coastalBurg(overrides: Partial<AzgaarBurgInput> = {}): AzgaarBurgInput {
-  // Near edge at x=-50 (d=50). With a pop-12000 burg, wallRadius ≈ 77 and
-  // gate ≈ 0.44 * 77 ≈ 34. Since d=50 > gate, the hysteresis test passes
-  // and coast_pull fires.
+  // Near edge at x=-100 (d=100). Density-targeting Task 1 derives nPatches
+  // from the household target, which grew wallRadius for this pop-12000
+  // burg to ≈175 (was ≈77) — gate ≈ 0.44 * 175 ≈ 77. Since d=100 > gate,
+  // the hysteresis test passes and coast_pull fires.
   return {
     name: 'Ertelenlik',
     population: 12000,
@@ -131,8 +132,8 @@ function coastalBurg(overrides: Partial<AzgaarBurgInput> = {}): AzgaarBurgInput 
     shanty: false,
     capital: false,
     coastlineGeometry: [[
-      { x: -400, y: -100 }, { x: -50, y: -100 },
-      { x: -50, y: 100 },   { x: -400, y: 100 },
+      { x: -700, y: -200 }, { x: -100, y: -200 },
+      { x: -100, y: 200 },   { x: -700, y: 200 },
     ]],
     harbourSize: 'large',
     ...overrides,
@@ -189,8 +190,18 @@ describe('SVG output reflects shift', () => {
     // model-vertex + shift (within float tolerance). Easiest check:
     // the path string should contain at least one explicitly negative
     // x value matching the wall's westernmost vertex + shift.dx.
-    const wall = result.model.wall!.shape.vertices;
-    const minModelX = Math.min(...wall.map(v => v.x));
+    //
+    // Only vertices adjacent to an active segment are actually drawn
+    // (getActiveWallPolylines skips waterfront-inactive stretches, and
+    // density-targeting Task 1's larger nPatches now puts the raw
+    // westernmost vertex on an inactive stretch for this fixture) — so
+    // restrict the search to vertices with at least one active neighbour.
+    const wallModel = result.model.wall!;
+    const verts = wallModel.shape.vertices;
+    const segments = wallModel.segments;
+    const len = verts.length;
+    const drawnVerts = verts.filter((_, i) => segments[i] || segments[(i - 1 + len) % len]);
+    const minModelX = Math.min(...drawnVerts.map(v => v.x));
     const expectedMinOutputX = minModelX + result.originShift.dx;
     // Parse all number pairs from the SVG; at least one x should be within
     // 1 unit of expectedMinOutputX.
@@ -208,11 +219,11 @@ describe('GeoJSON output reflects shift', () => {
     expect(meta.local_origin_shift.dx).toBeLessThan(0);
   });
 
-  it('emits schema_version=4 and settlemaker_version=0.6.0', () => {
+  it('emits schema_version=4 and settlemaker_version=0.7.0', () => {
     const result = generateFromBurg(coastalBurg());
     const meta = (result.geojson as unknown as { metadata: { schema_version: number; settlemaker_version: string } }).metadata;
     expect(meta.schema_version).toBe(4);
-    expect(meta.settlemaker_version).toBe('0.6.0');
+    expect(meta.settlemaker_version).toBe('0.7.0');
   });
 
   it('shifts wall feature coordinates toward the coast', () => {
@@ -258,9 +269,9 @@ describe('acceptance: Ertelenlik-like coastal burg', () => {
     const result = generateFromBurg(coastalBurg());
     const R = result.model.border!.getRadius();
     // Shifted origin (in the output frame) = (originShift.dx, dy).
-    // The original coastline's nearest edge is at x = -50 (west strip).
-    // Distance from (dx, dy) to that edge = |-50 - dx|.
-    const d = Math.abs(-50 - result.originShift.dx);
+    // The original coastline's nearest edge is at x = -100 (west strip).
+    // Distance from (dx, dy) to that edge = |-100 - dx|.
+    const d = Math.abs(-100 - result.originShift.dx);
     expect(Math.abs(result.originShift.dy)).toBeLessThan(1e-6);
     expect(d).toBeGreaterThanOrEqual(0.3 * R);
     expect(d).toBeLessThanOrEqual(0.5 * R);

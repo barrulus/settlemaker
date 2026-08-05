@@ -21,6 +21,7 @@ import { Castle } from '../wards/castle.js';
 import { Farm } from '../wards/farm.js';
 import { Slum } from '../wards/slum.js';
 import { Harbour } from '../wards/harbour.js';
+import { CommonWard } from '../wards/common-ward.js';
 import { buildWardDistribution, type WardConstructor } from '../wards/ward-distribution.js';
 
 const MAX_ATTEMPTS = 20;
@@ -112,6 +113,13 @@ export class Model {
    */
   syntheticCoast: Point[][] | null = null;
 
+  /**
+   * Multiplier applied to CommonWard minSq during geometry builds. Set by
+   * refineDensity's second pass to shrink block size when the first build
+   * lands far below the household target; 1 otherwise.
+   */
+  minSqScale = 1;
+
   arteries: Street[] = [];
   streets: Street[] = [];
   roads: Street[] = [];
@@ -184,6 +192,7 @@ export class Model {
     this.arteries = [];
     this.topology = null;
     this.syntheticCoast = null;
+    this.minSqScale = 1;
   }
 
   private build(): void {
@@ -742,8 +751,41 @@ export class Model {
         patch.ward.createGeometry();
       }
     }
+    this.refineDensity();
     this.removeDrownedGeometry();
     this.applyBuildingBudget();
+  }
+
+  private countOrdinaryBuildings(): number {
+    let n = 0;
+    for (const patch of this.patches) {
+      const ward = patch.ward;
+      if (!ward || ward.type === WardType.Park || BUDGET_EXEMPT_WARD_TYPES.has(ward.type)) continue;
+      n += ward.geometry.length;
+    }
+    return n;
+  }
+
+  /**
+   * One adaptive pass toward the household target: patch geometry cannot
+   * know in advance how many buildings subdivision will yield, so if the
+   * first build lands under 65% of target, shrink CommonWard block size
+   * (minSqScale ≈ count/target ⇒ new count ≈ target) and rebuild ordinary
+   * wards once. Deterministic — extra rng draws, fixed sequence per seed.
+   * Runs before the drowning filter (target is approximate on coasts).
+   */
+  private refineDensity(): void {
+    const target = buildingBudget(this.params.population, this.params.urbanDensity);
+    const count = this.countOrdinaryBuildings();
+    if (count === 0 || count >= target * 0.65) return;
+
+    this.minSqScale = Math.max(0.25, count / target);
+    for (const patch of this.patches) {
+      if (patch.ward instanceof CommonWard && !this.waterbody.includes(patch)) {
+        patch.ward.createGeometry();
+      }
+    }
+    this.minSqScale = 1;
   }
 
   /**

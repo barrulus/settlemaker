@@ -24,3 +24,15 @@ export const PALETTES: Record<string, Palette> = {
   colour: PALETTE_COLOUR,
   simple: PALETTE_SIMPLE,
 };
+
+/**
+ * Biome → default palette. Both current palettes are temperate-ish; the
+ * table is the extension point for artist-supplied biome palettes. Unknown
+ * or missing biome → default.
+ */
+export function paletteForBiome(biome?: string): Palette {
+  const table: Record<string, Palette> = {
+    // e.g. desert: PALETTES.desert — when an artist supplies one
+  };
+  return (biome != null ? table[biome] : undefined) ?? PALETTES.default;
+}

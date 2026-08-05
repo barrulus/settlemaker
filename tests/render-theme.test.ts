@@ -54,6 +54,20 @@ describe('themeFrom', () => {
     expect(t.greenFill).toBe(cssHex(0x888888));
     expect(t.fieldFill).toBe(cssHex(blend(0xffffff, 0x888888, 0.08)));
   });
+
+  it('treeFill darkens tree or falls back to green/medium', () => {
+    const p: Palette = { paper: 0xffffff, light: 0xcccccc, medium: 0x888888, dark: 0x000000, tree: 0x228833 };
+    const t = themeFrom(p);
+    expect(t.treeFill).toBe(cssHex(darken(0x228833, 0.15)));
+
+    const noTree: Palette = { paper: 0xffffff, light: 0xcccccc, medium: 0x888888, dark: 0x000000, green: 0x228833 };
+    const t2 = themeFrom(noTree);
+    expect(t2.treeFill).toBe(cssHex(darken(0x228833, 0.15)));
+
+    const noGreen: Palette = { paper: 0xffffff, light: 0xcccccc, medium: 0x888888, dark: 0x000000 };
+    const t3 = themeFrom(noGreen);
+    expect(t3.treeFill).toBe(cssHex(darken(0x888888, 0.15)));
+  });
 });
 
 describe('parchment palette', () => {

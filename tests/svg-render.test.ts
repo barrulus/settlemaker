@@ -23,7 +23,7 @@ describe('svg render: fields and water', () => {
     const { model } = generateFromBurg(makeBurg({ population: 12000 }), { seed: 42 });
     const svg = generateSvg(model);
     // fieldFill for parchment = blend(0xfff2c8, 0x8fa26a, 0.08) = #f6ecc0
-    expect(svg).toContain('fill="#f6ecc0"');
+    expect(svg).toContain('#fields path{fill:#f6ecc0');
   });
 
   it('renders oceanBearing water as one clipped geometry path (synthetic half-plane)', () => {
@@ -35,9 +35,9 @@ describe('svg render: fields and water', () => {
     expect(model.waterbody.length).toBeGreaterThan(0);
     // …but the painted water is the synthesized half-plane, not patch shapes:
     // exactly one even-odd fill path, no per-patch seam strokes.
-    const waterFills = svg.match(/<path[^>]*fill="#85bcb2"[^>]*\/>/g) ?? [];
+    const waterFills = svg.match(/<path class="fill"[^>]*fill-rule="evenodd"[^>]*\/>/g) ?? [];
     expect(waterFills.length).toBe(1);
-    expect(waterFills[0]).toContain('fill-rule="evenodd"');
+    expect(svg).toContain('#water .fill{fill:#85bcb2');
   });
 
   it('draws shore strokes on outer water edges only', () => {
@@ -45,9 +45,11 @@ describe('svg render: fields and water', () => {
       makeBurg({ port: true, oceanBearing: 90 }),
       { seed: 42 },
     );
-    // waterEdge for parchment = darken(0x85bcb2, 0.2) = #6a968e
-    const shoreLines = svg.match(/stroke="#6a968e"/g) ?? [];
-    expect(shoreLines.length).toBeGreaterThan(0);
+    // waterEdge for parchment = darken(0x85bcb2, 0.2) = #6a968e; the shore
+    // color lives once in the style block, painted by a single shore path.
+    expect(svg).toContain('#water .shore{fill:none;stroke:#6a968e');
+    const shorePaths = svg.match(/<path class="shore"/g) ?? [];
+    expect(shorePaths.length).toBeGreaterThan(0);
   });
 
   it('keeps the data-bg contract for the tiler', () => {
@@ -61,8 +63,8 @@ describe('svg render: fields and water', () => {
       { seed: 42 },
     );
     const bg = svg.indexOf('data-bg="paper"');
-    const water = svg.indexOf('fill="#85bcb2"');
-    const building = svg.indexOf(`fill="#d5ad6e"`);
+    const water = svg.indexOf('<g id="water"');
+    const building = svg.indexOf('<g id="buildings"');
     expect(bg).toBeGreaterThan(-1);
     expect(water).toBeGreaterThan(bg);
     expect(building).toBeGreaterThan(water);
@@ -89,26 +91,23 @@ describe('svg render: roads', () => {
 
   it('uses round joins for road strokes', () => {
     const { svg } = generateFromBurg(makeBurg({ population: 12000 }), { seed: 42 });
-    expect(svg).toContain('stroke-linejoin="round"');
+    expect(svg).toContain('stroke-linejoin:round');
   });
 });
 
 describe('svg render: shadows, buildings, landmarks', () => {
   it('emits one shadow group before buildings, after roads', () => {
     const { svg } = generateFromBurg(makeBurg({ population: 12000 }), { seed: 42 });
-    const shadow = svg.indexOf('<g transform="translate(0.40,0.60)" fill="#4a3f2a" opacity="0.18">');
+    const shadow = svg.indexOf('<g id="shadows" transform="translate(0.40,0.60)">');
     const lastRoadCore = svg.lastIndexOf('stroke-width="1.60"');
-    const firstBuilding = svg.indexOf('fill="#d5ad6e"');
+    const firstBuilding = svg.indexOf('<g id="buildings"');
     expect(shadow).toBeGreaterThan(lastRoadCore);
     expect(firstBuilding).toBeGreaterThan(shadow);
   });
 
   it('shadow count matches building count', () => {
     const { model, svg } = generateFromBurg(makeBurg({ population: 12000 }), { seed: 42 });
-    const shadowGroup = svg.slice(
-      svg.indexOf('opacity="0.18">'),
-      svg.indexOf('</g>'),
-    );
+    const shadowGroup = svg.match(/<g id="shadows"[^>]*>([\s\S]*?)<\/g>/)![1];
     const shadowPaths = (shadowGroup.match(/<path /g) ?? []).length;
     let buildings = 0;
     for (const patch of model.patches) {
@@ -135,25 +134,20 @@ describe('svg render: shadows, buildings, landmarks', () => {
       return `M${first.x.toFixed(2)},${first.y.toFixed(2)}`;
     });
 
-    // Every geometry path should appear painted with greenFill.
+    const greensGroup = svg.match(/<g id="greens">([\s\S]*?)<\/g>/)?.[1] ?? '';
+    // Every geometry path should appear painted (in greens).
     for (const start of paths) {
-      const idx = svg.indexOf(start);
-      expect(idx).toBeGreaterThan(-1);
+      expect(greensGroup).toContain(start);
     }
 
-    // None of those paths should also appear with the building tan fill.
-    const shadowGroup = svg.slice(
-      svg.indexOf('opacity="0.18">'),
-      svg.indexOf('</g>'),
-    );
+    // None of those paths should also appear in shadows or buildings.
+    const shadowGroup = svg.match(/<g id="shadows"[^>]*>([\s\S]*?)<\/g>/)?.[1] ?? '';
+    const buildingsGroup = svg.match(/<g id="buildings">([\s\S]*?)<\/g>/)?.[1] ?? '';
     for (const start of paths) {
       expect(shadowGroup).not.toContain(start);
-      const buildingRegex = new RegExp(
-        `<path d="${start.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^"]*" fill="#d5ad6e"`,
-      );
-      expect(svg).not.toMatch(buildingRegex);
+      expect(buildingsGroup).not.toContain(start);
     }
-    expect(svg).toContain(`fill="${greenFill}"`);
+    expect(svg).toContain(`#greens path{fill:${greenFill}`);
   });
 
   it('landmark wards use the landmark fill', () => {
@@ -168,7 +162,7 @@ describe('svg render: shadows, buildings, landmarks', () => {
       // landmarkFill parchment = blend(0xd5ad6e, 0xffffff, 0.45):
       // r 213+42×0.45=231.9→232 (e8), g 173+82×0.45=209.9→210 (d2),
       // b 110+145×0.45=175.25→175 (af) → #e8d2af
-      expect(svg).toContain('fill="#e8d2af"');
+      expect(svg).toContain('#landmarks path{fill:#e8d2af');
     }
   });
 });
@@ -177,8 +171,8 @@ describe('svg render: overrides + determinism', () => {
   it('honors options.theme overrides', () => {
     const { model } = generateFromBurg(makeBurg(), { seed: 42 });
     const svg = generateSvg(model, { theme: { buildingFill: '#ff0000' } });
-    expect(svg).toContain('fill="#ff0000"');
-    expect(svg).not.toContain('fill="#d5ad6e"');
+    expect(svg).toContain('#buildings path{fill:#ff0000');
+    expect(svg).not.toContain('#buildings path{fill:#d5ad6e');
   });
 
   it('honors options.palette via themeFrom', () => {
@@ -195,8 +189,8 @@ describe('svg render: overrides + determinism', () => {
 
   it('walls paint after buildings', () => {
     const { svg } = generateFromBurg(makeBurg({ walls: true }), { seed: 42 });
-    const lastBuilding = svg.lastIndexOf('fill="#d5ad6e"');
-    const wall = svg.lastIndexOf('stroke-width="1.80"');
+    const lastBuilding = svg.lastIndexOf('<g id="buildings"');
+    const wall = svg.lastIndexOf('<g id="walls"');
     expect(wall).toBeGreaterThan(lastBuilding);
   });
 
@@ -210,6 +204,6 @@ describe('svg render: overrides + determinism', () => {
     expect(svg).not.toContain('fill="undefined"');
     expect(svg).not.toContain('stroke="undefined"');
     // Default parchment water color still renders.
-    expect(svg).toContain('fill="#85bcb2"');
+    expect(svg).toContain('#water .fill{fill:#85bcb2');
   });
 });

@@ -61,6 +61,8 @@ export interface GenerationParams {
   harbourSize?: 'large' | 'small';
   /** People per household — FMG's urbanDensityInput. Drives the building budget. Default 4. */
   urbanDensity?: number;
+  /** Azgaar biome name; flows to the scene for asset-set/palette defaults. */
+  biome?: string;
 }
 
 /**

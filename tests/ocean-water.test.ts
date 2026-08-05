@@ -131,7 +131,10 @@ describe('SVG rendering with water', () => {
 
   it('SVG does not contain water color without ocean', () => {
     const result = generateFromBurg(makeBurg(), { seed: 42 });
-    expect(result.svg).not.toContain('#85bcb2');
+    // The theme's <style> block declares the water rule unconditionally
+    // (it's a static color palette, not scene-instance-derived); the real
+    // "no water" signal is that the water layer group is omitted entirely.
+    expect(result.svg).not.toContain('<g id="water"');
   });
 
   it('generates valid SVG with water', () => {

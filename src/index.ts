@@ -31,7 +31,7 @@ export type {
 } from './output/settlement-tiler.js';
 
 export { Palette, WardType, Street } from './types/interfaces.js';
-export { PALETTES, PALETTE_DEFAULT } from './output/palette.js';
+export { PALETTES, PALETTE_DEFAULT, paletteForBiome } from './output/palette.js';
 export { themeFrom } from './output/render-theme.js';
 export type { RenderTheme } from './output/render-theme.js';
 
@@ -43,6 +43,21 @@ export { computeLocalBounds, computeDiameterLocal } from './generator/bounds.js'
 export type { LocalBounds } from './generator/bounds.js';
 
 export type { Poi, PoiKind } from './poi/poi-kinds.js';
+
+export { SCENE_VERSION } from './scene/scene.js';
+export type {
+  Scene, ScenePoint, WaterLayer, FieldPlot, Furrow, GreenFeature,
+  VegetationInstance, RoadFeature, BuildingFeature, PierFeature,
+  WallFeature, WallGate,
+} from './scene/scene.js';
+export { buildScene } from './scene/build-scene.js';
+export type { BuildSceneOptions } from './scene/build-scene.js';
+
+export { assembleSvg, themeToCss } from './output/assemble-svg.js';
+export type { AssembleOptions } from './output/assemble-svg.js';
+
+export { SCHEMATIC_SET, assetSetFor } from './assets/asset-sets.js';
+export type { AssetSet } from './assets/asset-sets.js';
 
 import type { AzgaarBurgInput } from './input/azgaar-input.js';
 import type { FeatureCollection } from 'geojson';
