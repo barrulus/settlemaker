@@ -37,110 +37,100 @@
 
 ---
 
-### Task 1: Furrows stay inside their plots (generation-level fix)
+### Task 1 (REVISED): Fields as assets — pattern-rendered parcels
 
-Mechanism (from source read, `src/wards/farm.ts:54-67`): furrow scan lines are cut against the plot with `pierce(renderPlot, lineStart, lineEnd)` and hits are paired `shift(), shift()` — with NO sort along the line and no odd-count guard. On concave plots (4+ hits) mispaired hits produce segments that span the polygon's *outside*; odd hit counts (vertex tangencies) shift every subsequent pairing. Fix: sort hits by parameter along the scan line, then keep only pairs whose midpoint is inside the plot.
+> Revision note (2026-08-05, mid-execution): the original geometry fix was proven a no-op under review (pierce() already sorts; the TDD test passes against base code). Real defect: field READABILITY — `fieldFill` is an 8% paper tint (invisible parcels) while furrow lines render prominently, so correctly-clipped hatching reads as loose lines. User direction: fields become assets — semantic plot data rendered via SVG patterns from the asset set, eliminating per-furrow geometry entirely. Commit ef3d046 (the guard) stays; this task removes furrow generation wholesale.
 
 **Files:**
-- Modify: `src/wards/farm.ts` (the furrow loop)
-- Test: `tests/fidelity-round3.test.ts` (create)
+- Modify: `src/wards/farm.ts` (drop furrow generation; record per-plot angles)
+- Modify: `src/scene/scene.ts` (FieldPlot.angleDeg — additive; furrows layer deprecated)
+- Modify: `src/scene/build-scene.ts` (fields carry angles; furrows emit `[]`)
+- Modify: `src/assets/asset-sets.ts` (AssetSet.patterns + field pattern)
+- Modify: `src/output/assemble-svg.ts` (pattern defs + two-pass plot rendering; CSS)
+- Modify: `src/output/render-theme.ts` (fieldFill 0.08 → 0.18 blend)
+- Modify: `src/generator/model.ts` (removeDrownedGeometry: drop the furrow filter — furrows no longer exist)
+- Test: rewrite the round-3 furrow test block in `tests/fidelity-round3.test.ts`
 
 **Interfaces:**
-- Consumes: `pierce` (`src/geom/geom-utils.ts` — read it first; if it already sorts hits, the odd-count/tangency case is still unguarded and the fix below remains correct), `pointInPolygon`.
-- Produces: unchanged public surface; contract: every emitted furrow's quarter/mid/three-quarter points lie inside the furrow's own plot.
+- `FieldPlot` becomes `{ ring: ScenePoint[]; angleDeg: number }` (additive field; `Scene.layers.furrows` stays typed but is always `[]` — deprecate in the doc comment: "always empty since scene v1.1; fields carry angleDeg instead").
+- `Farm` gains `plotAngles: number[]` parallel to `subPlots` (angle in degrees of the furrow direction, from the plot's OBB: direction `box[3] − box[0]`, i.e. `Math.atan2(box[3].y - box[0].y, box[3].x - box[0].x) * 180 / Math.PI`). `Farm.furrows` stays declared but is never populated.
+- `AssetSet` gains `patterns?: Record<string, { width: number; height: number; content: string }>`; `SCHEMATIC_SET.patterns = { field: { width: 2, height: 1.3, content: '<line x1="0" y1="0.65" x2="2" y2="0.65" class="furrow"/>' } }` (1.3 = the old MIN_FURROW spacing).
+- Assembler contract: for each 15°-quantized angle bucket actually used, one def `<pattern id="${clipId}-field-a${bucket}" patternUnits="userSpaceOnUse" width="…" height="…" patternTransform="rotate(${bucket})">…</pattern>`; each plot renders twice inside `#fields`: `<path class="plot" d="…"/>` (base fill + border via CSS) then `<path class="hatch" d="…" fill="url(#${clipId}-field-a${bucket})"/>`. CSS: replace the old `#fields path`/`#fields line` rules with `#fields .plot{fill:${fieldFill};stroke:${fieldFurrow};stroke-width:0.2}` and `.furrow{stroke:${fieldFurrow};stroke-width:0.15;opacity:0.5}` (the `.furrow` rule styles pattern content — document-level CSS reaches `<defs>`). Bucket function: `const bucket = ((Math.round(a / 15) * 15) % 180 + 180) % 180;`.
+- Pattern ids embed `clipId` — same per-document uniqueness mechanism as the clip path (multi-SVG pages stay collision-free).
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Rewrite the failing test block**
 
-Create `tests/fidelity-round3.test.ts`:
+Replace the round-3 furrow describe-block in `tests/fidelity-round3.test.ts` with:
 
 ```typescript
-import { describe, it, expect } from 'vitest';
-import { generateFromBurg, type AzgaarBurgInput } from '../src/index.js';
-import { pointInPolygon } from '../src/geom/point-in-polygon.js';
-import { Farm } from '../src/wards/farm.js';
-import { Point } from '../src/types/point.js';
-
-const fenwick: AzgaarBurgInput = {
-  name: 'Fenwick', population: 90, port: false, citadel: false, walls: false,
-  plaza: false, temple: false, shanty: false, capital: false, roadBearings: [],
-};
-
-describe('fidelity round 3: furrows stay inside their plots', () => {
-  // Baseline defect (seed 21): 65/76 furrows had an endpoint outside every
-  // plot — mispaired pierce() hits spanning the outside of concave plots.
-  it.each([21, 4, 7])('seed %i: every furrow lies inside its own plot', (seed) => {
-    const { model } = generateFromBurg(fenwick, { seed });
-    let checked = 0;
+describe('fidelity round 3: fields as assets', () => {
+  it('Farm emits plots with angles and NO furrow segments', () => {
+    const { model } = generateFromBurg(fenwick, { seed: 21 });
+    let plots = 0;
     for (const patch of model.patches) {
       const ward = patch.ward;
       if (!(ward instanceof Farm)) continue;
-      for (const f of ward.furrows) {
-        checked++;
-        for (const t of [0.25, 0.5, 0.75]) {
-          const p = new Point(
-            f.start.x + (f.end.x - f.start.x) * t,
-            f.start.y + (f.end.y - f.start.y) * t,
-          );
-          const inSomePlot = ward.subPlots.some(plot => pointInPolygon(p, plot));
-          expect(inSomePlot, `seed ${seed}: furrow sample t=${t} outside all plots`).toBe(true);
-        }
-      }
+      expect(ward.furrows.length).toBe(0);
+      expect(ward.plotAngles.length).toBe(ward.subPlots.length);
+      for (const a of ward.plotAngles) expect(Number.isFinite(a)).toBe(true);
+      plots += ward.subPlots.length;
     }
-    expect(checked).toBeGreaterThan(0);
+    expect(plots).toBeGreaterThan(0);
+  });
+
+  it('scene fields carry angleDeg; furrows layer is empty', async () => {
+    const r = generateFromBurg(fenwick, { seed: 21 });
+    const { buildScene } = await import('../src/scene/build-scene.js');
+    const scene = buildScene(r.model, { shift: r.originShift });
+    expect(scene.layers.furrows).toEqual([]);
+    expect(scene.layers.fields.length).toBeGreaterThan(0);
+    for (const f of scene.layers.fields) {
+      expect(Number.isFinite(f.angleDeg)).toBe(true);
+    }
+  });
+
+  it('SVG renders parcels as bordered plots with rotated hatch patterns', () => {
+    const { svg } = generateFromBurg(fenwick, { seed: 21 });
+    expect(svg).toMatch(/<pattern id="frame-clip-field-a\d+"/);
+    expect(svg).toMatch(/patternTransform="rotate\(\d+\)"/);
+    const fields = svg.match(/<g id="fields">([\s\S]*?)<\/g>/)![1];
+    expect(fields).toContain('class="plot"');
+    expect(fields).toMatch(/class="hatch" d="[^"]+" fill="url\(#frame-clip-field-a\d+\)"/);
+    expect(fields).not.toContain('<line'); // furrow line segments are gone
+  });
+
+  it('pattern ids follow a custom clipId (multi-SVG documents)', () => {
+    const { model } = generateFromBurg(fenwick, { seed: 21 });
+    const svg = generateSvg(model, { clipId: 'zzz' });
+    expect(svg).toMatch(/<pattern id="zzz-field-a\d+"/);
+    expect(svg).not.toContain('frame-clip-field');
   });
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+(Add `generateSvg` to the imports from `../src/index.js`.)
+
+- [ ] **Step 2: Run to verify failure**
 
 Run: `nix develop --command bash -c "npx vitest run tests/fidelity-round3.test.ts"`
-Expected: FAIL on at least seed 21 (the measured baseline).
+Expected: FAIL — no `plotAngles`, furrows still emitted, no patterns.
 
-- [ ] **Step 3: Implement sort + midpoint guard**
+- [ ] **Step 3: Implement across the six source files**
 
-In `src/wards/farm.ts`, replace the furrow inner loop (the `const hits = pierce(...)` block) with:
+Per the Interfaces block. Farm: delete the furrow loop; push `this.plotAngles.push(angleOf(box))` per surviving plot (initialize `plotAngles = []` beside `furrows = []` in `createGeometry`; the OBB is already computed per plot). build-scene: `scene.layers.fields.push({ ring: ring(plot), angleDeg: ward.plotAngles[i] ?? 0 })`. model.ts `removeDrownedGeometry`: when dropping a drowned subPlot, drop its angle at the same index (filter both arrays in lockstep — iterate indexes, keep pairs); delete the furrow filter lines. Assembler: collect used buckets from `scene.layers.fields`, emit pattern defs after the clipPath, render the two-pass plots; update `themeToCss`. render-theme: fieldFill blend 0.08 → 0.18.
 
-```typescript
-        const hits = pierce(renderPlot, lineStart, lineEnd);
-        // pierce() gives boundary intersections in polygon-edge order, not
-        // scan-line order — pair them along the line, or concave plots get
-        // segments spanning the OUTSIDE (mispaired in/out points). Sort by
-        // parameter along the scan line, then keep only pairs whose midpoint
-        // is actually inside the plot (also guards odd counts from vertex
-        // tangencies).
-        const dirX = lineEnd.x - lineStart.x;
-        const dirY = lineEnd.y - lineStart.y;
-        hits.sort((a, b) =>
-          ((a.x - lineStart.x) * dirX + (a.y - lineStart.y) * dirY) -
-          ((b.x - lineStart.x) * dirX + (b.y - lineStart.y) * dirY),
-        );
-        for (let h = 0; h + 1 < hits.length; h += 2) {
-          const p = hits[h];
-          const q = hits[h + 1];
-          if (Point.distance(p, q) <= 1.2) continue;
-          const mid = new Point((p.x + q.x) / 2, (p.y + q.y) / 2);
-          if (!pointInPolygon(mid, renderPlot)) continue;
-          this.furrows.push({ start: p, end: q });
-        }
-```
+- [ ] **Step 4: Run the new tests, then full suite + reconciliation**
 
-Add the import: `import { pointInPolygon } from '../geom/point-in-polygon.js';`
-
-- [ ] **Step 4: Run the new test, then the full suite**
-
-Run: `nix develop --command bash -c "npx vitest run tests/fidelity-round3.test.ts && npx vitest run"`
-Reconciliation: no rng draws change (sorting/filtering only), so layouts are stable; only furrow-count-sensitive expectations could shift (`grep -rn furrow tests/`). The round-2 orphan-furrow test in `tests/water-geometry.test.ts` must still pass (the drowning filter is untouched). Structural failures elsewhere are real bugs.
+Rules: the orphan-furrow test in `tests/water-geometry.test.ts` is obsolete — DELETE it (furrows no longer exist; the plot drowning filter keeps its own coverage). `tests/svg-render.test.ts` furrow-line expectations → replace with pattern/plot assertions. `tests/scene.test.ts` purity/deep-equal still passes (additive field). `docs/scene-schema.md` update happens in Task 4, not here. No rng changes (the furrow loop used none): layout determinism suites must pass unchanged.
 
 - [ ] **Step 5: Visual spot-check + commit**
 
-Generate Fenwick (seed 21) to SVG, rasterize with sharp (repo-history snippet), and confirm by eye: hatching sits inside plot boundaries, no crossed hatch fields. Note the raster path in the report.
+Rasterize Fenwick seed 21: parcels must read as bordered fields with rotated hatching contained by construction. PNG path in the report.
 
 ```bash
-git add src/wards/farm.ts tests/fidelity-round3.test.ts
-git commit -m "Sort and guard furrow pierce pairs: hatching stays inside concave plots"
+git add src/wards/farm.ts src/scene/ src/assets/asset-sets.ts src/output/assemble-svg.ts src/output/render-theme.ts src/generator/model.ts tests/
+git commit -m "Fields as assets: semantic plots + rotated hatch patterns; furrow geometry removed"
 ```
-
----
 
 ### Task 2: Sublinear density — dense towns, smaller walls
 
