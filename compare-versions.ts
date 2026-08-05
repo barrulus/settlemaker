@@ -137,7 +137,7 @@ for (const c of CASES) {
   const oldR = generateOld(c.burg as never);
   // Unique clip id per panel — SVG ids are document-global, and this page
   // inlines every settlement's SVG (the exact collision SvgOptions.clipId exists for).
-  const newR = generateNew(c.burg, { svg: { clipId: `frame-clip-${c.burg.name.toLowerCase()}` } });
+  const newR = generateNew(c.burg, { svg: { clipId: `frame-clip-${c.burg.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` } });
   const oldStats = `buildings ${countBuildings(oldR.model)} · roads ${oldR.model.roads.length}`;
   const newStats = `buildings ${countBuildings(newR.model)} · roads ${newR.model.roads.length}`;
   console.log(`${c.burg.name.padEnd(10)} old[${oldStats}]  new[${newStats}]`);

@@ -40,7 +40,12 @@ export interface WaterLayer {
   synthetic: boolean;
 }
 
-export interface FieldPlot { ring: ScenePoint[] }
+export interface FieldPlot {
+  ring: ScenePoint[];
+  /** Furrow-hatch direction in degrees, from the plot's OBB. */
+  angleDeg: number;
+}
+/** @deprecated Always empty since scene v1.1 — fields carry angleDeg instead of furrow segments. */
 export interface Furrow { start: ScenePoint; end: ScenePoint }
 export interface GreenFeature { ring: ScenePoint[] }
 
@@ -92,6 +97,7 @@ export interface Scene {
   layers: {
     water: WaterLayer;
     fields: FieldPlot[];
+    /** @deprecated Always empty since scene v1.1 — fields carry angleDeg instead. */
     furrows: Furrow[];
     greens: GreenFeature[];
     vegetation: VegetationInstance[];
@@ -137,9 +143,15 @@ GeoJSON exporter unified onto this vocabulary later), build it against
   shoreline was invented from an `oceanBearing` rather than supplied as real
   coastline geometry — useful if you want to visually flag or suppress
   synthetic coastlines downstream.
-- `fields` / `furrows` — farmland subplots and the plow-line decoration
-  inside them. Emitted separately because furrows are drawn as thin strokes,
-  not filled shapes.
+- `fields` — farmland subplots, one `FieldPlot` per bordered parcel. Each
+  plot carries `angleDeg`, the hatch direction (from the plot's OBB) that the
+  renderer feeds into a `patternTransform="rotate(...)"` on the shared field
+  pattern (see §4) — the plot is filled with that rotated pattern rather than
+  drawn as individual furrow strokes. `furrows` is a **deprecated, always-empty**
+  layer kept only for `SCENE_VERSION` additive-compatibility; a past
+  representation of farmland as loose plow-line segments (`Furrow`) was
+  replaced by the bordered/hatched `FieldPlot` shape, and no code populates
+  `furrows` anymore. Consumers should ignore it.
 - `greens` / `vegetation` — park groves (filled polygons) and the individual
   tree instances scattered inside them. `vegetation` entries are placements,
   not geometry: `kind` is a lookup key into an `AssetSet` (see §3), not a
@@ -273,13 +285,15 @@ settlement** — SVG ids are global to the document, and a collision means the
 second settlement's water clips against the first settlement's frame. See
 `compare-versions.ts`'s `clipId: 'frame-clip-${name}'` for the pattern.
 
-## 4. The `AssetSet` manifest — worked example: the tree symbol
+## 4. The `AssetSet` manifest — worked example: the field pattern
 
-An `AssetSet` maps a semantic vegetation `kind` (currently just `'tree'`,
-see `VegetationInstance.kind`) to raw SVG markup for a `<symbol>`. This is
-the seam for a community artist: draw new art, drop it into a `symbols`
-record, and it replaces the built-in placeholder with zero generator-code
-changes.
+An `AssetSet` maps semantic kinds to raw SVG markup two ways: vegetation
+`kind`s (currently just `'tree'`, see `VegetationInstance.kind`) to `<symbol>`
+markup, and now also fill `kind`s (currently just `'field'`, see
+`FieldPlot`) to tileable `<pattern>` markup. This is the seam for a
+community artist: draw new art or a new hatch, drop it into `symbols` or
+`patterns`, and it replaces the built-in placeholder with zero
+generator-code changes.
 
 ```ts
 // src/assets/asset-sets.ts
@@ -287,16 +301,34 @@ export interface AssetSet {
   name: string;
   /** semantic kind → inner markup of a <symbol viewBox="-1 -1 2 2"> */
   symbols: Record<string, string>;
+  /** semantic kind → tileable <pattern> content, unrotated (assembler applies patternTransform). */
+  patterns?: Record<string, { width: number; height: number; content: string }>;
 }
 
 export const SCHEMATIC_SET: AssetSet = {
   name: 'schematic',
   symbols: {
-    tree: '<circle cx="0" cy="0.12" r="0.44"/><circle cx="-0.3" cy="-0.1" r="0.32"/>'
-        + '<circle cx="0.28" cy="-0.16" r="0.34"/><circle cx="-0.02" cy="-0.36" r="0.28"/>',
+    tree: '<circle cx="0" cy="0.12" r="0.44"/><circle cx="-0.3" cy="-0.1" r="0.32"/><circle cx="0.28" cy="-0.16" r="0.34"/><circle cx="-0.02" cy="-0.36" r="0.28"/>',
+  },
+  patterns: {
+    field: { width: 2, height: 1.3, content: '<line x1="0" y1="0.65" x2="2" y2="0.65" class="furrow"/>' },
   },
 };
 ```
+
+The `field` pattern is the worked example for `patterns`: `width`/`height`
+are the tile size in local units (a `patternUnits="userSpaceOnUse"` tile,
+not scaled to the plot), and `content` is the unrotated inner markup of the
+`<pattern>` element — here, a single horizontal line at mid-tile-height,
+tagged `class="furrow"` so `themeToCss` can color/weight it
+(`.furrow{stroke:...}`) without the pattern markup itself carrying paint. At
+assembly time, `assembleSvg` buckets each `FieldPlot` by its `angleDeg`
+(rounded to the nearest 15° and wrapped mod 180°, since a hatch line looks
+identical rotated 180°) and emits one `<pattern>` per bucket actually used,
+each wrapping the same `content` in a `patternTransform="rotate(<bucket>)"`
+— so a field plot rotated 47° reuses the same tile art as one rotated 53°,
+both sharing the 45°-bucket pattern, rather than minting a fresh pattern per
+distinct angle.
 
 At assembly time, `assembleSvg` wraps each used symbol's markup in a real
 `<symbol>` element once, in `<defs>`, and every `VegetationInstance` becomes

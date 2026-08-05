@@ -225,7 +225,7 @@ below — it has no equivalent for `roadBearings` or `coastlineGeometry`.
 | `oceanBearing` | number | (unset) | compass degrees, 0=N clockwise |
 | `harbourSize` | `large` \| `small` | (unset) | any other value is dropped, not passed through |
 | `biome` | string | (unset) | |
-| `urbanDensity` | number | (unset) | only kept if `> 0` |
+| `urbanDensity` | number | (unset) | only kept if `> 0`; when unset, the generator falls back to a population-scaled default curve — see §6 |
 
 That's all 15 flat data params (`src/url/params.ts`'s `FLAT_DATA_PARAMS`).
 
@@ -340,10 +340,20 @@ apply and the palette default shows through instead.
   `oceanBearing` remains a fallback heuristic when vector coastlines aren't
   available.
 - **Population budget.** Ordinary building count is derived from
-  `population` divided by `urbanDensity` (people per household; defaults to
-  a fixed baseline when omitted), then capped — so a population of 13
-  renders a handful of buildings, not a filled town mesh, and very large
-  populations don't produce an unbounded building count.
+  `population` divided by `urbanDensity` (people per household), then
+  capped — so a population of 13 renders a handful of buildings, not a
+  filled town mesh, and very large populations don't produce an unbounded
+  building count. When `urbanDensity` is omitted, the default is **not** a
+  fixed constant — it's a population-scaled curve (`densityCurve` in
+  `src/generator/generation-params.ts`): 4 people/household up to
+  population 500 (villages), rising log-linearly to a ceiling of 12 at
+  population ≥ 20 000 (cities), so denser settlements pack proportionally
+  more people per building rather than sprawling into an ever-larger
+  building count. An explicit `urbanDensity` (`> 0`) always overrides the
+  curve outright. This only changes the *default* value fed into the same
+  population/density division above — same-URL determinism (identical
+  `i=`/flat params + seed → byte-identical output) is unaffected, since the
+  curve is a pure function of `population` alone.
 
 ## 7. Evolution policy
 

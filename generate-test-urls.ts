@@ -106,8 +106,9 @@ external roads.
   are rescued to the shore, warehouses are not.
 - A thin single-patch gap can still show between the outermost building row
   and the wall on some seeds — the proportional trim leaves a small empty
-  band inside walls (measured ≈9% of wall radius on the reference fixture;
-  test ceiling 25%).
+  band inside walls (measured ≈16% of wall radius on the reference fixture
+  as of the round-3 density-curve change, up from ≈9% pre-curve since the
+  curve reshapes the building budget; test ceiling 25%).
 - Piers on obliquely-crossing shores can occasionally sit fully on land (they
   extend along the patch edge normal, not toward the water).
 `;
