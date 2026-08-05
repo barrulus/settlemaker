@@ -26,6 +26,21 @@ Base: https://settlemaker.netlify.app
 Same name + seed across the theme variants must produce the identical
 layout — only colors change.
 
+## Scaling series (round 4: footprint and texture vs population)
+
+Same name/seed/flags, population only varies. This is the canonical
+demonstration that wall size, footprint count, and texture density all
+grow with population instead of flattening out at a fixed patch count.
+Expected patch counts at seed 9: 20k → 56, 30k → 84, 70k → 195,
+200k → 220 (the cap — see known issues below).
+
+| pop | URL |
+|---|---|
+| 20,000 | https://settlemaker.netlify.app/?name=Aldford&pop=20000&seed=9&walls=1&plaza=1&temple=1&theme=ink |
+| 30,000 | https://settlemaker.netlify.app/?name=Aldford&pop=30000&seed=9&walls=1&plaza=1&temple=1&theme=ink |
+| 70,000 | https://settlemaker.netlify.app/?name=Aldford&pop=70000&seed=9&walls=1&plaza=1&temple=1&theme=ink |
+| 200,000 | https://settlemaker.netlify.app/?name=Aldford&pop=200000&seed=9&walls=1&plaza=1&temple=1&theme=ink |
+
 ## Compressed `i=` payloads (the FMG channel)
 
 **Grimhaven** — walled port on an organic vector coastline, 3 routes,
@@ -43,7 +58,7 @@ external roads.
 
     https://settlemaker.netlify.app/?i=RcwxEoIwEEbhu_x1CrFzSwsvwVisZMUMS5JJgowy3N3YhPIr3tvwBnUGjyWNoA2eZwHhJn51wwSDGOKiXFzwoMvp71RAT9YsBoMrbEWbV1bNTVH5y01F5qjSmF_sy-c4cayv45QC26twcn6sw_6-10LEgs7d_gM
 
-## Known issues to NOT report twice (fidelity round 2 backlog)
+## Known issues to NOT report twice (fidelity round 2-4 backlog)
 
 - Settlement outlines are still quite circular.
 - When no patch straddles the painted shoreline (mesh-dependent, e.g. some
@@ -52,8 +67,17 @@ external roads.
   are rescued to the shore, warehouses are not.
 - A thin single-patch gap can still show between the outermost building row
   and the wall on some seeds — the proportional trim leaves a small empty
-  band inside walls (measured ≈16% of wall radius on the reference fixture
-  as of the round-3 density-curve change, up from ≈9% pre-curve since the
-  curve reshapes the building budget; test ceiling 25%).
+  band inside walls (measured ≈10.7% of wall radius on the Salt Harbour
+  reference fixture as of round 4, down from ≈16% at round 3 and ≈9%
+  pre-curve; test ceiling 25%. Round 4 did not touch the trim policy, so
+  this is a re-measurement, not a fix).
 - Piers on obliquely-crossing shores can occasionally sit fully on land (they
   extend along the patch edge normal, not toward the water).
+- Megacities beyond ~pop 79,000 (round 4): households (pop / 30) exceed the
+  220-patch cap, so the footprint count and per-patch layout stop growing
+  and the remaining population is absorbed by denser in-patch texture
+  instead of more distinct footprints. Wall size keeps scaling with
+  population; only the fine-grained building texture compresses past the
+  boundary. The Aldford scaling series above brackets this — 20k and 30k
+  sit below the boundary with distinct individual footprints, 70k is close
+  to it, 200k is well past it and shows compressed texture.

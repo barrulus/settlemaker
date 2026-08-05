@@ -353,7 +353,12 @@ apply and the palette default shows through instead.
   curve outright. This only changes the *default* value fed into the same
   population/density division above — same-URL determinism (identical
   `i=`/flat params + seed → byte-identical output) is unaffected, since the
-  curve is a pure function of `population` alone.
+  curve is a pure function of `population` alone. The number of Voronoi
+  patches (and so the physical size of the walled area and the count of
+  distinct building footprints) also scales with population, up to a cap;
+  populations large enough to hit that cap keep growing the wall but express
+  the remaining population as denser texture within existing footprints
+  rather than more of them.
 
 ## 7. Evolution policy
 
