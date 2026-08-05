@@ -3,7 +3,6 @@ import { createHash } from 'node:crypto';
 import { generateFromBurg, mapToGenerationParams, Model, type AzgaarBurgInput } from '../src/index.js';
 import { perPatchDensity, densityCurve } from '../src/generator/generation-params.js';
 import { MAX_PATCHES } from '../src/input/azgaar-input.js';
-import { WardType } from '../src/index.js';
 import { CommonWard } from '../src/wards/common-ward.js';
 
 const aldford = (population: number): AzgaarBurgInput => ({
@@ -53,18 +52,26 @@ describe('fidelity round 4: footprint and texture scale with population', () => 
   });
 
   it('the Aldford series gets distinct growing footprints (the user-reported defect)', () => {
-    const pops = [20000, 30000, 70000];
+    // 200000 included per fix round 1: at MAX_PATCHES=220, 70k's uncapped
+    // 195 sits below the cap, so 200k (which saturates at 220) still reads
+    // as strictly bigger than 70k — the original complaint (20k/30k/70k/200k
+    // all rendering the identical mesh) is fixed across the full series,
+    // not just up to 70k. Four full generateFromBurg calls (one of them at
+    // pop 200000, ~4-5s per the fix-round-1 stress measurements) exceed
+    // vitest's default 5000ms test timeout, hence the explicit bump below.
+    const pops = [20000, 30000, 70000, 200000];
     const patchCounts = pops.map(p => mapToGenerationParams(aldford(p), 9).nPatches);
     for (let i = 1; i < patchCounts.length; i++) {
       expect(patchCounts[i]).toBeGreaterThan(patchCounts[i - 1]);
     }
-    expect(patchCounts[2]).toBeLessThanOrEqual(MAX_PATCHES);
+    expect(patchCounts[3]).toBeLessThanOrEqual(MAX_PATCHES);
+    expect(patchCounts[3]).toBe(MAX_PATCHES);
 
     const radii = pops.map(p => generateFromBurg(aldford(p), { seed: 9 }).model.wall!.getRadius());
     for (let i = 1; i < radii.length; i++) {
       expect(radii[i]).toBeGreaterThan(radii[i - 1]);
     }
-  });
+  }, 20000);
 
   it('city texture is packed, village texture stays airy', () => {
     const densityOf = (population: number): number => {

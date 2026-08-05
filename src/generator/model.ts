@@ -389,18 +389,19 @@ export class Model {
 
     this.border = new CurtainWall(this.wallsNeeded, this, this.inner, reserved, this.rng, this.params.roadEntryPoints);
 
-    // `findCircumference`'s O(n^2) edge walk can — rarely, and pre-existing
-    // (confirmed present even at the historical n≤60 scale, just more likely
-    // to surface at round-4's larger footprints) — close its loop on a
-    // spurious inner cycle instead of the true outer boundary, silently
-    // returning a tiny polygon that encloses none of the requested inner
-    // patches instead of throwing. That corrupt-but-exception-free result
-    // would otherwise sail past the existing retry/degrade ladder in
-    // `generate()`/`probeWallRadius()`, which only catches thrown errors.
-    // Enclosure is the cheapest reliable tell: a correct circumference must
-    // contain nearly every inner patch's centroid. Failing that, throw so
-    // the ladder retries with the rng advanced past the bad draw, exactly
-    // like any other recoverable generation failure.
+    // `findCircumference` can — rarely, and pre-existing (confirmed present
+    // even at the historical n≤60 scale, just more likely to surface at
+    // round-4's larger footprints) — terminate on a wrong boundary that
+    // still passes its own walk-termination guard, encoding a polygon that
+    // doesn't actually contain the requested inner patches. Enclosure is the
+    // cheapest reliable tell: a correct circumference must contain nearly
+    // every inner patch's centroid. Failing that, throw so the ladder
+    // retries with the rng advanced past the bad draw, exactly like any
+    // other recoverable generation failure. Below 10 inner patches, `enclosed`
+    // and `inner.length` are both small integers and the strict `<` against
+    // the non-integer `*0.9` cutoff already demands 100% enclosure (e.g. for
+    // inner.length=9, 0.9*9=8.1, so enclosed=8 still throws) — no separate
+    // small-n case needed.
     const enclosed = this.inner.filter(
       p => pointInPolygon(p.shape.center, this.border!.shape.vertices),
     ).length;
@@ -1073,6 +1074,19 @@ export class Model {
     do {
       result.push(A[index]);
       index = A.indexOf(B[index]);
+      // The outer-edge walk can, rarely, land on a cycle that never revisits
+      // index 0 (a spurious inner loop instead of the true boundary) — an
+      // `indexOf` miss (-1) or a walk longer than the edge pool it's drawn
+      // from both prove that. Left unchecked, `index === -1` sends the next
+      // iteration's `A[index]` to `A[A.length - 1]` instead of throwing,
+      // which can re-enter the same bad cycle and grow `result` without
+      // bound (observed: 11.2s inside this loop ending in `RangeError:
+      // Invalid array length`). Throwing routes into the existing
+      // retry/degrade ladder in `generate()`/`probeWallRadius()`, exactly
+      // like the enclosure check below.
+      if (index === -1 || result.vertices.length > A.length) {
+        throw new Error('Bad circumference walk!');
+      }
     } while (index !== 0);
 
     return result;

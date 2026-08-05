@@ -63,22 +63,26 @@ export interface AzgaarBurgInput {
 
 /** Hard footprint cap, chosen from round-4 calibration against the ≤8 s
  * generation budget (see docs/superpowers/plans/2026-08-05-fidelity-round-4.md
- * and task-2-report.md). Latitude [120, 400] — landed at the floor, not the
- * brief's suggested 250, because calibration surfaced a pre-existing (not
- * Task-2-introduced) `findCircumference`/`buildWalls` defect: on certain
- * seed/patch-count draws it used to silently return an undersized wall
- * polygon instead of throwing (fixed in `Model.buildWalls` with an enclosure
- * check — see its comment), which now correctly retries instead, but each
- * retry's cost scales with patch count (the O(n²) circumference walk), so
- * above ~150-180 patches occasional retries can push a single generation
- * past the 8 s budget. A 60-seed stress test at pop 200000 (which always
- * saturates the cap) measured a worst case of 12.4 s and 2/60 over-budget
- * runs at cap 220, 9.7 s and 1/60 at cap 180, vs. zero over-budget runs and
- * a tight ~3.2-4.1 s spread across 33+ seeds at cap 120 — see task-2-report.md
- * for the full tables. Optimizing `findCircumference` to avoid the O(n²)
- * cost (making retries cheap regardless of n) would let this cap move back
- * up the latitude; that's out of this task's scope. */
-export const MAX_PATCHES = 120;
+ * and task-2-report.md, including its "Fix round 1" section). Latitude
+ * [120, 400]. Calibration surfaced a pre-existing (not Task-2-introduced)
+ * `findCircumference` defect: its boundary walk (`model.ts`'s
+ * `findCircumference`, ~line 1071) could enter a cycle that never revisits
+ * index 0, growing its result array unboundedly — observed as an 11.2 s
+ * hang ending in `RangeError: Invalid array length` at cap 250. That, not
+ * per-retry cost, was the actual 8 s-budget tail (an earlier pass at this
+ * comment mis-attributed it to O(n²) retry cost; a terminating enclosure
+ * retry costs single-digit milliseconds). Fixed with a termination guard in
+ * the walk itself (throws into the existing retry ladder instead of
+ * spinning) plus an enclosure check in `Model.buildWalls` for the rarer case
+ * where the walk terminates but on the wrong (too-small) boundary. With both
+ * guards in place, a 60-seed stress test at pop 200000 (which always
+ * saturates the cap) at MAX_PATCHES=220 measured a worst case of 4.9 s and
+ * 0/60 over-budget runs — see task-2-report.md for the full table. 220 was
+ * chosen over a smaller value in the latitude because it's the smallest cap
+ * that still keeps pop 70000 (uncapped nPatches 195) strictly below pop
+ * 200000's (capped at 220), preserving the Aldford series' distinct
+ * footprints all the way to the top of the calibrated population range. */
+export const MAX_PATCHES = 220;
 
 /**
  * Patch count derives from the household target (pop / urbanDensity) so the
