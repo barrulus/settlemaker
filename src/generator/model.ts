@@ -830,7 +830,15 @@ export class Model {
       }
       if (ward instanceof Farm) {
         ward.subPlots = ward.subPlots.filter(plot => !plot.some(v => inWater(v)));
-        ward.furrows = ward.furrows.filter(f => !inWater(f.start) && !inWater(f.end));
+        // Furrows belong to plots but live in a flat array: when a shoreline
+        // plot is dropped above, its furrows must go too or they render as
+        // orphan hatching on bare ground. Keep a furrow only if it is dry AND
+        // its midpoint still lies inside a surviving plot.
+        ward.furrows = ward.furrows.filter(f => {
+          if (inWater(f.start) || inWater(f.end)) return false;
+          const mid = new Point((f.start.x + f.end.x) / 2, (f.start.y + f.end.y) / 2);
+          return ward.subPlots.some(plot => pointInPolygon(mid, plot));
+        });
       }
       if (ward instanceof Harbour) {
         // Piers may (and should) extend over water, but they must touch

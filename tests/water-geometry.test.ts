@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { generateFromBurg, type AzgaarBurgInput } from '../src/index.js';
 import { pointInPolygon } from '../src/geom/point-in-polygon.js';
+import { Farm } from '../src/wards/farm.js';
+import { toprak } from './fixtures/toprak.js';
 
 // Open sea east of the burg: shoreline at x=40 (inside the frame), far edge at
 // x=1500 (far beyond it). Output coords equal input coords: generateFromBurg
@@ -65,6 +67,26 @@ describe('water rendered from coastline geometry', () => {
       for (const poly of patch.ward.geometry) {
         for (const v of poly.vertices) {
           expect(v.x).toBeLessThanOrEqual(shoreX + 1e-6);
+        }
+      }
+    }
+  });
+
+  it('no orphan furrows: every surviving furrow lies inside a surviving plot', () => {
+    // Regression (seen on the live Toprak render): a shoreline field plot is
+    // dropped by the drowning filter while its furrow lines — stored in a
+    // separate array with dry endpoints — survive, hatching bare ground.
+    for (const burg of [toprak, coastalBurg]) {
+      const { model } = generateFromBurg(burg);
+      for (const patch of model.patches) {
+        const ward = patch.ward;
+        if (!(ward instanceof Farm)) continue;
+        for (const f of ward.furrows) {
+          const mid = { x: (f.start.x + f.end.x) / 2, y: (f.start.y + f.end.y) / 2 };
+          const inSomePlot = ward.subPlots.some(plot =>
+            pointInPolygon(mid as Parameters<typeof pointInPolygon>[0], plot),
+          );
+          expect(inSomePlot).toBe(true);
         }
       }
     }
