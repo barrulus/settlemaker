@@ -1,0 +1,12 @@
+[build]
+  base = "web"
+  command = "npm ci && npm run build"
+  publish = "dist"
+  # The web app compiles ../src directly (no published package boundary), so
+  # library-only commits (changes under src/ with nothing under web/) must
+  # still trigger a build. Skip only when NEITHER web/ nor the library src/
+  # changed since the last build.
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- . ../src"
+
+[build.environment]
+  NODE_VERSION = "22"

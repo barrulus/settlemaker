@@ -1,20 +1,23 @@
 // Public API
 export { Model } from './generator/model.js';
-export { GenerationParams, RoadEntry, RouteKind, DegradedFlag } from './generator/generation-params.js';
+export type { GenerationParams, RoadEntry, RouteKind, DegradedFlag } from './generator/generation-params.js';
 export { Patch } from './generator/patch.js';
-export { CurtainWall, GateMeta, GateRouteAssignment } from './generator/curtain-wall.js';
+export { CurtainWall } from './generator/curtain-wall.js';
+export type { GateMeta, GateRouteAssignment } from './generator/curtain-wall.js';
 export type { OriginShift } from './generator/origin-shift.js';
 
-export { AzgaarBurgInput, RoadBearingInput, mapToGenerationParams } from './input/azgaar-input.js';
+export type { AzgaarBurgInput, RoadBearingInput } from './input/azgaar-input.js';
+export { mapToGenerationParams } from './input/azgaar-input.js';
 export { Harbour } from './wards/harbour.js';
 
-export { generateSvg, SvgOptions } from './output/svg-builder.js';
+export { generateSvg } from './output/svg-builder.js';
+export type { SvgOptions } from './output/svg-builder.js';
 export {
   generateGeoJson,
-  GenerateGeoJsonOptions,
   GEOJSON_SCHEMA_VERSION,
   SETTLEMAKER_VERSION,
 } from './output/geojson-builder.js';
+export type { GenerateGeoJsonOptions } from './output/geojson-builder.js';
 export {
   parseSvgViewBox,
   computeSettlementScale,
@@ -30,7 +33,8 @@ export type {
   TileCoord,
 } from './output/settlement-tiler.js';
 
-export { Palette, WardType, Street } from './types/interfaces.js';
+export { WardType } from './types/interfaces.js';
+export type { Palette, Street } from './types/interfaces.js';
 export { PALETTES, PALETTE_DEFAULT, paletteForBiome } from './output/palette.js';
 export { themeFrom } from './output/render-theme.js';
 export type { RenderTheme } from './output/render-theme.js';
@@ -58,6 +62,15 @@ export type { AssembleOptions } from './output/assemble-svg.js';
 
 export { SCHEMATIC_SET, assetSetFor } from './assets/asset-sets.js';
 export type { AssetSet } from './assets/asset-sets.js';
+
+export {
+  URL_PAYLOAD_VERSION, UrlCodecError,
+  encodeBurgParam, decodeBurgParam, encodeJsonParam, decodeJsonParam,
+} from './url/codec.js';
+export type { UrlCodecFailure } from './url/codec.js';
+
+export { parseSettlementUrl } from './url/params.js';
+export type { ParsedSettlementUrl } from './url/params.js';
 
 import type { AzgaarBurgInput } from './input/azgaar-input.js';
 import type { FeatureCollection } from 'geojson';

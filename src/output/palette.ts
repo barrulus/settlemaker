@@ -34,5 +34,5 @@ export function paletteForBiome(biome?: string): Palette {
   const table: Record<string, Palette> = {
     // e.g. desert: PALETTES.desert — when an artist supplies one
   };
-  return (biome != null ? table[biome] : undefined) ?? PALETTES.default;
+  return (biome != null && Object.hasOwn(table, biome) ? table[biome] : undefined) ?? PALETTES.default;
 }
