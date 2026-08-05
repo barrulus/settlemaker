@@ -28,6 +28,11 @@ import { buildWardDistribution, type WardConstructor } from '../wards/ward-distr
 const MAX_ATTEMPTS = 20;
 const MIN_POPULATION_FOR_WALLS = 150;
 
+/** Voronoi points per requested patch. Countryside ring (farms/wilderness)
+ * comes from the surplus. Round-4 Task 2 may scale this down for large
+ * meshes based on calibration; keep 8 for nPatches ≤ 60 regardless. */
+const VORONOI_POINT_MULTIPLIER = (nPatches: number): number => 8;
+
 /** Ward types whose buildings are feature landmarks, exempt from the population budget. */
 const BUDGET_EXEMPT_WARD_TYPES = new Set<WardType>([
   WardType.Castle,
@@ -174,6 +179,48 @@ export class Model {
     );
   }
 
+  /**
+   * Cheap alternative to `generate()` for callers that only need
+   * `border.getRadius()` (phases 1-3 fully determine it; streets, wards, and
+   * geometry never affect it). Mirrors `generate()`'s retry/degrade ladder
+   * exactly so the returned radius matches what a full `generate()` would
+   * produce on the same params. Only throws when every fallback (walls, then
+   * citadel) has been exhausted.
+   */
+  probeWallRadius(): number {
+    if (this.tryProbe()) return this.border!.getRadius();
+
+    if (this.wallsNeeded) {
+      this.wallsNeeded = false;
+      this.degradedFlags.add('walls');
+      if (this.tryProbe()) return this.border!.getRadius();
+    }
+
+    if (this.citadelNeeded) {
+      this.citadelNeeded = false;
+      this.degradedFlags.add('citadel');
+      if (this.tryProbe()) return this.border!.getRadius();
+    }
+
+    throw new Error(
+      `Failed to probe wall radius after ${MAX_ATTEMPTS} attempts with walls/citadel fallbacks`,
+    );
+  }
+
+  private tryProbe(): boolean {
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      try {
+        this.buildPatches();
+        this.optimizeJunctions();
+        this.buildWalls();
+        return true;
+      } catch (e) {
+        this.reset();
+      }
+    }
+    return false;
+  }
+
   private tryGenerate(): boolean {
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       try {
@@ -223,7 +270,7 @@ export class Model {
     const rng = this.rng;
     const sa = rng.float() * 2 * Math.PI;
     const points: Point[] = [];
-    for (let i = 0; i < this.nPatches * 8; i++) {
+    for (let i = 0; i < this.nPatches * VORONOI_POINT_MULTIPLIER(this.nPatches); i++) {
       const a = sa + Math.sqrt(i) * 5;
       const r = i === 0 ? 0 : 10 + i * (2 + rng.float());
       points.push(new Point(Math.cos(a) * r, Math.sin(a) * r));

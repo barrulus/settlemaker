@@ -120,8 +120,7 @@ export function generateFromBurg(
     coastlineGeometry: undefined,
     harbourSize: undefined,
   };
-  const radiusProbe = new Model(paramsRadiusProbe).generate();
-  const wallRadius = radiusProbe.border!.getRadius();
+  const wallRadius = new Model(paramsRadiusProbe).probeWallRadius();
 
   // Compute shift from ORIGINAL coastline + pass-1 wallRadius.
   const shift: OriginShift =

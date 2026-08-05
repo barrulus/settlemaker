@@ -219,11 +219,11 @@ describe('GeoJSON output reflects shift', () => {
     expect(meta.local_origin_shift.dx).toBeLessThan(0);
   });
 
-  it('emits schema_version=4 and settlemaker_version=0.8.0', () => {
+  it('emits schema_version=4 and settlemaker_version=0.9.0', () => {
     const result = generateFromBurg(coastalBurg());
     const meta = (result.geojson as unknown as { metadata: { schema_version: number; settlemaker_version: string } }).metadata;
     expect(meta.schema_version).toBe(4);
-    expect(meta.settlemaker_version).toBe('0.8.0');
+    expect(meta.settlemaker_version).toBe('0.9.0');
   });
 
   it('shifts wall feature coordinates toward the coast', () => {
