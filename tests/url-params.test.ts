@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseSettlementUrl } from '../src/url/params.js';
+import { parseSettlementUrl, sanitizeThemeOverrides } from '../src/url/params.js';
 import { encodeBurgParam, encodeJsonParam } from '../src/url/codec.js';
 import { toprak } from './fixtures/toprak.js';
 
@@ -58,5 +58,48 @@ describe('parseSettlementUrl', () => {
   it('malformed style= propagates too', async () => {
     const i = await encodeBurgParam(toprak);
     await expect(parseSettlementUrl(sp(`i=${i}&style=AAAA`))).rejects.toMatchObject({ name: 'UrlCodecError' });
+  });
+});
+
+describe('sanitizeThemeOverrides', () => {
+  it('drops XSS-shaped color strings and unknown keys', () => {
+    const out = sanitizeThemeOverrides({
+      paper: '"><img src=x onerror=x>',
+      buildingFill: 'javascript:alert(1)',
+      notARealKey: '#123456',
+    });
+    expect(out).not.toHaveProperty('paper');
+    expect(out).not.toHaveProperty('buildingFill');
+    expect(out).not.toHaveProperty('notARealKey');
+    expect(out).toEqual({});
+  });
+
+  it('accepts valid hex colors, null water/waterEdge, and finite numbers', () => {
+    const out = sanitizeThemeOverrides({
+      buildingFill: '#123456',
+      water: null,
+      waterEdge: null,
+      shadowOpacity: 0.5,
+      arteryWidth: 3,
+    });
+    expect(out).toEqual({
+      buildingFill: '#123456',
+      water: null,
+      waterEdge: null,
+      shadowOpacity: 0.5,
+      arteryWidth: 3,
+    });
+  });
+
+  it('drops shadowOffset with a non-numeric dx', () => {
+    const out = sanitizeThemeOverrides({ shadowOffset: { dx: 'nope', dy: 1 } });
+    expect(out).not.toHaveProperty('shadowOffset');
+  });
+
+  it('accepts a valid shadowOffset and rebuilds it rather than aliasing the input', () => {
+    const offset = { dx: 0.4, dy: 0.6 };
+    const out = sanitizeThemeOverrides({ shadowOffset: offset });
+    expect(out.shadowOffset).toEqual(offset);
+    expect(out.shadowOffset).not.toBe(offset);
   });
 });
