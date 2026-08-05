@@ -5,6 +5,22 @@ import { Ward, createAlleys } from './ward.js';
 import type { Model } from '../generator/model.js';
 import type { Patch } from '../generator/patch.js';
 
+/**
+ * Bisect a segment known to cross the painted shoreline (`a` and `b` on
+ * opposite sides per `isWaterAt`) down to the boundary point, in a fixed
+ * number of iterations — no rng, deterministic.
+ */
+function bisectShoreline(a: Point, b: Point, isWaterAt: (p: Point) => boolean): Point {
+  const aWet = isWaterAt(a);
+  let lo = a;
+  let hi = b;
+  for (let i = 0; i < 20; i++) {
+    const mid = new Point((lo.x + hi.x) / 2, (lo.y + hi.y) / 2);
+    if (isWaterAt(mid) === aWet) lo = mid; else hi = mid;
+  }
+  return new Point((lo.x + hi.x) / 2, (lo.y + hi.y) / 2);
+}
+
 export class Harbour extends Ward {
   piers: Polygon[] = [];
   private large: boolean;
@@ -36,17 +52,47 @@ export class Harbour extends Ward {
   private createPiers(): void {
     this.piers = [];
 
-    // Find shared edges between harbour patch and water patches
-    const waterfrontEdges: Array<{ v0: Point; v1: Point; waterPatch: Patch }> = [];
+    // Find shared edges between harbour patch and water patches. Prefer
+    // edges that also cross the painted shoreline (one wet vertex, one dry)
+    // — those are true waterfront where a pier anchored near the crossing
+    // keeps a dry base. A patch selected by the straddle-first placeHarbour
+    // scoring can still carry OTHER shared edges that sit entirely on the
+    // wet side (an inlet the patch also touches); anchoring piers there
+    // leaves all four pier corners submerged, and there is nothing nearby
+    // to slide onto. For crossing edges specifically, truncate to the dry
+    // 90% of the segment (dry endpoint → just short of the bisected
+    // crossing point) so every basePoint drawn from it lands on dry land
+    // by construction, regardless of where along the edge it falls. Fall
+    // back to the untruncated shared edges only when the patch has no
+    // crossing edge at all (the fallback-placed, non-straddling harbours
+    // from the old scoring path).
+    const allEdges: Array<{ v0: Point; v1: Point; waterPatch: Patch }> = [];
+    const crossingEdges: Array<{ v0: Point; v1: Point; waterPatch: Patch }> = [];
     this.patch.shape.forEdge((v0, v1) => {
       for (const wp of this.model.waterbody) {
         if (wp.shape.findEdge(v1, v0) !== -1) {
-          waterfrontEdges.push({ v0, v1, waterPatch: wp });
+          allEdges.push({ v0, v1, waterPatch: wp });
+          if (this.model.isWaterAt(v0) !== this.model.isWaterAt(v1)) {
+            const dryIsV0 = !this.model.isWaterAt(v0);
+            const dry = dryIsV0 ? v0 : v1;
+            const wet = dryIsV0 ? v1 : v0;
+            const crossing = bisectShoreline(dry, wet, p => this.model.isWaterAt(p));
+            const nearShore = new Point(
+              dry.x + (crossing.x - dry.x) * 0.9,
+              dry.y + (crossing.y - dry.y) * 0.9,
+            );
+            crossingEdges.push(
+              dryIsV0
+                ? { v0: dry, v1: nearShore, waterPatch: wp }
+                : { v0: nearShore, v1: dry, waterPatch: wp },
+            );
+          }
           break;
         }
       }
     });
 
+    const waterfrontEdges = crossingEdges.length > 0 ? crossingEdges : allEdges;
     if (waterfrontEdges.length === 0) return;
 
     // Calculate total waterfront length

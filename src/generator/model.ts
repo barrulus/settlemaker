@@ -439,34 +439,52 @@ export class Model {
 
     const large = this.params.harbourSize === 'large';
 
-    // Candidates: outer patches that border both water AND the city
-    const candidates: Array<{ patch: Patch; waterfrontLength: number }> = [];
+    // Candidates preferred: outer patches bordering the city whose shape
+    // STRADDLES the painted shoreline (mixed wet/dry vertices) — the
+    // harbour district then sits at the visible waterline, warehouses on
+    // painted land, piers over painted water. Scored by total length of
+    // shore-crossing edges, restricted to edges that are ALSO shared with a
+    // `waterbody` patch: `Harbour.createPiers()` anchors piers by walking
+    // exactly those shared edges, so a mixed-vertex edge that isn't shared
+    // with any water-classified patch (an internal Voronoi artifact, not a
+    // real waterfront) would qualify a patch as "straddling" yet leave
+    // createPiers walking a *different*, fully-wet shared edge with no dry
+    // anchor — rescueDetachedPier then has nothing to slide onto and drops
+    // the pier. Restricting the score to shared+crossing edges keeps the
+    // winning patch's actual pier-anchor edges at the visible shoreline.
+    // Fallback: the old waterbody-patch-adjacency scoring (any shared edge,
+    // crossing or not), so small meshes where no patch straddles still get
+    // a port.
+    const straddling: Array<{ patch: Patch; waterfrontLength: number }> = [];
+    const adjacent: Array<{ patch: Patch; waterfrontLength: number }> = [];
 
     for (const patch of this.patches) {
       if (patch.withinCity) continue;
       if (patch.ward !== null) continue;
       if (this.waterbody.includes(patch)) continue;
+      if (!this.getNeighbours(patch).some(n => n.withinCity)) continue;
 
-      // Must border at least one city patch
-      const bordersCity = this.getNeighbours(patch).some(n => n.withinCity);
-      if (!bordersCity) continue;
-
-      // Measure total shared edge length with water patches
-      let waterfrontLength = 0;
+      let shoreLength = 0;
+      let sharedLength = 0;
       patch.shape.forEdge((v0, v1) => {
         for (const wp of this.waterbody) {
           if (wp.shape.findEdge(v1, v0) !== -1) {
-            waterfrontLength += Point.distance(v0, v1);
+            const len = Point.distance(v0, v1);
+            sharedLength += len;
+            if (this.isWaterAt(v0) !== this.isWaterAt(v1)) shoreLength += len;
             break;
           }
         }
       });
 
-      if (waterfrontLength > 0) {
-        candidates.push({ patch, waterfrontLength });
+      if (shoreLength > 0) {
+        straddling.push({ patch, waterfrontLength: shoreLength });
+      } else if (sharedLength > 0) {
+        adjacent.push({ patch, waterfrontLength: sharedLength });
       }
     }
 
+    const candidates = straddling.length > 0 ? straddling : adjacent;
     if (candidates.length === 0) return;
 
     // Pick the patch with the most waterfront edge length
