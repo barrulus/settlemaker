@@ -65,6 +65,9 @@ export {
 } from './url/codec.js';
 export type { UrlCodecFailure } from './url/codec.js';
 
+export { parseSettlementUrl } from './url/params.js';
+export type { ParsedSettlementUrl } from './url/params.js';
+
 import type { AzgaarBurgInput } from './input/azgaar-input.js';
 import type { FeatureCollection } from 'geojson';
 import type { DegradedFlag } from './generator/generation-params.js';
