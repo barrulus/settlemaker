@@ -90,6 +90,15 @@ const CASES: Case[] = [
     },
   },
   {
+    label: 'Salt Harbour — walled port, bearing-only water',
+    note: 'pop 4200, walls, oceanBearing 135, large harbour. Round-2 fixes: town fills the walls (no hollow band); harbour district sits ON the painted shoreline.',
+    burg: {
+      name: 'Salt Harbour', population: 4200, port: true, citadel: false, walls: true,
+      plaza: true, temple: false, shanty: false, capital: false,
+      oceanBearing: 135, harbourSize: 'large',
+    },
+  },
+  {
     label: 'Highbury — inland walled city',
     note: 'pop 9000, citadel, 4 routes, no water. Control case: should look essentially unchanged.',
     burg: {

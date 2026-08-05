@@ -45,8 +45,7 @@ external roads.
 
 ## Known issues to NOT report twice (fidelity round 2 backlog)
 
-- Large walled towns (pop ≳ 2000) show an empty band between the built
-  core and the wall (budget trim keeps nearest-centre buildings).
-- In `oceanBearing` mode the harbour district can sit inland of the
-  painted shoreline (piers are rescued to the water; warehouses are not).
 - Settlement outlines are still quite circular.
+- A thin single-patch gap can still show between the outermost building
+  row and the wall on some seeds — the proportional per-patch trim
+  floors the empty band at roughly the low single digits, not zero.
