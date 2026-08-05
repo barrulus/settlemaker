@@ -159,10 +159,10 @@ describe('svg render: shadows, buildings, landmarks', () => {
       p => p.ward && ['castle', 'cathedral', 'market'].includes(String(p.ward.type)),
     );
     if (hasLandmarkWard) {
-      // landmarkFill parchment = blend(0xd5ad6e, 0xffffff, 0.45):
-      // r 213+42×0.45=231.9→232 (e8), g 173+82×0.45=209.9→210 (d2),
-      // b 110+145×0.45=175.25→175 (af) → #e8d2af
-      expect(svg).toContain('#landmarks path{fill:#e8d2af');
+      // landmarkFill parchment = blend(0xd5ad6e, 0x4a3f2a, 0.3):
+      // r 213+(74-213)×0.3=171.3→171 (ab), g 173+(63-173)×0.3=140 (8c),
+      // b 110+(42-110)×0.3=89.6→90 (5a) → #ab8c5a
+      expect(svg).toContain('#landmarks path{fill:#ab8c5a');
     }
   });
 });

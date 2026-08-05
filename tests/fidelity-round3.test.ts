@@ -4,6 +4,8 @@ import { Farm } from '../src/wards/farm.js';
 import { densityCurve } from '../src/generator/generation-params.js';
 import { buildingBudget } from '../src/generator/model.js';
 import { CommonWard } from '../src/wards/common-ward.js';
+import { themeFrom } from '../src/output/render-theme.js';
+import { PALETTES } from '../src/output/palette.js';
 
 const fenwick: AzgaarBurgInput = {
   name: 'Fenwick', population: 90, port: false, citadel: false, walls: false,
@@ -83,5 +85,34 @@ describe('fidelity round 3: sublinear density — dense towns, smaller walls', (
     }
     expect(wards).toBeGreaterThan(0);
     expect(buildings / wards).toBeGreaterThanOrEqual(5); // was ~sparse dots before
+  });
+});
+
+describe('fidelity round 3: visual grooming', () => {
+  it('landmarkFill has real contrast against paper and ordinary buildings', () => {
+    for (const name of Object.keys(PALETTES)) {
+      if (name === 'simple') continue; // 2-color palette; can't achieve landmark contrast
+      const t = themeFrom(PALETTES[name]);
+      expect(t.landmarkFill, `palette ${name}`).not.toBe(t.paper);
+      expect(t.landmarkFill, `palette ${name}`).not.toBe(t.buildingFill);
+    }
+  });
+
+  it('park groves are never slivers', () => {
+    // Sweep a handful of park-bearing towns; every grove that survives must
+    // meet the cull thresholds.
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const { model } = generateFromBurg({
+        name: `Groveton${seed}`, population: 2500, port: false, citadel: false,
+        walls: true, plaza: true, temple: true, shanty: false, capital: false,
+      }, { seed });
+      for (const patch of model.patches) {
+        if (patch.ward?.type !== WardType.Park) continue;
+        for (const g of patch.ward.geometry) {
+          expect(Math.abs(g.square)).toBeGreaterThanOrEqual(30);
+          expect(g.compactness).toBeGreaterThanOrEqual(0.25);
+        }
+      }
+    }
   });
 });

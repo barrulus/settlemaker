@@ -31,7 +31,7 @@ describe('themeFrom', () => {
     expect(t.fieldFill).toBe(cssHex(blend(PALETTE_DEFAULT.paper, PALETTE_DEFAULT.green!, 0.18)));
     expect(t.buildingFill).toBe(cssHex(PALETTE_DEFAULT.light));
     expect(t.buildingStroke).toBe(cssHex(PALETTE_DEFAULT.dark));
-    expect(t.landmarkFill).toBe(cssHex(blend(PALETTE_DEFAULT.light, 0xffffff, 0.45)));
+    expect(t.landmarkFill).toBe(cssHex(blend(PALETTE_DEFAULT.light, PALETTE_DEFAULT.dark, 0.3)));
     expect(t.shadowOpacity).toBeCloseTo(0.18);
     expect(t.shadowOffset).toEqual({ dx: 0.4, dy: 0.6 });
     expect(t.arteryWidth).toBe(2.4);

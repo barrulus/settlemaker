@@ -41,7 +41,7 @@ export interface RenderTheme {
   roadCore: string;
   buildingFill: string;
   buildingStroke: string;
-  landmarkFill: string;      // castle/cathedral/market highlight
+  landmarkFill: string;      // castle/cathedral/market; reads darker than ordinary buildings
   shadowColor: string;
   shadowOpacity: number;
   shadowOffset: { dx: number; dy: number };
@@ -67,7 +67,7 @@ export function themeFrom(palette: Palette): RenderTheme {
     roadCore: cssHex(palette.paper),
     buildingFill: cssHex(palette.light),
     buildingStroke: cssHex(palette.dark),
-    landmarkFill: cssHex(blend(palette.light, 0xffffff, 0.45)),
+    landmarkFill: cssHex(blend(palette.light, palette.dark, 0.3)),
     shadowColor: cssHex(palette.dark),
     shadowOpacity: 0.18,
     shadowOffset: { dx: 0.4, dy: 0.6 },

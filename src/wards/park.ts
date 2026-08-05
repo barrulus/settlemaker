@@ -15,6 +15,12 @@ export class Park extends Ward {
     this.geometry = block.compactness >= 0.7
       ? radial(block, undefined, ALLEY)
       : semiRadial(block, undefined, ALLEY);
+
+    // Cull sliver groves — thin wedges read as artifacts, and a lone tree
+    // symbol at a wedge tip looks like debris (live-site report 2026-08-05).
+    this.geometry = this.geometry.filter(
+      g => Math.abs(g.square) >= 30 && g.compactness >= 0.25,
+    );
   }
 
   override getLabel() { return 'Park'; }

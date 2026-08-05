@@ -172,7 +172,8 @@ function scatterVegetation(
     for (const grove of ward.geometry) {
       const poly = new Polygon(grove.vertices);
       const area = Math.abs(poly.square);
-      const n = Math.max(1, Math.min(24, Math.round(area / 12)));
+      const n = Math.min(24, Math.floor(area / 12));
+      if (n === 0) continue;
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       for (const v of grove.vertices) {
         if (v.x < minX) minX = v.x;
