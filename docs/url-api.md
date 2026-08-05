@@ -133,13 +133,29 @@ export interface AzgaarBurgInput {
 }
 ```
 
-`RouteKind` is re-exported from `src/generator/generation-params.js`; treat
-it as an opaque string tag round-tripped from your own route data if you use
-`roadBearings` objects — settlemaker does not interpret its value beyond
-echoing it back on the matching gate output feature.
+`RouteKind` is re-exported from the package root; treat it as an opaque
+string tag round-tripped from your own route data if you use `roadBearings`
+objects — settlemaker does not interpret its value beyond echoing it back on
+the matching gate output feature.
 
-Only `name` and `population` are strictly required; every other field is
-optional and simply omitted (not set to `null`) when unknown.
+**Which fields are actually required, precisely:**
+
+- In the TypeScript interface above, the seven boolean flags (`port`,
+  `citadel`, `walls`, `plaza`, `temple`, `shanty`, `capital`) have no `?` —
+  they are required fields of `AzgaarBurgInput`. Set every one of them
+  explicitly (`false` when the burg doesn't have that feature); don't omit
+  them.
+- At runtime, the `i=` decoder (`decodeBurgParam` in `src/url/codec.ts`)
+  only validates that `burg.name` is a string and `burg.population` is a
+  number — it does not check the seven booleans at all. A hand-built JSON
+  payload that omits them will still decode successfully, and generation
+  will treat every missing boolean as falsy (no port, no walls, etc.),
+  which is silent and easy to get wrong.
+- **Recommendation:** always set all seven booleans explicitly in the
+  payload you send, even when `false`. Every other field
+  (`culture`, `elevation`, `temperature`, `roadBearings`, `oceanBearing`,
+  `harbourSize`, `urbanDensity`, `biome`, `trade`, `coastlineGeometry`) is
+  genuinely optional and can be omitted (not set to `null`) when unknown.
 
 ### Adapter snippet
 
@@ -290,20 +306,24 @@ apply and the palette default shows through instead.
   machine-readable reason: `base64 | inflate | json | version | shape` for
   `i=`/`style=` decode failures (`UrlCodecError.reason` in
   `src/url/codec.ts`), or a generic generation-failure message otherwise.
-- **Route fidelity.** External roads rendered equal the routes you supply in
-  `roadBearings`: same count, bearings, and kinds — the generator invents no
-  additional external connections beyond what's supplied (internal lanes are
-  a separate, unrelated concern). See "Fidelity requirements" in
-  `docs/superpowers/specs/2026-08-04-netlify-pivot-design.md`.
+- **Route fidelity.** External roads rendered match the supplied
+  `roadBearings` exactly: same count, bearings, and kinds, with any
+  `route_id` you attached echoed back on the matching gate output feature.
+  The generator invents no additional external connections beyond what's
+  supplied — an empty or omitted `roadBearings` means zero external roads
+  (internal lanes within the settlement are a separate, unrelated concern
+  and are not counted here).
 - **Water fidelity.** When `coastlineGeometry` is supplied, the rendered
-  water outline is built from that geometry (clipped to the local frame),
-  not from Voronoi patch shapes — open sea/rivers extend to the frame edge,
-  matching the world map's orientation. `oceanBearing` remains a fallback
-  when vector coastlines aren't available. See the same fidelity-requirements
-  section.
-- **Population budget.** Building count derives from `population` (and
-  `urbanDensity` when supplied), not from patch count alone — a population
-  of 13 renders a handful of buildings, not a filled town mesh. Same section.
+  water outline follows that geometry (clipped to the local frame) rather
+  than Voronoi patch shapes — open sea/rivers reach the frame edge, matching
+  the world map's orientation, and nothing is built or routed over water.
+  `oceanBearing` remains a fallback heuristic when vector coastlines aren't
+  available.
+- **Population budget.** Ordinary building count is derived from
+  `population` divided by `urbanDensity` (people per household; defaults to
+  a fixed baseline when omitted), then capped — so a population of 13
+  renders a handful of buildings, not a filled town mesh, and very large
+  populations don't produce an unbounded building count.
 
 ## 7. Evolution policy
 
