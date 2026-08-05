@@ -59,6 +59,12 @@ export type { AssembleOptions } from './output/assemble-svg.js';
 export { SCHEMATIC_SET, assetSetFor } from './assets/asset-sets.js';
 export type { AssetSet } from './assets/asset-sets.js';
 
+export {
+  URL_PAYLOAD_VERSION, UrlCodecError,
+  encodeBurgParam, decodeBurgParam, encodeJsonParam, decodeJsonParam,
+} from './url/codec.js';
+export type { UrlCodecFailure } from './url/codec.js';
+
 import type { AzgaarBurgInput } from './input/azgaar-input.js';
 import type { FeatureCollection } from 'geojson';
 import type { DegradedFlag } from './generator/generation-params.js';
