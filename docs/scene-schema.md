@@ -1,7 +1,8 @@
 # Scene & asset contract (v1)
 
-This document is for two audiences: **Azgaar/FMG-side integrators** who consume
-settlemaker's output, and **community artists** who want to draw a new visual
+This document is for two audiences: **Azgaar/FMG-side integrators** — FMG is
+Azgaar's Fantasy Map Generator — who consume settlemaker's output, and
+**community artists** who want to draw a new visual
 style for a settlement without touching generator code. If you only care about
 the GeoJSON layer, see `docs/schema-v3.md` instead — this document covers the
 newer `Scene` object and the SVG it renders to.
@@ -123,11 +124,11 @@ const scene = buildScene(model); // buildScene(model, { shift, padding })
 const svg = assembleSvg(scene);  // string, ready to write to a file
 ```
 
-`buildScene` is a **pure extraction** — the spec's hard rule is that
-`assembleSvg` (and any future renderer) never sees the `Model`, only the
-`Scene`. If you're writing an alternative renderer (e.g. a canvas or WebGL
-backend, or a GeoJSON exporter unified onto this vocabulary later), build it
-against `Scene`, not `Model`.
+`buildScene` is a **pure extraction**: `assembleSvg` (and any future
+renderer) is required to consume only the `Scene`, never the `Model`. If
+you're writing an alternative renderer (e.g. a canvas or WebGL backend, or a
+GeoJSON exporter unified onto this vocabulary later), build it against
+`Scene`, not `Model`.
 
 ### Layer semantics, briefly
 
@@ -148,8 +149,9 @@ against `Scene`, not `Model`.
   want a road network graph must derive it themselves; the `Scene` only
   carries polylines.
 - `buildings` — every drawable structure, ordinary and landmark alike, in one
-  flat array. `kind` is the ward-type string (e.g. `"Craftsmen"`, `"Market"`,
-  `"Castle"`) and is what group/style code switches on. `landmark: true`
+  flat array. `kind` is the ward-type string — the lowercase `WardType` enum
+  value (e.g. `"craftsmen"`, `"market"`, `"castle"`; see the full list in §3)
+  — verbatim, and is what group/style code switches on. `landmark: true`
   marks castles, cathedrals, and markets, which render in a separate pass
   with heavier strokes (see §2).
 - `piers` — harbour pier footprints, drawn in the same visual pass as
@@ -205,13 +207,24 @@ everything).
 | `#water`     | one filled path + one shore-outline path     | `.fill`, `.shore`     |
 | `#roads`     | one casing pass, one core pass, per road     | `.casing`, `.core`    |
 | `#shadows`   | offset building silhouettes                  | (none — group-level fill/opacity) |
-| `#buildings` | ordinary (non-landmark) buildings + piers    | `.<wardType>` (e.g. `.Craftsmen`), `.pier` |
-| `#landmarks` | castles/cathedrals/markets                   | `.<wardType>` (`.castle`, `.cathedral`, `.market` styling hooks in CSS; the element's own class is the raw ward-type string) |
+| `#buildings` | ordinary (non-landmark) buildings + piers    | `.<wardType>` (e.g. `.craftsmen`), `.pier` |
+| `#landmarks` | castles/cathedrals/markets                   | `.<wardType>` (`.castle`, `.cathedral`, `.market`) |
 | `#walls`     | wall polylines, towers, gate bars            | `.gate` on gate `<line>`s |
 
 `#water` and `#greens` only appear when their layer has content (e.g. no
 `#water` group at all for a landlocked settlement). `#buildings` is emitted
 if there are ordinary buildings *or* piers — the group can hold both.
+
+The `.<wardType>` class on every building/landmark path is the element's
+`kind` value written verbatim — the **lowercase** `WardType` enum value, not
+the TypeScript enum member name. The full enum (`src/types/interfaces.ts`):
+`craftsmen`, `merchant`, `cathedral`, `slum`, `patriciate`, `administration`,
+`military`, `gate`, `market`, `castle`, `park`, `farm`, `harbour`, `empty`,
+`water` — though `park` wards never reach `#buildings` (their geometry goes
+to `greens` instead, see §1) and `water`/`empty` patches carry no ward at
+all. A CSS rule targeting craftsmen buildings must select on `craftsmen`
+lowercase — the TypeScript enum member name (`Craftsmen`, capitalized) is
+never what ends up in the markup.
 
 ### Style-block ownership
 
