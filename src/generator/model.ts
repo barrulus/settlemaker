@@ -214,10 +214,22 @@ export class Model {
   /**
    * Cheap alternative to `generate()` for callers that only need
    * `border.getRadius()` (phases 1-3 fully determine it; streets, wards, and
-   * geometry never affect it). Mirrors `generate()`'s retry/degrade ladder
-   * exactly so the returned radius matches what a full `generate()` would
-   * produce on the same params. Only throws when every fallback (walls, then
-   * citadel) has been exhausted.
+   * geometry never affect it). Mirrors `generate()`'s retry/degrade ladder,
+   * but only over phases 1-3 (buildPatches/optimizeJunctions/buildWalls) —
+   * it never runs phases 4-6 (buildStreets/createWards/buildGeometry), so it
+   * cannot see a phase 4-6 failure (e.g. "Unable to build a street!") that
+   * would make a full `generate()` retry past this probe's first successful
+   * mesh. When phases 4-6 don't retry, the radius matches a full
+   * `generate()` exactly. When they do, `generate()`'s pass 2 lands on a
+   * different mesh than this probe saw, and the radius can differ — measured
+   * 12/60 mismatches across pops 350/4200/20000 x seeds 1-20, up to ~5.7%
+   * divergence (see fidelity-round4.test.ts). The consequence is bounded:
+   * this radius feeds only `computeOriginShift`, so a mismatch means a
+   * slightly mis-sized coast pull (and, near `MAX_SHIFT_MULTIPLIER`, a
+   * possible coast_pull/coast_too_far flip) — both the SVG and GeoJSON
+   * outputs consume the same shift, so a given run's output stays
+   * self-consistent and deterministic regardless. Only throws when every
+   * fallback (walls, then citadel) has been exhausted.
    */
   probeWallRadius(): number {
     if (this.tryProbe()) return this.border!.getRadius();
@@ -406,8 +418,7 @@ export class Model {
     this.border = new CurtainWall(this.wallsNeeded, this, this.inner, reserved, this.rng, this.params.roadEntryPoints);
 
     // `findCircumference` can — rarely, and pre-existing (confirmed present
-    // even at the historical n≤60 scale, just more likely to surface at
-    // round-4's larger footprints) — terminate on a wrong boundary that
+    // even at the historical n≤60 scale) — terminate on a wrong boundary that
     // still passes its own walk-termination guard, encoding a polygon that
     // doesn't actually contain the requested inner patches. Enclosure is the
     // cheapest reliable tell: a correct circumference must contain nearly
@@ -418,6 +429,11 @@ export class Model {
     // the non-integer `*0.9` cutoff already demands 100% enclosure (e.g. for
     // inner.length=9, 0.9*9=8.1, so enclosed=8 still throws) — no separate
     // small-n case needed.
+    //
+    // Measured (round-4 final review): 12 throws across 160 village runs
+    // (pops 200/400/700/1000 x seeds 1-40) vs 0 across 30 city runs (pops
+    // 5000/20000/70000 x seeds 1-10) — this fires at village scale, in fact
+    // only there in the sampled sweep, not preferentially at large footprints.
     const enclosed = this.inner.filter(
       p => pointInPolygon(p.shape.center, this.border!.shape.vertices),
     ).length;
@@ -898,17 +914,24 @@ export class Model {
   /**
    * One adaptive pass toward the household target: patch geometry cannot
    * know in advance how many buildings subdivision will yield, so if the
-   * first build lands under 65% of target, shrink CommonWard block size
-   * (minSqScale ≈ count/target ⇒ new count ≈ target) and rebuild ordinary
-   * wards once. Deterministic — extra rng draws, fixed sequence per seed.
-   * Runs before the drowning filter (target is approximate on coasts).
+   * first build lands under 65% of target, shrink CommonWard block size and
+   * rebuild ordinary wards once. `minSqScale` is the minimum-square-area
+   * scale fed to `CommonWard`'s subdivision, RELATIVE to `baseMinSqScale`
+   * (not an absolute scale) — a LARGER `minSqScale` means bigger minimum
+   * blocks, i.e. FEWER, larger buildings; a SMALLER one means more, smaller
+   * buildings. Here `count < target` means too few buildings were produced,
+   * so we scale `baseMinSqScale` down by `count/target` (floored at 0.25 of
+   * baseMinSqScale, so this pass never shrinks block size by more than 4x)
+   * to pack more buildings in. Deterministic — extra rng draws, fixed
+   * sequence per seed. Runs before the drowning filter (target is
+   * approximate on coasts).
    */
   private refineDensity(): void {
     const target = buildingBudget(this.params.population, this.params.urbanDensity);
     const count = this.countOrdinaryBuildings();
     if (count === 0 || count >= target * 0.65) return;
 
-    this.minSqScale = Math.max(0.2, this.baseMinSqScale * Math.max(0.25, count / target));
+    this.minSqScale = this.baseMinSqScale * Math.max(0.25, count / target);
     for (const patch of this.patches) {
       if (patch.ward instanceof CommonWard && !this.waterbody.includes(patch)) {
         patch.ward.createGeometry();

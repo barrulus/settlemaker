@@ -15,12 +15,38 @@ function sha256(s: string): string {
 }
 
 describe('fidelity round 4: probe path', () => {
-  it('probeWallRadius equals the radius of a full first-attempt generation', () => {
+  it('probeWallRadius matches a full generation when phases 4-6 do not retry', () => {
     const params = mapToGenerationParams(aldford(1400), 9);
     const probe = new Model({ ...params, coastlineGeometry: undefined, harbourSize: undefined });
     const r1 = probe.probeWallRadius();
     const full = new Model({ ...params, coastlineGeometry: undefined, harbourSize: undefined }).generate();
     expect(r1).toBeCloseTo(full.border!.getRadius(), 6);
+  });
+
+  it('probeWallRadius can diverge from a full generation when phases 4-6 retry', () => {
+    // Reviewer-measured divergent case (final review, round 4): pop 350,
+    // seed 17. A full sweep of pops {350, 4200, 20000} x seeds 1-20 found
+    // 12/60 mismatches, up to ~5.7% divergence, all caused by phase 4-6
+    // retries ("Unable to build a street!") that probeWallRadius's
+    // phases-1-3-only path never sees — pass 2 of a full generate() lands on
+    // a different mesh than the probe saw. This is expected, not a bug: see
+    // probeWallRadius's doc comment for the bounded consequence (it only
+    // feeds computeOriginShift's coast-pull sizing).
+    const params = mapToGenerationParams(aldford(350), 17);
+    const probe = new Model({ ...params, coastlineGeometry: undefined, harbourSize: undefined });
+    const probeRadius = probe.probeWallRadius();
+    const full = new Model({ ...params, coastlineGeometry: undefined, harbourSize: undefined }).generate();
+    const fullRadius = full.border!.getRadius();
+
+    expect(Number.isFinite(probeRadius)).toBe(true);
+    expect(Number.isFinite(fullRadius)).toBe(true);
+    expect(probeRadius).toBeGreaterThan(0);
+    expect(fullRadius).toBeGreaterThan(0);
+    // Not equal within 0.5 units — i.e. the divergence is real and not noise.
+    expect(Math.abs(probeRadius - fullRadius)).toBeGreaterThan(0.5);
+    // Pin the measured values (reproduced locally: probe ~41.414, full ~43.774).
+    expect(probeRadius).toBeCloseTo(41.4142465525551, 3);
+    expect(fullRadius).toBeCloseTo(43.77363024960438, 3);
   });
 
   it('generateFromBurg output is unchanged for an inland burg (probe swap is invisible)', () => {
@@ -35,6 +61,26 @@ describe('fidelity round 4: probe path', () => {
     const { svg } = generateFromBurg(aldford(1400), { seed: 9 });
     expect(svg.length).toBeGreaterThan(1000);
     expect(sha256(svg)).toBe('b51568a1a1175674962c22f01e33e021cf5caf19c30e93d93545d574a87a15f7');
+  });
+
+  it('pins current village output at pop 800 (not a base-equality guarantee)', () => {
+    // Final review: the earlier claim that pop ≤ 1000 output is
+    // unconditionally "byte-stable" was false. `buildWalls`'s enclosure
+    // check (added earlier in this task) legitimately changes output for
+    // village seeds that were silently producing corrupt wall polygons
+    // before it existed — measured 12/160 (~7.5%) of sampled village seeds
+    // (pops 200/400/700/1000 x seeds 1-40) change under the check. That's
+    // desirable (silently-corrupt walls fixed, not a regression), and any
+    // resulting change to already-deployed output is a cache-invalidation
+    // concern covered by 0.9.0, not a correctness regression here.
+    // This test pins CURRENT behavior at pop 800, seed 1 (a seed that does
+    // NOT throw the enclosure check) purely as a stability canary going
+    // forward — it is not a claim that this hash equals some pre-fix
+    // baseline, and a legitimate future change is expected to require
+    // re-pinning, same as the pop-1400 hash above.
+    const { svg } = generateFromBurg(aldford(800), { seed: 1 });
+    expect(svg.length).toBeGreaterThan(1000);
+    expect(sha256(svg)).toBe('23d5f0e0aa4eeeb45dc32b1bdcf829f50c9639cf4cd15fcd267ac0cde3fa3eb1');
   });
 });
 

@@ -88,6 +88,11 @@ grow with population instead of flattening out at a fixed patch count.
 Expected patch counts at seed 9: 20k → 56, 30k → 84, 70k → 195,
 200k → 220 (the cap — see known issues below).
 
+Caution: the 200,000-population URL is expensive — measured 2923ms
+generation, a 3832 KB SVG, and a 5739 KB GeoJSON — and generation is
+synchronous on the main thread, so the page blocks (no spinner) while it
+runs. Expect a multi-second freeze before it renders.
+
 | pop | URL |
 |---|---|
 | 20,000 | ${BASE}/?name=Aldford&pop=20000&seed=9&walls=1&plaza=1&temple=1&theme=ink |
