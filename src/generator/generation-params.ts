@@ -38,6 +38,40 @@ export function perPatchDensity(population: number): number {
   return Math.min(30, 9 + 21 * Math.log10(population / 1000) / Math.log10(20));
 }
 
+/**
+ * `Model`'s CommonWard block-size scale (`baseMinSqScale`) for a given
+ * `perPatchDensity` target. Round-4 fix round 2: `createAlleys`'s yield is
+ * far from linear in `minSq`, so the original `9 / targetPerPatch` inverse
+ * badly under-shot at city scale (target 30 -> scale 0.3), leaving the
+ * *natural* pre-trim yield miles above the target (measured: ~90-250
+ * buildings/patch at scale 0.3 against a target of 30). `applyBuildingBudget`
+ * then had to trim 60-90% of each patch's buildings via its keep-nearest-
+ * patch-centre policy, which sculpts a small cluster at each patch's centre
+ * with a bare stripped rim instead of contiguous urban fabric.
+ *
+ * Anchored and log-interpolated exactly like `perPatchDensity` itself:
+ * - (9, 1.0): villages, unchanged -- hard-pinned, not re-fitted, because
+ *   pop <= 1000 output must stay byte-stable (existing pinned-hash tests).
+ * - (30, 9.0): the largest scale, measured against a fixed Aldford (seed 9,
+ *   walled) fixture at BOTH pop 20000 and pop 70000 (`calibrate-yield.ts`),
+ *   that keeps pre-trim yield within a <12%-trim margin of target at both
+ *   populations simultaneously -- their patches differ in average area by
+ *   ~2.9x (bigger cities get bigger patches, not just more of them), so a
+ *   single scale can't perfectly match both, but 9.0 keeps trim at 0% (pop
+ *   20000) and 3.3% (pop 70000), both comfortably under the 12% ceiling,
+ *   with post-trim density landing at 0.76x/0.94x target respectively (both
+ *   inside the accepted [0.7, 1.2]x band). See task-2-report.md's
+ *   "Fix round 2" section for the full measured curve.
+ *
+ * Values outside [9, 30] clamp to the anchors -- `perPatchDensity` never
+ * actually leaves that range, so this is a safety net, not a live branch.
+ */
+export function baseScaleForYield(targetPerPatch: number): number {
+  if (targetPerPatch <= 9) return 1.0;
+  if (targetPerPatch >= 30) return 9.0;
+  return 1.0 + 8.0 * Math.log10(targetPerPatch / 9) / Math.log10(30 / 9);
+}
+
 export interface GenerationParams {
   /** Number of Voronoi patches for the inner city */
   nPatches: number;
@@ -86,6 +120,17 @@ export interface GenerationParams {
   urbanDensity?: number;
   /** Azgaar biome name; flows to the scene for asset-set/palette defaults. */
   biome?: string;
+  /**
+   * Internal calibration hook (round-4 Task 2, fix round 2): forces
+   * `Model.baseMinSqScale` to this value instead of deriving it from
+   * `perPatchDensity(population)`. Not part of the public Azgaar input
+   * surface — `mapToGenerationParams` never sets it. Exists so calibration
+   * scripts (see `calibrate-yield.ts`) can sweep texture scale against a
+   * fixed population/seed to measure the pre-trim yield curve that
+   * `baseScaleForYield` was fitted from, without needing a second code path.
+   * Do not wire this to any external input.
+   */
+  textureScaleOverride?: number;
 }
 
 /**

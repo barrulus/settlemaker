@@ -57,10 +57,25 @@ describe('fidelity round 2: wall gap', () => {
     expect(wallR - maxR).toBeLessThan(wallR * 0.25);
   });
 
-  it('budget cap still binds exactly', () => {
+  it('budget cap is respected; natural yield stays a meaningful fraction of it', () => {
+    // Round-4 fix round 2 changed WHY this holds. Before: baseMinSqScale
+    // badly over-generated at city/town texture, so applyBuildingBudget's
+    // trim pushed count right up against the cap (>90% of it) every time --
+    // "binds exactly" described the trim doing the work. After: baseMinSqScale
+    // is fitted so natural per-patch yield already lands near
+    // perPatchDensity(pop)'s target, so the trim barely engages (measured:
+    // 0% trimmed here) and `count` reflects natural yield directly, not a
+    // budget-chasing trim. At this fixture (Salt Harbour, pop 4200, seed 7)
+    // that's 338 vs a budget of 487 (~69%, target-driven: 23 walled
+    // CommonWard patches x perPatchDensity(4200)=19.06/patch ~= 438, itself
+    // ~90% of budget by the patch-count formula's own approximation, times
+    // this population's actual yield-vs-target fit). The cap must still
+    // never be exceeded; the floor is loosened to guard against an actual
+    // collapse (createAlleys/budget logic breaking) rather than insist on
+    // the old trim-driven convergence to ~90-100% of budget.
     const { count } = ordinaryStats(model);
     expect(count).toBeLessThanOrEqual(buildingBudget(4200));
-    expect(count).toBeGreaterThan(buildingBudget(4200) * 0.9); // trim, not collapse
+    expect(count).toBeGreaterThan(buildingBudget(4200) * 0.5);
   });
 
   it('no walled CommonWard patch is stripped bare by the trim', () => {

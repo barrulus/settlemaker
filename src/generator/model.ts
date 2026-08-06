@@ -11,7 +11,7 @@ import { CurtainWall } from './curtain-wall.js';
 import { Topology } from './topology.js';
 import { pointInPolygon } from '../geom/point-in-polygon.js';
 import type { GenerationParams, DegradedFlag } from './generation-params.js';
-import { densityCurve, perPatchDensity } from './generation-params.js';
+import { densityCurve, perPatchDensity, baseScaleForYield } from './generation-params.js';
 import { WardType } from '../types/interfaces.js';
 import type { Street } from '../types/interfaces.js';
 
@@ -136,18 +136,33 @@ export class Model {
    * Multiplier applied to CommonWard minSq during geometry builds. Set by
    * refineDensity's second pass to shrink block size when the first build
    * lands far below the household target; restored to `baseMinSqScale`
-   * otherwise (village-airy 1.0 down to city-packed 0.3, from
-   * `perPatchDensity`).
+   * otherwise (village-unchanged 1.0 up to city-packed 9.0, from
+   * `baseScaleForYield(perPatchDensity(population))` -- see that function's
+   * doc comment for why bigger cities need a LARGER minSq scale, not
+   * smaller, to hit their per-patch building target).
    */
   minSqScale: number;
 
   /**
    * Base texture scale for this settlement's population, derived once in
-   * the constructor from `perPatchDensity`: 9/9 = 1.0 for villages down to
-   * 9/30 = 0.3 for the densest cities. `minSqScale` always returns to this
-   * value outside of `refineDensity`'s corrective pass.
+   * the constructor from `baseScaleForYield(perPatchDensity(population))`:
+   * 1.0 for villages (unchanged, byte-stable) up to 9.0 for the densest
+   * cities (fitted from calibration so natural yield lands near the target
+   * instead of miles above it — see `baseScaleForYield`'s doc comment).
+   * `minSqScale` always returns to this value outside of `refineDensity`'s
+   * corrective pass.
    */
   private readonly baseMinSqScale: number;
+
+  /**
+   * Ordinary-building count immediately before `applyBuildingBudget`'s trim
+   * (after `refineDensity` and the drowning filter, so it reflects the
+   * actual natural yield of this generation, not a theoretical estimate).
+   * Internal/cheap — set once per `buildGeometry()` call — kept public so
+   * calibration scripts and tests can read the pre-trim/post-trim ratio
+   * without a second code path. 0 before geometry has been built.
+   */
+  pretrimOrdinaryCount = 0;
 
   arteries: Street[] = [];
   streets: Street[] = [];
@@ -160,7 +175,7 @@ export class Model {
     this.plazaNeeded = params.plazaNeeded;
     this.citadelNeeded = params.citadelNeeded;
     this.wallsNeeded = params.wallsNeeded;
-    this.baseMinSqScale = 9 / perPatchDensity(params.population);
+    this.baseMinSqScale = params.textureScaleOverride ?? baseScaleForYield(perPatchDensity(params.population));
     this.minSqScale = this.baseMinSqScale;
 
     if (this.wallsNeeded && params.population < MIN_POPULATION_FOR_WALLS) {
@@ -266,6 +281,7 @@ export class Model {
     this.topology = null;
     this.syntheticCoast = null;
     this.minSqScale = this.baseMinSqScale;
+    this.pretrimOrdinaryCount = 0;
   }
 
   private build(): void {
@@ -865,6 +881,7 @@ export class Model {
     }
     this.refineDensity();
     this.removeDrownedGeometry();
+    this.pretrimOrdinaryCount = this.countOrdinaryBuildings();
     this.applyBuildingBudget();
   }
 

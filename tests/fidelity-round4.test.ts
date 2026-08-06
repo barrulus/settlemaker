@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createHash } from 'node:crypto';
-import { generateFromBurg, mapToGenerationParams, Model, type AzgaarBurgInput } from '../src/index.js';
+import { generateFromBurg, mapToGenerationParams, Model, WardType, type AzgaarBurgInput } from '../src/index.js';
 import { perPatchDensity, densityCurve } from '../src/generator/generation-params.js';
 import { MAX_PATCHES } from '../src/input/azgaar-input.js';
 import { CommonWard } from '../src/wards/common-ward.js';
@@ -28,10 +28,13 @@ describe('fidelity round 4: probe path', () => {
     // Re-pinned in Task 2 because pop 1400 > 1000, so perPatchDensity's
     // curve legitimately changes this burg's footprint/texture (only
     // pop ≤ 1000 is required to stay byte-stable — see
-    // fidelity-round4.test.ts's "village stability" test below).
+    // fidelity-round4.test.ts's "village stability" test below). Re-pinned
+    // again in fix round 2: baseScaleForYield(perPatchDensity(1400)) != the
+    // old naive 9/perPatchDensity(1400), so this pop-1400 burg's texture
+    // legitimately changed again for the same reason (still > 1000).
     const { svg } = generateFromBurg(aldford(1400), { seed: 9 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('40267d6dc9374db7349144dc60732be4b605775e853c8107e0908546ba0e99d1');
+    expect(sha256(svg)).toBe('b51568a1a1175674962c22f01e33e021cf5caf19c30e93d93545d574a87a15f7');
   });
 });
 
@@ -92,4 +95,45 @@ describe('fidelity round 4: footprint and texture scale with population', () => 
     const village = densityOf(800);
     expect(village).toBeLessThanOrEqual(9 * 1.3);
   });
+
+  it('fix round 2: yield-matched texture barely trims and lands near the per-patch target', () => {
+    // The original defect this test guards against: baseMinSqScale badly
+    // over-generated at city texture (naive 9/perPatchDensity(pop)), so
+    // applyBuildingBudget's keep-nearest-patch-centre trim had to strip
+    // 60-90% of each patch's buildings, sculpting a small cluster at each
+    // patch's centre with a bare rim instead of contiguous urban fabric.
+    // baseScaleForYield (fitted from calibrate-yield.ts's measured curve)
+    // fixes this at the source: natural yield should already land near
+    // target, so the trim barely engages.
+    const BUDGET_EXEMPT = new Set([
+      WardType.Castle, WardType.Cathedral, WardType.Market, WardType.Harbour, WardType.Park,
+    ]);
+    const totalOrdinary = (model: Model): number => {
+      let n = 0;
+      for (const patch of model.patches) {
+        if (!patch.ward || BUDGET_EXEMPT.has(patch.ward.type)) continue;
+        n += patch.ward.geometry.length;
+      }
+      return n;
+    };
+    for (const population of [20000, 70000]) {
+      const { model } = generateFromBurg(aldford(population), { seed: 9 });
+      const preTrim = model.pretrimOrdinaryCount;
+      const postTrim = totalOrdinary(model);
+      expect(preTrim).toBeGreaterThan(0);
+      const trimmedFrac = (preTrim - postTrim) / preTrim;
+      expect(trimmedFrac).toBeLessThan(0.12);
+
+      let wards = 0, buildings = 0;
+      for (const patch of model.patches) {
+        if (!(patch.ward instanceof CommonWard) || !patch.withinWalls) continue;
+        wards++;
+        buildings += patch.ward.geometry.length;
+      }
+      const density = buildings / wards;
+      const target = perPatchDensity(population);
+      expect(density).toBeGreaterThanOrEqual(target * 0.7);
+      expect(density).toBeLessThanOrEqual(target * 1.2);
+    }
+  }, 20000);
 });
