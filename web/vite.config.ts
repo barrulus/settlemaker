@@ -1,4 +1,3 @@
-import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -11,9 +10,12 @@ export default defineConfig({
       input: {
         // "/" is the human builder; "/fmg" is the bare renderer — the URL
         // contract endpoint (docs/url-api.md). A Netlify rewrite maps the
-        // extensionless /fmg path onto fmg.html.
-        index: resolve(__dirname, 'index.html'),
-        fmg: resolve(__dirname, 'fmg.html'),
+        // extensionless /fmg path onto fmg.html. Relative paths resolve
+        // against the Vite root; no node:path/__dirname — this tsconfig has
+        // no Node types (the web build must not depend on the parent repo's
+        // node_modules, which is exactly what masked this locally).
+        index: 'index.html',
+        fmg: 'fmg.html',
       },
     },
   },
