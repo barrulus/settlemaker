@@ -10,3 +10,11 @@
 
 [build.environment]
   NODE_VERSION = "22"
+
+# "/fmg" is the machine endpoint (the URL contract in docs/url-api.md);
+# query parameters pass through 200 rewrites untouched. "/" serves the
+# human builder page.
+[[redirects]]
+  from = "/fmg"
+  to = "/fmg.html"
+  status = 200

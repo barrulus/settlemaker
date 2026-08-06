@@ -17,7 +17,7 @@ JavaScript SDK to install. AFMG (or any host page) owns all surrounding UI
 and drop it into an iframe `src`.
 
 Throughout this document, the renderer's base URL is written as
-`https://<site>.netlify.app/` — substitute the actual deployed origin.
+`https://<site>.netlify.app/fmg` — substitute the actual deployed origin. (The bare site root `/` serves a human-facing builder page; the machine endpoint that renders from URL parameters is `/fmg`.)
 
 ## 2. Quick start
 
@@ -25,14 +25,14 @@ Throughout this document, the renderer's base URL is written as
 seeded from the page load, so it demos something on first visit:
 
 ```
-https://<site>.netlify.app/
+https://<site>.netlify.app/fmg
 ```
 
 **Flat tier** — human-typable query params, useful for manual testing and
 simple links:
 
 ```
-https://<site>.netlify.app/?name=Salt+Harbour&pop=4200&seed=7&port=1&walls=1&oceanBearing=135&harbourSize=large
+https://<site>.netlify.app/fmg?name=Salt+Harbour&pop=4200&seed=7&port=1&walls=1&oceanBearing=135&harbourSize=large
 ```
 
 **Real integrations use `i=`.** The flat tier only covers a handful of
@@ -188,7 +188,7 @@ async function settlemakerUrl(base, burg, seed) {
 Usage:
 
 ```js
-const url = await settlemakerUrl('https://<site>.netlify.app/', {
+const url = await settlemakerUrl('https://<site>.netlify.app/fmg', {
   name: 'Toprak',
   population: 13,
   port: true,

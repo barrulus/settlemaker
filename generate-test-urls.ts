@@ -9,6 +9,8 @@ import { writeFileSync } from 'node:fs';
 import { encodeBurgParam, type AzgaarBurgInput } from './src/index.js';
 
 const BASE = 'https://settlemaker.netlify.app';
+/** The machine endpoint; the bare site root serves the human builder. */
+const IMG = `${BASE}/fmg`;
 
 /** Organic meandering shoreline, same shape as the compare-versions harness. */
 function organicCoast(bearingDeg: number, shoreDist: number, seed: number): Array<{ x: number; y: number }> {
@@ -58,24 +60,26 @@ Manual verification links for the deployed renderer. Regenerate with
 \`npx tsx generate-test-urls.ts\` after codec or generator changes — the
 \`i=\` payloads below are version-bound (\`v: 1\`).
 
-Base: ${BASE}
+Builder (human landing page): ${BASE}/
+Image endpoint (URL contract): ${IMG}
 
 ## Page behavior
 
 | Check | URL | Expect |
 |---|---|---|
-| Random demo | ${BASE}/ | A different settlement per reload, filling the viewport |
-| Broken payload | ${BASE}/?i=garbage | Parchment error card, reason \`base64\`/\`inflate\` — never a blank page |
-| Unknown theme | ${BASE}/?name=X&pop=100&theme=nope | Error card listing the known theme presets |
+| Builder page | ${BASE}/ | Human landing page: form, live preview, copyable image links |
+| Random demo | ${IMG} | A different settlement per reload, filling the viewport |
+| Broken payload | ${IMG}?i=garbage | Parchment error card, reason \`base64\`/\`inflate\` — never a blank page |
+| Unknown theme | ${IMG}?name=X&pop=100&theme=nope | Error card listing the known theme presets |
 
 ## Flat parameter tier
 
 | Check | URL |
 |---|---|
-| Coastal village, bearing-only water (organic synthetic shore) | ${BASE}/?name=Saltmere&pop=350&seed=3&port=1&plaza=1&oceanBearing=180&harbourSize=small |
-| Walled town, classic theme | ${BASE}/?name=Aldford&pop=1400&seed=9&walls=1&plaza=1&temple=1&theme=classic |
-| Same town, night theme | ${BASE}/?name=Aldford&pop=1400&seed=9&walls=1&plaza=1&temple=1&theme=night |
-| Same town, ink theme | ${BASE}/?name=Aldford&pop=1400&seed=9&walls=1&plaza=1&temple=1&theme=ink |
+| Coastal village, bearing-only water (organic synthetic shore) | ${IMG}?name=Saltmere&pop=350&seed=3&port=1&plaza=1&oceanBearing=180&harbourSize=small |
+| Walled town, classic theme | ${IMG}?name=Aldford&pop=1400&seed=9&walls=1&plaza=1&temple=1&theme=classic |
+| Same town, night theme | ${IMG}?name=Aldford&pop=1400&seed=9&walls=1&plaza=1&temple=1&theme=night |
+| Same town, ink theme | ${IMG}?name=Aldford&pop=1400&seed=9&walls=1&plaza=1&temple=1&theme=ink |
 
 Same name + seed across the theme variants must produce the identical
 layout — only colors change.
@@ -95,27 +99,27 @@ runs. Expect a multi-second freeze before it renders.
 
 | pop | URL |
 |---|---|
-| 20,000 | ${BASE}/?name=Aldford&pop=20000&seed=9&walls=1&plaza=1&temple=1&theme=ink |
-| 30,000 | ${BASE}/?name=Aldford&pop=30000&seed=9&walls=1&plaza=1&temple=1&theme=ink |
-| 70,000 | ${BASE}/?name=Aldford&pop=70000&seed=9&walls=1&plaza=1&temple=1&theme=ink |
-| 200,000 | ${BASE}/?name=Aldford&pop=200000&seed=9&walls=1&plaza=1&temple=1&theme=ink |
+| 20,000 | ${IMG}?name=Aldford&pop=20000&seed=9&walls=1&plaza=1&temple=1&theme=ink |
+| 30,000 | ${IMG}?name=Aldford&pop=30000&seed=9&walls=1&plaza=1&temple=1&theme=ink |
+| 70,000 | ${IMG}?name=Aldford&pop=70000&seed=9&walls=1&plaza=1&temple=1&theme=ink |
+| 200,000 | ${IMG}?name=Aldford&pop=200000&seed=9&walls=1&plaza=1&temple=1&theme=ink |
 
 ## Compressed \`i=\` payloads (the FMG channel)
 
 **Grimhaven** — walled port on an organic vector coastline, 3 routes,
 large harbour. The showcase link.
 
-    ${BASE}/?i=${gri}
+    ${IMG}?i=${gri}
 
 **Highbury** — inland walled capital with citadel, 4 roads at the
 cardinal diagonals.
 
-    ${BASE}/?i=${hig}
+    ${IMG}?i=${hig}
 
 **Fenwick** — routeless hamlet (\`roadBearings: []\`): must render ZERO
 external roads.
 
-    ${BASE}/?i=${fen}
+    ${IMG}?i=${fen}
 
 ## Known issues to NOT report twice (fidelity round 2-4 backlog)
 
