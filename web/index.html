@@ -5,6 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>settlemaker — builder</title>
     <link rel="stylesheet" href="/src/builder.css" />
+    <!-- Self-hosted Umami (rucio). stats.barrulus.com publicly proxies only
+         /script.js and /api/send; the dashboard stays on the tailnet. Cookieless,
+         so no consent banner. data-domains keeps `npm run dev` on localhost and
+         Netlify deploy-preview URLs out of the stats — but it FAILS SILENTLY:
+         any hostname not listed here is simply not tracked, with no error. Add
+         every domain the site is ever served from. Deliberately NOT on
+         /fmg.html — that endpoint is embedded by third parties and by this
+         page's own preview iframe, which would swamp the visitor count. -->
+    <script
+      defer
+      src="https://stats.barrulus.com/script.js"
+      data-website-id="162c6727-fc89-4425-9962-7ad4d65e71ba"
+      data-domains="settlemaker.com,www.settlemaker.com,settlemaker.netlify.app"
+    ></script>
   </head>
   <body>
     <main class="builder">
@@ -18,12 +32,16 @@
           </label>
 
           <label>Population
-            <input type="number" id="pop" value="1400" min="10" max="200000" step="10" />
+            <input type="number" id="pop" value="1400" min="10" max="200000" step="1" />
           </label>
           <p class="hint warn hidden" id="pop-warn">Populations above ~50k take several seconds to generate and produce multi-MB images.</p>
 
           <label>Seed <span class="hint">(blank = derived from name)</span>
-            <input type="number" id="seed" placeholder="e.g. 9" />
+            <span class="row">
+              <input type="number" id="seed" min="0" step="1" placeholder="e.g. 9" />
+              <button type="button" id="reseed" title="Random seed" aria-label="Random seed">🎲</button>
+              <button type="button" id="clear-seed" title="Clear seed" aria-label="Clear seed">✕</button>
+            </span>
           </label>
 
           <fieldset>

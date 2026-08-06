@@ -32,6 +32,14 @@ legend { font-size: 0.8rem; font-weight: 700; padding: 0 0.3rem; }
 .check { display: block; margin: 0.3rem 0 0 !important; font-weight: 400 !important; }
 .check input { margin-right: 0.4rem; }
 
+/* Input paired with icon buttons (seed + randomiser). */
+.row { display: flex; gap: 0.35rem; align-items: stretch; }
+.row input { flex: 1 1 auto; min-width: 0; }
+.row button {
+  flex: 0 0 auto; margin-top: 0.25rem; padding: 0.4rem 0.55rem;
+  font-weight: 400; line-height: 1; background: #fff; color: #4a3324;
+}
+
 details { margin-top: 1rem; }
 summary { cursor: pointer; font-size: 0.85rem; font-weight: 600; }
 
