@@ -1,0 +1,1010 @@
+{
+  "batch": "001",
+  "grid": 64,
+  "markGrid": 32,
+  "strokeWidth": 2,
+  "symbols": {
+    "sm-well": {
+      "cls": "fixed",
+      "footprint": [
+        3.2,
+        3.2
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "stone"
+      ],
+      "zBand": "structure",
+      "tags": [
+        "civic",
+        "water"
+      ],
+      "minScale": 0.35,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-market-cross": {
+      "cls": "fixed",
+      "footprint": [
+        6.5,
+        6.5
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "snap-cardinal",
+      "materials": [
+        "stone"
+      ],
+      "zBand": "structure",
+      "tags": [
+        "civic",
+        "market"
+      ],
+      "minScale": 0.45,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-mill-water": {
+      "cls": "fixed",
+      "footprint": [
+        9.0,
+        7.4
+      ],
+      "anchor": [
+        34,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        -1
+      ],
+      "orientationHint": "wheel-to-water",
+      "materials": [
+        "stone",
+        "roof",
+        "timber"
+      ],
+      "zBand": "structure",
+      "tags": [
+        "industry"
+      ],
+      "requires": {
+        "adjacency": "river|millrace"
+      },
+      "minScale": 0.5,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-mill-wind": {
+      "cls": "fixed",
+      "footprint": [
+        7.0,
+        7.0
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "parts": {
+        "sails": "free"
+      },
+      "materials": [
+        "stone",
+        "timber"
+      ],
+      "zBand": "structure",
+      "tags": [
+        "industry"
+      ],
+      "minScale": 0.5,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-mark-church": {
+      "cls": "mark",
+      "footprint": null,
+      "anchor": [
+        16,
+        16
+      ],
+      "rotation": "locked",
+      "scaleTo": "lot-short-axis*0.55",
+      "materials": [
+        "ink"
+      ],
+      "zBand": "overlay",
+      "tags": [
+        "religion"
+      ],
+      "minScale": 0.6,
+      "viewBox": [
+        0,
+        0,
+        32,
+        32
+      ]
+    },
+    "sm-tree-deciduous": {
+      "cls": "canopy",
+      "footprint": [
+        7.5,
+        7.5
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "variantSeed": true,
+      "materials": [
+        "canopy"
+      ],
+      "zBand": "canopy",
+      "tags": [
+        "vegetation",
+        "deciduous"
+      ],
+      "minScale": 0.3,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-tree-deciduous-round": {
+      "cls": "canopy",
+      "footprint": [
+        7.5,
+        7.5
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "variantSeed": true,
+      "materials": [
+        "canopy"
+      ],
+      "zBand": "canopy",
+      "tags": [
+        "vegetation",
+        "deciduous",
+        "borderless"
+      ],
+      "minScale": 0.3,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-amphitheatre": {
+      "cls": "fixed",
+      "footprint": [
+        22,
+        17
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "stone"
+      ],
+      "zBand": "structure",
+      "tags": [
+        "civic",
+        "leisure"
+      ],
+      "minScale": 0.55,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-bridge": {
+      "cls": "fixed",
+      "footprint": [
+        8,
+        3
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "materials": [
+        "stone"
+      ],
+      "zBand": "route",
+      "tags": [
+        "infrastructure"
+      ],
+      "minScale": 0.4,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-castle": {
+      "cls": "fixed",
+      "footprint": [
+        24,
+        20
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "stone"
+      ],
+      "zBand": "structure",
+      "tags": [
+        "civic",
+        "military"
+      ],
+      "minScale": 0.55,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-cathedral": {
+      "cls": "fixed",
+      "footprint": [
+        14,
+        20
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "stone"
+      ],
+      "zBand": "structure",
+      "tags": [
+        "religion",
+        "civic"
+      ],
+      "minScale": 0.5,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-docks": {
+      "cls": "fixed",
+      "footprint": [
+        10,
+        6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "materials": [
+        "timber"
+      ],
+      "zBand": "route",
+      "tags": [
+        "industry",
+        "water"
+      ],
+      "minScale": 0.45,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-dump": {
+      "cls": "fixed",
+      "footprint": [
+        7,
+        7
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "timber"
+      ],
+      "zBand": "structure",
+      "tags": [
+        "industry",
+        "waste"
+      ],
+      "minScale": 0.35,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-field": {
+      "cls": "pattern",
+      "footprint": null,
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "field"
+      ],
+      "zBand": "parcel",
+      "tags": [
+        "agriculture"
+      ],
+      "minScale": 0.3,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-field-fallow": {
+      "cls": "pattern",
+      "footprint": null,
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "field"
+      ],
+      "zBand": "parcel",
+      "tags": [
+        "agriculture",
+        "fallow"
+      ],
+      "minScale": 0.3,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-field-harvested": {
+      "cls": "pattern",
+      "footprint": null,
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "field"
+      ],
+      "zBand": "parcel",
+      "tags": [
+        "agriculture",
+        "harvested"
+      ],
+      "minScale": 0.3,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-house": {
+      "cls": "fixed",
+      "footprint": [
+        6,
+        6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "stone"
+      ],
+      "zBand": "structure",
+      "tags": [
+        "residential"
+      ],
+      "minScale": 0.4,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-house-tiled": {
+      "cls": "fixed",
+      "footprint": [
+        6,
+        6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "stone",
+        "roof"
+      ],
+      "zBand": "structure",
+      "tags": [
+        "residential"
+      ],
+      "minScale": 0.4,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-house-large-tiled": {
+      "cls": "fixed",
+      "footprint": [
+        8,
+        8
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "stone",
+        "roof"
+      ],
+      "zBand": "structure",
+      "tags": [
+        "residential"
+      ],
+      "minScale": 0.45,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-hut-mud": {
+      "cls": "fixed",
+      "footprint": [
+        4.5,
+        4.5
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "timber"
+      ],
+      "zBand": "structure",
+      "tags": [
+        "residential",
+        "vernacular"
+      ],
+      "minScale": 0.35,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-hut-round": {
+      "cls": "fixed",
+      "footprint": [
+        4.5,
+        4.5
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "timber"
+      ],
+      "zBand": "structure",
+      "tags": [
+        "residential",
+        "vernacular"
+      ],
+      "minScale": 0.35,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-hut-straw": {
+      "cls": "fixed",
+      "footprint": [
+        4.5,
+        4.5
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "timber"
+      ],
+      "zBand": "structure",
+      "tags": [
+        "residential",
+        "vernacular"
+      ],
+      "minScale": 0.35,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-inn": {
+      "cls": "fixed",
+      "footprint": [
+        7,
+        6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "stone",
+        "timber"
+      ],
+      "zBand": "structure",
+      "tags": [
+        "civic",
+        "hospitality"
+      ],
+      "minScale": 0.45,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-longhouse": {
+      "cls": "fixed",
+      "footprint": [
+        10,
+        5
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "timber"
+      ],
+      "zBand": "structure",
+      "tags": [
+        "residential",
+        "vernacular"
+      ],
+      "minScale": 0.4,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-market": {
+      "cls": "fixed",
+      "footprint": [
+        9,
+        7
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "stone",
+        "timber"
+      ],
+      "zBand": "structure",
+      "tags": [
+        "civic",
+        "market"
+      ],
+      "minScale": 0.45,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-mine": {
+      "cls": "fixed",
+      "footprint": [
+        8,
+        8
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "stone",
+        "timber"
+      ],
+      "zBand": "structure",
+      "tags": [
+        "industry"
+      ],
+      "minScale": 0.45,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-orchard": {
+      "cls": "pattern",
+      "footprint": null,
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "canopy"
+      ],
+      "zBand": "parcel",
+      "tags": [
+        "agriculture",
+        "vegetation"
+      ],
+      "minScale": 0.35,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-park": {
+      "cls": "pattern",
+      "footprint": null,
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "canopy"
+      ],
+      "zBand": "parcel",
+      "tags": [
+        "leisure",
+        "vegetation"
+      ],
+      "minScale": 0.35,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-racetrack": {
+      "cls": "fixed",
+      "footprint": [
+        30,
+        18
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "stone"
+      ],
+      "zBand": "route",
+      "tags": [
+        "leisure"
+      ],
+      "minScale": 0.5,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-road-cobbled": {
+      "cls": "pattern",
+      "footprint": null,
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "stone"
+      ],
+      "zBand": "route",
+      "tags": [
+        "infrastructure"
+      ],
+      "minScale": 0.3,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-road-dirt": {
+      "cls": "pattern",
+      "footprint": null,
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "stone"
+      ],
+      "zBand": "route",
+      "tags": [
+        "infrastructure"
+      ],
+      "minScale": 0.3,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-stables": {
+      "cls": "fixed",
+      "footprint": [
+        8,
+        6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "timber"
+      ],
+      "zBand": "structure",
+      "tags": [
+        "agriculture",
+        "industry"
+      ],
+      "minScale": 0.4,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-temple": {
+      "cls": "fixed",
+      "footprint": [
+        10,
+        10
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "stone"
+      ],
+      "zBand": "structure",
+      "tags": [
+        "religion"
+      ],
+      "minScale": 0.45,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-tower": {
+      "cls": "fixed",
+      "footprint": [
+        6,
+        6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "stone"
+      ],
+      "zBand": "structure",
+      "tags": [
+        "military"
+      ],
+      "minScale": 0.4,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-town-hall": {
+      "cls": "fixed",
+      "footprint": [
+        9,
+        7
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "stone"
+      ],
+      "zBand": "structure",
+      "tags": [
+        "civic"
+      ],
+      "minScale": 0.45,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-town-square": {
+      "cls": "pattern",
+      "footprint": null,
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "stone"
+      ],
+      "zBand": "parcel",
+      "tags": [
+        "civic"
+      ],
+      "minScale": 0.35,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-tree-conifer": {
+      "cls": "canopy",
+      "footprint": [
+        6,
+        6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "canopy"
+      ],
+      "zBand": "canopy",
+      "tags": [
+        "vegetation",
+        "conifer"
+      ],
+      "minScale": 0.3,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    },
+    "sm-vineyard": {
+      "cls": "pattern",
+      "footprint": null,
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "materials": [
+        "canopy"
+      ],
+      "zBand": "parcel",
+      "tags": [
+        "agriculture"
+      ],
+      "minScale": 0.35,
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ]
+    }
+  }
+}

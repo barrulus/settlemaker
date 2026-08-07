@@ -1,0 +1,319 @@
+#+TITLE: SettleMaker Symbol Specification
+#+SUBTITLE: Top-down settlement symbology — authoring contract
+#+AUTHOR: Barry Gill
+#+DATE: 2026-08-06
+#+OPTIONS: toc:2 num:t
+#+PROPERTY: header-args :eval never-export
+#+STARTUP: overview
+
+* Scope
+
+This spec governs the SVG symbol library for SettleMaker's settlement-scale
+renderer. It does *not* govern world-scale relief icons (see FMG's
+=#relief-*= sprite) and it does not govern the bulk of the settlement map.
+
+** The generator/asset boundary
+
+The single most important rule in this document:
+
+#+begin_quote
+If the geometry must conform to a lot polygon, a parcel boundary, a road
+centreline or a coastline, it is *generated*. It is not an asset.
+#+end_quote
+
+Generated, never shipped as art:
+
+- building footprints (inset from subdivided lot polygons)
+- ward and parcel boundaries
+- field furrow hatching (pattern fill + per-parcel axis transform)
+- roads, tracks, walls, palisades (tapered stroked paths)
+- coastline offsets, millraces, jetty decking
+- the global ground gradient and vignette
+
+Shipped as assets:
+
+- point features with a real-world footprint that does not deform
+- semantic marks that identify what a generated building *is*
+- vegetation canopies
+
+Attempting to source the first list as an image library is the failure mode
+that makes procedural settlement renderers look like sticker collages. The
+asset library exists to add *semantics* the generator cannot infer, not to
+replace geometry the generator already produces well.
+
+** What the library buys us over MFCG
+
+MFCG discards the burg metadata FMG already holds: temple, citadel, port,
+shipyard, market, culture, religion, dominant trade. Every building comes out
+an anonymous rectangle. The symbol library's purpose is to spend that
+metadata — a settlement where the reader can locate the forge, the granary and
+the tannery is the differentiator, not prettier houses.
+
+* Symbol classes
+
+| Class    | Placement                       | Deforms? | Rotates?          | Example           |
+|----------+---------------------------------+----------+-------------------+-------------------|
+| =fixed=  | at a world point                | no       | per contract      | well, windmill    |
+| =mark=   | at a generated lot's centroid   | no       | locked upright    | church, forge     |
+| =canopy= | scattered by a vegetation pass  | no       | free (invariant)  | tree, coppice     |
+| =pattern= | tiled/stroked along generated geometry | n/a | n/a         | palisade, orchard |
+
+=mark= is the class that does the real work. A =mark= never draws a building —
+the generator has already drawn the footprint from the lot polygon. The mark
+supplies only the identifying glyph, scaled to the lot's short axis and drawn
+upright regardless of how the building is rotated to its street. This is what
+lets a semantic building fit *any* lot shape.
+
+* Canvas conventions
+
+- Coordinate system is SVG-native: origin top-left, +y down, north is −y.
+- =fixed= and =canopy= symbols: =viewBox="0 0 64 64"=.
+- =mark= symbols: =viewBox="0 0 32 32"=.
+- Live area is inset 4 units on all sides (56×56 / 24×24). Nothing but a
+  deliberate overhang (windmill sails, mill wheel) may enter the margin, and
+  such parts must be declared in =parts= in the manifest.
+- Stroke width is =var(--sm-sw, 2)= at 1×. Secondary hatch is
+  =calc(var(--sm-sw) * 0.5)=.
+- =stroke-linejoin="round"=, =stroke-linecap="round"= on the root.
+- No =width=/=height= on symbols destined for the sprite; the renderer scales.
+- Do *not* use =vector-effect="non-scaling-stroke"=. Strokes scale with the
+  map deliberately; the zoom-floor check in §9 governs legibility.
+
+* File structure
+
+A symbol file carries exactly one =<g>= whose =id= matches the filename.
+
+#+begin_src xml
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"
+     fill="none" stroke-width="var(--sm-sw, 2)"
+     stroke-linejoin="round" stroke-linecap="round">
+  <style>/* shared token block, see §6 */</style>
+  <g id="sm-mill-wind">
+    <g class="sm-part" data-part="sails"> ... </g>
+    <circle class="sm-stone" cx="32" cy="32" r="13"/>
+    <path class="sm-hatch" d="..."/>
+    <circle class="sm-void" cx="32" cy="32" r="4.5"/>
+  </g>
+</svg>
+#+end_src
+
+The build step concatenates these into =symbols.svg= as paired =<symbol>=
+elements — =#sm-mill-wind= and =#sm-mill-wind-sil= — mirroring FMG's
+=<use href="#relief-mount-2">= idiom so the sprite drops into the same
+document without ceremony.
+
+* The shadow contract
+
+Watabou's maps read as designed rather than emitted largely because every drop
+shadow falls in the same direction, even though buildings are rotated to their
+streets. Reproducing that is a hard constraint, not a stylistic nicety.
+
+*No symbol may contain shadow, shading, or light-direction geometry.*
+
+Instead, every symbol ships a silhouette twin containing only the opaque
+footprint. The renderer casts shadow by applying the offset *outside* the
+rotation transform:
+
+#+begin_src xml
+<!-- shadow: offset applied at the outer translate -->
+<g transform="translate(x+dx, y+dy)" opacity="0.20" color="#46303c">
+  <g transform="rotate(a) translate(-32,-32)"><use href="#sm-mill-water-sil"/></g>
+</g>
+<!-- body -->
+<g transform="translate(x, y)">
+  <g transform="rotate(a) translate(-32,-32)"><use href="#sm-mill-water"/></g>
+</g>
+#+end_src
+
+The silhouette rotates with the object (it is the object's outline); the offset
+vector does not. One light source, arbitrary rotation. The silhouette doubles
+as the collision/occlusion hull for placement rejection, so it should be a
+simple convex-ish approximation, not a faithful trace.
+
+* Colour and material tokens
+
+All colour flows through CSS custom properties with hard-coded fallbacks, so
+files still preview standalone in a browser or Inkscape.
+
+#+begin_src css
+--sm-ink:        #46303c;   /* every stroke, without exception */
+--sm-stone:      #e8dcc0;   /* masonry fill */
+--sm-timber:     #d9c39a;   /* timber fill */
+--sm-void:       #6b5460;   /* shafts, openings, dark interiors */
+--sm-canopy-1:   #4f7f43;   /* outer foliage */
+--sm-canopy-2:   #74a552;   /* inner foliage */
+--sm-sw:         2;
+#+end_src
+
+Material variants are palette swaps on an ancestor =<g>=, never new geometry:
+
+| Material | =--sm-stone= | =--sm-timber= |
+|----------+--------------+---------------|
+| thatch   | =#d8bd7e=    | =#c9a961=     |
+| tile     | =#c08268=    | =#a9694f=     |
+| slate    | =#8d99a6=    | =#6f7a86=     |
+| lead     | =#9aa3aa=    | =#7d858c=     |
+
+Settlement wealth, region and age select the material; the symbol never knows.
+Seasonal and burnt/ruined states work the same way.
+
+* Rotation contract
+
+Declared per symbol in the manifest:
+
+- =invariant= :: reads correctly at any bearing. Renderer may randomise
+  rotation freely. Well, tree, market cross under 90° snap.
+- =free= :: has a meaningful up-vector; renderer rotates to a semantic target.
+  Watermill (=orientationHint: wheel-to-water=), jetty, gatehouse.
+- =locked= :: always drawn upright in screen space regardless of the parent
+  geometry's rotation. All =mark= symbols.
+- =snap-cardinal= :: rotation restricted to multiples of 90°.
+
+Sub-parts may carry their own contract via =parts=; the windmill's tower is
+=invariant= while its =sails= group is =free=, letting a prevailing-wind pass
+orient sails consistently across a region.
+
+* Draw order
+
+Bands composite bottom-up. A symbol declares one; the renderer never sorts
+within a band by anything but y-coordinate.
+
+| Band        | Contents                                        |
+|-------------+-------------------------------------------------|
+| =ground=    | terrain gradient, water, beach                  |
+| =parcel=    | fields, orchards, yards, commons                |
+| =route=     | roads, tracks, bridges, jetties                 |
+| =structure= | building footprints, fixed symbols, walls       |
+| =canopy=    | trees and vegetation (occludes structures)      |
+| =overlay=   | marks, labels, vignette                         |
+
+=canopy= sitting above =structure= is deliberate — canopies overhanging roofs
+is what stops a settlement looking like it was assembled on a pegboard.
+
+* Manifest schema
+
+=symbols.json=, consumed by the renderer at load. One entry per symbol.
+
+#+begin_src js
+"sm-mill-water": {
+  "cls": "fixed",                  // fixed | mark | canopy | pattern
+  "viewBox": [0, 0, 64, 64],
+  "footprint": [9.0, 7.4],         // METRES, not pixels — drives placement
+  "anchor": [34, 32],              // user units; the point put at the world coord
+  "rotation": "free",
+  "upVector": [0, -1],
+  "orientationHint": "wheel-to-water",
+  "parts": { "wheel": "free" },
+  "materials": ["stone", "roof", "timber"],
+  "zBand": "structure",
+  "tags": ["industry"],
+  "requires": { "adjacency": "river|millrace" },
+  "minScale": 0.5                  // below this the renderer substitutes or drops
+}
+#+end_src
+
+=footprint= in metres is what makes placement rejection work: a windmill
+occupies ~7 m and the scatter pass must know that to refuse overlaps. Pixel
+dimensions are meaningless across FMG's zoom range.
+
+=requires= lets the placement pass filter candidates without hard-coding rules
+in the renderer — a watermill will only be offered sites adjacent to flowing
+water.
+
+* Naming and ID hygiene
+
+FMG is a single enormous SVG document. Every =id= SettleMaker introduces is a
+collision risk against Azgaar's, and a collision manifests as a silently wrong
+=<use>= reference that will be miserable to trace.
+
+- Every =id= and every class carries the =sm-= prefix. No exceptions.
+- Symbol ids are =sm-<category>-<variant>=: =sm-mill-water=, =sm-mill-wind=,
+  =sm-tree-deciduous=. Category first so the sprite sorts usefully.
+- Silhouette twins are =<id>-sil=.
+- Gradients, filters and patterns generated at runtime get
+  =sm-<purpose>-<nanoid>= to survive multiple settlements in one document.
+- =data-part= rather than nested ids for sub-parts, so a symbol can be
+  =<use>=d many times without duplicate-id warnings.
+
+* Generation workflow
+
+Symbols are authored as code against this spec, not generated as images. The
+rotation, anchor, material-slot and silhouette requirements are all structural;
+a raster or vector-diffusion model produces none of them and normalising its
+output costs more than authoring from scratch.
+
+** Prompt template
+
+#+begin_src text
+Author one SVG symbol for a top-down medieval settlement map.
+
+SUBJECT: <subject>
+CLASS:   <fixed|mark|canopy>
+
+Hard constraints:
+- viewBox 0 0 64 64 (32 32 for mark class); live area inset 4 units
+- true plan view, north up, orthographic — no perspective, no isometry
+- NO shadow, NO shading, NO gradient, NO light direction of any kind
+- every stroke: stroke="var(--sm-ink, #46303c)", width var(--sm-sw, 2)
+- fills only via the token classes: sm-stone, sm-timber, sm-void,
+  sm-canopy-a, sm-canopy-b; secondary linework via class sm-hatch
+- root: fill="none" stroke-linejoin="round" stroke-linecap="round"
+- wrap everything in a single <g id="sm-<name>">
+- sub-parts that rotate independently go in
+  <g class="sm-part" data-part="<name>">
+- must remain distinguishable from its neighbours at 16px
+- emit a separate minimal silhouette path: the opaque footprint hull only
+
+Return: the symbol SVG, the silhouette path, and the manifest entry. No prose.
+#+end_src
+
+Generate in batches of six against a shared reference sheet, render the batch
+together, and reject on *set cohesion* rather than individual quality. A
+symbol that is excellent alone and wrong beside its neighbours is a defect.
+
+* Acceptance checklist
+:PROPERTIES:
+:CUSTOM_ID: acceptance
+:END:
+
+Per symbol, before it enters the sprite:
+
+- [ ] renders correctly with no CSS variables defined (fallbacks work)
+- [ ] contains zero shadow, gradient or shading geometry
+- [ ] silhouette twin present, convex-ish, no interior detail
+- [ ] legible and distinguishable from the full set at 16px
+- [ ] rotated through 0–360° with a fixed shadow offset without artefact
+- [ ] all three material palettes applied without geometry change
+- [ ] no bare =id= without the =sm-= prefix
+- [ ] =footprint= stated in metres and sanity-checked against the subject
+- [ ] passes the cohesion test in =preview.html= §5 against placed lots
+
+* Batch roadmap
+
+Batch 001 (done) is a spread across all three classes to validate the spec
+before volume.
+
+| Batch | Contents                                                        |
+|-------+-----------------------------------------------------------------|
+|   001 | well, market cross, watermill, windmill, church mark, tree      |
+|   002 | =mark=: forge, granary, tannery, guildhall, tavern, barracks    |
+|   003 | =mark=: temple, keep, warehouse, shipyard, mint, gaol           |
+|   004 | =fixed=: gallows, stocks, fountain, shrine, dovecote, kiln      |
+|   005 | =canopy=: conifer, coppice, orchard unit, hedgerow, scrub       |
+|   006 | =pattern=: palisade, hedgeline, vineyard rows, pontoon          |
+|   007 | scatter props: cart, haystack, woodpile, stall, moored boat     |
+
+Batches 002 and 003 are the differentiator against MFCG and should be
+prioritised over any further =fixed= work. Every entry in them maps to a burg
+attribute FMG already computes.
+
+* Open questions
+
+- Should =mark= glyphs counter-rotate to screen-upright, or to *map*-upright?
+  They differ once FMG's map rotation is in play. Leaning map-upright, so a
+  printed export stays coherent.
+- Canopy variant seeding: N discrete symbols, or one symbol with a seeded
+  lobe-count parameter generated at build time? The latter gives unlimited
+  variety at zero asset cost and is probably correct.
+- Whether =pattern= class belongs here at all, or is simply generator
+  configuration wearing an asset costume.

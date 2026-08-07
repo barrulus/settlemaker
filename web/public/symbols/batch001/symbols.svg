@@ -1,0 +1,1152 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" fill="none" stroke-width="var(--sm-sw, 2)" stroke-linejoin="round" stroke-linecap="round">
+  <style>
+  .sm-stone    { fill: var(--sm-stone,    #e8dcc0); stroke: var(--sm-ink, #46303c); }
+  .sm-timber   { fill: var(--sm-timber,   #d9c39a); stroke: var(--sm-ink, #46303c); }
+  .sm-void     { fill: var(--sm-void,     #6b5460); stroke: var(--sm-ink, #46303c); }
+  .sm-mark     { fill: var(--sm-ink,      #46303c); stroke: none; }
+  .sm-canopy-a { fill: var(--sm-canopy-1, #4f7f43); stroke: var(--sm-ink, #46303c); }
+  .sm-canopy-b { fill: var(--sm-canopy-2, #74a552); stroke: none; }
+  .sm-ridge    { fill: none; stroke: var(--sm-ink, #46303c); }
+  .sm-hatch    { fill: none; stroke: var(--sm-ink, #46303c);
+                 stroke-width: calc(var(--sm-sw, 2) * 0.5); opacity: .45; }
+  .sm-canopy-a-round { fill: var(--sm-canopy-1, #4f7f43); stroke: var(--sm-canopy-edge, #2f5626);
+                        stroke-width: 2; stroke-linejoin: round; }
+  .sm-canopy-b-round { fill: var(--sm-canopy-2, #74a552); stroke: none; }
+  .sm-vein     { fill: none; stroke: #1a1a1a; stroke-width: 1; stroke-linecap: round; opacity: .55; }
+  .sm-crop     { fill: var(--sm-crop, #b5c98a); stroke: var(--sm-ink, #46303c); }
+  .sm-sil, .sm-sil * { fill: currentColor !important; stroke: currentColor !important; opacity: 1 !important; }
+</style>
+  <symbol id="sm-well" viewBox="0 0 64 64" overflow="visible">
+    <circle class="sm-stone" cx="32" cy="32" r="19"/>
+    <circle class="sm-void"  cx="32" cy="32" r="9.5"/>
+    <path class="sm-hatch" d="M40.78,35.64 L49.55,39.27 M35.64,40.78 L39.27,49.55 M28.36,40.78 L24.73,49.55 M23.22,35.64 L14.45,39.27 M23.22,28.36 L14.45,24.73 M28.36,23.22 L24.73,14.45 M35.64,23.22 L39.27,14.45 M40.78,28.36 L49.55,24.73"/>
+  </symbol>
+  <symbol id="sm-well-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil" fill="currentColor" stroke="currentColor" stroke-width="var(--sm-sw, 2)" stroke-linejoin="round"><circle cx="32" cy="32" r="19"/></g>
+  </symbol>
+  <symbol id="sm-market-cross" viewBox="0 0 64 64" overflow="visible">
+    <rect class="sm-stone" x="12" y="12" width="40" height="40" rx="3"/>
+    <rect class="sm-stone" x="18.5" y="18.5" width="27" height="27" rx="2.5"/>
+    <rect class="sm-stone" x="25" y="25" width="14" height="14" rx="2"/>
+    <circle class="sm-timber" cx="32" cy="32" r="4"/>
+  </symbol>
+  <symbol id="sm-market-cross-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil" fill="currentColor" stroke="currentColor" stroke-width="var(--sm-sw, 2)" stroke-linejoin="round"><rect x="12" y="12" width="40" height="40" rx="3"/></g>
+  </symbol>
+  <symbol id="sm-mill-water" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-part" data-part="wheel">
+      <rect class="sm-timber" x="4.5" y="20" width="14" height="24" rx="1.5"/>
+      <path class="sm-hatch" d="M6.00,25.70 L17.00,25.70 M6.00,29.90 L17.00,29.90 M6.00,34.10 L17.00,34.10 M6.00,38.30 L17.00,38.30"/>
+      <circle class="sm-void" cx="11.5" cy="32" r="2.6"/>
+    </g>
+    <rect class="sm-stone" x="18" y="10" width="32" height="44" rx="1.5"/>
+    <path class="sm-hatch" d="M21.00,18.50 L47.00,18.50 M21.00,24.00 L47.00,24.00 M21.00,29.50 L47.00,29.50 M21.00,35.00 L47.00,35.00 M21.00,40.50 L47.00,40.50 M21.00,46.00 L47.00,46.00"/>
+    <path class="sm-ridge" d="M34,12.5 V51.5"/>
+  </symbol>
+  <symbol id="sm-mill-water-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil" fill="currentColor" stroke="currentColor" stroke-width="var(--sm-sw, 2)" stroke-linejoin="round"><path d="M18,10 H50 V54 H18 Z M8,22 H18 V42 H8 Z"/></g>
+  </symbol>
+  <symbol id="sm-mill-wind" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-part" data-part="sails">
+      <path class="sm-timber" d="M36.90,39.83 L49.25,55.76 L55.76,49.25 L39.83,36.90 Z M24.17,36.90 L8.24,49.25 L14.75,55.76 L27.10,39.83 Z M27.10,24.17 L14.75,8.24 L8.24,14.75 L24.17,27.10 Z M39.83,27.10 L55.76,14.75 L49.25,8.24 L36.90,24.17 Z"/>
+    </g>
+    <circle class="sm-stone" cx="32" cy="32" r="13"/>
+    <path class="sm-hatch" d="M37.00,32.00 L45.00,32.00 M35.54,35.54 L41.19,41.19 M32.00,37.00 L32.00,45.00 M28.46,35.54 L22.81,41.19 M27.00,32.00 L19.00,32.00 M28.46,28.46 L22.81,22.81 M32.00,27.00 L32.00,19.00 M35.54,28.46 L41.19,22.81"/>
+    <circle class="sm-void" cx="32" cy="32" r="4.5"/>
+  </symbol>
+  <symbol id="sm-mill-wind-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil" fill="currentColor" stroke="currentColor" stroke-width="var(--sm-sw, 2)" stroke-linejoin="round"><circle cx="32" cy="32" r="14"/></g>
+  </symbol>
+  <symbol id="sm-mark-church" viewBox="0 0 32 32" overflow="visible">
+    <path class="sm-mark" d="M13,3 h6 v8 h8 v6 h-8 v12 h-6 V17 H5 v-6 h8 Z"/>
+  </symbol>
+  <symbol id="sm-mark-church-sil" viewBox="0 0 32 32" overflow="visible">
+    <g class="sm-sil" fill="currentColor" stroke="currentColor" stroke-width="var(--sm-sw, 2)" stroke-linejoin="round"><path d="M13,3 h6 v8 h8 v6 h-8 v12 h-6 V17 H5 v-6 h8 Z"/></g>
+  </symbol>
+  <symbol id="sm-tree-deciduous" viewBox="0 0 64 64" overflow="visible">
+    <path class="sm-canopy-a" d="M49.50,32.00 Q59.66,42.07 45.41,43.25 Q46.72,57.50 35.04,49.23 Q26.89,60.99 23.25,47.16 Q9.45,50.92 15.56,37.99 Q2.56,32.00 15.56,26.01 Q9.45,13.08 23.25,16.84 Q26.89,3.01 35.04,14.77 Q46.72,6.50 45.41,20.75 Q59.66,21.93 49.50,32.00 Z"/>
+    <path class="sm-canopy-b" d="M40.75,35.70 Q43.34,44.88 34.56,41.15 Q29.00,48.90 26.45,39.71 Q16.92,40.19 22.51,32.46 Q16.19,25.32 25.72,24.87 Q27.37,15.48 33.66,22.65 Q42.03,18.08 40.35,27.47 Q49.14,31.16 40.75,35.70 Z"/>
+  </symbol>
+  <symbol id="sm-tree-deciduous-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil" fill="currentColor" stroke="currentColor" stroke-width="var(--sm-sw, 2)" stroke-linejoin="round"><path d="M49.50,32.00 Q59.66,42.07 45.41,43.25 Q46.72,57.50 35.04,49.23 Q26.89,60.99 23.25,47.16 Q9.45,50.92 15.56,37.99 Q2.56,32.00 15.56,26.01 Q9.45,13.08 23.25,16.84 Q26.89,3.01 35.04,14.77 Q46.72,6.50 45.41,20.75 Q59.66,21.93 49.50,32.00 Z"/></g>
+  </symbol>
+  <symbol id="sm-tree-deciduous-round" viewBox="0 0 64 64" overflow="visible">
+    <path class="sm-canopy-a-round" d="m 50.87,32.92 c -0.09,1.57 -6.41,1.89 -7.59,3.95 -1.17,2.05 2.756808,7.462402 1.816808,8.762402 C 44.166808,46.932402 39.41,43.65 37.65,44.65 c -1.76,1 -2.856002,4.911189 -4.646002,4.801189 -1.78,-0.1 -3.727198,-4.031987 -6.083998,-5.431189 -2.4,-1.08 -6.85,1.98 -8.07,0.77 -1.22,-1.21 1.41,-5.78 0.76,-8.03 C 18.95,34.51 16.34601,33.857207 16.52601,32.397207 16.71601,30.927207 20.27,29.9 20.7,27.95 21.12,26 16.25,20.8 17.49,19.56 c 1.23,-1.24 8.05,1.95 10.59,0.97 2.55,-0.98 3.17,-6.68 4.69,-6.85 1.51,-0.17 2.23,4.74 4.38,5.83 2.15,1.09 4.972785,0.603608 6.082785,1.933608 1.11,1.32 -0.282785,3.916392 0.577215,6.036392 0.87,2.12 7.15,3.88 7.06,5.44 z"/>
+    <path class="sm-canopy-b-round" d="m 43.14,32.53 c -0.07,1 -4.05,1.64 -4.95,3.3 -0.89,1.66 0.39,5.89 -0.42,6.66 -0.81,0.76 -3.01,-2.52 -4.45,-2.09 -1.43,0.44 -3.598404,2.322785 -4.818404,2.252785 C 27.291596,42.582785 27.48,41.08 26.04,39.97 24.6,38.87 20.96,39.69 20.49,38.46 20.03,37.23 23.12,34.28 23.25,32.6 23.39,30.92 21,29.34 21.31,28.38 c 0.31,-0.96 2.45,-0.52 3.81,-1.54 1.36,-1.03 3.1,-4.36 4.35,-4.62 1.26,-0.27 1.63,2.77 3.19,3.05 1.57,0.29 5.2,-2.1 6.2,-1.34 0.99,0.76 -0.95,4.48 -0.24,5.91 0.72,1.44 4.59,1.69 4.52,2.69 z"/>
+    <path class="sm-vein" d="m 26.387365,30.270989 c 0.07093,0 0.212801,0.07093 0.212801,0 0,-0.07093 -0.262959,0.05016 -0.212801,0 0.112156,-0.112156 0.297327,-0.11951 0.425603,-0.212801 0.105405,-0.07666 0.426818,-0.518193 0.532003,-0.638404 0.222768,-0.254592 0.433414,-0.476446 0.691604,-0.691604 0.127681,-0.106401 0.170241,-0.212802 0.319202,-0.319202 0.09389,-0.06707 0.401206,-0.187523 0.532004,-0.266002 0.07588,-0.04553 0.174795,-0.129199 0.266001,-0.159601 0.09783,-0.03261 0.192342,0.01637 0.266002,0.0532 0.523335,0.261668 0.797857,0.398743 1.117207,0.957606 0.01752,0.03067 0.07359,0.233193 0.106401,0.266002 0.01254,0.01254 0.04066,-0.01254 0.0532,0 0.02508,0.02508 -0.02508,0.08132 0,0.106401 0.04733,0.04733 0.660308,0.302302 0.744805,0.319202 0.166933,0.03339 0.364069,-0.02099 0.532003,0 0.354602,0.04433 0.538549,0.04573 0.904405,0 0.05279,-0.0066 0.10799,0.0129 0.159601,0 0.09265,-0.02316 0.172359,-0.08767 0.266002,-0.106401 0.08695,-0.01739 0.178765,0.01586 0.266002,0 0.110347,-0.02006 0.209224,-0.0844 0.319202,-0.106401 0.145854,-0.02917 0.590539,-0.03857 0.744804,0 0.223347,0.05584 0.383307,0.216436 0.532004,0.266002 0.03365,0.01121 0.07468,-0.01586 0.1064,0 0.01586,0.0079 -0.0079,0.03734 0,0.0532 0.136874,0.273747 0.0646,0.769499 -0.0532,1.064007 -0.0093,0.02328 -0.03547,0.03547 -0.0532,0.0532 -0.01773,0.0532 -0.0422,0.104612 -0.0532,0.159601 -0.01073,0.05364 -0.02396,0.271284 0,0.319202 0.01652,0.03304 0.106401,0.01223 0.106401,0.106401"/>
+    <path class="sm-vein" d="m 28.621779,33.303408 c -0.05542,0.0078 0.122931,0.0159 0.744805,-0.0532 0.286645,-0.03185 1.103744,-0.05859 1.383208,0.0532 0.04722,0.01889 0.440161,0.145043 0.372403,0.212801 -0.04157,0.04157 -0.296766,0.09892 -0.319202,0.106401 -0.15579,0.05193 -0.244806,0.180937 -0.372403,0.266002 -0.01475,0.0098 -0.04066,-0.01254 -0.0532,0 -0.03762,0.03762 0,0.1064 0,0.159601 0,0.33749 0.03299,0.830996 0.266002,1.064006"/>
+  </symbol>
+  <symbol id="sm-tree-deciduous-round-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil" fill="currentColor" stroke="currentColor" stroke-width="var(--sm-sw, 2)" stroke-linejoin="round"><path d="M50.87,32.92 C50.78,34.49 44.46,34.81 43.28,36.87 C42.11,38.92 44.76,43.96 43.82,45.26 C42.89,46.56 39.41,43.65 37.65,44.65 C35.89,45.65 35.06,51.37 33.27,51.26 C31.49,51.16 29.33,45.10 26.92,44.02 C24.52,42.94 20.07,46.00 18.85,44.79 C17.63,43.58 20.26,39.01 19.61,36.76 C18.95,34.51 14.75,32.74 14.93,31.28 C15.12,29.81 20.27,29.90 20.70,27.95 C21.12,26.00 16.25,20.80 17.49,19.56 C18.72,18.32 25.54,21.51 28.08,20.53 C30.63,19.55 31.25,13.85 32.77,13.68 C34.28,13.51 35.00,18.42 37.15,19.51 C39.30,20.60 44.57,18.89 45.68,20.22 C46.79,21.54 42.95,25.36 43.81,27.48 C44.68,29.60 50.96,31.36 50.87,32.92 Z"/></g>
+  </symbol>
+  <symbol id="sm-amphitheatre" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- outer wall: widest ellipse -->
+    <ellipse class="sm-stone" cx="32" cy="32" rx="28" ry="21"/>
+    <!-- seating tier 2: each inner ellipse covers the fill of the outer;
+         the visible ink stroke between them reads as the tier edge -->
+    <ellipse class="sm-stone" cx="32" cy="32" rx="20" ry="14"/>
+    <!-- seating tier 3 -->
+    <ellipse class="sm-stone" cx="32" cy="32" rx="13" ry="8"/>
+    <!-- arena floor: open sand -->
+    <ellipse class="sm-void"  cx="32" cy="32" rx="6"  ry="3.5"/>
+    <!-- vomitoria: four radial access passages (N S E W) shown as hatch cuts -->
+    <path class="sm-hatch" d="M32,11 L32,18 M32,46 L32,53 M4,32 L11,32 M53,32 L60,32"/>
+  </symbol>
+  <symbol id="sm-amphitheatre-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- outer wall: widest ellipse -->
+    <ellipse class="sm-stone" cx="32" cy="32" rx="28" ry="21"/>
+    <!-- seating tier 2: each inner ellipse covers the fill of the outer;
+         the visible ink stroke between them reads as the tier edge -->
+    <ellipse class="sm-stone" cx="32" cy="32" rx="20" ry="14"/>
+    <!-- seating tier 3 -->
+    <ellipse class="sm-stone" cx="32" cy="32" rx="13" ry="8"/>
+    <!-- arena floor: open sand -->
+    <ellipse class="sm-void"  cx="32" cy="32" rx="6"  ry="3.5"/>
+    <!-- vomitoria: four radial access passages (N S E W) shown as hatch cuts -->
+    <path class="sm-hatch" d="M32,11 L32,18 M32,46 L32,53 M4,32 L11,32 M53,32 L60,32"/></g>
+  </symbol>
+  <symbol id="sm-bridge" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- bridge deck -->
+    <rect class="sm-timber" x="5" y="21" width="54" height="22" rx="1"/>
+    <!-- plank lines running across the bridge width -->
+    <path class="sm-hatch" d="M13,21 L13,43 M20,21 L20,43 M27,21 L27,43 M34,21 L34,43 M41,21 L41,43 M48,21 L48,43"/>
+    <!-- side rails -->
+    <path class="sm-ridge" d="M5,21 L59,21 M5,43 L59,43"/>
+    <!-- abutment caps at each end -->
+    <rect class="sm-stone" x="5" y="19" width="6" height="26" rx="1"/>
+    <rect class="sm-stone" x="53" y="19" width="6" height="26" rx="1"/>
+  </symbol>
+  <symbol id="sm-bridge-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- bridge deck -->
+    <rect class="sm-timber" x="5" y="21" width="54" height="22" rx="1"/>
+    <!-- plank lines running across the bridge width -->
+    <path class="sm-hatch" d="M13,21 L13,43 M20,21 L20,43 M27,21 L27,43 M34,21 L34,43 M41,21 L41,43 M48,21 L48,43"/>
+    <!-- side rails -->
+    <path class="sm-ridge" d="M5,21 L59,21 M5,43 L59,43"/>
+    <!-- abutment caps at each end -->
+    <rect class="sm-stone" x="5" y="19" width="6" height="26" rx="1"/>
+    <rect class="sm-stone" x="53" y="19" width="6" height="26" rx="1"/></g>
+  </symbol>
+  <symbol id="sm-castle" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- curtain wall -->
+    <rect class="sm-stone" x="10" y="10" width="44" height="44" rx="1.5"/>
+    <!-- inner bailey (open courtyard) -->
+    <rect class="sm-void" x="20" y="20" width="24" height="24" rx="1"/>
+    <!-- wall-walk hatch -->
+    <path class="sm-hatch" d="M20,13 L44,13 M13,20 L13,44 M51,20 L51,44 M20,51 L27,51 M37,51 L44,51"/>
+    <!-- circular corner towers -->
+    <circle class="sm-stone" cx="10" cy="10" r="9"/>
+    <circle class="sm-stone" cx="54" cy="10" r="9"/>
+    <circle class="sm-stone" cx="10" cy="54" r="9"/>
+    <circle class="sm-stone" cx="54" cy="54" r="9"/>
+    <!-- keep: rectangular, north-east quadrant of courtyard -->
+    <rect class="sm-stone" x="32" y="20" width="12" height="12" rx="1"/>
+    <circle class="sm-void" cx="38" cy="26" r="3.5"/>
+    <!-- gatehouse gap in south wall -->
+    <rect class="sm-void" x="27" y="52" width="10" height="8" rx="0.5"/>
+  </symbol>
+  <symbol id="sm-castle-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- curtain wall -->
+    <rect class="sm-stone" x="10" y="10" width="44" height="44" rx="1.5"/>
+    <!-- inner bailey (open courtyard) -->
+    <rect class="sm-void" x="20" y="20" width="24" height="24" rx="1"/>
+    <!-- wall-walk hatch -->
+    <path class="sm-hatch" d="M20,13 L44,13 M13,20 L13,44 M51,20 L51,44 M20,51 L27,51 M37,51 L44,51"/>
+    <!-- circular corner towers -->
+    <circle class="sm-stone" cx="10" cy="10" r="9"/>
+    <circle class="sm-stone" cx="54" cy="10" r="9"/>
+    <circle class="sm-stone" cx="10" cy="54" r="9"/>
+    <circle class="sm-stone" cx="54" cy="54" r="9"/>
+    <!-- keep: rectangular, north-east quadrant of courtyard -->
+    <rect class="sm-stone" x="32" y="20" width="12" height="12" rx="1"/>
+    <circle class="sm-void" cx="38" cy="26" r="3.5"/>
+    <!-- gatehouse gap in south wall -->
+    <rect class="sm-void" x="27" y="52" width="10" height="8" rx="0.5"/></g>
+  </symbol>
+  <symbol id="sm-cathedral" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- square nave below the rotunda; corners poke out from behind the circle -->
+    <rect class="sm-stone" x="14" y="7" width="36" height="36" rx="1.5"/>
+    <!-- large rotunda / nave circle (covers most of square, leaving only corners) -->
+    <circle class="sm-stone" cx="32" cy="25" r="21"/>
+    <!-- crossing tower void -->
+    <circle class="sm-void" cx="32" cy="25" r="8"/>
+    <!-- altar stone at centre -->
+    <circle class="sm-stone" cx="32" cy="25" r="2.5"/>
+    <!-- south choir arm jutting below the rotunda -->
+    <rect class="sm-stone" x="26" y="43" width="12" height="14" rx="1.5"/>
+    <path class="sm-hatch" d="M29,46 L29,55 M32,46 L32,55 M35,46 L35,55"/>
+    <!-- apse: semicircle at south end of choir -->
+    <path class="sm-stone" d="M26,55 Q32,62 38,55 Z"/>
+  </symbol>
+  <symbol id="sm-cathedral-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- square nave below the rotunda; corners poke out from behind the circle -->
+    <rect class="sm-stone" x="14" y="7" width="36" height="36" rx="1.5"/>
+    <!-- large rotunda / nave circle (covers most of square, leaving only corners) -->
+    <circle class="sm-stone" cx="32" cy="25" r="21"/>
+    <!-- crossing tower void -->
+    <circle class="sm-void" cx="32" cy="25" r="8"/>
+    <!-- altar stone at centre -->
+    <circle class="sm-stone" cx="32" cy="25" r="2.5"/>
+    <!-- south choir arm jutting below the rotunda -->
+    <rect class="sm-stone" x="26" y="43" width="12" height="14" rx="1.5"/>
+    <path class="sm-hatch" d="M29,46 L29,55 M32,46 L32,55 M35,46 L35,55"/>
+    <!-- apse: semicircle at south end of choir -->
+    <path class="sm-stone" d="M26,55 Q32,62 38,55 Z"/></g>
+  </symbol>
+  <symbol id="sm-docks" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- single pier / jetty -->
+    <rect class="sm-timber" x="24" y="6" width="16" height="52" rx="1.5"/>
+    <path class="sm-hatch" d="M27,12 L37,12 M27,18 L37,18 M27,24 L37,24 M27,30 L37,30 M27,36 L37,36 M27,42 L42,42 M27,48 L37,48"/>
+    <!-- mooring bollards at pier head -->
+    <circle class="sm-void" cx="26" cy="56" r="2.5"/>
+    <circle class="sm-void" cx="38" cy="56" r="2.5"/>
+  </symbol>
+  <symbol id="sm-docks-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- single pier / jetty -->
+    <rect class="sm-timber" x="24" y="6" width="16" height="52" rx="1.5"/>
+    <path class="sm-hatch" d="M27,12 L37,12 M27,18 L37,18 M27,24 L37,24 M27,30 L37,30 M27,36 L37,36 M27,42 L42,42 M27,48 L37,48"/>
+    <!-- mooring bollards at pier head -->
+    <circle class="sm-void" cx="26" cy="56" r="2.5"/>
+    <circle class="sm-void" cx="38" cy="56" r="2.5"/></g>
+  </symbol>
+  <symbol id="sm-dump" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- irregular midden/heap boundary — deliberately lumpy, not geometric -->
+    <path class="sm-timber" d="M18,6 Q28,4 38,7 Q50,5 56,14 Q62,22 58,33
+                               Q61,44 54,52 Q44,60 32,58 Q20,61 13,53
+                               Q5,45 7,33 Q3,22 10,14 Q13,7 18,6 Z"/>
+    <!-- horizontal hatch: loose layered refuse -->
+    <path class="sm-hatch" d="M9,18 L55,18 M8,25 L56,25 M8,32 L56,32 M9,39 L55,39 M10,46 L54,46 M13,52 L51,52"/>
+    <!-- diagonal hatch overlaid: cross the horizontal to suggest chaotic waste -->
+    <path class="sm-hatch" d="M18,7 L52,41 M10,12 L48,50 M24,6 L57,39 M10,20 L40,50 M10,30 L30,50 M32,7 L57,32"/>
+    <!-- void depressions / pits scattered across heap -->
+    <circle class="sm-void" cx="22" cy="22" r="3"/>
+    <circle class="sm-void" cx="42" cy="18" r="2.5"/>
+    <circle class="sm-void" cx="36" cy="38" r="3.5"/>
+    <circle class="sm-void" cx="20" cy="44" r="2"/>
+    <circle class="sm-void" cx="48" cy="44" r="2.5"/>
+  </symbol>
+  <symbol id="sm-dump-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- irregular midden/heap boundary — deliberately lumpy, not geometric -->
+    <path class="sm-timber" d="M18,6 Q28,4 38,7 Q50,5 56,14 Q62,22 58,33
+                               Q61,44 54,52 Q44,60 32,58 Q20,61 13,53
+                               Q5,45 7,33 Q3,22 10,14 Q13,7 18,6 Z"/>
+    <!-- horizontal hatch: loose layered refuse -->
+    <path class="sm-hatch" d="M9,18 L55,18 M8,25 L56,25 M8,32 L56,32 M9,39 L55,39 M10,46 L54,46 M13,52 L51,52"/>
+    <!-- diagonal hatch overlaid: cross the horizontal to suggest chaotic waste -->
+    <path class="sm-hatch" d="M18,7 L52,41 M10,12 L48,50 M24,6 L57,39 M10,20 L40,50 M10,30 L30,50 M32,7 L57,32"/>
+    <!-- void depressions / pits scattered across heap -->
+    <circle class="sm-void" cx="22" cy="22" r="3"/>
+    <circle class="sm-void" cx="42" cy="18" r="2.5"/>
+    <circle class="sm-void" cx="36" cy="38" r="3.5"/>
+    <circle class="sm-void" cx="20" cy="44" r="2"/>
+    <circle class="sm-void" cx="48" cy="44" r="2.5"/></g>
+  </symbol>
+  <symbol id="sm-field-fallow" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- bare ploughed earth: warm timber fill -->
+    <rect class="sm-timber" x="7" y="7" width="50" height="50" rx="2"/>
+    <!-- furrow lines: gently curved to read as turned soil, not a floor -->
+    <path class="sm-hatch" d="M7,14 Q32,12 57,14
+                              M7,20 Q32,18 57,20
+                              M7,26 Q32,24 57,26
+                              M7,32 Q32,30 57,32
+                              M7,38 Q32,36 57,38
+                              M7,44 Q32,42 57,44
+                              M7,50 Q32,48 57,50"/>
+  </symbol>
+  <symbol id="sm-field-fallow-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- bare ploughed earth: warm timber fill -->
+    <rect class="sm-timber" x="7" y="7" width="50" height="50" rx="2"/>
+    <!-- furrow lines: gently curved to read as turned soil, not a floor -->
+    <path class="sm-hatch" d="M7,14 Q32,12 57,14
+                              M7,20 Q32,18 57,20
+                              M7,26 Q32,24 57,26
+                              M7,32 Q32,30 57,32
+                              M7,38 Q32,36 57,38
+                              M7,44 Q32,42 57,44
+                              M7,50 Q32,48 57,50"/></g>
+  </symbol>
+  <symbol id="sm-field-harvested" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- pale stubble: stone fill (lighter than crop, lighter than fallow) -->
+    <rect class="sm-stone" x="7" y="7" width="50" height="50" rx="2"/>
+    <!-- stubble: short upright tick marks in offset rows mimicking cut stalks -->
+    <path class="sm-hatch" d="
+      M13,13 L13,18  M19,13 L19,18  M25,13 L25,18  M31,13 L31,18  M37,13 L37,18  M43,13 L43,18  M49,13 L49,18
+      M10,21 L10,26  M16,21 L16,26  M22,21 L22,26  M28,21 L28,26  M34,21 L34,26  M40,21 L40,26  M46,21 L46,26  M52,21 L52,26
+      M13,29 L13,34  M19,29 L19,34  M25,29 L25,34  M31,29 L31,34  M37,29 L37,34  M43,29 L43,34  M49,29 L49,34
+      M10,37 L10,42  M16,37 L16,42  M22,37 L22,42  M28,37 L28,42  M34,37 L34,42  M40,37 L40,42  M46,37 L46,42  M52,37 L52,42
+      M13,45 L13,50  M19,45 L19,50  M25,45 L25,50  M31,45 L31,50  M37,45 L37,50  M43,45 L43,50  M49,45 L49,50
+    "/>
+  </symbol>
+  <symbol id="sm-field-harvested-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- pale stubble: stone fill (lighter than crop, lighter than fallow) -->
+    <rect class="sm-stone" x="7" y="7" width="50" height="50" rx="2"/>
+    <!-- stubble: short upright tick marks in offset rows mimicking cut stalks -->
+    <path class="sm-hatch" d="
+      M13,13 L13,18  M19,13 L19,18  M25,13 L25,18  M31,13 L31,18  M37,13 L37,18  M43,13 L43,18  M49,13 L49,18
+      M10,21 L10,26  M16,21 L16,26  M22,21 L22,26  M28,21 L28,26  M34,21 L34,26  M40,21 L40,26  M46,21 L46,26  M52,21 L52,26
+      M13,29 L13,34  M19,29 L19,34  M25,29 L25,34  M31,29 L31,34  M37,29 L37,34  M43,29 L43,34  M49,29 L49,34
+      M10,37 L10,42  M16,37 L16,42  M22,37 L22,42  M28,37 L28,42  M34,37 L34,42  M40,37 L40,42  M46,37 L46,42  M52,37 L52,42
+      M13,45 L13,50  M19,45 L19,50  M25,45 L25,50  M31,45 L31,50  M37,45 L37,50  M43,45 L43,50  M49,45 L49,50
+    "/></g>
+  </symbol>
+  <symbol id="sm-field" viewBox="0 0 64 64" overflow="visible">
+
+    <rect class="sm-crop" x="7" y="7" width="50" height="50" rx="2"/>
+    <!-- crop rows running across -->
+    <path class="sm-hatch" d="M7,14 L57,14 M7,20 L57,20 M7,26 L57,26 M7,32 L57,32 M7,38 L57,38 M7,44 L57,44 M7,50 L57,50"/>
+  </symbol>
+  <symbol id="sm-field-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <rect class="sm-crop" x="7" y="7" width="50" height="50" rx="2"/>
+    <!-- crop rows running across -->
+    <path class="sm-hatch" d="M7,14 L57,14 M7,20 L57,20 M7,26 L57,26 M7,32 L57,32 M7,38 L57,38 M7,44 L57,44 M7,50 L57,50"/></g>
+  </symbol>
+  <symbol id="sm-house-large-tiled" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- larger stone house — wider than sm-house-tiled, three bays -->
+    <rect class="sm-stone" x="6" y="14" width="52" height="36" rx="1.5"/>
+    <!-- ridge and two cross-ridges dividing three roof bays -->
+    <path class="sm-ridge" d="M32,14 L32,50"/>
+    <path class="sm-ridge" d="M6,32 L58,32"/>
+    <!--
+      Fish-scale tiles on all four quadrants.
+      Quadrant bounds: NW x6–32 y14–32, NE x32–58 y14–32,
+                       SW x6–32 y32–50, SE x32–58 y32–50.
+    -->
+    <!-- NW + NE: rows y=18..30 -->
+    <path class="sm-hatch" d="M6,19  A4,4 0 0 1 14,19  M14,19 A4,4 0 0 1 22,19  M22,19 A4,4 0 0 1 30,19
+                              M32,19 A4,4 0 0 1 40,19  M40,19 A4,4 0 0 1 48,19  M48,19 A4,4 0 0 1 56,19"/>
+    <path class="sm-hatch" d="M10,23 A4,4 0 0 1 18,23  M18,23 A4,4 0 0 1 26,23  M26,23 A4,4 0 0 1 34,23
+                              M36,23 A4,4 0 0 1 44,23  M44,23 A4,4 0 0 1 52,23"/>
+    <path class="sm-hatch" d="M6,27  A4,4 0 0 1 14,27  M14,27 A4,4 0 0 1 22,27  M22,27 A4,4 0 0 1 30,27
+                              M32,27 A4,4 0 0 1 40,27  M40,27 A4,4 0 0 1 48,27  M48,27 A4,4 0 0 1 56,27"/>
+    <path class="sm-hatch" d="M10,31 A4,4 0 0 1 18,31  M18,31 A4,4 0 0 1 26,31  M26,31 A4,4 0 0 1 34,31
+                              M36,31 A4,4 0 0 1 44,31  M44,31 A4,4 0 0 1 52,31"/>
+    <!-- SW + SE: rows y=35..47 -->
+    <path class="sm-hatch" d="M6,35  A4,4 0 0 1 14,35  M14,35 A4,4 0 0 1 22,35  M22,35 A4,4 0 0 1 30,35
+                              M32,35 A4,4 0 0 1 40,35  M40,35 A4,4 0 0 1 48,35  M48,35 A4,4 0 0 1 56,35"/>
+    <path class="sm-hatch" d="M10,39 A4,4 0 0 1 18,39  M18,39 A4,4 0 0 1 26,39  M26,39 A4,4 0 0 1 34,39
+                              M36,39 A4,4 0 0 1 44,39  M44,39 A4,4 0 0 1 52,39"/>
+    <path class="sm-hatch" d="M6,43  A4,4 0 0 1 14,43  M14,43 A4,4 0 0 1 22,43  M22,43 A4,4 0 0 1 30,43
+                              M32,43 A4,4 0 0 1 40,43  M40,43 A4,4 0 0 1 48,43  M48,43 A4,4 0 0 1 56,43"/>
+    <path class="sm-hatch" d="M10,47 A4,4 0 0 1 18,47  M18,47 A4,4 0 0 1 26,47  M26,47 A4,4 0 0 1 34,47
+                              M36,47 A4,4 0 0 1 44,47  M44,47 A4,4 0 0 1 52,47"/>
+  </symbol>
+  <symbol id="sm-house-large-tiled-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- larger stone house — wider than sm-house-tiled, three bays -->
+    <rect class="sm-stone" x="6" y="14" width="52" height="36" rx="1.5"/>
+    <!-- ridge and two cross-ridges dividing three roof bays -->
+    <path class="sm-ridge" d="M32,14 L32,50"/>
+    <path class="sm-ridge" d="M6,32 L58,32"/>
+    <!--
+      Fish-scale tiles on all four quadrants.
+      Quadrant bounds: NW x6–32 y14–32, NE x32–58 y14–32,
+                       SW x6–32 y32–50, SE x32–58 y32–50.
+    -->
+    <!-- NW + NE: rows y=18..30 -->
+    <path class="sm-hatch" d="M6,19  A4,4 0 0 1 14,19  M14,19 A4,4 0 0 1 22,19  M22,19 A4,4 0 0 1 30,19
+                              M32,19 A4,4 0 0 1 40,19  M40,19 A4,4 0 0 1 48,19  M48,19 A4,4 0 0 1 56,19"/>
+    <path class="sm-hatch" d="M10,23 A4,4 0 0 1 18,23  M18,23 A4,4 0 0 1 26,23  M26,23 A4,4 0 0 1 34,23
+                              M36,23 A4,4 0 0 1 44,23  M44,23 A4,4 0 0 1 52,23"/>
+    <path class="sm-hatch" d="M6,27  A4,4 0 0 1 14,27  M14,27 A4,4 0 0 1 22,27  M22,27 A4,4 0 0 1 30,27
+                              M32,27 A4,4 0 0 1 40,27  M40,27 A4,4 0 0 1 48,27  M48,27 A4,4 0 0 1 56,27"/>
+    <path class="sm-hatch" d="M10,31 A4,4 0 0 1 18,31  M18,31 A4,4 0 0 1 26,31  M26,31 A4,4 0 0 1 34,31
+                              M36,31 A4,4 0 0 1 44,31  M44,31 A4,4 0 0 1 52,31"/>
+    <!-- SW + SE: rows y=35..47 -->
+    <path class="sm-hatch" d="M6,35  A4,4 0 0 1 14,35  M14,35 A4,4 0 0 1 22,35  M22,35 A4,4 0 0 1 30,35
+                              M32,35 A4,4 0 0 1 40,35  M40,35 A4,4 0 0 1 48,35  M48,35 A4,4 0 0 1 56,35"/>
+    <path class="sm-hatch" d="M10,39 A4,4 0 0 1 18,39  M18,39 A4,4 0 0 1 26,39  M26,39 A4,4 0 0 1 34,39
+                              M36,39 A4,4 0 0 1 44,39  M44,39 A4,4 0 0 1 52,39"/>
+    <path class="sm-hatch" d="M6,43  A4,4 0 0 1 14,43  M14,43 A4,4 0 0 1 22,43  M22,43 A4,4 0 0 1 30,43
+                              M32,43 A4,4 0 0 1 40,43  M40,43 A4,4 0 0 1 48,43  M48,43 A4,4 0 0 1 56,43"/>
+    <path class="sm-hatch" d="M10,47 A4,4 0 0 1 18,47  M18,47 A4,4 0 0 1 26,47  M26,47 A4,4 0 0 1 34,47
+                              M36,47 A4,4 0 0 1 44,47  M44,47 A4,4 0 0 1 52,47"/></g>
+  </symbol>
+  <symbol id="sm-house-tiled" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- same footprint as sm-house -->
+    <rect class="sm-stone" x="12" y="16" width="40" height="32" rx="1.5"/>
+    <!-- roof ridge -->
+    <path class="sm-ridge" d="M32,16 L32,48"/>
+    <!--
+      Fish-scale clay tiles: each arc is M x,y A 4,4 0 0 1 x+8,y
+      which draws the downward-curving bottom edge of one tile
+      (clockwise arc = convex downward = the exposed lower hem).
+      Rows alternate offset by 4 px so tiles interlock like real courses.
+      Left slope (x 12–32), right slope (x 32–52).
+    -->
+    <!-- row y=21, even — left: starts 12,20; right: starts 32,20 -->
+    <path class="sm-hatch" d="M12,21 A4,4 0 0 1 20,21  M20,21 A4,4 0 0 1 28,21
+                              M32,21 A4,4 0 0 1 40,21  M40,21 A4,4 0 0 1 48,21"/>
+    <!-- row y=25, odd — left: starts 16; right: starts 36 -->
+    <path class="sm-hatch" d="M16,25 A4,4 0 0 1 24,25  M24,25 A4,4 0 0 1 32,25
+                              M36,25 A4,4 0 0 1 44,25  M44,25 A4,4 0 0 1 52,25"/>
+    <!-- row y=29, even -->
+    <path class="sm-hatch" d="M12,29 A4,4 0 0 1 20,29  M20,29 A4,4 0 0 1 28,29
+                              M32,29 A4,4 0 0 1 40,29  M40,29 A4,4 0 0 1 48,29"/>
+    <!-- row y=33, odd -->
+    <path class="sm-hatch" d="M16,33 A4,4 0 0 1 24,33  M24,33 A4,4 0 0 1 32,33
+                              M36,33 A4,4 0 0 1 44,33  M44,33 A4,4 0 0 1 52,33"/>
+    <!-- row y=37, even -->
+    <path class="sm-hatch" d="M12,37 A4,4 0 0 1 20,37  M20,37 A4,4 0 0 1 28,37
+                              M32,37 A4,4 0 0 1 40,37  M40,37 A4,4 0 0 1 48,37"/>
+    <!-- row y=41, odd -->
+    <path class="sm-hatch" d="M16,41 A4,4 0 0 1 24,41  M24,41 A4,4 0 0 1 32,41
+                              M36,41 A4,4 0 0 1 44,41  M44,41 A4,4 0 0 1 52,41"/>
+    <!-- row y=45, even -->
+    <path class="sm-hatch" d="M12,45 A4,4 0 0 1 20,45  M20,45 A4,4 0 0 1 28,45
+                              M32,45 A4,4 0 0 1 40,45  M40,45 A4,4 0 0 1 48,45"/>
+  </symbol>
+  <symbol id="sm-house-tiled-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- same footprint as sm-house -->
+    <rect class="sm-stone" x="12" y="16" width="40" height="32" rx="1.5"/>
+    <!-- roof ridge -->
+    <path class="sm-ridge" d="M32,16 L32,48"/>
+    <!--
+      Fish-scale clay tiles: each arc is M x,y A 4,4 0 0 1 x+8,y
+      which draws the downward-curving bottom edge of one tile
+      (clockwise arc = convex downward = the exposed lower hem).
+      Rows alternate offset by 4 px so tiles interlock like real courses.
+      Left slope (x 12–32), right slope (x 32–52).
+    -->
+    <!-- row y=21, even — left: starts 12,20; right: starts 32,20 -->
+    <path class="sm-hatch" d="M12,21 A4,4 0 0 1 20,21  M20,21 A4,4 0 0 1 28,21
+                              M32,21 A4,4 0 0 1 40,21  M40,21 A4,4 0 0 1 48,21"/>
+    <!-- row y=25, odd — left: starts 16; right: starts 36 -->
+    <path class="sm-hatch" d="M16,25 A4,4 0 0 1 24,25  M24,25 A4,4 0 0 1 32,25
+                              M36,25 A4,4 0 0 1 44,25  M44,25 A4,4 0 0 1 52,25"/>
+    <!-- row y=29, even -->
+    <path class="sm-hatch" d="M12,29 A4,4 0 0 1 20,29  M20,29 A4,4 0 0 1 28,29
+                              M32,29 A4,4 0 0 1 40,29  M40,29 A4,4 0 0 1 48,29"/>
+    <!-- row y=33, odd -->
+    <path class="sm-hatch" d="M16,33 A4,4 0 0 1 24,33  M24,33 A4,4 0 0 1 32,33
+                              M36,33 A4,4 0 0 1 44,33  M44,33 A4,4 0 0 1 52,33"/>
+    <!-- row y=37, even -->
+    <path class="sm-hatch" d="M12,37 A4,4 0 0 1 20,37  M20,37 A4,4 0 0 1 28,37
+                              M32,37 A4,4 0 0 1 40,37  M40,37 A4,4 0 0 1 48,37"/>
+    <!-- row y=41, odd -->
+    <path class="sm-hatch" d="M16,41 A4,4 0 0 1 24,41  M24,41 A4,4 0 0 1 32,41
+                              M36,41 A4,4 0 0 1 44,41  M44,41 A4,4 0 0 1 52,41"/>
+    <!-- row y=45, even -->
+    <path class="sm-hatch" d="M12,45 A4,4 0 0 1 20,45  M20,45 A4,4 0 0 1 28,45
+                              M32,45 A4,4 0 0 1 40,45  M40,45 A4,4 0 0 1 48,45"/></g>
+  </symbol>
+  <symbol id="sm-house" viewBox="0 0 64 64" overflow="visible">
+
+    <rect class="sm-stone" x="12" y="16" width="40" height="32" rx="1.5"/>
+    <path class="sm-hatch" d="M15,22 L49,22 M15,27.5 L49,27.5 M15,33 L49,33 M15,38.5 L49,38.5 M15,44 L49,44"/>
+    <path class="sm-ridge" d="M32,16 L32,48"/>
+  </symbol>
+  <symbol id="sm-house-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <rect class="sm-stone" x="12" y="16" width="40" height="32" rx="1.5"/>
+    <path class="sm-hatch" d="M15,22 L49,22 M15,27.5 L49,27.5 M15,33 L49,33 M15,38.5 L49,38.5 M15,44 L49,44"/>
+    <path class="sm-ridge" d="M32,16 L32,48"/></g>
+  </symbol>
+  <symbol id="sm-hut-mud" viewBox="0 0 64 64" overflow="visible">
+
+    <!--
+      Organic, slightly asymmetric perimeter — mud/adobe walls are hand-built
+      so the plan is never quite rectangular. Thick walls shown by inner void.
+    -->
+    <path class="sm-timber" d="M18,11 Q28,8 40,10 Q50,11 52,22 Q54,32 52,43
+                               Q50,53 38,55 Q26,57 16,52 Q8,47 9,34
+                               Q8,22 12,15 Q14,11 18,11 Z"/>
+    <!--
+      Dense irregular hatch on the wall band — short strokes going in two
+      roughly opposite angles, suggesting pressed and cracked mud/daub.
+    -->
+    <path class="sm-hatch" d="M12,18 L18,12  M18,56 L12,50  M52,18 L46,12  M52,46 L46,52
+                              M10,26 L16,20  M10,40 L16,46  M48,20 L54,26  M48,44 L54,38
+                              M10,34 L16,28  M10,42 L16,48  M48,28 L54,34  M48,42 L54,36"/>
+    <!-- interior void — the single open living space -->
+    <ellipse class="sm-void" cx="32" cy="33" rx="14" ry="12"/>
+    <!-- narrow doorway break in south wall -->
+    <rect class="sm-void" x="27" y="51" width="10" height="7" rx="0.5"/>
+  </symbol>
+  <symbol id="sm-hut-mud-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!--
+      Organic, slightly asymmetric perimeter — mud/adobe walls are hand-built
+      so the plan is never quite rectangular. Thick walls shown by inner void.
+    -->
+    <path class="sm-timber" d="M18,11 Q28,8 40,10 Q50,11 52,22 Q54,32 52,43
+                               Q50,53 38,55 Q26,57 16,52 Q8,47 9,34
+                               Q8,22 12,15 Q14,11 18,11 Z"/>
+    <!--
+      Dense irregular hatch on the wall band — short strokes going in two
+      roughly opposite angles, suggesting pressed and cracked mud/daub.
+    -->
+    <path class="sm-hatch" d="M12,18 L18,12  M18,56 L12,50  M52,18 L46,12  M52,46 L46,52
+                              M10,26 L16,20  M10,40 L16,46  M48,20 L54,26  M48,44 L54,38
+                              M10,34 L16,28  M10,42 L16,48  M48,28 L54,34  M48,42 L54,36"/>
+    <!-- interior void — the single open living space -->
+    <ellipse class="sm-void" cx="32" cy="33" rx="14" ry="12"/>
+    <!-- narrow doorway break in south wall -->
+    <rect class="sm-void" x="27" y="51" width="10" height="7" rx="0.5"/></g>
+  </symbol>
+  <symbol id="sm-hut-round" viewBox="0 0 64 64" overflow="visible">
+
+    <!--
+      Concentric rings read as overlapping thatch layers seen from directly above.
+      Each inner circle's fill covers the previous; only the ink stroke between
+      them remains visible as a thatch-ring line.
+    -->
+    <circle class="sm-timber" cx="32" cy="32" r="23"/>
+    <circle class="sm-timber" cx="32" cy="32" r="16"/>
+    <circle class="sm-timber" cx="32" cy="32" r="10"/>
+    <!-- central post hole -->
+    <circle class="sm-void"   cx="32" cy="32" r="3.5"/>
+  </symbol>
+  <symbol id="sm-hut-round-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!--
+      Concentric rings read as overlapping thatch layers seen from directly above.
+      Each inner circle's fill covers the previous; only the ink stroke between
+      them remains visible as a thatch-ring line.
+    -->
+    <circle class="sm-timber" cx="32" cy="32" r="23"/>
+    <circle class="sm-timber" cx="32" cy="32" r="16"/>
+    <circle class="sm-timber" cx="32" cy="32" r="10"/>
+    <!-- central post hole -->
+    <circle class="sm-void"   cx="32" cy="32" r="3.5"/></g>
+  </symbol>
+  <symbol id="sm-hut-straw" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- small timber-walled hut -->
+    <rect class="sm-timber" x="12" y="17" width="40" height="30" rx="1.5"/>
+    <!--
+      Diagonal 45° hatch simulates a thatched roof seen from above —
+      the slanting lines suggest the angle and texture of laid straw.
+      Two directions crossing each other give the herringbone feel.
+    -->
+    <path class="sm-hatch" d="M12,33 L29,17  M12,41 L37,17  M12,47 L45,17  M20,47 L52,17  M28,47 L52,25  M36,47 L52,33"/>
+    <path class="sm-hatch" d="M35,17 L12,39  M43,17 L12,47  M52,19 L20,47  M52,27 L28,47  M52,35 L36,47  M52,43 L44,47"/>
+    <!-- roof ridge running east-west at apex -->
+    <path class="sm-ridge" d="M12,32 L52,32"/>
+    <!-- low doorway void on south face -->
+    <rect class="sm-void" x="26" y="44" width="12" height="5" rx="0.5"/>
+  </symbol>
+  <symbol id="sm-hut-straw-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- small timber-walled hut -->
+    <rect class="sm-timber" x="12" y="17" width="40" height="30" rx="1.5"/>
+    <!--
+      Diagonal 45° hatch simulates a thatched roof seen from above —
+      the slanting lines suggest the angle and texture of laid straw.
+      Two directions crossing each other give the herringbone feel.
+    -->
+    <path class="sm-hatch" d="M12,33 L29,17  M12,41 L37,17  M12,47 L45,17  M20,47 L52,17  M28,47 L52,25  M36,47 L52,33"/>
+    <path class="sm-hatch" d="M35,17 L12,39  M43,17 L12,47  M52,19 L20,47  M52,27 L28,47  M52,35 L36,47  M52,43 L44,47"/>
+    <!-- roof ridge running east-west at apex -->
+    <path class="sm-ridge" d="M12,32 L52,32"/>
+    <!-- low doorway void on south face -->
+    <rect class="sm-void" x="26" y="44" width="12" height="5" rx="0.5"/></g>
+  </symbol>
+  <symbol id="sm-inn" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- north range: main inn building -->
+    <rect class="sm-stone" x="8"  y="8"  width="48" height="15" rx="1.5"/>
+    <path class="sm-hatch" d="M11,11 L53,11 M11,15 L53,15 M11,19 L53,19"/>
+    <!-- west range -->
+    <rect class="sm-stone" x="8"  y="8"  width="13" height="44" rx="1.5"/>
+    <path class="sm-hatch" d="M11,24 L18,24 M11,30 L18,30 M11,36 L18,36 M11,42 L18,42 M11,48 L18,48"/>
+    <!-- east range -->
+    <rect class="sm-stone" x="43" y="8"  width="13" height="44" rx="1.5"/>
+    <path class="sm-hatch" d="M46,24 L53,24 M46,30 L53,30 M46,36 L53,36 M46,42 L53,42 M46,48 L53,48"/>
+    <!-- inner courtyard void -->
+    <rect class="sm-void"  x="21" y="23" width="22" height="29" rx="1"/>
+    <!-- south gateway posts -->
+    <rect class="sm-stone" x="21" y="50" width="5"  height="6" rx="1"/>
+    <rect class="sm-stone" x="38" y="50" width="5"  height="6" rx="1"/>
+    <!-- inn sign post: small timber post in courtyard -->
+    <circle class="sm-timber" cx="32" cy="38" r="3"/>
+    <circle class="sm-void"   cx="32" cy="38" r="1.2"/>
+  </symbol>
+  <symbol id="sm-inn-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- north range: main inn building -->
+    <rect class="sm-stone" x="8"  y="8"  width="48" height="15" rx="1.5"/>
+    <path class="sm-hatch" d="M11,11 L53,11 M11,15 L53,15 M11,19 L53,19"/>
+    <!-- west range -->
+    <rect class="sm-stone" x="8"  y="8"  width="13" height="44" rx="1.5"/>
+    <path class="sm-hatch" d="M11,24 L18,24 M11,30 L18,30 M11,36 L18,36 M11,42 L18,42 M11,48 L18,48"/>
+    <!-- east range -->
+    <rect class="sm-stone" x="43" y="8"  width="13" height="44" rx="1.5"/>
+    <path class="sm-hatch" d="M46,24 L53,24 M46,30 L53,30 M46,36 L53,36 M46,42 L53,42 M46,48 L53,48"/>
+    <!-- inner courtyard void -->
+    <rect class="sm-void"  x="21" y="23" width="22" height="29" rx="1"/>
+    <!-- south gateway posts -->
+    <rect class="sm-stone" x="21" y="50" width="5"  height="6" rx="1"/>
+    <rect class="sm-stone" x="38" y="50" width="5"  height="6" rx="1"/>
+    <!-- inn sign post: small timber post in courtyard -->
+    <circle class="sm-timber" cx="32" cy="38" r="3"/>
+    <circle class="sm-void"   cx="32" cy="38" r="1.2"/></g>
+  </symbol>
+  <symbol id="sm-longhouse" viewBox="0 0 64 64" overflow="visible">
+
+    <rect class="sm-timber" x="7" y="20" width="50" height="24" rx="1.5"/>
+    <path class="sm-hatch" d="M10,25 L54,25 M10,29.5 L54,29.5 M10,34 L54,34 M10,38.5 L54,38.5"/>
+    <path class="sm-ridge" d="M7,32 L57,32"/>
+    <!-- end gable marks -->
+    <path class="sm-ridge" d="M7,20 L7,44 M57,20 L57,44"/>
+  </symbol>
+  <symbol id="sm-longhouse-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <rect class="sm-timber" x="7" y="20" width="50" height="24" rx="1.5"/>
+    <path class="sm-hatch" d="M10,25 L54,25 M10,29.5 L54,29.5 M10,34 L54,34 M10,38.5 L54,38.5"/>
+    <path class="sm-ridge" d="M7,32 L57,32"/>
+    <!-- end gable marks -->
+    <path class="sm-ridge" d="M7,20 L7,44 M57,20 L57,44"/></g>
+  </symbol>
+  <symbol id="sm-market" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- covered market hall: open-sided, roof supported on pillars -->
+    <rect class="sm-timber" x="7" y="18" width="50" height="28" rx="1.5"/>
+    <!-- roof hatch -->
+    <path class="sm-hatch" d="M10,23 L54,23 M10,28 L54,28 M10,33 L54,33 M10,38 L54,38 M10,43 L54,43"/>
+    <!-- central ridge -->
+    <path class="sm-ridge" d="M7,32 L57,32"/>
+    <!-- support posts along centreline -->
+    <circle class="sm-void" cx="17" cy="32" r="2.5"/>
+    <circle class="sm-void" cx="27" cy="32" r="2.5"/>
+    <circle class="sm-void" cx="37" cy="32" r="2.5"/>
+    <circle class="sm-void" cx="47" cy="32" r="2.5"/>
+    <!-- open end openings (north + south) indicated by gap in stroke -->
+    <path class="sm-ridge" d="M7,18 L57,18"/>
+    <path class="sm-ridge" d="M7,46 L57,46"/>
+    <!-- stall dividers on both sides of centre -->
+    <path class="sm-hatch" d="M17,18 L17,26 M27,18 L27,26 M37,18 L37,26 M47,18 L47,26
+                              M17,38 L17,46 M27,38 L27,46 M37,38 L37,46 M47,38 L47,46"/>
+  </symbol>
+  <symbol id="sm-market-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- covered market hall: open-sided, roof supported on pillars -->
+    <rect class="sm-timber" x="7" y="18" width="50" height="28" rx="1.5"/>
+    <!-- roof hatch -->
+    <path class="sm-hatch" d="M10,23 L54,23 M10,28 L54,28 M10,33 L54,33 M10,38 L54,38 M10,43 L54,43"/>
+    <!-- central ridge -->
+    <path class="sm-ridge" d="M7,32 L57,32"/>
+    <!-- support posts along centreline -->
+    <circle class="sm-void" cx="17" cy="32" r="2.5"/>
+    <circle class="sm-void" cx="27" cy="32" r="2.5"/>
+    <circle class="sm-void" cx="37" cy="32" r="2.5"/>
+    <circle class="sm-void" cx="47" cy="32" r="2.5"/>
+    <!-- open end openings (north + south) indicated by gap in stroke -->
+    <path class="sm-ridge" d="M7,18 L57,18"/>
+    <path class="sm-ridge" d="M7,46 L57,46"/>
+    <!-- stall dividers on both sides of centre -->
+    <path class="sm-hatch" d="M17,18 L17,26 M27,18 L27,26 M37,18 L37,26 M47,18 L47,26
+                              M17,38 L17,46 M27,38 L27,46 M37,38 L37,46 M47,38 L47,46"/></g>
+  </symbol>
+  <symbol id="sm-mine" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- outermost disturbed ground / spoil terrace -->
+    <rect class="sm-stone" x="5" y="5" width="54" height="54" rx="2"/>
+    <!-- diagonal cross-hatch on spoil: loose broken rock, not orderly like a building -->
+    <path class="sm-hatch" d="M5,13 L13,5 M5,21 L21,5 M5,29 L29,5 M5,37 L37,5 M5,45 L45,5
+                              M5,53 L53,5 M13,59 L59,13 M21,59 L59,21 M29,59 L59,29
+                              M37,59 L59,37 M45,59 L59,45 M53,59 L59,53"/>
+    <!-- second terrace: first cut down into the earth -->
+    <rect class="sm-stone" x="14" y="14" width="36" height="36" rx="1.5"/>
+    <!-- third terrace -->
+    <rect class="sm-stone" x="23" y="23" width="18" height="18" rx="1"/>
+    <!-- shaft: central void -->
+    <rect class="sm-void"  x="27" y="27" width="10" height="10" rx="0.5"/>
+    <!-- headframe / winding gear: cross of ridgelines over the shaft,
+         representing the mine infrastructure above ground -->
+    <path class="sm-ridge" d="M32,5 L32,27 M5,32 L27,32"/>
+  </symbol>
+  <symbol id="sm-mine-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- outermost disturbed ground / spoil terrace -->
+    <rect class="sm-stone" x="5" y="5" width="54" height="54" rx="2"/>
+    <!-- diagonal cross-hatch on spoil: loose broken rock, not orderly like a building -->
+    <path class="sm-hatch" d="M5,13 L13,5 M5,21 L21,5 M5,29 L29,5 M5,37 L37,5 M5,45 L45,5
+                              M5,53 L53,5 M13,59 L59,13 M21,59 L59,21 M29,59 L59,29
+                              M37,59 L59,37 M45,59 L59,45 M53,59 L59,53"/>
+    <!-- second terrace: first cut down into the earth -->
+    <rect class="sm-stone" x="14" y="14" width="36" height="36" rx="1.5"/>
+    <!-- third terrace -->
+    <rect class="sm-stone" x="23" y="23" width="18" height="18" rx="1"/>
+    <!-- shaft: central void -->
+    <rect class="sm-void"  x="27" y="27" width="10" height="10" rx="0.5"/>
+    <!-- headframe / winding gear: cross of ridgelines over the shaft,
+         representing the mine infrastructure above ground -->
+    <path class="sm-ridge" d="M32,5 L32,27 M5,32 L27,32"/></g>
+  </symbol>
+  <symbol id="sm-orchard" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- grassy ground between trees -->
+    <rect class="sm-crop" x="7" y="7" width="50" height="50" rx="2"/>
+    <!-- 3×3 grid of fruit trees, centres at 17 / 32 / 47 -->
+    <circle class="sm-canopy-a" cx="17" cy="17" r="7"/>
+    <circle class="sm-canopy-b" cx="17" cy="17" r="3.5"/>
+    <circle class="sm-canopy-a" cx="32" cy="17" r="7"/>
+    <circle class="sm-canopy-b" cx="32" cy="17" r="3.5"/>
+    <circle class="sm-canopy-a" cx="47" cy="17" r="7"/>
+    <circle class="sm-canopy-b" cx="47" cy="17" r="3.5"/>
+    <circle class="sm-canopy-a" cx="17" cy="32" r="7"/>
+    <circle class="sm-canopy-b" cx="17" cy="32" r="3.5"/>
+    <circle class="sm-canopy-a" cx="32" cy="32" r="7"/>
+    <circle class="sm-canopy-b" cx="32" cy="32" r="3.5"/>
+    <circle class="sm-canopy-a" cx="47" cy="32" r="7"/>
+    <circle class="sm-canopy-b" cx="47" cy="32" r="3.5"/>
+    <circle class="sm-canopy-a" cx="17" cy="47" r="7"/>
+    <circle class="sm-canopy-b" cx="17" cy="47" r="3.5"/>
+    <circle class="sm-canopy-a" cx="32" cy="47" r="7"/>
+    <circle class="sm-canopy-b" cx="32" cy="47" r="3.5"/>
+    <circle class="sm-canopy-a" cx="47" cy="47" r="7"/>
+    <circle class="sm-canopy-b" cx="47" cy="47" r="3.5"/>
+  </symbol>
+  <symbol id="sm-orchard-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- grassy ground between trees -->
+    <rect class="sm-crop" x="7" y="7" width="50" height="50" rx="2"/>
+    <!-- 3×3 grid of fruit trees, centres at 17 / 32 / 47 -->
+    <circle class="sm-canopy-a" cx="17" cy="17" r="7"/>
+    <circle class="sm-canopy-b" cx="17" cy="17" r="3.5"/>
+    <circle class="sm-canopy-a" cx="32" cy="17" r="7"/>
+    <circle class="sm-canopy-b" cx="32" cy="17" r="3.5"/>
+    <circle class="sm-canopy-a" cx="47" cy="17" r="7"/>
+    <circle class="sm-canopy-b" cx="47" cy="17" r="3.5"/>
+    <circle class="sm-canopy-a" cx="17" cy="32" r="7"/>
+    <circle class="sm-canopy-b" cx="17" cy="32" r="3.5"/>
+    <circle class="sm-canopy-a" cx="32" cy="32" r="7"/>
+    <circle class="sm-canopy-b" cx="32" cy="32" r="3.5"/>
+    <circle class="sm-canopy-a" cx="47" cy="32" r="7"/>
+    <circle class="sm-canopy-b" cx="47" cy="32" r="3.5"/>
+    <circle class="sm-canopy-a" cx="17" cy="47" r="7"/>
+    <circle class="sm-canopy-b" cx="17" cy="47" r="3.5"/>
+    <circle class="sm-canopy-a" cx="32" cy="47" r="7"/>
+    <circle class="sm-canopy-b" cx="32" cy="47" r="3.5"/>
+    <circle class="sm-canopy-a" cx="47" cy="47" r="7"/>
+    <circle class="sm-canopy-b" cx="47" cy="47" r="3.5"/></g>
+  </symbol>
+  <symbol id="sm-park" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- grass ground -->
+    <rect class="sm-crop" x="6" y="6" width="52" height="52" rx="3"/>
+    <!-- two winding paths crossing near centre — curved so they read as
+         informal gravel walks rather than roads or field furrows -->
+    <path class="sm-ridge" d="M6,32 Q14,26 22,32 Q30,38 38,30 Q46,22 58,28"/>
+    <path class="sm-ridge" d="M32,6 Q26,16 32,24 Q38,32 30,42 Q24,50 32,58"/>
+    <!-- central pond where the paths meet -->
+    <circle class="sm-stone" cx="32" cy="30" r="6"/>
+    <circle class="sm-void"  cx="32" cy="30" r="3.5"/>
+    <!-- trees: one in each quadrant, sizes varied for a natural feel -->
+    <circle class="sm-canopy-a" cx="14" cy="14" r="7"/>
+    <circle class="sm-canopy-b" cx="14" cy="14" r="3.5"/>
+    <circle class="sm-canopy-a" cx="50" cy="13" r="6"/>
+    <circle class="sm-canopy-b" cx="50" cy="13" r="3"/>
+    <circle class="sm-canopy-a" cx="13" cy="50" r="6"/>
+    <circle class="sm-canopy-b" cx="13" cy="50" r="3"/>
+    <circle class="sm-canopy-a" cx="50" cy="50" r="7"/>
+    <circle class="sm-canopy-b" cx="50" cy="50" r="3.5"/>
+    <!-- extra tree mid-left for asymmetry -->
+    <circle class="sm-canopy-a" cx="14" cy="32" r="4"/>
+    <circle class="sm-canopy-b" cx="14" cy="32" r="2"/>
+  </symbol>
+  <symbol id="sm-park-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- grass ground -->
+    <rect class="sm-crop" x="6" y="6" width="52" height="52" rx="3"/>
+    <!-- two winding paths crossing near centre — curved so they read as
+         informal gravel walks rather than roads or field furrows -->
+    <path class="sm-ridge" d="M6,32 Q14,26 22,32 Q30,38 38,30 Q46,22 58,28"/>
+    <path class="sm-ridge" d="M32,6 Q26,16 32,24 Q38,32 30,42 Q24,50 32,58"/>
+    <!-- central pond where the paths meet -->
+    <circle class="sm-stone" cx="32" cy="30" r="6"/>
+    <circle class="sm-void"  cx="32" cy="30" r="3.5"/>
+    <!-- trees: one in each quadrant, sizes varied for a natural feel -->
+    <circle class="sm-canopy-a" cx="14" cy="14" r="7"/>
+    <circle class="sm-canopy-b" cx="14" cy="14" r="3.5"/>
+    <circle class="sm-canopy-a" cx="50" cy="13" r="6"/>
+    <circle class="sm-canopy-b" cx="50" cy="13" r="3"/>
+    <circle class="sm-canopy-a" cx="13" cy="50" r="6"/>
+    <circle class="sm-canopy-b" cx="13" cy="50" r="3"/>
+    <circle class="sm-canopy-a" cx="50" cy="50" r="7"/>
+    <circle class="sm-canopy-b" cx="50" cy="50" r="3.5"/>
+    <!-- extra tree mid-left for asymmetry -->
+    <circle class="sm-canopy-a" cx="14" cy="32" r="4"/>
+    <circle class="sm-canopy-b" cx="14" cy="32" r="2"/></g>
+  </symbol>
+  <symbol id="sm-racetrack" viewBox="0 0 64 64" overflow="visible">
+
+    <!--
+      Roman circus / hippodrome: flat west end (carceres/starting gates),
+      semicircular east end. Both outer and inner arcs share the same
+      centre (44,32) so the curved track width is uniform at 6 px.
+    -->
+    <!-- outer boundary: flat west wall + two rails + east semicircle -->
+    <path class="sm-stone" d="M8,16 L44,16 A16,16 0 0,1 44,48 L8,48 Z"/>
+    <!-- inner void: racing lane cutout -->
+    <path class="sm-void"  d="M14,22 L44,22 A10,10 0 0,1 44,42 L14,42 Z"/>
+    <!-- spina: central barrier running most of the track length -->
+    <rect class="sm-stone" x="16" y="28" width="26" height="8" rx="1"/>
+    <!-- turning posts (metae): east end of spina -->
+    <circle class="sm-stone" cx="44" cy="32" r="3.5"/>
+    <circle class="sm-void"  cx="44" cy="32" r="1.5"/>
+    <!-- starting gate stalls (carceres): vertical dividers at west flat end -->
+    <path class="sm-hatch" d="M10,22 L10,42 M12,22 L12,42"/>
+    <path class="sm-hatch" d="M8,26 L14,26 M8,30 L14,30 M8,34 L14,34 M8,38 L14,38"/>
+  </symbol>
+  <symbol id="sm-racetrack-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!--
+      Roman circus / hippodrome: flat west end (carceres/starting gates),
+      semicircular east end. Both outer and inner arcs share the same
+      centre (44,32) so the curved track width is uniform at 6 px.
+    -->
+    <!-- outer boundary: flat west wall + two rails + east semicircle -->
+    <path class="sm-stone" d="M8,16 L44,16 A16,16 0 0,1 44,48 L8,48 Z"/>
+    <!-- inner void: racing lane cutout -->
+    <path class="sm-void"  d="M14,22 L44,22 A10,10 0 0,1 44,42 L14,42 Z"/>
+    <!-- spina: central barrier running most of the track length -->
+    <rect class="sm-stone" x="16" y="28" width="26" height="8" rx="1"/>
+    <!-- turning posts (metae): east end of spina -->
+    <circle class="sm-stone" cx="44" cy="32" r="3.5"/>
+    <circle class="sm-void"  cx="44" cy="32" r="1.5"/>
+    <!-- starting gate stalls (carceres): vertical dividers at west flat end -->
+    <path class="sm-hatch" d="M10,22 L10,42 M12,22 L12,42"/>
+    <path class="sm-hatch" d="M8,26 L14,26 M8,30 L14,30 M8,34 L14,34 M8,38 L14,38"/></g>
+  </symbol>
+  <symbol id="sm-road-cobbled" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- road surface -->
+    <rect class="sm-stone" x="0" y="18" width="64" height="28" rx="0"/>
+    <!-- road edges -->
+    <path class="sm-ridge" d="M0,18 L64,18 M0,46 L64,46"/>
+    <!-- cobble rows (horizontal mortar joints) -->
+    <path class="sm-hatch" d="M0,23 L64,23 M0,28 L64,28 M0,33 L64,33 M0,38 L64,38 M0,43 L64,43"/>
+    <!-- cobble columns: alternating offset per row (running bond) -->
+    <!-- row band 18-23 -->
+    <path class="sm-hatch" d="M4,18 L4,23 M12,18 L12,23 M20,18 L20,23 M28,18 L28,23 M36,18 L36,23 M44,18 L44,23 M52,18 L52,23 M60,18 L60,23"/>
+    <!-- row band 23-28 (offset +4) -->
+    <path class="sm-hatch" d="M8,23 L8,28 M16,23 L16,28 M24,23 L24,28 M32,23 L32,28 M40,23 L40,28 M48,23 L48,28 M56,23 L56,28"/>
+    <!-- row band 28-33 -->
+    <path class="sm-hatch" d="M4,28 L4,33 M12,28 L12,33 M20,28 L20,33 M28,28 L28,33 M36,28 L36,33 M44,28 L44,33 M52,28 L52,33 M60,28 L60,33"/>
+    <!-- row band 33-38 (offset) -->
+    <path class="sm-hatch" d="M8,33 L8,38 M16,33 L16,38 M24,33 L24,38 M32,33 L32,38 M40,33 L40,38 M48,33 L48,38 M56,33 L56,38"/>
+    <!-- row band 38-43 -->
+    <path class="sm-hatch" d="M4,38 L4,43 M12,38 L12,43 M20,38 L20,43 M28,38 L28,43 M36,38 L36,43 M44,38 L44,43 M52,38 L52,43 M60,38 L60,43"/>
+    <!-- row band 43-46 (offset) -->
+    <path class="sm-hatch" d="M8,43 L8,46 M16,43 L16,46 M24,43 L24,46 M32,43 L32,46 M40,43 L40,46 M48,43 L48,46 M56,43 L56,46"/>
+  </symbol>
+  <symbol id="sm-road-cobbled-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- road surface -->
+    <rect class="sm-stone" x="0" y="18" width="64" height="28" rx="0"/>
+    <!-- road edges -->
+    <path class="sm-ridge" d="M0,18 L64,18 M0,46 L64,46"/>
+    <!-- cobble rows (horizontal mortar joints) -->
+    <path class="sm-hatch" d="M0,23 L64,23 M0,28 L64,28 M0,33 L64,33 M0,38 L64,38 M0,43 L64,43"/>
+    <!-- cobble columns: alternating offset per row (running bond) -->
+    <!-- row band 18-23 -->
+    <path class="sm-hatch" d="M4,18 L4,23 M12,18 L12,23 M20,18 L20,23 M28,18 L28,23 M36,18 L36,23 M44,18 L44,23 M52,18 L52,23 M60,18 L60,23"/>
+    <!-- row band 23-28 (offset +4) -->
+    <path class="sm-hatch" d="M8,23 L8,28 M16,23 L16,28 M24,23 L24,28 M32,23 L32,28 M40,23 L40,28 M48,23 L48,28 M56,23 L56,28"/>
+    <!-- row band 28-33 -->
+    <path class="sm-hatch" d="M4,28 L4,33 M12,28 L12,33 M20,28 L20,33 M28,28 L28,33 M36,28 L36,33 M44,28 L44,33 M52,28 L52,33 M60,28 L60,33"/>
+    <!-- row band 33-38 (offset) -->
+    <path class="sm-hatch" d="M8,33 L8,38 M16,33 L16,38 M24,33 L24,38 M32,33 L32,38 M40,33 L40,38 M48,33 L48,38 M56,33 L56,38"/>
+    <!-- row band 38-43 -->
+    <path class="sm-hatch" d="M4,38 L4,43 M12,38 L12,43 M20,38 L20,43 M28,38 L28,43 M36,38 L36,43 M44,38 L44,43 M52,38 L52,43 M60,38 L60,43"/>
+    <!-- row band 43-46 (offset) -->
+    <path class="sm-hatch" d="M8,43 L8,46 M16,43 L16,46 M24,43 L24,46 M32,43 L32,46 M40,43 L40,46 M48,43 L48,46 M56,43 L56,46"/></g>
+  </symbol>
+  <symbol id="sm-road-dirt" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- dirt track surface -->
+    <rect class="sm-timber" x="0" y="18" width="64" height="28" rx="0"/>
+    <!-- road edge lines (slightly irregular to feel organic) -->
+    <path class="sm-ridge" d="M0,18 Q16,19 32,18 Q48,17 64,18"/>
+    <path class="sm-ridge" d="M0,46 Q16,45 32,46 Q48,47 64,46"/>
+    <!-- worn wheel ruts -->
+    <path class="sm-ridge" d="M0,26 Q10,25 22,27 Q36,29 48,26 Q56,24 64,26"/>
+    <path class="sm-ridge" d="M0,38 Q12,39 24,37 Q38,35 50,38 Q58,40 64,38"/>
+    <!-- loose earth texture along edges -->
+    <path class="sm-hatch" d="M2,20 L8,20 M14,20 L19,20 M36,20 L41,20 M50,20 L55,20
+                              M4,22 L9,22 M18,22 L22,22 M42,22 L46,22 M53,22 L58,22
+                              M2,44 L7,44 M13,44 L18,44 M38,44 L43,44 M52,44 L57,44
+                              M5,42 L10,42 M20,42 L25,42 M44,42 L49,42 M55,42 L60,42"/>
+  </symbol>
+  <symbol id="sm-road-dirt-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- dirt track surface -->
+    <rect class="sm-timber" x="0" y="18" width="64" height="28" rx="0"/>
+    <!-- road edge lines (slightly irregular to feel organic) -->
+    <path class="sm-ridge" d="M0,18 Q16,19 32,18 Q48,17 64,18"/>
+    <path class="sm-ridge" d="M0,46 Q16,45 32,46 Q48,47 64,46"/>
+    <!-- worn wheel ruts -->
+    <path class="sm-ridge" d="M0,26 Q10,25 22,27 Q36,29 48,26 Q56,24 64,26"/>
+    <path class="sm-ridge" d="M0,38 Q12,39 24,37 Q38,35 50,38 Q58,40 64,38"/>
+    <!-- loose earth texture along edges -->
+    <path class="sm-hatch" d="M2,20 L8,20 M14,20 L19,20 M36,20 L41,20 M50,20 L55,20
+                              M4,22 L9,22 M18,22 L22,22 M42,22 L46,22 M53,22 L58,22
+                              M2,44 L7,44 M13,44 L18,44 M38,44 L43,44 M52,44 L57,44
+                              M5,42 L10,42 M20,42 L25,42 M44,42 L49,42 M55,42 L60,42"/></g>
+  </symbol>
+  <symbol id="sm-stables" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- stable building -->
+    <rect class="sm-timber" x="7" y="14" width="50" height="36" rx="1.5"/>
+    <!-- central aisle running east-west -->
+    <path class="sm-ridge" d="M7,32 L57,32"/>
+    <!-- stall dividers: north side (wall to aisle) -->
+    <path class="sm-hatch" d="M15,14 L15,32 M22,14 L22,32 M29,14 L29,32 M36,14 L36,32 M43,14 L43,32 M50,14 L50,32"/>
+    <!-- stall dividers: south side (aisle to wall) -->
+    <path class="sm-hatch" d="M15,32 L15,50 M22,32 L22,50 M29,32 L29,50 M36,32 L36,50 M43,32 L43,50 M50,32 L50,50"/>
+    <!-- feed troughs: small void marks at back of each stall, north side -->
+    <path class="sm-hatch" d="M8,16 L14,16 M15,16 L21,16 M22,16 L28,16 M29,16 L35,16 M36,16 L42,16 M43,16 L49,16 M50,16 L56,16"/>
+    <!-- feed troughs: south side -->
+    <path class="sm-hatch" d="M8,48 L14,48 M15,48 L21,48 M22,48 L28,48 M29,48 L35,48 M36,48 L42,48 M43,48 L49,48 M50,48 L56,48"/>
+  </symbol>
+  <symbol id="sm-stables-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- stable building -->
+    <rect class="sm-timber" x="7" y="14" width="50" height="36" rx="1.5"/>
+    <!-- central aisle running east-west -->
+    <path class="sm-ridge" d="M7,32 L57,32"/>
+    <!-- stall dividers: north side (wall to aisle) -->
+    <path class="sm-hatch" d="M15,14 L15,32 M22,14 L22,32 M29,14 L29,32 M36,14 L36,32 M43,14 L43,32 M50,14 L50,32"/>
+    <!-- stall dividers: south side (aisle to wall) -->
+    <path class="sm-hatch" d="M15,32 L15,50 M22,32 L22,50 M29,32 L29,50 M36,32 L36,50 M43,32 L43,50 M50,32 L50,50"/>
+    <!-- feed troughs: small void marks at back of each stall, north side -->
+    <path class="sm-hatch" d="M8,16 L14,16 M15,16 L21,16 M22,16 L28,16 M29,16 L35,16 M36,16 L42,16 M43,16 L49,16 M50,16 L56,16"/>
+    <!-- feed troughs: south side -->
+    <path class="sm-hatch" d="M8,48 L14,48 M15,48 L21,48 M22,48 L28,48 M29,48 L35,48 M36,48 L42,48 M43,48 L49,48 M50,48 L56,48"/></g>
+  </symbol>
+  <symbol id="sm-temple" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- outer stylobate platform -->
+    <rect class="sm-stone" x="5" y="9" width="54" height="46" rx="1"/>
+    <!-- inner cella -->
+    <rect class="sm-stone" x="17" y="19" width="30" height="26" rx="0.5"/>
+    <path class="sm-hatch" d="M20,23 L44,23 M20,27 L44,27 M20,31 L44,31 M20,35 L44,35 M20,39 L44,39 M20,43 L44,43"/>
+    <!--
+      Columns sit in the peristyle walkway between outer wall and cella.
+      West peristyle midpoint x≈11, east x≈53, north y≈14, south y≈50.
+    -->
+    <!-- corner columns -->
+    <circle class="sm-void" cx="11" cy="14" r="2.5"/>
+    <circle class="sm-void" cx="53" cy="14" r="2.5"/>
+    <circle class="sm-void" cx="11" cy="50" r="2.5"/>
+    <circle class="sm-void" cx="53" cy="50" r="2.5"/>
+    <!-- west colonnade -->
+    <circle class="sm-void" cx="11" cy="23" r="2.5"/>
+    <circle class="sm-void" cx="11" cy="32" r="2.5"/>
+    <circle class="sm-void" cx="11" cy="41" r="2.5"/>
+    <!-- east colonnade -->
+    <circle class="sm-void" cx="53" cy="23" r="2.5"/>
+    <circle class="sm-void" cx="53" cy="32" r="2.5"/>
+    <circle class="sm-void" cx="53" cy="41" r="2.5"/>
+    <!-- north colonnade (between corner columns) -->
+    <circle class="sm-void" cx="21" cy="14" r="2.5"/>
+    <circle class="sm-void" cx="32" cy="14" r="2.5"/>
+    <circle class="sm-void" cx="43" cy="14" r="2.5"/>
+    <!-- south colonnade -->
+    <circle class="sm-void" cx="21" cy="50" r="2.5"/>
+    <circle class="sm-void" cx="32" cy="50" r="2.5"/>
+    <circle class="sm-void" cx="43" cy="50" r="2.5"/>
+  </symbol>
+  <symbol id="sm-temple-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- outer stylobate platform -->
+    <rect class="sm-stone" x="5" y="9" width="54" height="46" rx="1"/>
+    <!-- inner cella -->
+    <rect class="sm-stone" x="17" y="19" width="30" height="26" rx="0.5"/>
+    <path class="sm-hatch" d="M20,23 L44,23 M20,27 L44,27 M20,31 L44,31 M20,35 L44,35 M20,39 L44,39 M20,43 L44,43"/>
+    <!--
+      Columns sit in the peristyle walkway between outer wall and cella.
+      West peristyle midpoint x≈11, east x≈53, north y≈14, south y≈50.
+    -->
+    <!-- corner columns -->
+    <circle class="sm-void" cx="11" cy="14" r="2.5"/>
+    <circle class="sm-void" cx="53" cy="14" r="2.5"/>
+    <circle class="sm-void" cx="11" cy="50" r="2.5"/>
+    <circle class="sm-void" cx="53" cy="50" r="2.5"/>
+    <!-- west colonnade -->
+    <circle class="sm-void" cx="11" cy="23" r="2.5"/>
+    <circle class="sm-void" cx="11" cy="32" r="2.5"/>
+    <circle class="sm-void" cx="11" cy="41" r="2.5"/>
+    <!-- east colonnade -->
+    <circle class="sm-void" cx="53" cy="23" r="2.5"/>
+    <circle class="sm-void" cx="53" cy="32" r="2.5"/>
+    <circle class="sm-void" cx="53" cy="41" r="2.5"/>
+    <!-- north colonnade (between corner columns) -->
+    <circle class="sm-void" cx="21" cy="14" r="2.5"/>
+    <circle class="sm-void" cx="32" cy="14" r="2.5"/>
+    <circle class="sm-void" cx="43" cy="14" r="2.5"/>
+    <!-- south colonnade -->
+    <circle class="sm-void" cx="21" cy="50" r="2.5"/>
+    <circle class="sm-void" cx="32" cy="50" r="2.5"/>
+    <circle class="sm-void" cx="43" cy="50" r="2.5"/></g>
+  </symbol>
+  <symbol id="sm-tower" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- outer wall -->
+    <rect class="sm-stone" x="10" y="10" width="44" height="44" rx="2"/>
+    <!-- wall hatch -->
+    <path class="sm-hatch" d="M13,17 L51,17 M13,24 L51,24 M13,31 L51,31 M13,38 L51,38 M13,45 L51,45"/>
+    <!-- interior void (open courtyard) -->
+    <rect class="sm-void" x="20" y="20" width="24" height="24" rx="1"/>
+    <!-- corner turrets -->
+    <rect class="sm-stone" x="7"  y="7"  width="10" height="10" rx="1"/>
+    <rect class="sm-stone" x="47" y="7"  width="10" height="10" rx="1"/>
+    <rect class="sm-stone" x="7"  y="47" width="10" height="10" rx="1"/>
+    <rect class="sm-stone" x="47" y="47" width="10" height="10" rx="1"/>
+  </symbol>
+  <symbol id="sm-tower-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- outer wall -->
+    <rect class="sm-stone" x="10" y="10" width="44" height="44" rx="2"/>
+    <!-- wall hatch -->
+    <path class="sm-hatch" d="M13,17 L51,17 M13,24 L51,24 M13,31 L51,31 M13,38 L51,38 M13,45 L51,45"/>
+    <!-- interior void (open courtyard) -->
+    <rect class="sm-void" x="20" y="20" width="24" height="24" rx="1"/>
+    <!-- corner turrets -->
+    <rect class="sm-stone" x="7"  y="7"  width="10" height="10" rx="1"/>
+    <rect class="sm-stone" x="47" y="7"  width="10" height="10" rx="1"/>
+    <rect class="sm-stone" x="7"  y="47" width="10" height="10" rx="1"/>
+    <rect class="sm-stone" x="47" y="47" width="10" height="10" rx="1"/></g>
+  </symbol>
+  <symbol id="sm-town-hall" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- main hall -->
+    <rect class="sm-stone" x="9" y="20" width="46" height="34" rx="1.5"/>
+    <path class="sm-hatch" d="M12,26 L52,26 M12,31 L52,31 M12,36 L52,36 M12,41 L52,41 M12,46 L52,46"/>
+    <!-- central ridge line -->
+    <path class="sm-ridge" d="M32,20 L32,54"/>
+    <!-- front belfry tower, projecting north -->
+    <rect class="sm-stone" x="22" y="8" width="20" height="16" rx="1"/>
+    <path class="sm-hatch" d="M25,11 L39,11 M25,15 L39,15 M25,19 L39,19"/>
+    <!-- belfry void (clock/bell opening) -->
+    <circle class="sm-void" cx="32" cy="14" r="4"/>
+  </symbol>
+  <symbol id="sm-town-hall-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- main hall -->
+    <rect class="sm-stone" x="9" y="20" width="46" height="34" rx="1.5"/>
+    <path class="sm-hatch" d="M12,26 L52,26 M12,31 L52,31 M12,36 L52,36 M12,41 L52,41 M12,46 L52,46"/>
+    <!-- central ridge line -->
+    <path class="sm-ridge" d="M32,20 L32,54"/>
+    <!-- front belfry tower, projecting north -->
+    <rect class="sm-stone" x="22" y="8" width="20" height="16" rx="1"/>
+    <path class="sm-hatch" d="M25,11 L39,11 M25,15 L39,15 M25,19 L39,19"/>
+    <!-- belfry void (clock/bell opening) -->
+    <circle class="sm-void" cx="32" cy="14" r="4"/></g>
+  </symbol>
+  <symbol id="sm-town-square" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- paved open square -->
+    <rect class="sm-stone" x="7" y="7" width="50" height="50" rx="1.5"/>
+    <!-- cobble grid hatch -->
+    <path class="sm-hatch" d="M7,15 L57,15 M7,23 L57,23 M7,31 L57,31 M7,39 L57,39 M7,47 L57,47 M7,55 L57,55"/>
+    <path class="sm-hatch" d="M15,7 L15,57 M23,7 L23,57 M31,7 L31,57 M39,7 L39,57 M47,7 L47,57 M55,7 L55,57"/>
+    <!-- central fountain: outer ring + inner pool -->
+    <circle class="sm-stone" cx="32" cy="32" r="8"/>
+    <circle class="sm-void"  cx="32" cy="32" r="4.5"/>
+    <circle class="sm-stone" cx="32" cy="32" r="1.5"/>
+    <!-- corner bollards / posts -->
+    <rect class="sm-void" x="9"  y="9"  width="4" height="4" rx="0.5"/>
+    <rect class="sm-void" x="51" y="9"  width="4" height="4" rx="0.5"/>
+    <rect class="sm-void" x="9"  y="51" width="4" height="4" rx="0.5"/>
+    <rect class="sm-void" x="51" y="51" width="4" height="4" rx="0.5"/>
+  </symbol>
+  <symbol id="sm-town-square-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- paved open square -->
+    <rect class="sm-stone" x="7" y="7" width="50" height="50" rx="1.5"/>
+    <!-- cobble grid hatch -->
+    <path class="sm-hatch" d="M7,15 L57,15 M7,23 L57,23 M7,31 L57,31 M7,39 L57,39 M7,47 L57,47 M7,55 L57,55"/>
+    <path class="sm-hatch" d="M15,7 L15,57 M23,7 L23,57 M31,7 L31,57 M39,7 L39,57 M47,7 L47,57 M55,7 L55,57"/>
+    <!-- central fountain: outer ring + inner pool -->
+    <circle class="sm-stone" cx="32" cy="32" r="8"/>
+    <circle class="sm-void"  cx="32" cy="32" r="4.5"/>
+    <circle class="sm-stone" cx="32" cy="32" r="1.5"/>
+    <!-- corner bollards / posts -->
+    <rect class="sm-void" x="9"  y="9"  width="4" height="4" rx="0.5"/>
+    <rect class="sm-void" x="51" y="9"  width="4" height="4" rx="0.5"/>
+    <rect class="sm-void" x="9"  y="51" width="4" height="4" rx="0.5"/>
+    <rect class="sm-void" x="51" y="51" width="4" height="4" rx="0.5"/></g>
+  </symbol>
+  <symbol id="sm-tree-conifer" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- 12-point star — outer radius 22, inner radius 12, centred 32,32 -->
+    <path class="sm-canopy-a" d="M32,10 L35.1,20.4 L43,12.9 L40.5,23.5 L51.1,21 L43.6,28.9
+      L54,32 L43.6,35.1 L51.1,43 L40.5,40.5 L43,51.1 L35.1,43.6
+      L32,54 L28.9,43.6 L21,51.1 L23.5,40.5 L12.9,43 L20.4,35.1
+      L10,32 L20.4,28.9 L12.9,21 L23.5,23.5 L21,12.9 L28.9,20.4 Z"/>
+    <!-- inner highlight — outer radius 14, inner radius 7 -->
+    <path class="sm-canopy-b" d="M32,18 L33.8,25.2 L39,19.9 L36.9,27.1 L44.1,25 L38.8,30.2
+      L46,32 L38.8,33.8 L44.1,39 L36.9,36.9 L39,44.1 L33.8,38.8
+      L32,46 L30.2,38.8 L25,44.1 L27.1,36.9 L19.9,39 L25.2,33.8
+      L18,32 L25.2,30.2 L19.9,25 L27.1,27.1 L25,19.9 L30.2,25.2 Z"/>
+    <circle class="sm-void" cx="32" cy="32" r="5"/>
+  </symbol>
+  <symbol id="sm-tree-conifer-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- 12-point star — outer radius 22, inner radius 12, centred 32,32 -->
+    <path class="sm-canopy-a" d="M32,10 L35.1,20.4 L43,12.9 L40.5,23.5 L51.1,21 L43.6,28.9
+      L54,32 L43.6,35.1 L51.1,43 L40.5,40.5 L43,51.1 L35.1,43.6
+      L32,54 L28.9,43.6 L21,51.1 L23.5,40.5 L12.9,43 L20.4,35.1
+      L10,32 L20.4,28.9 L12.9,21 L23.5,23.5 L21,12.9 L28.9,20.4 Z"/>
+    <!-- inner highlight — outer radius 14, inner radius 7 -->
+    <path class="sm-canopy-b" d="M32,18 L33.8,25.2 L39,19.9 L36.9,27.1 L44.1,25 L38.8,30.2
+      L46,32 L38.8,33.8 L44.1,39 L36.9,36.9 L39,44.1 L33.8,38.8
+      L32,46 L30.2,38.8 L25,44.1 L27.1,36.9 L19.9,39 L25.2,33.8
+      L18,32 L25.2,30.2 L19.9,25 L27.1,27.1 L25,19.9 L30.2,25.2 Z"/>
+    <circle class="sm-void" cx="32" cy="32" r="5"/></g>
+  </symbol>
+  <symbol id="sm-vineyard" viewBox="0 0 64 64" overflow="visible">
+
+    <!-- bare-earth alleys between vine rows -->
+    <rect class="sm-stone" x="7" y="7" width="50" height="50" rx="2"/>
+    <!--
+      Vine rows run east-west (the long axis) — drawn as heavier ridge lines.
+      Row pitch: 9 px.  Cross-tie pitch: 7 px (different from the town-square
+      cobble grid which is 8×8) so the trellis pattern reads distinctly.
+    -->
+    <path class="sm-ridge" d="M10,16 L54,16  M10,25 L54,25  M10,34 L54,34  M10,43 L54,43  M10,52 L54,52"/>
+    <!-- vine posts / cross-ties: lighter hatch lines running north-south -->
+    <path class="sm-hatch" d="
+      M17,7  L17,57   M24,7  L24,57   M31,7  L31,57
+      M38,7  L38,57   M45,7  L45,57   M52,7  L52,57
+    "/>
+  </symbol>
+  <symbol id="sm-vineyard-sil" viewBox="0 0 64 64" overflow="visible">
+    <g class="sm-sil">
+    <!-- bare-earth alleys between vine rows -->
+    <rect class="sm-stone" x="7" y="7" width="50" height="50" rx="2"/>
+    <!--
+      Vine rows run east-west (the long axis) — drawn as heavier ridge lines.
+      Row pitch: 9 px.  Cross-tie pitch: 7 px (different from the town-square
+      cobble grid which is 8×8) so the trellis pattern reads distinctly.
+    -->
+    <path class="sm-ridge" d="M10,16 L54,16  M10,25 L54,25  M10,34 L54,34  M10,43 L54,43  M10,52 L54,52"/>
+    <!-- vine posts / cross-ties: lighter hatch lines running north-south -->
+    <path class="sm-hatch" d="
+      M17,7  L17,57   M24,7  L24,57   M31,7  L31,57
+      M38,7  L38,57   M45,7  L45,57   M52,7  L52,57
+    "/></g>
+  </symbol>
+</svg>

@@ -18,3 +18,11 @@
   from = "/fmg"
   to = "/fmg.html"
   status = 200
+
+# "/symbols" is the symbol-library reference sheet. The sprite and per-symbol
+# files it loads live under /symbols/batch001/* — real static files, which
+# Netlify serves ahead of this rewrite, so they are unaffected.
+[[redirects]]
+  from = "/symbols"
+  to = "/symbols.html"
+  status = 200

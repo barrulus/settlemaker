@@ -16,6 +16,9 @@ export default defineConfig({
         // node_modules, which is exactly what masked this locally).
         index: 'index.html',
         fmg: 'fmg.html',
+        // "/symbols" is the symbol-library reference sheet. Its assets live in
+        // public/symbols/batch001/ and are served verbatim.
+        symbols: 'symbols.html',
       },
     },
   },
