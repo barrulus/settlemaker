@@ -1,0 +1,77 @@
+settlemaker
+Copyright (C) 2025-2026 Barry Gill <b@rry.im>
+
+This program is free software: you can redistribute it and/or modify it
+under the terms of the GNU General Public License version 3 as published
+by the Free Software Foundation.
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License along
+with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+SPDX-License-Identifier: GPL-3.0-only
+
+
+UPSTREAM WORK
+-------------
+
+settlemaker is a TypeScript reimplementation of the Medieval Fantasy City
+Generator by watabou (Oleg Dolya):
+
+    TownGeneratorOS (Haxe)
+    https://github.com/watabou/TownGeneratorOS
+    Licensed GPL-3.0
+
+    Medieval Fantasy City Generator
+    https://watabou.itch.io/medieval-fantasy-city-generator
+
+The generation core is a derivative work of TownGeneratorOS and is
+therefore licensed GPL-3.0 as well.  Upstream publishes no explicit
+"or (at your option) any later version" grant, so settlemaker is
+GPL-3.0-only rather than GPL-3.0-or-later.
+
+Files carrying directly ported algorithms mark the provenance inline
+("Port of watabou's ..."):
+
+    src/geom/geom-utils.ts        convexHull, obb, pierce
+    src/generator/model.ts        buildFarms and the generation pipeline
+    src/wards/farm.ts             splitField, round, getHousing
+    src/generator/generation-params.ts
+    src/wards/*                   ward layout and alley subdivision
+    src/geom/voronoi.ts           Voronoi/Delaunay construction
+    src/geom/polygon.ts           polygon operations
+
+
+INTERFACING WORKS (not part of this program)
+--------------------------------------------
+
+Azgaar's Fantasy Map Generator
+    https://github.com/Azgaar/Fantasy-Map-Generator
+    MIT License, Copyright 2017-2024 Max Haniyeu (Azgaar)
+
+FMG consumes settlemaker at arm's length over the URL API documented in
+docs/url-api.md -- two separate programs exchanging data over a URL, not
+a combined work.  Neither license reaches into the other.
+
+
+SYMBOL LIBRARY
+--------------
+
+The SVG symbol library under web/public/symbols/ is original artwork,
+licensed SEPARATELY from this program:
+
+    CC-BY-4.0, with a Rendered Output Exception
+    web/public/symbols/LICENSE
+    Per-symbol authorship: web/public/symbols/CREDITS
+
+Nothing in the GPL places that artwork under GPL terms, and nothing in
+the CC licence places any part of this program under CC terms.
+
+The exception waives attribution for rendered output: maps drawn with
+the symbols carry no obligation to anyone, because attribution cannot
+survive rasterisation and compositing into a larger map.  Attribution
+applies only to redistributing the symbol library itself as artwork.

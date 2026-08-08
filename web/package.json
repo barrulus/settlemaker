@@ -2,6 +2,8 @@
   "name": "settlemaker-web",
   "private": true,
   "version": "0.1.0",
+  "license": "GPL-3.0-only",
+  "author": "Barry Gill <b@rry.im>",
   "type": "module",
   "engines": {
     "node": ">=18"

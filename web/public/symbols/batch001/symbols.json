@@ -1,10 +1,16 @@
 {
   "batch": "001",
+  "license": "CC-BY-4.0",
+  "licenseUrl": "https://github.com/barrulus/settlemaker/blob/master/web/public/symbols/LICENSE",
+  "licenseNote": "Rendered output is exempt from attribution — see the Rendered Output Exception in LICENSE. Attribution applies when redistributing the symbol library itself.",
+  "attribution": "SettleMaker Symbol Library by Barry Gill and contributors, CC BY 4.0",
   "grid": 64,
   "markGrid": 32,
   "strokeWidth": 2,
   "symbols": {
     "sm-well": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         3.2,
@@ -32,6 +38,8 @@
       ]
     },
     "sm-market-cross": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         6.5,
@@ -59,9 +67,11 @@
       ]
     },
     "sm-mill-water": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
-        9.0,
+        9,
         7.4
       ],
       "anchor": [
@@ -95,10 +105,12 @@
       ]
     },
     "sm-mill-wind": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
-        7.0,
-        7.0
+        7,
+        7
       ],
       "anchor": [
         32,
@@ -125,6 +137,8 @@
       ]
     },
     "sm-mark-church": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "mark",
       "footprint": null,
       "anchor": [
@@ -149,6 +163,8 @@
       ]
     },
     "sm-tree-deciduous": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "canopy",
       "footprint": [
         7.5,
@@ -177,6 +193,8 @@
       ]
     },
     "sm-tree-deciduous-round": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "canopy",
       "footprint": [
         7.5,
@@ -206,6 +224,8 @@
       ]
     },
     "sm-amphitheatre": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         22,
@@ -233,6 +253,8 @@
       ]
     },
     "sm-bridge": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         8,
@@ -259,6 +281,8 @@
       ]
     },
     "sm-castle": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         24,
@@ -286,6 +310,8 @@
       ]
     },
     "sm-cathedral": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         14,
@@ -313,6 +339,8 @@
       ]
     },
     "sm-docks": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         10,
@@ -340,6 +368,8 @@
       ]
     },
     "sm-dump": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         7,
@@ -367,6 +397,8 @@
       ]
     },
     "sm-field": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "pattern",
       "footprint": null,
       "anchor": [
@@ -390,6 +422,8 @@
       ]
     },
     "sm-field-fallow": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "pattern",
       "footprint": null,
       "anchor": [
@@ -414,6 +448,8 @@
       ]
     },
     "sm-field-harvested": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "pattern",
       "footprint": null,
       "anchor": [
@@ -438,6 +474,8 @@
       ]
     },
     "sm-house": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         6,
@@ -464,6 +502,8 @@
       ]
     },
     "sm-house-tiled": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         6,
@@ -491,6 +531,8 @@
       ]
     },
     "sm-house-large-tiled": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         8,
@@ -518,6 +560,8 @@
       ]
     },
     "sm-hut-mud": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         4.5,
@@ -545,6 +589,8 @@
       ]
     },
     "sm-hut-round": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         4.5,
@@ -572,6 +618,8 @@
       ]
     },
     "sm-hut-straw": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         4.5,
@@ -599,6 +647,8 @@
       ]
     },
     "sm-inn": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         7,
@@ -627,6 +677,8 @@
       ]
     },
     "sm-longhouse": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         10,
@@ -654,6 +706,8 @@
       ]
     },
     "sm-market": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         9,
@@ -682,6 +736,8 @@
       ]
     },
     "sm-mine": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         8,
@@ -709,6 +765,8 @@
       ]
     },
     "sm-orchard": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "pattern",
       "footprint": null,
       "anchor": [
@@ -733,6 +791,8 @@
       ]
     },
     "sm-park": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "pattern",
       "footprint": null,
       "anchor": [
@@ -757,6 +817,8 @@
       ]
     },
     "sm-racetrack": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         30,
@@ -783,6 +845,8 @@
       ]
     },
     "sm-road-cobbled": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "pattern",
       "footprint": null,
       "anchor": [
@@ -806,6 +870,8 @@
       ]
     },
     "sm-road-dirt": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "pattern",
       "footprint": null,
       "anchor": [
@@ -829,6 +895,8 @@
       ]
     },
     "sm-stables": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         8,
@@ -856,6 +924,8 @@
       ]
     },
     "sm-temple": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         10,
@@ -882,6 +952,8 @@
       ]
     },
     "sm-tower": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         6,
@@ -908,6 +980,8 @@
       ]
     },
     "sm-town-hall": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "fixed",
       "footprint": [
         9,
@@ -934,6 +1008,8 @@
       ]
     },
     "sm-town-square": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "pattern",
       "footprint": null,
       "anchor": [
@@ -957,6 +1033,8 @@
       ]
     },
     "sm-tree-conifer": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "canopy",
       "footprint": [
         6,
@@ -984,6 +1062,8 @@
       ]
     },
     "sm-vineyard": {
+      "author": "Barry Gill",
+      "license": "CC-BY-4.0",
       "cls": "pattern",
       "footprint": null,
       "anchor": [

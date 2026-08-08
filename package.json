@@ -9,7 +9,13 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
-  "license": "GPL-3.0",
+  "license": "GPL-3.0-only",
+  "author": "Barry Gill <b@rry.im>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/barrulus/settlemaker.git"
+  },
+  "homepage": "https://settlemaker.com",
   "devDependencies": {
     "@types/geojson": "^7946.0.14",
     "@types/pg": "^8.11.0",
@@ -20,6 +26,7 @@
     "vitest": "^3.0.0"
   },
   "files": [
-    "dist"
+    "dist",
+    "NOTICE"
   ]
 }

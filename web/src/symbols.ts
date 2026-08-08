@@ -19,6 +19,9 @@ interface SymbolMeta {
   viewBox: [number, number, number, number];
   materials?: string[];
   scaleTo?: string;
+  /** Per-symbol credit. Carried in symbols.json so it survives a fork of the set. */
+  author?: string;
+  license?: string;
 }
 
 interface Catalog {
@@ -26,6 +29,8 @@ interface Catalog {
   grid: number;
   markGrid: number;
   strokeWidth: number;
+  license?: string;
+  attribution?: string;
   symbols: Record<string, SymbolMeta>;
 }
 
@@ -86,7 +91,13 @@ function buildGrid(catalog: Catalog): void {
     meta2.className = 'meta';
     meta2.textContent = `${sizeRule(meta)} · ≥${meta.minScale}`;
 
-    tile.append(box, name, meta2);
+    // Credit belongs on the artefact, not on maps drawn with it — see the
+    // Rendered Output Exception in web/public/symbols/LICENSE.
+    const by = document.createElement('div');
+    by.className = 'byline';
+    by.textContent = meta.author ? `by ${meta.author}` : '';
+
+    tile.append(box, name, meta2, by);
     grid.appendChild(tile);
   }
 

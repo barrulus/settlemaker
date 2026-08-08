@@ -179,4 +179,24 @@ npx tsc --noEmit
 
 ## License
 
-GPL-3.0 — same as the [original Haxe implementation](https://github.com/watabou/TownGeneratorOS).
+**GPL-3.0-only** (`SPDX-License-Identifier: GPL-3.0-only`). Full text in [LICENSE](LICENSE);
+attribution and provenance in [NOTICE](NOTICE).
+
+settlemaker is a derivative work of [watabou's TownGeneratorOS](https://github.com/watabou/TownGeneratorOS),
+which is GPL-3.0. Upstream grants no "or any later version" option, so settlemaker is
+GPL-3.0-**only**, not `-or-later`.
+
+The hosted build at [settlemaker.com](https://settlemaker.com) ships this program's compiled
+code to your browser; the corresponding source is this repository.
+
+Two things are *not* covered by that license:
+
+- **The SVG symbol library** (`web/public/symbols/`) is original artwork under
+  [**CC BY 4.0 with a rendered-output exception**](web/public/symbols/LICENSE). **Maps you
+  render with the symbols are yours and owe nothing** — no credit, no notice. Attribution
+  applies only if you redistribute the *library itself* (the SVGs, the sprite, or a set
+  derived from them), in which case credit the authors in
+  [CREDITS](web/public/symbols/CREDITS). Contributions are accepted on those terms.
+- **[Azgaar's Fantasy Map Generator](https://github.com/Azgaar/Fantasy-Map-Generator)** (MIT)
+  consumes settlemaker at arm's length over the [URL API](docs/url-api.md). Separate programs
+  exchanging data, not a combined work — neither license reaches into the other.
