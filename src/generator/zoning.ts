@@ -90,7 +90,14 @@ export function assignSprawl(args: SprawlArgs): UrbanisationField {
 
     const chosen = remaining.splice(bestIdx, 1)[0];
     built.add(chosen);
-    chosen.zone = chosen.shape.center.length > coreRadius * SATELLITE_DISTANCE
+    // `along` (the field's road-projection distance) is what actually
+    // separates ribbon from satellite — raw distance-from-centre can exceed
+    // coreRadius*SATELLITE_DISTANCE for an off-axis ribbon patch even when
+    // `satellites` is false (measured: 3/60 runs mislabeled a patch
+    // 'satellite' below SATELLITE_POP_THRESHOLD, e.g. pop 49000 seeds
+    // 1/5/7). Gate on the same `satellites` flag the field itself was built
+    // with, so a below-threshold settlement can never emit the label.
+    chosen.zone = satellites && chosen.shape.center.length > coreRadius * SATELLITE_DISTANCE
       ? 'satellite'
       : 'suburb';
     chosen.withinCity = true;

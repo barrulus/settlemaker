@@ -167,29 +167,26 @@ describe('generateFromBurg two-pass shift', () => {
 
 describe('SVG output reflects shift', () => {
   it('SVG viewBox shifts with the origin', () => {
-    // Round 4 Task 6 (zoning): coastalBurg()'s default population (12000)
-    // sits just above the default coreCapacity (10000), so at that
-    // population both runs now grow sprawl (suburb/satellite ribbons,
-    // reach = 4x core radius) outside the walls. The coastal run's sprawl
-    // is asymmetric (blocked on the water side) while the inland run's
-    // isn't, which dwarfs the shift-driven bbox difference this test is
-    // about — measured residual jumped from ~5 units to ~514. That's sprawl
-    // geometry legitimately diverging, not a shift-math regression (see the
-    // "wall path coordinates are shifted" and GeoJSON tests below, which
-    // check the shift itself directly and are unaffected). Overriding the
-    // population to 9000 here (below coreCapacity, so neither run has any
-    // sprawl) removes that confound and restores the tight residual — coast
-    // pull still fires at this population (verified: source 'coast_pull',
-    // dx ≈ -54, residual ≈ 0.03, measured locally). coastalBurg()'s shared
-    // default stays 12000 for the other tests in this file, several of
-    // which depend on its specific hysteresis-gate math (see its doc
-    // comment) and are unaffected by sprawl themselves.
+    // Round 4 Task 6 (zoning): this assertion measures content-bbox noise,
+    // not the shift math itself — the actual shift is checked directly by
+    // the "wall path coordinates are shifted" and GeoJSON tests below.
+    // coastalBurg()'s default population (12000) is small enough that the
+    // radius*12 farm ring buildWalls now keeps dominates the raw content
+    // bbox on its own (measured: both runs land only ~4 suburb patches
+    // within ~175 units of the core, while the viewBoxes span ±1700 —
+    // sprawl isn't the source of bbox noise here, the much larger farm ring
+    // is). Using 20000 instead keeps genuine sprawl in this test's coverage
+    // (measured: 18 real suburb patches per run) while the residual stays
+    // tiny (measured: 0.02, against the 10-unit tolerance below) — sprawl
+    // does not break this property. coastalBurg()'s shared default stays
+    // 12000 for the other tests in this file, several of which depend on
+    // its specific hysteresis-gate math (see its doc comment).
     const inland = generateFromBurg(coastalBurg({
       coastlineGeometry: undefined,
       harbourSize: undefined,
-      population: 9000,
+      population: 20000,
     }));
-    const coastal = generateFromBurg(coastalBurg({ population: 9000 }));
+    const coastal = generateFromBurg(coastalBurg({ population: 20000 }));
 
     // viewBox="minX minY width height" — extract minX from each.
     const extract = (svg: string): number => {

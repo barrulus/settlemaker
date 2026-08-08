@@ -106,15 +106,42 @@ function populationToPatches(population: number, urbanDensity?: number): number 
 }
 
 /**
- * Patches in the walled core. Population above `coreCapacity` does not
- * enlarge the core — it becomes extramural sprawl (see `urbanisation.ts`).
+ * Fraction of `population` that lives outside the walls even when the
+ * settlement is nowhere near `coreCapacity`. Faubourgs outside the gates
+ * and ribbon development along the approach roads were normal at every
+ * size, not just above the cap — `min(population, coreCapacity)` and
+ * `population` are the SAME expression for any burg at or below the cap,
+ * so without this a naive core sizing makes the sprawl budget
+ * (`nPatches - nCore`) evaluate to exactly zero and every settlement under
+ * `coreCapacity` becomes 100% intramural (a real defect in the first
+ * implementation — 84 measured runs across pop 400-10000 x seeds 1-12
+ * produced zero suburb/satellite patches).
+ *
+ * `~8%` outside at population 300, rising log-linearly to `~25%` at
+ * population 10000 (`DEFAULT_CORE_CAPACITY`), where the cap itself takes
+ * over as the binding constraint — continuous across that boundary, so
+ * nothing changes abruptly there. See
+ * docs/superpowers/specs/2026-08-08-roundness-and-fields-design.md.
+ */
+export function extramuralShare(population: number): number {
+  const raw = 0.08 + 0.1116 * (Math.log10(population) - Math.log10(300));
+  return Math.min(0.25, Math.max(0.05, raw));
+}
+
+/**
+ * Patches in the walled core. `coreCapacity` is a ceiling, not a target:
+ * the core holds `min(population * (1 - extramuralShare(population)),
+ * coreCapacity)` people — below the cap, `extramuralShare` alone decides
+ * how much of the population is extramural; at or above it, the cap binds
+ * and the rest becomes extramural sprawl (see `urbanisation.ts`).
  */
 export function corePatchCount(
   population: number,
   coreCapacity: number,
   urbanDensity?: number,
 ): number {
-  return populationToPatches(Math.min(population, coreCapacity), urbanDensity);
+  const corePopulation = Math.min(population * (1 - extramuralShare(population)), coreCapacity);
+  return populationToPatches(corePopulation, urbanDensity);
 }
 
 /**

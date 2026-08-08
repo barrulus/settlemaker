@@ -897,6 +897,13 @@ export class Model {
     // (zoning, field placement) need adjacency over this settled geometry.
     this.adjacency = buildAdjacency(this.patches);
 
+    // Reserve headroom for the "Outskirts" gate-ward loop below: it can add
+    // a handful more built patches (up to ~3 per gate — several patches can
+    // meet at one Voronoi vertex) independent of assignSprawl's budget, and
+    // since those patches are now zoned as built fabric too (not left
+    // 'wilderness'), an unreserved budget can walk the total past
+    // MAX_PATCHES when assignSprawl's own claim already saturates it.
+    const outskirtsReserve = this.wall !== null ? this.wall.gates.length * 3 : 0;
     this.urbanisationField = assignSprawl({
       patches: this.patches,
       inner: this.inner,
@@ -904,8 +911,15 @@ export class Model {
       roadDirections: (this.params.roadEntryPoints ?? []).map(r => r.point),
       coreRadius: this.border!.getRadius(),
       population: this.params.population,
-      isBuildable: (p) => p.ward === null && !this.waterbody.includes(p) && !this.isWaterAt(p.shape.center),
-      budget: Math.max(0, this.nPatches - this.inner.length),
+      // Centroid-only was insufficient: a patch straddling the shoreline can
+      // have a dry centroid with most of its body underwater (measured:
+      // 11/179 built patches at a port-city fixture had 1-5 of their own
+      // vertices submerged, several with a WET majority). Require every
+      // vertex dry too.
+      isBuildable: (p) =>
+        p.ward === null && !this.waterbody.includes(p) &&
+        !this.isWaterAt(p.shape.center) && !p.shape.vertices.some(v => this.isWaterAt(v)),
+      budget: Math.max(0, this.nPatches - this.inner.length - outskirtsReserve),
     });
 
     const rng = this.rng;
@@ -971,6 +985,13 @@ export class Model {
             if (patch.ward === null) {
               patch.withinCity = true;
               patch.ward = new GateWard(this, patch);
+              // A GateWard patch outside the walls is built fabric, same as
+              // a suburb ribbon patch — matters downstream (the Scene/symbol
+              // library task carries `zone` forward and has no rule for a
+              // built patch tagged 'wilderness'). Only patches assignSprawl
+              // left unclaimed reach here still 'wilderness'; a patch it
+              // already zoned 'suburb'/'satellite' keeps that label.
+              if (patch.zone === 'wilderness') patch.zone = 'suburb';
             }
           }
         }

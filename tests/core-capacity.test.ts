@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { mapToGenerationParams, corePatchCount, DEFAULT_CORE_CAPACITY, MAX_PATCHES } from '../src/input/azgaar-input.js';
+import {
+  mapToGenerationParams, corePatchCount, extramuralShare, DEFAULT_CORE_CAPACITY, MAX_PATCHES,
+} from '../src/input/azgaar-input.js';
 import { parseSettlementUrl } from '../src/url/params.js';
-import type { AzgaarBurgInput } from '../src/index.js';
+import { generateFromBurg, type AzgaarBurgInput } from '../src/index.js';
 
 function burg(population: number, coreCapacity?: number): AzgaarBurgInput {
   return {
@@ -17,10 +19,15 @@ describe('coreCapacity', () => {
     expect(DEFAULT_CORE_CAPACITY).toBe(10000);
   });
 
-  it('caps core size once population exceeds the capacity', () => {
-    const atCap = corePatchCount(10000, DEFAULT_CORE_CAPACITY);
+  it('caps core size once population is well past the capacity', () => {
+    // Below the cap, extramuralShare keeps rising (25% at 10000) so the core
+    // itself keeps growing right up to the cap boundary — 10000 is where the
+    // cap first *starts* to bind, not where it's already fully binding.
+    // Compare two populations comfortably past that (extramuralShare clamped
+    // at its 25% ceiling for both, so the cap alone decides core size).
+    const wellOver = corePatchCount(50000, DEFAULT_CORE_CAPACITY);
     const wayOver = corePatchCount(250000, DEFAULT_CORE_CAPACITY);
-    expect(wayOver).toBe(atCap);
+    expect(wayOver).toBe(wellOver);
   });
 
   it('leaves small settlements uncapped', () => {
@@ -72,5 +79,49 @@ describe('coreCapacity', () => {
   it('ignores a non-positive flat coreCapacity', async () => {
     const parsed = await parseSettlementUrl(new URLSearchParams('pop=1000&coreCapacity=0'));
     expect(parsed.burg.coreCapacity).toBeUndefined();
+  });
+
+  describe('extramuralShare — coreCapacity is a ceiling, not a target', () => {
+    // Target curve from docs/superpowers/specs/2026-08-08-roundness-and-fields-design.md:
+    // ~8% at 300, ~14% at 1200, ~20% at 4000, ~25% at 10000 (where the cap
+    // takes over). Tolerance is generous (2 percentage points) — this pins
+    // the shape of the curve, not the exact fitted constants.
+    it.each([
+      [300, 0.08],
+      [1200, 0.14],
+      [4000, 0.20],
+      [10000, 0.25],
+    ])('is ~%i%% at population %i', (population, target) => {
+      expect(extramuralShare(population)).toBeCloseTo(target, 1);
+    });
+
+    it('is continuous across the coreCapacity boundary (no jump at 10000)', () => {
+      const justBelow = extramuralShare(9999);
+      const atCap = extramuralShare(10000);
+      const justAbove = extramuralShare(10001);
+      expect(Math.abs(atCap - justBelow)).toBeLessThan(0.001);
+      expect(Math.abs(justAbove - atCap)).toBeLessThan(0.001);
+    });
+
+    it('a below-cap settlement is not 100% intramural', () => {
+      // The defect this rule fixes: min(population, coreCapacity) === population
+      // below the cap, so nCore === nPatches and the sprawl budget
+      // (nPatches - nCore) evaluated to exactly zero for every burg under
+      // coreCapacity. 4000 is well under the default 10000 cap; nCore must
+      // now be strictly smaller than nPatches, leaving budget for sprawl.
+      const params = mapToGenerationParams(burg(4000));
+      expect(params.nCore).toBeLessThan(params.nPatches);
+    });
+
+    it('a pop-4000 walled burg actually produces suburb patches', () => {
+      const burgInput: AzgaarBurgInput = {
+        name: 'Faubourg', population: 4000, port: false, citadel: false, walls: true,
+        plaza: true, temple: false, shanty: false, capital: false,
+        roadBearings: [0, 120, 240],
+      };
+      const { model } = generateFromBurg(burgInput, { seed: 3 });
+      const suburbs = model.patches.filter(p => p.zone === 'suburb');
+      expect(suburbs.length).toBeGreaterThan(0);
+    });
   });
 });

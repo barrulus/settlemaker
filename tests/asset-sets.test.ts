@@ -10,7 +10,11 @@ const parky: AzgaarBurgInput = {
   // own "adjust the fixture ... until one exists" maintenance note below.
   // Round 4 Task 4: warped core selection moved the ward-roll boundary
   // again — 8000 stopped rolling Park; 9000 does.
-  population: 9000,
+  // Round 4 Task 6 (fix round: coreCapacity is a ceiling, not a target):
+  // extramuralShare(population) now shrinks the walled core even below
+  // coreCapacity, moving the ward-roll boundary again — 9000 stopped
+  // rolling Park; 10500 does.
+  population: 10500,
   port: false, citadel: false, walls: true,
   plaza: true, temple: true, shanty: false, capital: false,
 };

@@ -36,7 +36,12 @@ describe('fidelity round 4: probe path', () => {
     // 17 at pop 350 no longer diverges (probe now matches full exactly).
     // Re-swept the same {350, 4200, 20000} x seeds 1-20 grid and re-pinned
     // to seed 15 at pop 350, which still diverges.
-    const params = mapToGenerationParams(aldford(350), 15);
+    // Round 4 Task 6 (fix round: coreCapacity is a ceiling, not a target):
+    // extramuralShare(population) changes nCore even below coreCapacity,
+    // moving which seeds retry yet again — seed 15 at pop 350 no longer
+    // diverges. Re-swept the same grid and re-pinned to seed 10 at pop 350,
+    // which still diverges (measured: probe ~36.036, full ~38.121).
+    const params = mapToGenerationParams(aldford(350), 10);
     const probe = new Model({ ...params, coastlineGeometry: undefined, harbourSize: undefined });
     const probeRadius = probe.probeWallRadius();
     const full = new Model({ ...params, coastlineGeometry: undefined, harbourSize: undefined }).generate();
@@ -48,9 +53,9 @@ describe('fidelity round 4: probe path', () => {
     expect(fullRadius).toBeGreaterThan(0);
     // Not equal within 0.5 units — i.e. the divergence is real and not noise.
     expect(Math.abs(probeRadius - fullRadius)).toBeGreaterThan(0.5);
-    // Pin the measured values (reproduced locally: probe ~44.874, full ~42.166).
-    expect(probeRadius).toBeCloseTo(44.874327432324584, 3);
-    expect(fullRadius).toBeCloseTo(42.16596967894349, 3);
+    // Pin the measured values (reproduced locally: probe ~36.036, full ~38.121).
+    expect(probeRadius).toBeCloseTo(36.0361873776777, 3);
+    expect(fullRadius).toBeCloseTo(38.12128125573297, 3);
   });
 
   it('generateFromBurg output is unchanged for an inland burg (probe swap is invisible)', () => {
@@ -68,11 +73,18 @@ describe('fidelity round 4: probe path', () => {
     // of countryside (was radius*3) so sprawl has room to grow — pop 1400
     // has no sprawl of its own (well under the default 10000 coreCapacity)
     // but the much larger farm ring still legitimately changes this burg's
-    // farmland geometry. Verified non-degenerate: svg.length 81716,
-    // 144 patches, 39 wards with geometry (measured locally).
+    // farmland geometry.
+    // Re-pinned again in the same task's fix round (coreCapacity is a
+    // ceiling, not a target): extramuralShare(population) now shrinks the
+    // walled core even below coreCapacity, so pop 1400 legitimately grows
+    // real suburb patches of its own too. Verified non-degenerate:
+    // svg.length 78048, 144 patches, 20 wards with geometry (measured
+    // locally — comparable to the prior 39, the difference is buildings
+    // now split between core and suburb wards instead of concentrated in
+    // the core).
     const { svg } = generateFromBurg(aldford(1400), { seed: 9 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('884c3e6721b59f3621a1f27a54910be825b600f6323ec34acb26d147110316dc');
+    expect(sha256(svg)).toBe('f4d5354ae802c8fd569c9ec5af22540d809b833ae928a1115a237e8e9b7fc809');
   });
 
   it('pins current village output at pop 800 (not a base-equality guarantee)', () => {
@@ -93,11 +105,15 @@ describe('fidelity round 4: probe path', () => {
     // Re-pinned in Round 4 Task 4: warping core selection changes output
     // for every settlement by design.
     // Re-pinned in Round 4 Task 6 (zoning): same radius*12 farm-ring reason
-    // as the pop-1400 hash above. Verified non-degenerate: svg.length
-    // 50737, 131 patches, 26 wards with geometry (measured locally).
+    // as the pop-1400 hash above.
+    // Re-pinned again in the same task's fix round (coreCapacity is a
+    // ceiling, not a target): same extramuralShare reason as the pop-1400
+    // hash above — pop 800 now legitimately grows its own suburb patches
+    // too. Verified non-degenerate: svg.length 63987, 131 patches, 23 wards
+    // with geometry (measured locally).
     const { svg } = generateFromBurg(aldford(800), { seed: 1 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('ada2c9992130905dbfa0fe0cc40d626d2f91f876006b4bc58a48117d23f80786');
+    expect(sha256(svg)).toBe('b26f5a803df14009edb27cf5aeda17d2290609e3130d91a7b659198067b6c648');
   });
 });
 
