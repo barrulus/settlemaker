@@ -20,6 +20,15 @@
 - **Output will change for every settlement, including villages.** Pinned hashes in `tests/fidelity-round4.test.ts` and `tests/toprak-regression.test.ts` must be regenerated — deliberately, in the task that causes the change, never pre-emptively.
 - **`SETTLEMAKER_VERSION` bumps to `0.10.0`** in the final task (invalidates downstream tile caches).
 - Angles: model space uses `atan2(y, x)` math angles. Compass bearings appear only at the input boundary. **Fields consume unit direction vectors (`RoadEntry.point`), never degrees.**
+- **`coreCapacity` is a CEILING, not a target.** A settlement below the cap must not put its whole population inside the walls — faubourgs outside the gates and ribbon development along the approach roads were normal at every size. The core holds `min(population × (1 − extramuralShare(population)), coreCapacity)` people, where
+
+  ```
+  extramuralShare(pop) = clamp(0.08 + 0.1116 × (log10(pop) − log10(300)), 0.05, 0.25)
+  ```
+
+  giving ~8% outside at population 300, ~14% at 1 200, ~20% at 4 000, ~25% at 10 000, after which the cap binds instead. The curve is continuous, so nothing changes abruptly at the cap boundary.
+
+  **Why this is called out:** `min(population, coreCapacity)` and `population` are the SAME expression for any burg at or below the cap, so a naive `nCore` makes the sprawl budget `nPatches − nCore` evaluate to exactly zero and every settlement under 10 000 becomes 100% intramural. This was a real defect in the first implementation.
 
 ---
 

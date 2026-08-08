@@ -47,6 +47,41 @@ the *settlement* reads as elongated, because the sprawl follows the roads.
 The cap applies whether or not the burg has walls. Walls *draw* the core
 boundary; they do not define it.
 
+### `coreCapacity` is a ceiling, not a target
+
+A settlement below the cap must NOT put its whole population inside the
+walls. Faubourgs outside the gates, ribbon development along the approach
+roads, and clusters at a bridge or mill were normal at every size — not a
+big-city phenomenon.
+
+So the core has its own share rule, independent of the cap. The extramural
+share scales with population:
+
+```
+extramuralShare(pop) = clamp(0.08 + 0.1116·(log₁₀(pop) − log₁₀(300)), 0.05, 0.25)
+```
+
+| population | outside the walls |
+|---|---|
+| 300 | ~8% |
+| 1 200 | ~14% |
+| 4 000 | ~20% |
+| 10 000 | ~25% |
+| 50 000 | ~80% (cap binds) |
+| 250 000 | ~96% (cap binds) |
+
+The core therefore holds `min(pop × (1 − extramuralShare(pop)), coreCapacity)`
+people, and the sprawl budget is whatever the total budget has left. The
+curve is continuous, so nothing changes abruptly at the cap boundary: below
+it the share rule governs, above it the cap does.
+
+**This was a real defect in the first implementation.** Because
+`nCore = corePatchCount(min(pop, coreCapacity))` and
+`nPatches = populationToPatches(pop)` are identical expressions for any
+population at or below the cap, the sprawl budget `nPatches − nCore`
+evaluated to exactly zero, and every burg under 10 000 put 100% of its
+people inside the walls.
+
 ## Architecture
 
 The change introduces two pure functions and lets existing phases read them.
