@@ -40,12 +40,84 @@ describe('zoning', () => {
     expect(built.length).toBeLessThanOrEqual(MAX_PATCHES);
   }, 20000);
 
-  it('puts every suburb within reach of a road', () => {
+  /**
+   * Angular coverage of extramural BUILDINGS in the annulus just outside the
+   * core, in 24 bins of 15 degrees. This is the direct measure of "is there a
+   * band?" — patch counts are not, and repeatedly looked healthy while the
+   * render showed bare spikes radiating from the wall with empty ground
+   * between them.
+   */
+  function bandCoverage(model: ReturnType<typeof generateFromBurg>['model'], bins = 24): number {
+    const R = model.border!.getRadius();
+    const hit = new Array<boolean>(bins).fill(false);
+    for (const patch of model.patches) {
+      for (const building of patch.ward?.geometry ?? []) {
+        const c = building.center;
+        const r = Math.sqrt(c.x * c.x + c.y * c.y);
+        if (r <= R || r > R * 2.2) continue;
+        const a = Math.atan2(c.y, c.x);
+        hit[Math.min(bins - 1, Math.floor(((a + Math.PI) / (2 * Math.PI)) * bins))] = true;
+      }
+    }
+    return hit.filter(Boolean).length;
+  }
+
+  it('wraps the walls in a continuous band of building, not spokes with gaps between them', () => {
+    // THE regression this pins. Before the halo term the field could only score
+    // points lying along a road ray, so a three-road metropolis rendered as
+    // three bare spikes: measured band coverage was clustered at the road
+    // bearings, with empty ground in the angular gaps. With the halo it is
+    // continuous all the way round.
+    for (const roadBearings of [[0, 120, 240], [90, 270]]) {
+      const { model } = generateFromBurg(metropolis(roadBearings), { seed: 5 });
+      expect(bandCoverage(model)).toBeGreaterThanOrEqual(22);
+    }
+  }, 30000);
+
+  it('wraps the walls even with no roads at all', () => {
+    // The halo is a function of distance from the core edge and of nothing
+    // else, so roadBearings: [] must still produce a ring — this is what the
+    // old six-direction fallback was standing in for, badly.
+    const { model } = generateFromBurg({ ...metropolis([]), roadBearings: [] }, { seed: 5 });
+    expect(bandCoverage(model)).toBeGreaterThanOrEqual(22);
+  }, 20000);
+
+  it('the halo carries the majority of extramural fabric; arms are the minority', () => {
+    // Spec requirement 2: "largely focussed around the city, with smaller arms
+    // following the routes". Two independent measures:
+    //   (a) most extramural patches sit in the skirt (within three core radii),
+    //       not out on the arms;
+    //   (b) folding every extramural patch angle modulo 120 (the roads are 120
+    //       degrees apart) leaves NO empty 10-degree slice. Spoke-only growth
+    //       piles everything into the slices around the ray and leaves the rest
+    //       bare, which is exactly the defect this task fixes.
+    const { model } = generateFromBurg(metropolis([0, 120, 240]), { seed: 5 });
+    const R = model.border!.getRadius();
+    const extramural = model.patches.filter(p => p.zone === 'suburb' || p.zone === 'satellite');
+    expect(extramural.length).toBeGreaterThan(20);
+
+    const inSkirt = extramural.filter(p => p.shape.center.length <= R * 3).length;
+    expect(inSkirt / extramural.length).toBeGreaterThan(0.6);
+
+    const bins = new Array<number>(12).fill(0);
+    for (const p of extramural) {
+      const deg = ((Math.atan2(p.shape.center.y, p.shape.center.x) * 180) / Math.PI + 360) % 120;
+      bins[Math.min(11, Math.floor(deg / 10))]++;
+    }
+    expect(Math.min(...bins)).toBeGreaterThan(0);
+    expect(Math.min(...bins) / Math.max(...bins)).toBeGreaterThan(0.2);
+  }, 20000);
+
+  it('still favours the road bearings: arms reach further than the ground between them', () => {
+    // The halo must not flatten the roads out of the picture. One road due
+    // east: the furthest built patch along it outreaches the furthest built
+    // patch on the opposite side.
     const { model } = generateFromBurg(metropolis([90]), { seed: 5 });
-    // One road due east: no suburb may sit to the west of the core.
-    const suburbs = model.patches.filter(p => p.zone === 'suburb');
-    expect(suburbs.length).toBeGreaterThan(0);
-    expect(suburbs.every(p => p.shape.center.x > -model.border!.getRadius())).toBe(true);
+    const built = model.patches.filter(p => p.zone === 'suburb' || p.zone === 'satellite');
+    expect(built.length).toBeGreaterThan(0);
+    const east = Math.max(0, ...built.filter(p => p.shape.center.x > 0).map(p => p.shape.center.length));
+    const west = Math.max(0, ...built.filter(p => p.shape.center.x < 0).map(p => p.shape.center.length));
+    expect(east).toBeGreaterThan(west);
   }, 20000);
 
   it('falls back to a belt when the burg has no roads', () => {
@@ -55,8 +127,16 @@ describe('zoning', () => {
   }, 20000);
 
   it('emits satellites only above the population threshold', () => {
-    const big = generateFromBurg(metropolis([0, 180]), { seed: 5 });
-    const small = generateFromBurg({ ...metropolis([0, 180]), population: 12000 }, { seed: 5 });
+    // Three roads, not two: whether the budget ever reaches out past the
+    // ribbons depends on how many candidate patches the skirt can absorb
+    // first, which varies with the core radius the shape field happens to
+    // produce. metropolis([0, 180]) at seed 5 draws an unusually small core,
+    // so its skirt alone holds all 181 sprawl patches and nothing is left to
+    // claim a satellite bump. The threshold gate itself is what this test is
+    // about, and the negative half below is the half that can regress
+    // silently.
+    const big = generateFromBurg(metropolis([0, 120, 240]), { seed: 5 });
+    const small = generateFromBurg({ ...metropolis([0, 120, 240]), population: 12000 }, { seed: 5 });
     expect(big.model.patches.some(p => p.zone === 'satellite')).toBe(true);
     expect(small.model.patches.some(p => p.zone === 'satellite')).toBe(false);
   }, 20000);

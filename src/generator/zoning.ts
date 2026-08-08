@@ -1,18 +1,37 @@
 import type { Patch } from './patch.js';
 import type { PatchAdjacency } from './adjacency.js';
 import { Point } from '../types/point.js';
-import { createUrbanisationField, SATELLITE_POP_THRESHOLD, type UrbanisationField } from './urbanisation.js';
+import { createUrbanisationField, radialProfile, SATELLITE_POP_THRESHOLD, type UrbanisationField } from './urbanisation.js';
 
 export type Zone = 'core' | 'suburb' | 'satellite' | 'farm' | 'wilderness';
 
 /** Ribbon reach as a multiple of the core radius. */
-const REACH_MULTIPLIER = 4;
+const REACH_MULTIPLIER = 6;
+/**
+ * Halo reach as a multiple of the core radius — a skirt two core-radii deep
+ * beyond the wall. Shorter than REACH_MULTIPLIER on purpose: at metropolis
+ * scale the budget (181 patches) exceeds every candidate within 4 core radii
+ * (measured: ~200), so an unbounded skirt swallows the whole budget and the
+ * arms vanish. Bounding it hands the outer candidates to the corridors.
+ */
+const HALO_REACH_MULTIPLIER = 2.5;
 /** Corridor half-width as a fraction of the core radius. */
 const CORRIDOR_FRACTION = 0.45;
+/**
+ * Halo decay length as a fraction of the core radius. At 0.75 the skirt is
+ * still at 26% of full strength one core-radius out from the wall, but down to
+ * 7% at two — so the whole first ring outranks any arm patch beyond it, and
+ * the render reads as a band with arms rather than arms alone.
+ */
+const HALO_DEPTH_FRACTION = 0.75;
 /** Extra score for touching already-built fabric — this is what fuses ribbons into a belt. */
 const NEIGHBOUR_BONUS = 0.35;
-/** Beyond this multiple of the core radius, a built patch reads as an outlying hamlet. */
-const SATELLITE_DISTANCE = 4;
+/**
+ * Beyond this multiple of the core radius a built patch reads as an outlying
+ * hamlet. Tied to REACH_MULTIPLIER by definition: the ribbons stop there, so
+ * anything further out is on a satellite bump, not on the continuous ribbon.
+ */
+const SATELLITE_DISTANCE = REACH_MULTIPLIER;
 
 export interface SprawlArgs {
   patches: Patch[];
@@ -20,6 +39,13 @@ export interface SprawlArgs {
   adjacency: PatchAdjacency;
   roadDirections: Point[];
   coreRadius: number;
+  /**
+   * Vertices of the core outline (the wall shape), origin-centred. The core is
+   * lobed, so `coreRadius` alone (the circumscribed radius) would put the
+   * halo's inner edge at the lobe tips. Optional: without it the halo falls
+   * back to the scalar radius.
+   */
+  coreOutline?: Point[];
   population: number;
   /** Patches to leave alone: water, and anything already given a ward. */
   isBuildable: (patch: Patch) => boolean;
@@ -37,7 +63,7 @@ export interface SprawlArgs {
  * it from constants that may later be tuned.
  */
 export function assignSprawl(args: SprawlArgs): UrbanisationField {
-  const { patches, inner, adjacency, roadDirections, coreRadius, population, isBuildable, budget } = args;
+  const { patches, inner, adjacency, roadDirections, coreRadius, coreOutline, population, isBuildable, budget } = args;
 
   for (const p of patches) p.zone = 'wilderness';
   for (const p of inner) p.zone = 'core';
@@ -45,19 +71,17 @@ export function assignSprawl(args: SprawlArgs): UrbanisationField {
   const satellites = population >= SATELLITE_POP_THRESHOLD;
   const reach = coreRadius * REACH_MULTIPLIER;
 
-  // No roads is a real case (roadBearings: [] is authoritative). Fall back to
-  // a ring of directions so the overflow forms a belt rather than a disc of
-  // the same shape as the core.
-  const directions = roadDirections.length > 0
-    ? roadDirections
-    : Array.from({ length: 6 }, (_, i) => {
-        const a = i * Math.PI / 3;
-        return new Point(Math.cos(a), Math.sin(a));
-      });
-
+  // No roads is a real case (roadBearings: [] is authoritative) and needs no
+  // special handling any more: the halo term is isotropic, so a roadless burg
+  // gets a continuous ring on its own. The previous six-direction fallback
+  // only existed because the field could score nothing off a road ray, and it
+  // produced a lumpy hexagon rather than a belt.
   const field = createUrbanisationField({
-    roadDirections: directions,
+    roadDirections,
     coreRadius,
+    coreRadiusAt: coreOutline && coreOutline.length >= 3 ? radialProfile(coreOutline) : undefined,
+    haloDepth: Math.max(1, coreRadius * HALO_DEPTH_FRACTION),
+    haloReach: coreRadius * HALO_REACH_MULTIPLIER,
     reach,
     corridorHalfWidth: Math.max(1, coreRadius * CORRIDOR_FRACTION),
     satellites,

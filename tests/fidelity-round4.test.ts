@@ -94,7 +94,7 @@ describe('fidelity round 4: probe path', () => {
     // sprawl, up from 1 before this fix) (measured locally).
     const { svg } = generateFromBurg(aldford(1400), { seed: 9 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('210204741f4229caf865876dd7cebbacaebf07872ee86ffecd101ce9245d376d');
+    expect(sha256(svg)).toBe('582ec516231cecf87a8acdbea77ba19e7f88e606b3d311602c3ca9a256ea665e');
   });
 
   it('pins current village output at pop 800 (not a base-equality guarantee)', () => {
@@ -135,9 +135,14 @@ describe('fidelity round 4: probe path', () => {
     // non-degenerate: svg.length 61454, 131 patches, 24 wards with
     // geometry, 6 suburb patches of which 1 is non-GateWard (measured
     // locally).
+    // Re-pinned again in fix round 4 (wall-halo term in the urbanisation
+    // field). Verified non-degenerate and deterministic (two runs
+    // byte-identical): svg.length 53402, 131 patches, 23 wards with
+    // geometry, 16 core patches, 5 suburb patches of which 1 is
+    // non-GateWard (measured locally).
     const { svg } = generateFromBurg(aldford(800), { seed: 1 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('9e1da90b2ab0d8e1d701d52ea203a907e28ded51295736cecef2bbe5c2b8c3a8');
+    expect(sha256(svg)).toBe('a67616a47ab1b4d7452608c14f75399a72c6b6191720a9f9b7d0e75226c93fc8');
   });
 });
 

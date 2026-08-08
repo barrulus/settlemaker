@@ -904,6 +904,10 @@ export class Model {
       adjacency: this.adjacency!,
       roadDirections: (this.params.roadEntryPoints ?? []).map(r => r.point),
       coreRadius: this.border!.getRadius(),
+      // The core is lobed (shape-field warping), so the circumscribed radius
+      // alone would anchor the halo at the lobe tips and leave the ground
+      // between lobes unscored. Hand the field the actual outline.
+      coreOutline: this.border!.shape.vertices,
       population: this.params.population,
       // Centroid-only was insufficient: a patch straddling the shoreline can
       // have a dry centroid with most of its body underwater (measured:
