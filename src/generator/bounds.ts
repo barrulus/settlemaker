@@ -3,6 +3,7 @@ import type { Point } from '../types/point.js';
 import type { OriginShift } from './origin-shift.js';
 import { Castle } from '../wards/castle.js';
 import { Harbour } from '../wards/harbour.js';
+import { Farm } from '../wards/farm.js';
 
 /** Axis-aligned bounding box in settlement-local coordinates (y-down). */
 export interface LocalBounds {
@@ -13,9 +14,20 @@ export interface LocalBounds {
 }
 
 /**
- * Compute the AABB of every geometrically-placed feature in the model —
- * patches, walls, streets/arteries/roads, harbour piers — plus a uniform
- * padding applied to all four sides.
+ * Compute the AABB of every feature that actually renders visible ink in
+ * the model — patches with buildings/fields/greens, harbour piers, water
+ * patches, walls — plus a uniform padding applied to all four sides.
+ *
+ * Deliberately EXCLUDED:
+ *  - Countryside/wilderness patches carrying a bare `Ward` (or no ward at
+ *    all): a plain `Ward.geometry` is empty, so it draws nothing. Their
+ *    culled radius was widened (radius*3 -> radius*12, see buildWalls) to
+ *    give extramural sprawl room to occupy, which otherwise balloons the
+ *    frame around empty space.
+ *  - Streets, arteries and roads: they still render and are still allowed
+ *    to run to (and past) the frame edge — that's existing, documented
+ *    product behaviour for external roads — but they no longer dictate the
+ *    frame size. They're clipped by the SVG viewBox instead.
  *
  * Both the SVG viewBox and the GeoJSON `metadata.local_bounds` derive from
  * this so they cannot drift. Pass the same padding to both callers.
@@ -30,10 +42,19 @@ export function computeLocalBounds(model: Model, padding = 20, shift?: OriginShi
     if (p.y > maxY) maxY = p.y;
   };
 
+  const waterbody = new Set(model.waterbody);
+
   for (const patch of model.patches) {
+    const ward = patch.ward;
+    const hasPiers = ward instanceof Harbour && ward.piers.length > 0;
+    const hasFields = ward instanceof Farm && ward.subPlots.length > 0;
+    const hasGeometry = ward !== null && ward.geometry.length > 0;
+    const isWaterPatch = waterbody.has(patch);
+    if (!hasGeometry && !hasFields && !hasPiers && !isWaterPatch) continue;
+
     for (const v of patch.shape.vertices) expand(v);
-    if (patch.ward instanceof Harbour) {
-      for (const pier of patch.ward.piers) {
+    if (hasPiers) {
+      for (const pier of (ward as Harbour).piers) {
         for (const v of pier.vertices) expand(v);
       }
     }
@@ -46,15 +67,6 @@ export function computeLocalBounds(model: Model, padding = 20, shift?: OriginShi
   }
   if (model.citadel !== null && model.citadel.ward instanceof Castle) {
     for (const v of model.citadel.ward.wall.shape.vertices) expand(v);
-  }
-  for (const artery of model.arteries) {
-    for (const v of artery.vertices) expand(v);
-  }
-  for (const road of model.roads) {
-    for (const v of road.vertices) expand(v);
-  }
-  for (const street of model.streets) {
-    for (const v of street.vertices) expand(v);
   }
 
   const raw: LocalBounds = {

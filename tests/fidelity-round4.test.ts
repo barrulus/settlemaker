@@ -92,9 +92,19 @@ describe('fidelity round 4: probe path', () => {
     // Verified non-degenerate: svg.length 84635, 143 patches, 39 wards with
     // geometry, 9 suburb patches of which 3 are non-GateWard (real corridor
     // sprawl, up from 1 before this fix) (measured locally).
+    // Re-pinned again for the roundness-and-fields bounds fix:
+    // computeLocalBounds no longer expands over every patch (countryside
+    // patches with a bare Ward — empty geometry, no rendered ink — used to
+    // balloon the frame) or over road/artery/street polylines (they still
+    // render and still run to the frame edge, just clipped by the viewBox
+    // instead of dictating it). The frame shrinks to fit the settlement and
+    // its farm belt; only the viewBox coordinates change, not the
+    // underlying model. Verified non-degenerate: viewBox
+    // "-82.9 -149.6 363.2 367.6" (was much larger before the fix), svg.length
+    // 81084, 143 patches, 34 wards with geometry (measured locally).
     const { svg } = generateFromBurg(aldford(1400), { seed: 9 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('582ec516231cecf87a8acdbea77ba19e7f88e606b3d311602c3ca9a256ea665e');
+    expect(sha256(svg)).toBe('9977a167383f50f109a7ea58176dbf07af20665408169e14b9847216666c3850');
   });
 
   it('pins current village output at pop 800 (not a base-equality guarantee)', () => {
@@ -140,9 +150,15 @@ describe('fidelity round 4: probe path', () => {
     // byte-identical): svg.length 53402, 131 patches, 23 wards with
     // geometry, 16 core patches, 5 suburb patches of which 1 is
     // non-GateWard (measured locally).
+    // Re-pinned again for the roundness-and-fields bounds fix (same
+    // computeLocalBounds change as the pop-1400 hash above): the frame now
+    // fits the settlement and its farm belt instead of ballooning around
+    // invisible countryside patches and full road extents. Verified
+    // non-degenerate: viewBox "-114.6 -124.3 333.0 272.3", svg.length 53181,
+    // 131 patches, 23 wards with geometry (measured locally).
     const { svg } = generateFromBurg(aldford(800), { seed: 1 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('a67616a47ab1b4d7452608c14f75399a72c6b6191720a9f9b7d0e75226c93fc8');
+    expect(sha256(svg)).toBe('b94cb02e69db463870d1f95c618c9442e5923500b8de1f69904c24a30b226561');
   });
 });
 

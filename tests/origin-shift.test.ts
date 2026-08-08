@@ -206,10 +206,24 @@ describe('SVG output reflects shift', () => {
     // again: the coastal run's water penalty warps its lobe shape
     // differently than the inland run (which has no water to probe), so the
     // two bboxes diverge a bit more independent of the shift itself
-    // (re-measured at ~5.02 units, was ~2.2). Loosened the tolerance from
-    // 5 to 10 units to absorb that — still a real shift-tracks-svg check,
-    // not a golden-pixel assertion.
-    expect(Math.abs((coastalMin - inlandMin) - coastal.originShift.dx)).toBeLessThan(10);
+    // (re-measured at ~5.02 units, was ~2.2).
+    //
+    // computeLocalBounds now only expands over patches that actually render
+    // something (buildings/fields/greens/water/piers), not every countryside
+    // patch — see src/generator/bounds.ts. Water occupies roughly half of
+    // this fixture's map, so the coastal run's farm ring has to reach
+    // further inland (away from the coast) to pick up the same quota of
+    // farmland patches the inland run gets on all sides "for free". That's
+    // real, legitimate content-bbox asymmetry — not shift-tracking noise —
+    // and it dwarfs the previous ~5-unit residual (re-measured at ~312
+    // units at this population). This assertion is deliberately loose (its
+    // own comment history says so): it only checks the viewBox still moves
+    // in the shift's direction by at least the shift itself, not that the
+    // two bboxes are otherwise identical — that precise check lives in "SVG
+    // wall path coordinates are shifted" below.
+    const delta = coastalMin - inlandMin;
+    expect(Math.sign(delta)).toBe(Math.sign(coastal.originShift.dx));
+    expect(Math.abs(delta)).toBeGreaterThanOrEqual(Math.abs(coastal.originShift.dx) - 1);
   });
 
   it('SVG wall path coordinates are shifted', () => {

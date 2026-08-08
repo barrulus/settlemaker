@@ -3,6 +3,7 @@ import { generateFromBurg, type AzgaarBurgInput } from '../src/index.js';
 import { computeLocalBounds, computeDiameterLocal } from '../src/generator/bounds.js';
 import { Castle } from '../src/wards/castle.js';
 import { Harbour } from '../src/wards/harbour.js';
+import { Farm } from '../src/wards/farm.js';
 
 function makeBurg(overrides: Partial<AzgaarBurgInput> = {}): AzgaarBurgInput {
   return {
@@ -20,11 +21,20 @@ function makeBurg(overrides: Partial<AzgaarBurgInput> = {}): AzgaarBurgInput {
 }
 
 describe('computeLocalBounds', () => {
-  it('returns an AABB that contains every patch vertex plus padding', () => {
+  it('returns an AABB that contains every vertex of every patch that renders something', () => {
     const { model } = generateFromBurg(makeBurg(), { seed: 42 });
     const bounds = computeLocalBounds(model, 20);
+    const waterbody = new Set(model.waterbody);
 
     for (const patch of model.patches) {
+      const ward = patch.ward;
+      const rendersSomething =
+        (ward !== null && ward.geometry.length > 0) ||
+        (ward instanceof Farm && ward.subPlots.length > 0) ||
+        (ward instanceof Harbour && ward.piers.length > 0) ||
+        waterbody.has(patch);
+      if (!rendersSomething) continue;
+
       for (const v of patch.shape.vertices) {
         expect(v.x).toBeGreaterThanOrEqual(bounds.min_x);
         expect(v.x).toBeLessThanOrEqual(bounds.max_x);
@@ -32,6 +42,36 @@ describe('computeLocalBounds', () => {
         expect(v.y).toBeLessThanOrEqual(bounds.max_y);
       }
     }
+  });
+
+  it('does NOT expand over a bare countryside patch that renders nothing', () => {
+    // Regression test: a plain Ward has empty geometry and draws no ink, so
+    // it must not inflate the frame. buildWalls' patch cull was widened
+    // (radius*3 -> radius*12) to give extramural sprawl room, which used to
+    // balloon the frame around a sea of invisible wilderness patches.
+    const { model } = generateFromBurg(makeBurg(), { seed: 42 });
+    const bounds = computeLocalBounds(model, 20);
+    const waterbody = new Set(model.waterbody);
+
+    const bareCountrysidePatches = model.patches.filter(patch => {
+      const ward = patch.ward;
+      const rendersSomething =
+        (ward !== null && ward.geometry.length > 0) ||
+        (ward instanceof Farm && ward.subPlots.length > 0) ||
+        (ward instanceof Harbour && ward.piers.length > 0) ||
+        waterbody.has(patch);
+      return !rendersSomething;
+    });
+    // This fixture must actually have some — otherwise the assertion below
+    // is vacuous.
+    expect(bareCountrysidePatches.length).toBeGreaterThan(0);
+
+    const outside = bareCountrysidePatches.some(patch =>
+      patch.shape.vertices.some(v =>
+        v.x < bounds.min_x || v.x > bounds.max_x || v.y < bounds.min_y || v.y > bounds.max_y,
+      ),
+    );
+    expect(outside).toBe(true);
   });
 
   it('respects the padding argument', () => {
@@ -44,20 +84,50 @@ describe('computeLocalBounds', () => {
     expect(padded.max_y).toBeCloseTo(tight.max_y + 20);
   });
 
-  it('covers street and road polylines', () => {
+  it('does NOT expand over street/artery/road polylines (they run to and past the frame edge, clipped by the viewBox instead)', () => {
     const { model } = generateFromBurg(makeBurg({ population: 15000 }), { seed: 42 });
     const bounds = computeLocalBounds(model, 0);
 
-    for (const artery of model.arteries) {
-      for (const v of artery.vertices) {
-        expect(v.x).toBeGreaterThanOrEqual(bounds.min_x);
-        expect(v.x).toBeLessThanOrEqual(bounds.max_x);
-        expect(v.y).toBeGreaterThanOrEqual(bounds.min_y);
-        expect(v.y).toBeLessThanOrEqual(bounds.max_y);
-      }
-    }
-    for (const road of model.roads) {
-      for (const v of road.vertices) {
+    // External roads are documented, deliberate product behaviour: they
+    // reach beyond the settlement's frame. At least one road/artery vertex
+    // should now fall outside the tight (padding=0) bounds — if this ever
+    // stops being true the fixture no longer exercises the regression this
+    // test guards against.
+    const allRoadVerts = [...model.arteries, ...model.roads, ...model.streets]
+      .flatMap(r => r.vertices);
+    const someOutside = allRoadVerts.some(v =>
+      v.x < bounds.min_x || v.x > bounds.max_x || v.y < bounds.min_y || v.y > bounds.max_y,
+    );
+    expect(someOutside).toBe(true);
+  });
+
+  it('clips road/artery/street paths to the viewBox in the rendered SVG', () => {
+    const { svg } = generateFromBurg(makeBurg({ population: 15000 }), { seed: 42 });
+    // The #roads group must carry an explicit clip-path referencing a
+    // clipPath def whose <rect> matches the viewBox — belt-and-braces so
+    // roads that now run past computeLocalBounds don't rely solely on a
+    // consumer's default SVG overflow behaviour.
+    const roadsGroupMatch = svg.match(/<g id="roads" clip-path="url\(#([^)]+)\)">/);
+    expect(roadsGroupMatch).not.toBeNull();
+    const clipId = roadsGroupMatch![1];
+    const clipRectMatch = svg.match(
+      new RegExp(`<clipPath id="${clipId}"><rect x="([^"]+)" y="([^"]+)" width="([^"]+)" height="([^"]+)"`),
+    );
+    expect(clipRectMatch).not.toBeNull();
+    const viewBoxMatch = svg.match(/viewBox="([^"]+)"/);
+    expect(viewBoxMatch).not.toBeNull();
+    const [vbX, vbY, vbW, vbH] = viewBoxMatch![1].split(' ');
+    expect(clipRectMatch![1]).toBe(vbX);
+    expect(clipRectMatch![2]).toBe(vbY);
+    expect(clipRectMatch![3]).toBe(vbW);
+    expect(clipRectMatch![4]).toBe(vbH);
+  });
+
+  it('still covers piers, walls and border (unaffected by the road/countryside exclusion)', () => {
+    const { model } = generateFromBurg(makeBurg({ population: 15000 }), { seed: 42 });
+    const bounds = computeLocalBounds(model, 0);
+    if (model.wall !== null) {
+      for (const v of model.wall.shape.vertices) {
         expect(v.x).toBeGreaterThanOrEqual(bounds.min_x);
         expect(v.x).toBeLessThanOrEqual(bounds.max_x);
         expect(v.y).toBeGreaterThanOrEqual(bounds.min_y);
