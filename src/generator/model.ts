@@ -913,8 +913,24 @@ export class Model {
       isBuildable: (p) =>
         p.ward === null && !this.waterbody.includes(p) &&
         !this.isWaterAt(p.shape.center) && !p.shape.vertices.some(v => this.isWaterAt(v)),
-      budget: Math.max(0, this.nPatches - this.inner.length),
+      // The citadel patch (when present) sits outside `this.inner` and is
+      // never a sprawl candidate (it already has a Castle ward from
+      // buildWalls, so isBuildable already excludes it) — but it still
+      // consumes one of the nPatches total-budget slots. Reserve that slot
+      // so core (inner.length) + citadel (1) + sprawl claimed up to this
+      // budget never exceeds nPatches (and so MAX_PATCHES).
+      budget: Math.max(0, this.nPatches - this.inner.length - (this.citadel !== null ? 1 : 0)),
     });
+
+    // The citadel patch sits outside `this.inner` (buildPatches selects it
+    // separately, right after the core) but already carries a Castle ward
+    // from buildWalls, phases before this — assignSprawl's blanket "reset
+    // everything to wilderness" leaves it 'wilderness' otherwise, which is
+    // exactly the "built patch tagged wilderness" case the next task (Scene
+    // / symbol library) has no rule for, and it drops out of any zone-based
+    // built-patch count (measured: 221 real built patches counted as 220
+    // whenever a citadel exists).
+    if (this.citadel !== null) this.citadel.zone = 'core';
 
     const rng = this.rng;
     const unassigned = this.inner.slice();

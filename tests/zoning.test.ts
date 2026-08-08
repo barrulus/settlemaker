@@ -1,6 +1,6 @@
 // tests/zoning.test.ts
 import { describe, it, expect } from 'vitest';
-import { generateFromBurg, type AzgaarBurgInput } from '../src/index.js';
+import { generateFromBurg, mapToGenerationParams, WardType, type AzgaarBurgInput } from '../src/index.js';
 import { MAX_PATCHES } from '../src/input/azgaar-input.js';
 
 function metropolis(roadBearings: number[]): AzgaarBurgInput {
@@ -80,42 +80,110 @@ describe('zoning', () => {
     // test above was fixed for) — the outskirts "Outskirts" gate-ward loop
     // in createWards bypasses assignSprawl's isBuildable check entirely, and
     // seeds 1/6/9/10 reproduced fully-submerged 'suburb'-zoned outskirts
-    // patches before that loop got its own water guard. Sweep seeds.
-    const port: AzgaarBurgInput = {
-      ...metropolis([0, 120]), port: true, oceanBearing: 90, harbourSize: 'large',
-    };
-    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
-      const { model } = generateFromBurg(port, { seed });
-      const built = model.patches.filter(p => p.zone === 'suburb' || p.zone === 'satellite');
+    // patches before that loop got its own water guard.
+    //
+    // Round 4 Task 6 fix round 3: the defect is "the outskirts loop lacks a
+    // predicate at all" — it reproduces at ANY walled port with gates, not
+    // specifically at the metropolis scale. Three seeds at a much smaller
+    // (much faster) population plus the two known worst reproducers from
+    // the original pop-250000 measurement (seeds 1 and 9) keeps the
+    // regression value at a fraction of sweeping all 10 seeds at pop 250000.
+    const check = (built: ReturnType<typeof generateFromBurg>['model']['patches'], model: ReturnType<typeof generateFromBurg>['model']) => {
+      const suburbsOrSatellites = built.filter(p => p.zone === 'suburb' || p.zone === 'satellite');
       // Not just the centroid (isBuildable, which assignSprawl already
       // filters on, checks that) — no VERTEX of a built patch may sit in
       // water either, which would also catch a dry-centroid patch whose body
       // is actually submerged.
-      expect(built.every(p => p.shape.vertices.every(v => !model.isWaterAt(v)))).toBe(true);
+      expect(suburbsOrSatellites.every(p => p.shape.vertices.every(v => !model.isWaterAt(v)))).toBe(true);
+    };
+
+    const midPort: AzgaarBurgInput = {
+      name: 'Havenmid', population: 20000, port: true, citadel: false, walls: true,
+      plaza: true, temple: true, shanty: false, capital: false,
+      roadBearings: [0, 120], oceanBearing: 90, harbourSize: 'large',
+    };
+    for (const seed of [2, 3, 4]) {
+      const { model } = generateFromBurg(midPort, { seed });
+      check(model.patches, model);
     }
-  }, 90000);
+
+    const bigPort: AzgaarBurgInput = {
+      ...metropolis([0, 120]), port: true, oceanBearing: 90, harbourSize: 'large',
+    };
+    for (const seed of [1, 9]) {
+      const { model } = generateFromBurg(bigPort, { seed });
+      check(model.patches, model);
+    }
+  }, 30000);
 
   it('exposes the urbanisation field it built', () => {
     const { model } = generateFromBurg(metropolis([0, 120, 240]), { seed: 5 });
     expect(model.urbanisationField).not.toBeNull();
   }, 20000);
 
-  it('never exceeds MAX_PATCHES even when an explicit coreCapacity saturates nCore == nPatches', () => {
-    // The "Outskirts" gate-ward loop in createWards is independent of
-    // assignSprawl's budget (bounded only by gate count, not population).
-    // A public coreCapacity URL param can make nCore == nPatches (so
-    // assignSprawl's own budget is 0) while gates still produce new built
-    // patches — measured 242-244 built (against a cap of 220) before the
-    // outskirts loop got its own hard MAX_PATCHES check. Sweep the
-    // reported violating configurations directly.
+  it('nPatches never exceeds MAX_PATCHES across the coreCapacity grid (structural, no generation)', () => {
+    // The MAX_PATCHES property is structural (populationToPatches clamps
+    // it directly), so prove it with pure arithmetic across a grid far
+    // wider than a handful of sampled generations could cover — this runs
+    // in milliseconds.
     const roadBearings = Array.from({ length: 12 }, (_, i) => i * 30);
     for (const coreCapacity of [100000, 150000, 180000, 200000, 250000]) {
-      for (const seed of [1, 2, 3]) {
-        const burg = { ...metropolis(roadBearings), coreCapacity };
-        const { model } = generateFromBurg(burg, { seed });
-        const built = model.patches.filter(p => p.zone === 'core' || p.zone === 'suburb' || p.zone === 'satellite');
-        expect(built.length).toBeLessThanOrEqual(MAX_PATCHES);
-      }
+      const params = mapToGenerationParams({ ...metropolis(roadBearings), coreCapacity }, 1);
+      expect(params.nPatches).toBeLessThanOrEqual(MAX_PATCHES);
+      expect(params.nCore).toBeLessThanOrEqual(params.nPatches);
     }
-  }, 150000);
+  });
+
+  it('built total honours MAX_PATCHES end to end at the worst-case coreCapacity', () => {
+    // The structural test above proves nPatches/nCore never exceed the
+    // budget; this is the ONE full generation (not a sampled sweep) that
+    // proves the "Outskirts" gate-ward loop — which is independent of
+    // assignSprawl's own budget and was the actual source of the
+    // MAX_PATCHES violation (244 built against a cap of 220) — honours the
+    // hard cap end to end at the worst measured case.
+    const roadBearings = Array.from({ length: 12 }, (_, i) => i * 30);
+    const burg = { ...metropolis(roadBearings), coreCapacity: 250000 };
+    const { model } = generateFromBurg(burg, { seed: 1 });
+    const built = model.patches.filter(p => p.zone === 'core' || p.zone === 'suburb' || p.zone === 'satellite');
+    expect(built.length).toBeLessThanOrEqual(MAX_PATCHES);
+  }, 20000);
+
+  it('sub-cap sprawl budget is never zero (structural: every population 100-14000 has nPatches - nCore >= 1)', () => {
+    // Root cause fixed in azgaar-input.ts's corePatchCount: nCore and
+    // nPatches used to be two independently-rounded populationToPatches
+    // calls, so their difference (the sprawl budget) could land on exactly
+    // zero even with a non-zero extramuralShare. Measured before the fix:
+    // 11 of 140 populations swept 100-14000 in steps of 100 hit
+    // nCore >= nPatches (100, 200, 1100-1600, 2000-2200). Pure arithmetic —
+    // no generation needed, this covers every population in the band.
+    for (let population = 100; population <= 14000; population += 100) {
+      const params = mapToGenerationParams({
+        name: 'Faubourg', population, port: false, citadel: false, walls: true,
+        plaza: true, temple: false, shanty: false, capital: false,
+        roadBearings: [0, 120, 240],
+      }, 1);
+      expect(params.nPatches - params.nCore).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('genuine corridor sprawl (not just gate-ward outskirts) exists at pop 1200 and 4000', () => {
+    // pop 1200 was the worst measured case: nCore === nPatches (budget 0)
+    // at all 5 sampled seeds before the corePatchCount fix, so every
+    // "suburb" patch there was 100% relabelled GateWard outskirts, never
+    // exercising assignSprawl's corridor-scored ribbon growth at all.
+    for (const population of [1200, 4000]) {
+      let sawNonGateSuburb = false;
+      for (const seed of [1, 2, 3, 4, 5]) {
+        const burgInput: AzgaarBurgInput = {
+          name: 'Faubourg', population, port: false, citadel: false, walls: true,
+          plaza: true, temple: false, shanty: false, capital: false,
+          roadBearings: [0, 120, 240],
+        };
+        const { model } = generateFromBurg(burgInput, { seed });
+        const suburbs = model.patches.filter(p => p.zone === 'suburb' || p.zone === 'satellite');
+        if (suburbs.some(p => p.ward?.type !== WardType.GateWard)) sawNonGateSuburb = true;
+      }
+      expect(sawNonGateSuburb).toBe(true);
+    }
+  }, 20000);
 });

@@ -129,19 +129,45 @@ export function extramuralShare(population: number): number {
 }
 
 /**
- * Patches in the walled core. `coreCapacity` is a ceiling, not a target:
- * the core holds `min(population * (1 - extramuralShare(population)),
- * coreCapacity)` people — below the cap, `extramuralShare` alone decides
- * how much of the population is extramural; at or above it, the cap binds
- * and the rest becomes extramural sprawl (see `urbanisation.ts`).
+ * Patches in the walled core. `coreCapacity` is a ceiling, not a target.
+ *
+ * Fix round 3: the first version computed this as
+ * `populationToPatches(min(population * (1 - extramuralShare(population)),
+ * coreCapacity))` — a SECOND, independently-rounded call to
+ * `populationToPatches` against a scaled-down population. Because
+ * `nPatches` (the caller's own `populationToPatches(population)`) and this
+ * value round `households / perPatchDensity` at different granularities,
+ * their difference (the sprawl budget, `nPatches - nCore`) could land on
+ * exactly zero even when `extramuralShare` was clearly non-zero — measured:
+ * 11 of 140 populations swept 100-14000 in steps of 100 hit `nCore >=
+ * nPatches`, and every walled burg in those bands produced gate-ward
+ * outskirts only, no real corridor sprawl, at ANY seed.
+ *
+ * Fixed at the root: derive the sprawl patch count directly from `nPatches
+ * * extramuralShare(population)`, floored at 1, and subtract that from
+ * `nPatches` — a single rounding step that can never land on zero while
+ * the share is non-zero. `coreCapacity`'s ceiling is then a SEPARATE,
+ * population-independent cap (`populationToPatches(coreCapacity)` — patches
+ * for a settlement whose population IS the capacity, not further scaled by
+ * `extramuralShare`): the smaller of the two governs, so the ceiling still
+ * binds once `population` runs far enough past `coreCapacity` that the
+ * share-based core would otherwise keep growing (a 250000-person city's
+ * core does not grow past what `coreCapacity` alone allows).
  */
 export function corePatchCount(
   population: number,
   coreCapacity: number,
   urbanDensity?: number,
 ): number {
-  const corePopulation = Math.min(population * (1 - extramuralShare(population)), coreCapacity);
-  return populationToPatches(corePopulation, urbanDensity);
+  const nPatches = populationToPatches(population, urbanDensity);
+  const sprawlPatches = Math.max(1, Math.round(nPatches * extramuralShare(population)));
+  const shareBasedCore = nPatches - sprawlPatches;
+  const capacityCeiling = populationToPatches(coreCapacity, urbanDensity);
+  // Clamped to nPatches too (belt-and-braces, per the existing
+  // non-monotonicity guard in mapToGenerationParams) — shareBasedCore is
+  // already <= nPatches - 1 by construction, but capacityCeiling alone
+  // (populationToPatches on a different population) is not.
+  return Math.min(shareBasedCore, capacityCeiling, nPatches);
 }
 
 /**

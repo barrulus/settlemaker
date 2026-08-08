@@ -66,13 +66,18 @@ describe('citadel fallback via staged retries', () => {
   //
   // To keep this fallback code path under coverage, seed 180 at pop=170
   // still exhausts the retry loop under the new shape field.
-  it('drops citadel via fallback instead of throwing (seed 180, pop=170)', () => {
+  // Round 4 Task 6 fix round 3: corePatchCount's rewrite (direct
+  // share-based sprawl budget) shifts nCore for essentially every
+  // population, moving which seeds exhaust the citadel-compactness retry
+  // loop yet again — seed 180 no longer drops citadel at pop 170. Swept
+  // seeds 1-500 and re-pinned to seed 43, which still exhausts the loop.
+  it('drops citadel via fallback instead of throwing (seed 43, pop=170)', () => {
     const result = generateFromBurg(burg({
-      name: 'S180',
+      name: 'S43',
       population: 170,
       citadel: true,
       walls: false,
-    }), { seed: 180 });
+    }), { seed: 43 });
     expect(result.model.degradedFlags.has('citadel')).toBe(true);
     expect(result.model.citadel).toBeNull();
   });

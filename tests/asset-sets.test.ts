@@ -14,7 +14,10 @@ const parky: AzgaarBurgInput = {
   // extramuralShare(population) now shrinks the walled core even below
   // coreCapacity, moving the ward-roll boundary again — 9000 stopped
   // rolling Park; 10500 does.
-  population: 10500,
+  // Round 4 Task 6 fix round 3: corePatchCount's rewrite (direct
+  // share-based sprawl budget, fixing a zero-budget rounding bug) moved the
+  // boundary again — 10500 stopped rolling Park; 15000 does.
+  population: 15000,
   port: false, citadel: false, walls: true,
   plaza: true, temple: true, shanty: false, capital: false,
 };

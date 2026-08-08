@@ -82,9 +82,19 @@ describe('fidelity round 4: probe path', () => {
     // locally — comparable to the prior 39, the difference is buildings
     // now split between core and suburb wards instead of concentrated in
     // the core).
+    // Re-pinned again in fix round 3: corePatchCount used to derive nCore
+    // from a SECOND, independently-rounded populationToPatches call against
+    // a share-scaled population, which could round the sprawl budget
+    // (nPatches - nCore) to zero even with a non-zero extramuralShare. Fixed
+    // by deriving the sprawl patch count directly from
+    // round(nPatches * extramuralShare(population)) instead — this pop-1400
+    // fixture's nCore shrinks further, deepening its real corridor sprawl.
+    // Verified non-degenerate: svg.length 84635, 143 patches, 39 wards with
+    // geometry, 9 suburb patches of which 3 are non-GateWard (real corridor
+    // sprawl, up from 1 before this fix) (measured locally).
     const { svg } = generateFromBurg(aldford(1400), { seed: 9 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('f4d5354ae802c8fd569c9ec5af22540d809b833ae928a1115a237e8e9b7fc809');
+    expect(sha256(svg)).toBe('210204741f4229caf865876dd7cebbacaebf07872ee86ffecd101ce9245d376d');
   });
 
   it('pins current village output at pop 800 (not a base-equality guarantee)', () => {
@@ -119,9 +129,15 @@ describe('fidelity round 4: probe path', () => {
     // Verified non-degenerate: svg.length 50813, 131 patches, 24 wards with
     // geometry, 7 suburb patches of which 1 is non-GateWard (real corridor
     // sprawl) (measured locally).
+    // Re-pinned again in fix round 3: same corePatchCount root-cause fix as
+    // the pop-1400 hash above (direct share-based sprawl budget instead of
+    // a second independently-rounded populationToPatches call). Verified
+    // non-degenerate: svg.length 61454, 131 patches, 24 wards with
+    // geometry, 6 suburb patches of which 1 is non-GateWard (measured
+    // locally).
     const { svg } = generateFromBurg(aldford(800), { seed: 1 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('869890d8a001900e26236cd014ae640f750d6a1dd3a93f72b4b9022feb67f88b');
+    expect(sha256(svg)).toBe('9e1da90b2ab0d8e1d701d52ea203a907e28ded51295736cecef2bbe5c2b8c3a8');
   });
 });
 
