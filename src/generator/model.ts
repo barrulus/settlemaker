@@ -19,6 +19,7 @@ import { createShapeField, type ShapeField } from './shape-field.js';
 import { buildAdjacency, type PatchAdjacency } from './adjacency.js';
 import { assignSprawl } from './zoning.js';
 import type { UrbanisationField } from './urbanisation.js';
+import { MAX_PATCHES } from '../input/azgaar-input.js';
 
 import { Ward } from '../wards/ward.js';
 import { GateWard } from '../wards/gate-ward.js';
@@ -897,13 +898,6 @@ export class Model {
     // (zoning, field placement) need adjacency over this settled geometry.
     this.adjacency = buildAdjacency(this.patches);
 
-    // Reserve headroom for the "Outskirts" gate-ward loop below: it can add
-    // a handful more built patches (up to ~3 per gate — several patches can
-    // meet at one Voronoi vertex) independent of assignSprawl's budget, and
-    // since those patches are now zoned as built fabric too (not left
-    // 'wilderness'), an unreserved budget can walk the total past
-    // MAX_PATCHES when assignSprawl's own claim already saturates it.
-    const outskirtsReserve = this.wall !== null ? this.wall.gates.length * 3 : 0;
     this.urbanisationField = assignSprawl({
       patches: this.patches,
       inner: this.inner,
@@ -919,7 +913,7 @@ export class Model {
       isBuildable: (p) =>
         p.ward === null && !this.waterbody.includes(p) &&
         !this.isWaterAt(p.shape.center) && !p.shape.vertices.some(v => this.isWaterAt(v)),
-      budget: Math.max(0, this.nPatches - this.inner.length - outskirtsReserve),
+      budget: Math.max(0, this.nPatches - this.inner.length),
     });
 
     const rng = this.rng;
@@ -979,10 +973,30 @@ export class Model {
 
     // Outskirts
     if (this.wall !== null) {
+      // Hard cap by construction: MAX_PATCHES was fitted to an 8-second
+      // generation budget, and this loop is independent of assignSprawl's
+      // budget (bounded only by gate count, not population) — an explicit
+      // coreCapacity can make nCore == nPatches (assignSprawl's budget is
+      // then 0) with several gates still producing new built patches here,
+      // pushing the total well past MAX_PATCHES (measured: 242-244 built at
+      // pop 250000 with coreCapacity >= ~0.75x population). Track the
+      // running built total (core+suburb+satellite) and refuse to claim
+      // once it reaches the cap — no reservation arithmetic, an input
+      // simply cannot bypass this.
+      let builtCount = this.patches.reduce(
+        (n, p) => n + (p.zone === 'core' || p.zone === 'suburb' || p.zone === 'satellite' ? 1 : 0), 0,
+      );
       for (const gate of this.wall.gates) {
         if (!rng.bool(1 / Math.max(2, this.nCore - 5))) {
           for (const patch of this.patchByVertex(gate)) {
             if (patch.ward === null) {
+              if (builtCount >= MAX_PATCHES) continue;
+              // This loop bypassed assignSprawl's isBuildable check entirely
+              // (measured: at a port fixture, several seeds produced fully
+              // submerged 'suburb'-zoned outskirts patches). Same predicate:
+              // reject a wet centroid or any wet vertex.
+              if (this.waterbody.includes(patch) || this.isWaterAt(patch.shape.center) ||
+                  patch.shape.vertices.some(v => this.isWaterAt(v))) continue;
               patch.withinCity = true;
               patch.ward = new GateWard(this, patch);
               // A GateWard patch outside the walls is built fabric, same as
@@ -990,8 +1004,9 @@ export class Model {
               // library task carries `zone` forward and has no rule for a
               // built patch tagged 'wilderness'). Only patches assignSprawl
               // left unclaimed reach here still 'wilderness'; a patch it
-              // already zoned 'suburb'/'satellite' keeps that label.
-              if (patch.zone === 'wilderness') patch.zone = 'suburb';
+              // already zoned 'suburb'/'satellite' keeps that label (and was
+              // already counted in builtCount, so it's not double-counted).
+              if (patch.zone === 'wilderness') { patch.zone = 'suburb'; builtCount++; }
             }
           }
         }

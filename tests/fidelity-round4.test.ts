@@ -111,9 +111,17 @@ describe('fidelity round 4: probe path', () => {
     // hash above — pop 800 now legitimately grows its own suburb patches
     // too. Verified non-degenerate: svg.length 63987, 131 patches, 23 wards
     // with geometry (measured locally).
+    // Re-pinned again in the same fix round's second pass (dropping the
+    // outskirtsReserve that had been silently zeroing assignSprawl's real
+    // budget for every walled burg under ~13500 — see zoning.ts and
+    // core-capacity.test.ts): pop 800 now genuinely reaches assignSprawl's
+    // corridor-scored ribbon growth, not just outskirts gate wards.
+    // Verified non-degenerate: svg.length 50813, 131 patches, 24 wards with
+    // geometry, 7 suburb patches of which 1 is non-GateWard (real corridor
+    // sprawl) (measured locally).
     const { svg } = generateFromBurg(aldford(800), { seed: 1 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('b26f5a803df14009edb27cf5aeda17d2290609e3130d91a7b659198067b6c648');
+    expect(sha256(svg)).toBe('869890d8a001900e26236cd014ae640f750d6a1dd3a93f72b4b9022feb67f88b');
   });
 });
 

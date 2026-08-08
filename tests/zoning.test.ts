@@ -75,21 +75,47 @@ describe('zoning', () => {
     }
   }, 20000);
 
-  it('builds nothing on water', () => {
+  it('builds nothing on water (seed sweep)', () => {
+    // seed 5 alone is clean by luck (same seed-luck problem the satellite
+    // test above was fixed for) — the outskirts "Outskirts" gate-ward loop
+    // in createWards bypasses assignSprawl's isBuildable check entirely, and
+    // seeds 1/6/9/10 reproduced fully-submerged 'suburb'-zoned outskirts
+    // patches before that loop got its own water guard. Sweep seeds.
     const port: AzgaarBurgInput = {
       ...metropolis([0, 120]), port: true, oceanBearing: 90, harbourSize: 'large',
     };
-    const { model } = generateFromBurg(port, { seed: 5 });
-    const built = model.patches.filter(p => p.zone === 'suburb' || p.zone === 'satellite');
-    // Not just the centroid (isBuildable, which assignSprawl already
-    // filters on, checks that) — no VERTEX of a built patch may sit in
-    // water either, which would also catch a dry-centroid patch whose body
-    // is actually submerged.
-    expect(built.every(p => p.shape.vertices.every(v => !model.isWaterAt(v)))).toBe(true);
-  }, 20000);
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+      const { model } = generateFromBurg(port, { seed });
+      const built = model.patches.filter(p => p.zone === 'suburb' || p.zone === 'satellite');
+      // Not just the centroid (isBuildable, which assignSprawl already
+      // filters on, checks that) — no VERTEX of a built patch may sit in
+      // water either, which would also catch a dry-centroid patch whose body
+      // is actually submerged.
+      expect(built.every(p => p.shape.vertices.every(v => !model.isWaterAt(v)))).toBe(true);
+    }
+  }, 90000);
 
   it('exposes the urbanisation field it built', () => {
     const { model } = generateFromBurg(metropolis([0, 120, 240]), { seed: 5 });
     expect(model.urbanisationField).not.toBeNull();
   }, 20000);
+
+  it('never exceeds MAX_PATCHES even when an explicit coreCapacity saturates nCore == nPatches', () => {
+    // The "Outskirts" gate-ward loop in createWards is independent of
+    // assignSprawl's budget (bounded only by gate count, not population).
+    // A public coreCapacity URL param can make nCore == nPatches (so
+    // assignSprawl's own budget is 0) while gates still produce new built
+    // patches — measured 242-244 built (against a cap of 220) before the
+    // outskirts loop got its own hard MAX_PATCHES check. Sweep the
+    // reported violating configurations directly.
+    const roadBearings = Array.from({ length: 12 }, (_, i) => i * 30);
+    for (const coreCapacity of [100000, 150000, 180000, 200000, 250000]) {
+      for (const seed of [1, 2, 3]) {
+        const burg = { ...metropolis(roadBearings), coreCapacity };
+        const { model } = generateFromBurg(burg, { seed });
+        const built = model.patches.filter(p => p.zone === 'core' || p.zone === 'suburb' || p.zone === 'satellite');
+        expect(built.length).toBeLessThanOrEqual(MAX_PATCHES);
+      }
+    }
+  }, 150000);
 });

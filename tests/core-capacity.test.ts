@@ -3,7 +3,7 @@ import {
   mapToGenerationParams, corePatchCount, extramuralShare, DEFAULT_CORE_CAPACITY, MAX_PATCHES,
 } from '../src/input/azgaar-input.js';
 import { parseSettlementUrl } from '../src/url/params.js';
-import { generateFromBurg, type AzgaarBurgInput } from '../src/index.js';
+import { generateFromBurg, WardType, type AzgaarBurgInput } from '../src/index.js';
 
 function burg(population: number, coreCapacity?: number): AzgaarBurgInput {
   return {
@@ -113,15 +113,27 @@ describe('coreCapacity', () => {
       expect(params.nCore).toBeLessThan(params.nPatches);
     });
 
-    it('a pop-4000 walled burg actually produces suburb patches', () => {
-      const burgInput: AzgaarBurgInput = {
-        name: 'Faubourg', population: 4000, port: false, citadel: false, walls: true,
-        plaza: true, temple: false, shanty: false, capital: false,
-        roadBearings: [0, 120, 240],
-      };
-      const { model } = generateFromBurg(burgInput, { seed: 3 });
-      const suburbs = model.patches.filter(p => p.zone === 'suburb');
-      expect(suburbs.length).toBeGreaterThan(0);
+    it('a pop-4000 walled burg actually produces suburb patches from corridor sprawl, not just outskirts gate wards', () => {
+      // The "Outskirts" gate-ward loop in createWards is a separate,
+      // pre-existing mechanism (bounded by gate count, not population) that
+      // also zones patches 'suburb' now — a reservation-based fix once made
+      // assignSprawl's own budget evaluate to 0 at every population in this
+      // range (nPatches - nCore <= 7 while a 3-gate reserve was >= 9), so
+      // every "suburb" patch at these fixtures was 100% relabelled GateWard,
+      // never exercising assignSprawl's corridor-scored ribbon growth at
+      // all. Assert a genuine (non-GateWard) suburb patch exists, swept
+      // across seeds since gate count/placement varies by seed.
+      for (const seed of [1, 2, 3, 4, 5]) {
+        const burgInput: AzgaarBurgInput = {
+          name: 'Faubourg', population: 4000, port: false, citadel: false, walls: true,
+          plaza: true, temple: false, shanty: false, capital: false,
+          roadBearings: [0, 120, 240],
+        };
+        const { model } = generateFromBurg(burgInput, { seed });
+        const suburbs = model.patches.filter(p => p.zone === 'suburb');
+        expect(suburbs.length).toBeGreaterThan(0);
+        expect(suburbs.some(p => p.ward?.type !== WardType.GateWard)).toBe(true);
+      }
     });
   });
 });
