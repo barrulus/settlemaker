@@ -1,6 +1,7 @@
 node_modules/
 dist/
 test-output.svg
+test-output-port.svg
 *.tsbuildinfo
 /output/
 tiles/
