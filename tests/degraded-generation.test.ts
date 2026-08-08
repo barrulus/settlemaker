@@ -88,17 +88,26 @@ describe('enforceCoreConnectivity does not absorb the citadel', () => {
   // Castle ward with an ordinary ward from `unassigned`, while buildWalls's
   // castle gates and `this.citadel` both still point at the same patch —
   // silently producing "citadel present, degradedFlags empty, but no Castle
-  // ward and no castle walls rendered." pop=170 seed=22 citadel=true is a
-  // known-reproducing case (found by a 280-run sweep of pops
-  // 170/400/1200/4000/12000/40000/90000 x seeds 1-40: connectivity fired 25
-  // times, the top-up chose the citadel 9 times, and this specific case
-  // landed the citadel inside `inner`).
+  // ward and no castle walls rendered." pop=170 seed=22 citadel=true WITH
+  // roadBearings [0,90,180,270] is a known-reproducing case (found by a
+  // 280-run sweep of pops 170/400/1200/4000/12000/40000/90000 x seeds 1-40:
+  // connectivity fired 25 times, the top-up chose the citadel 9 times, and
+  // this specific case landed the citadel inside `inner`). The road
+  // bearings are load-bearing for the repro, not incidental: without them
+  // the shape field is nearly isotropic, connectivity rarely breaks, and
+  // this exact case's top-up loop never runs at all — a version of this
+  // test without roadBearings was independently confirmed to PASS against
+  // the pre-fix code (vacuous), which is why it's included here explicitly
+  // rather than relying on burg()'s roadless default. Verified (see
+  // task-4-report.md's fix report) that reverting the two guard lines in
+  // enforceCoreConnectivity makes this test fail.
   it('keeps the citadel out of inner and its ward a Castle (pop=170, seed=22)', () => {
     const { model } = generateFromBurg(burg({
       name: 'CitadelConnectivity',
       population: 170,
       citadel: true,
       walls: false,
+      roadBearings: [0, 90, 180, 270],
     }), { seed: 22 });
     expect(model.citadel).not.toBeNull();
     expect(model.inner.includes(model.citadel!)).toBe(false);
