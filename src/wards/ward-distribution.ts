@@ -26,7 +26,15 @@ export type WardConstructor = new (model: Model, patch: Patch) => Ward;
  *   + remaining Craftsmen fill
  */
 export function buildWardDistribution(params: GenerationParams): WardConstructor[] {
-  const n = params.nPatches;
+  // Round-4 Task 4 split nPatches (the total built budget, including the
+  // countryside ring) from nCore (the inner-city/core budget). This list is
+  // consumed front-to-back by createWards' assignment loop over `unassigned`
+  // (this.inner, sized nCore) — sizing proportions off the much larger
+  // nPatches starves low-priority entries pushed near the end (Cathedral,
+  // Park) for any settlement with real countryside surplus, since Craftsmen
+  // alone (~46% of nPatches) can exceed nCore before the loop ever reaches
+  // them. nCore is the correct budget here.
+  const n = params.nCore;
   const wards: WardConstructor[] = [];
 
   // Base Craftsmen fill: ~46%

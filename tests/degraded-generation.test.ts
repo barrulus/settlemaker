@@ -53,29 +53,26 @@ describe('up-front walls threshold', () => {
 });
 
 describe('citadel fallback via staged retries', () => {
-  // Yarwick: pop=170, citadel=true. With its hashString("Yarwick") seed,
-  // every retry in the 20-attempt loop produces compactness < 0.75 — the
-  // default retry loop exhausts and the citadel-drop fallback must kick in.
-  // (Density-targeting Task 1 changed nPatches at pop=199, which now
-  // succeeds without the fallback; pop=170 still exercises it.)
-  it('drops citadel for the Yarwick case via fallback instead of throwing', () => {
+  // Round-4 Task 4 warps core selection by a direction-dependent shape
+  // field, which also moves which patch is picked as citadel and its
+  // resulting compactness. The named-burg cases below ("Yarwick" pop=170,
+  // "Undraladrynn" pop=181) used to exhaust the retry loop on compactness <
+  // 0.75 and fall back to dropping citadel; with the warped selection they
+  // now find an acceptable citadel shape on their first attempt instead
+  // (verified: citadel present, compactness ~0.79-0.80). That's a legitimate
+  // side effect of the shape change (see task-4-report.md), not a
+  // regression, so those two cases moved to the "five named failing burgs"
+  // acceptance block below with degradedFlags = [].
+  //
+  // To keep this fallback code path under coverage, seed 180 at pop=170
+  // still exhausts the retry loop under the new shape field.
+  it('drops citadel via fallback instead of throwing (seed 180, pop=170)', () => {
     const result = generateFromBurg(burg({
-      name: 'Yarwick',
+      name: 'S180',
       population: 170,
       citadel: true,
       walls: false,
-    }));
-    expect(result.model.degradedFlags.has('citadel')).toBe(true);
-    expect(result.model.citadel).toBeNull();
-  });
-
-  it('drops citadel for the Undraladrynn case via fallback instead of throwing', () => {
-    const result = generateFromBurg(burg({
-      name: 'Undraladrynn',
-      population: 181,
-      citadel: true,
-      walls: false,
-    }));
+    }), { seed: 180 });
     expect(result.model.degradedFlags.has('citadel')).toBe(true);
     expect(result.model.citadel).toBeNull();
   });
@@ -186,11 +183,14 @@ describe('acceptance: the five named failing burgs', () => {
       input: burg({ name: 'Skipton',      population: 50,  walls: true,  citadel: false }),
       expectDegraded: ['walls'],
     },
-    // Undraladrynn: every retry produces compactness < 0.75, so the
-    // citadel fallback drops it.
+    // Undraladrynn: previously every retry produced compactness < 0.75 so
+    // the citadel fallback dropped it. Round-4 Task 4's warped core
+    // selection moves the citadel candidate and its shape; it now finds an
+    // acceptable citadel on the first attempt (see the "citadel fallback
+    // via staged retries" block above for the still-exercised fallback path).
     {
       input: burg({ name: 'Undraladrynn', population: 181, walls: false, citadel: true }),
-      expectDegraded: ['citadel'],
+      expectDegraded: [],
     },
   ];
 

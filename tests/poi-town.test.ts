@@ -47,10 +47,13 @@ describe('selectPois — town regime (P >= 300)', () => {
   });
 
   it('emits 1 cathedral per Cathedral ward', () => {
-    // pop=90000 + seed=42 reliably produces exactly 1 Cathedral ward
+    // pop=90000 + seed=231 reliably produces exactly 1 Cathedral ward.
+    // Round 4 Task 4: warping core selection (and repointing
+    // buildWardDistribution from nPatches to nCore, see ward-distribution.ts)
+    // moved which seeds roll a Cathedral; seed=42 stopped rolling one.
     const { model } = generateFromBurg(
       makeBurg({ population: 90000, temple: true, capital: true }),
-      { seed: 42 },
+      { seed: 231 },
     );
     const cathedralWards = model.patches.filter(p => p.ward?.type === WardType.Cathedral).length;
     expect(cathedralWards).toBeGreaterThan(0);

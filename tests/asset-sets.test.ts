@@ -8,7 +8,9 @@ const parky: AzgaarBurgInput = {
   // 38 to 22 patches, and this seed no longer rolls a Park ward at 22.
   // Bumped to 8000 (nPatches 34, close to the original 38) per this file's
   // own "adjust the fixture ... until one exists" maintenance note below.
-  population: 8000,
+  // Round 4 Task 4: warped core selection moved the ward-roll boundary
+  // again — 8000 stopped rolling Park; 9000 does.
+  population: 9000,
   port: false, citadel: false, walls: true,
   plaza: true, temple: true, shanty: false, capital: false,
 };

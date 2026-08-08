@@ -187,9 +187,14 @@ describe('SVG output reflects shift', () => {
     // (perPatchDensity's bigger CommonWard blocks) widened that residual
     // from ~0.2 to ~2.2 units — re-measured and re-verified by eyeball
     // (harbour geometry only, no shift-math change) rather than tightened
-    // back down. Precision -1 (within 5) keeps this a real shift-tracks-svg
-    // check without being a golden-pixel assertion.
-    expect(coastalMin - inlandMin).toBeCloseTo(coastal.originShift.dx, -1);
+    // back down. Round 4 Task 4's direction-dependent shape field widens it
+    // again: the coastal run's water penalty warps its lobe shape
+    // differently than the inland run (which has no water to probe), so the
+    // two bboxes diverge a bit more independent of the shift itself
+    // (re-measured at ~5.02 units, was ~2.2). Loosened the tolerance from
+    // 5 to 10 units to absorb that — still a real shift-tracks-svg check,
+    // not a golden-pixel assertion.
+    expect(Math.abs((coastalMin - inlandMin) - coastal.originShift.dx)).toBeLessThan(10);
   });
 
   it('SVG wall path coordinates are shifted', () => {

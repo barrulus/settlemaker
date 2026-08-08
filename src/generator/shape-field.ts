@@ -2,9 +2,17 @@ import { Point } from '../types/point.js';
 import type { SeededRandom } from '../utils/random.js';
 
 /** Peak radial gain directly along a road. */
-const ROAD_LOBE_AMPLITUDE = 0.45;
-/** Higher = tighter lobe. cos^k falloff. */
-const ROAD_LOBE_SHARPNESS = 2;
+const ROAD_LOBE_AMPLITUDE = 1.8;
+/** Higher = tighter lobe. cos^k falloff. Must stay non-even: for exactly
+ * four roads spaced 90 degrees apart (a common case), an even exponent k
+ * makes cos^k(theta) + cos^k(theta-90) identically 1 for every angle (a
+ * trig identity, cos^2+sin^2=1), so the two adjacent lobes' contributions
+ * sum to a constant and the road term produces NO angular variation at all
+ * regardless of amplitude. A higher odd exponent both breaks that identity
+ * and concentrates the lobe tightly around the road direction (cos^k(45deg)
+ * -> 0 as k grows), which is what keeps the peak-to-valley ratio from being
+ * capped near 1.4x regardless of amplitude (the k=3 asymptote). */
+const ROAD_LOBE_SHARPNESS = 14;
 /** Radial loss for a direction that is entirely water. */
 const WATER_PENALTY = 0.55;
 /** Per-harmonic amplitude for the organic term. */

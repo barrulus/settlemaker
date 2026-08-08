@@ -15,6 +15,9 @@ import { densityCurve, perPatchDensity, baseScaleForYield } from './generation-p
 import { WardType } from '../types/interfaces.js';
 import type { Street } from '../types/interfaces.js';
 
+import { createShapeField, type ShapeField } from './shape-field.js';
+import { buildAdjacency, type PatchAdjacency } from './adjacency.js';
+
 import { Ward } from '../wards/ward.js';
 import { GateWard } from '../wards/gate-ward.js';
 import { Market } from '../wards/market.js';
@@ -102,10 +105,16 @@ export class Model {
   rng: SeededRandom;
 
   private nPatches: number;
+  private nCore: number;
   private plazaNeeded: boolean;
   private citadelNeeded: boolean;
   private wallsNeeded: boolean;
   readonly params: GenerationParams;
+
+  /** Direction-dependent radial scale; warps core selection away from a disc. */
+  shapeField: ShapeField | null = null;
+  /** Built once per buildPatches pass, rebuilt at the start of createWards. */
+  adjacency: PatchAdjacency | null = null;
 
   topology: Topology | null = null;
   patches: Patch[] = [];
@@ -172,6 +181,7 @@ export class Model {
     this.params = params;
     this.rng = new SeededRandom(params.seed);
     this.nPatches = params.nPatches;
+    this.nCore = Math.min(params.nCore, params.nPatches);
     this.plazaNeeded = params.plazaNeeded;
     this.citadelNeeded = params.citadelNeeded;
     this.wallsNeeded = params.wallsNeeded;
@@ -329,13 +339,27 @@ export class Model {
       for (let j = 0; j < 3 && j < voronoi.points.length; j++) {
         toRelax.push(voronoi.points[j]);
       }
-      if (this.nPatches < voronoi.points.length) {
-        toRelax.push(voronoi.points[this.nPatches]);
+      if (this.nCore < voronoi.points.length) {
+        toRelax.push(voronoi.points[this.nCore]);
       }
       voronoi = Voronoi.relax(voronoi, toRelax);
     }
 
-    voronoi.points.sort((p1, p2) => sign(p1.length - p2.length));
+    // Estimated core radius from the spiral seeding (r ≈ 10 + i·2.5), used
+    // only to probe water at a plausible distance.
+    const probeRadius = 10 + this.nCore * 2.5;
+    this.shapeField = createShapeField({
+      roadDirections: (this.params.roadEntryPoints ?? []).map(r => r.point),
+      probeRadius,
+      ...(this.getWaterRings().length > 0 ? { isWaterAt: (p: Point) => this.isWaterAt(p) } : {}),
+      rng,
+    });
+    const field = this.shapeField;
+
+    /** Distance warped by the shape field: small = "belongs in the core". */
+    const warped = (p: Point): number => p.length / field.scaleAt(Math.atan2(p.y, p.x));
+
+    voronoi.points.sort((p1, p2) => sign(warped(p1) - warped(p2)));
     const regions = voronoi.partitioning();
 
     this.patches = [];
@@ -352,18 +376,75 @@ export class Model {
         if (this.plazaNeeded) {
           this.plaza = patch;
         }
-      } else if (count === this.nPatches && this.citadelNeeded) {
+      } else if (count === this.nCore && this.citadelNeeded) {
         this.citadel = patch;
         this.citadel.withinCity = true;
       }
 
-      if (count < this.nPatches) {
+      if (count < this.nCore) {
         patch.withinCity = true;
         patch.withinWalls = this.wallsNeeded;
         this.inner.push(patch);
       }
 
       count++;
+    }
+
+    // Built here, right after selection, because enforceCoreConnectivity
+    // (below) needs neighbour lookups on the just-built mesh. It goes stale
+    // after optimizeJunctions merges vertices and buildWalls filters
+    // this.patches, so createWards rebuilds it on the settled geometry.
+    this.adjacency = buildAdjacency(this.patches);
+    this.enforceCoreConnectivity();
+  }
+
+  /**
+   * Keep only the connected component of `inner` containing the centre,
+   * then top up from adjacent unselected patches until nCore is reached.
+   * A disconnected core makes findCircumference walk a spurious boundary
+   * (the round-4 failure mode), so this runs before buildWalls.
+   */
+  private enforceCoreConnectivity(): void {
+    if (this.inner.length === 0) return;
+    const adj = this.adjacency!;
+    const innerSet = new Set(this.inner);
+
+    // Flood-fill from the centre patch through inner patches only.
+    const seed = this.inner[0];
+    const connected = new Set<Patch>([seed]);
+    let frontier = [seed];
+    while (frontier.length > 0) {
+      const next: Patch[] = [];
+      for (const p of frontier) {
+        for (const n of adj.neighboursOf(p)) {
+          if (innerSet.has(n) && !connected.has(n)) { connected.add(n); next.push(n); }
+        }
+      }
+      frontier = next;
+    }
+
+    if (connected.size === this.inner.length) return;
+
+    // Drop strays, then grow back to nCore through adjacency so the count
+    // (and so the population the core holds) is preserved.
+    for (const p of this.inner) {
+      if (!connected.has(p)) { p.withinCity = false; p.withinWalls = false; }
+    }
+    this.inner = this.inner.filter(p => connected.has(p));
+
+    while (this.inner.length < this.nCore) {
+      const candidates = new Set<Patch>();
+      for (const p of this.inner) {
+        for (const n of adj.neighboursOf(p)) {
+          if (!connected.has(n)) candidates.add(n);
+        }
+      }
+      if (candidates.size === 0) break;
+      const best = minBy([...candidates], (p: Patch) => p.shape.center.length);
+      connected.add(best);
+      best.withinCity = true;
+      best.withinWalls = this.wallsNeeded;
+      this.inner.push(best);
     }
   }
 
@@ -774,6 +855,13 @@ export class Model {
 
   // Phase 5: Create wards
   private createWards(): void {
+    // Rebuilt here (not reused from buildPatches) because optimizeJunctions
+    // merged/spliced vertices and buildWalls filtered this.patches since
+    // then — the phase-1 index would hold stale vertex identities and
+    // references to patches no longer in this.patches. Downstream consumers
+    // (zoning, field placement) need adjacency over this settled geometry.
+    this.adjacency = buildAdjacency(this.patches);
+
     const rng = this.rng;
     const unassigned = this.inner.slice();
 
@@ -832,7 +920,7 @@ export class Model {
     // Outskirts
     if (this.wall !== null) {
       for (const gate of this.wall.gates) {
-        if (!rng.bool(1 / (this.nPatches - 5))) {
+        if (!rng.bool(1 / (this.nCore - 5))) {
           for (const patch of this.patchByVertex(gate)) {
             if (patch.ward === null) {
               patch.withinCity = true;

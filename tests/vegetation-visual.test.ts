@@ -9,7 +9,9 @@ describe('vegetation visual output', () => {
       // pop 2500 from 38 to 22 patches, and at 22 this seed no longer rolls
       // a Park ward. Bumped to 8000 (nPatches 34, close to the original 38)
       // to restore a reliable park — see asset-sets.test.ts's matching note.
-      population: 8000,
+      // Round 4 Task 4: warped core selection moved the ward-roll boundary
+      // again — 8000 stopped rolling Park; 9000 does.
+      population: 9000,
       port: false, citadel: false, walls: true,
       plaza: true, temple: true, shanty: false, capital: false,
     };
@@ -41,7 +43,9 @@ describe('vegetation visual output', () => {
       // pop 2500 from 38 to 22 patches, and at 22 this seed no longer rolls
       // a Park ward. Bumped to 8000 (nPatches 34, close to the original 38)
       // to restore a reliable park — see asset-sets.test.ts's matching note.
-      population: 8000,
+      // Round 4 Task 4: warped core selection moved the ward-roll boundary
+      // again — 8000 stopped rolling Park; 9000 does.
+      population: 9000,
       port: false, citadel: false, walls: true,
       plaza: true, temple: true, shanty: false, capital: false,
     };
