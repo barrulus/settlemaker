@@ -116,8 +116,29 @@ wall inherits the lobed shape for free. The Voronoi mesh itself is unchanged.
 A function of position:
 
 ```
-built(p) = Σ over roads corridor(alongDist, perpDist) + neighbourBonus(p)
+built(p) = halo(distanceFromCoreEdge) + Σ over roads corridor(alongDist, perpDist) + neighbourBonus(p)
 ```
+
+**The halo term is what makes extramural growth read as a settlement rather
+than as spokes.** Real towns wrap their walls in a continuous skirt of
+building; the roads then carry thinner ribbons out of that skirt. Without a
+halo the field can only score points that lie along a road ray, and the
+render shows bare spikes radiating from a wall with empty ground between
+them — which is what the first implementation produced.
+
+Required behaviour, from review of the rendered output:
+
+1. **The halo fully encompasses the core.** It is a function of distance
+   from the core edge in EVERY direction, not of any road, so an
+   extramural ring exists even for a burg with no roads at all. It decays
+   with distance so the skirt is dense against the wall and thins outward.
+2. **The halo carries the majority of extramural population**; spokes carry
+   the minority. At metropolis scale the settlement must read as "largely
+   focussed around the city, with smaller arms following the routes".
+3. **Spokes taper.** A ribbon narrows as it runs out — its corridor
+   half-width shrinks with distance along the ray, not just its score.
+4. Above the core cap, the halo grows outward (a thicker skirt) rather than
+   the core growing.
 
 `corridor` decays with distance along the road ray and with perpendicular
 offset from it. Patches are ranked by `built(p)`; the top `nSprawl` become
