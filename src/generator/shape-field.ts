@@ -3,15 +3,20 @@ import type { SeededRandom } from '../utils/random.js';
 
 /** Peak radial gain directly along a road. */
 const ROAD_LOBE_AMPLITUDE = 1.8;
-/** Higher = tighter lobe. cos^k falloff. Must stay non-even: for exactly
- * four roads spaced 90 degrees apart (a common case), an even exponent k
- * makes cos^k(theta) + cos^k(theta-90) identically 1 for every angle (a
- * trig identity, cos^2+sin^2=1), so the two adjacent lobes' contributions
- * sum to a constant and the road term produces NO angular variation at all
- * regardless of amplitude. A higher odd exponent both breaks that identity
- * and concentrates the lobe tightly around the road direction (cos^k(45deg)
- * -> 0 as k grows), which is what keeps the peak-to-valley ratio from being
- * capped near 1.4x regardless of amplitude (the k=3 asymptote). */
+/** Higher = tighter lobe. cos^k falloff. Must stay strictly greater than 2:
+ * for exactly four roads spaced 90 degrees apart (a common case), k=2 makes
+ * cos^2(theta) + cos^2(theta-90) identically 1 for every angle (a trig
+ * identity, cos^2+sin^2=1), so the two adjacent lobes' contributions sum to
+ * a constant and the road term produces NO angular variation at all
+ * regardless of amplitude. Any k > 2 breaks that identity — it does NOT
+ * need to be odd: e.g. k=4 gives cos^4(theta) + sin^4(theta) =
+ * 1 - (1/2)sin^2(2*theta), which genuinely varies with theta. A higher k
+ * also concentrates the lobe more tightly around the road direction
+ * (cos^k(45deg) -> 0 as k grows), which is what keeps the peak-to-valley
+ * ratio from being capped near 1.4x regardless of amplitude (the k=2+eps
+ * asymptote) — see tests/shape-field.test.ts's four-roads-at-90-degrees
+ * regression, which would fail again at k=2 (or any k<=2) regardless of
+ * ROAD_LOBE_AMPLITUDE. */
 const ROAD_LOBE_SHARPNESS = 14;
 /** Radial loss for a direction that is entirely water. */
 const WATER_PENALTY = 0.55;

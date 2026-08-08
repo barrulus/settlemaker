@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Model, mapToGenerationParams, generateFromBurg, SETTLEMAKER_VERSION, type AzgaarBurgInput } from '../src/index.js';
+import { Model, mapToGenerationParams, generateFromBurg, SETTLEMAKER_VERSION, WardType, type AzgaarBurgInput } from '../src/index.js';
 import type { FeatureCollection } from 'geojson';
 
 function meta(fc: FeatureCollection): Record<string, unknown> {
@@ -75,6 +75,34 @@ describe('citadel fallback via staged retries', () => {
     }), { seed: 180 });
     expect(result.model.degradedFlags.has('citadel')).toBe(true);
     expect(result.model.citadel).toBeNull();
+  });
+});
+
+describe('enforceCoreConnectivity does not absorb the citadel', () => {
+  // Regression for a code-review finding on Round 4 Task 4: the
+  // connectivity top-up (Model.enforceCoreConnectivity, called at the end
+  // of buildPatches) grows `this.inner` back toward nCore via nearest-centre
+  // adjacency. The citadel sits at sorted index nCore — the single
+  // nearest unselected patch — so a naive top-up readily absorbs it into
+  // `inner`. createWards then overwrites the citadel's later-assigned
+  // Castle ward with an ordinary ward from `unassigned`, while buildWalls's
+  // castle gates and `this.citadel` both still point at the same patch —
+  // silently producing "citadel present, degradedFlags empty, but no Castle
+  // ward and no castle walls rendered." pop=170 seed=22 citadel=true is a
+  // known-reproducing case (found by a 280-run sweep of pops
+  // 170/400/1200/4000/12000/40000/90000 x seeds 1-40: connectivity fired 25
+  // times, the top-up chose the citadel 9 times, and this specific case
+  // landed the citadel inside `inner`).
+  it('keeps the citadel out of inner and its ward a Castle (pop=170, seed=22)', () => {
+    const { model } = generateFromBurg(burg({
+      name: 'CitadelConnectivity',
+      population: 170,
+      citadel: true,
+      walls: false,
+    }), { seed: 22 });
+    expect(model.citadel).not.toBeNull();
+    expect(model.inner.includes(model.citadel!)).toBe(false);
+    expect(model.citadel!.ward?.type).toBe(WardType.Castle);
   });
 });
 

@@ -356,10 +356,18 @@ export class Model {
     });
     const field = this.shapeField;
 
-    /** Distance warped by the shape field: small = "belongs in the core". */
-    const warped = (p: Point): number => p.length / field.scaleAt(Math.atan2(p.y, p.x));
-
-    voronoi.points.sort((p1, p2) => sign(warped(p1) - warped(p2)));
+    // Decorate-sort-undecorate: scaleAt (road-loop + harmonics + up to two
+    // point-in-polygon water probes) is computed once per point instead of
+    // twice per comparison. At pop 200000 (~44k points) a naive comparator
+    // reran it ~2*n*log2(n) times per buildPatches call, and buildPatches
+    // reruns on every retry in the generate() ladder.
+    const decorated = voronoi.points.map((p): [Point, number] => {
+      // Distance warped by the shape field: small = "belongs in the core".
+      const warped = p.length / field.scaleAt(Math.atan2(p.y, p.x));
+      return [p, warped];
+    });
+    decorated.sort((a, b) => sign(a[1] - b[1]));
+    voronoi.points = decorated.map(([p]) => p);
     const regions = voronoi.partitioning();
 
     this.patches = [];
@@ -436,6 +444,15 @@ export class Model {
       const candidates = new Set<Patch>();
       for (const p of this.inner) {
         for (const n of adj.neighboursOf(p)) {
+          // Exclude the citadel explicitly (it sits at sorted index nCore —
+          // the single nearest unselected patch — so it is very often the
+          // top-up's nearest-centre pick) and, defensively, any patch that
+          // already has a ward assigned. Absorbing the citadel into `inner`
+          // would make createWards overwrite its Castle with an ordinary
+          // ward while buildWalls's castle gates and this.citadel both still
+          // point at it — a silent "citadel present but no Castle" defect.
+          if (n === this.citadel) continue;
+          if (n.ward !== null) continue;
           if (!connected.has(n)) candidates.add(n);
         }
       }

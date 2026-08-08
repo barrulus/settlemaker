@@ -130,18 +130,33 @@ describe('fidelity round 4: footprint and texture scale with population', () => 
     // not enlarge the core — it becomes extramural sprawl") into the wall
     // selection that previously used `nPatches`. All four pops here (20000+)
     // sit above that 10000 cap, so `nCore` — and so the walled core's own
-    // radius — legitimately plateaus across the series now (measured: pairs
-    // tie exactly, 20000≈30000 at r≈153.99, 70000≈200000 at r≈140.03; the
-    // early-index Voronoi spiral points that seed the core are drawn from
-    // the RNG in a fixed sequence independent of how many additional
-    // countryside points follow, so two runs with the same capped nCore
-    // produce byte-identical core geometry). The user-reported defect this
-    // test guards — "20k/30k/70k/200k all render the identical mesh" — was
-    // about total footprint budget (`nPatches`, the sprawl mesh a later
-    // task will consume), which the patchCounts assertion above already
-    // covers and which still strictly grows. Walled-core radius is no
-    // longer the right metric for that footprint claim, so it's dropped
-    // here rather than pinned to a now-plateauing value.
+    // radius — legitimately plateaus (and can even fall, not just plateau —
+    // see below) across the series now. The user-reported defect this test
+    // guards — "20k/30k/70k/200k all render the identical mesh" — was about
+    // total footprint budget (`nPatches`, the sprawl mesh a later task will
+    // consume), which the patchCounts assertion above already covers and
+    // which still strictly grows. Walled-core radius is no longer the right
+    // metric for that footprint claim — but the new contract it implies
+    // (nCore constant, walled-core radius NOT growing) is itself surprising
+    // enough — a 200k city's walled core can be physically smaller than a
+    // 20k city's — that it needs its own coverage rather than silently
+    // dropping the check.
+    const nCores = pops.map(p => mapToGenerationParams(aldford(p), 9).nCore);
+    for (let i = 1; i < nCores.length; i++) {
+      expect(nCores[i]).toBe(nCores[0]);
+    }
+
+    // Measured: pairs tie exactly, 20000≈30000 at r≈153.99, 70000≈200000 at
+    // r≈140.03 (the early-index Voronoi spiral points that seed the core are
+    // drawn from the RNG in a fixed sequence independent of how many
+    // additional countryside points follow, so two runs with the same
+    // capped nCore produce byte-identical core geometry). Radius does not
+    // merely plateau here — it DECREASES from the first pair to the second
+    // — so no weaker monotonic form is pinnable; assert the actual contract
+    // instead: the last (largest-population) radius is no bigger than the
+    // first (smallest-population, still above coreCapacity) radius.
+    const radii = pops.map(p => generateFromBurg(aldford(p), { seed: 9 }).model.wall!.getRadius());
+    expect(radii[3]).toBeLessThanOrEqual(radii[0]);
   }, 20000);
 
   it('city texture is packed, village texture stays airy', () => {

@@ -52,6 +52,22 @@ describe('shape field', () => {
     expect(mean).toBeCloseTo(1, 1);
   });
 
+  it('varies for four roads spaced 90 degrees apart (trig-identity regression)', () => {
+    // With ROAD_LOBE_SHARPNESS=2, cos^2(theta) + cos^2(theta-90) is
+    // identically 1 for every angle (cos^2+sin^2=1), so this exact
+    // four-roads case produced zero angular variation regardless of
+    // ROAD_LOBE_AMPLITUDE — see shape-field.ts's ROAD_LOBE_SHARPNESS doc
+    // comment. Reverting to k<=2 makes this fail (max/min collapses to 1.0).
+    const field = createShapeField({
+      roadDirections: [dir(0), dir(Math.PI / 2), dir(Math.PI), dir(3 * Math.PI / 2)],
+      probeRadius: 100,
+      rng: new SeededRandom(1),
+    });
+    const samples = Array.from({ length: 32 }, (_, i) => field.scaleAt(i * 2 * Math.PI / 32));
+    const min = Math.min(...samples), max = Math.max(...samples);
+    expect(max / min).toBeGreaterThan(1.5);
+  });
+
   it('is deterministic for a given seed', () => {
     const build = () => createShapeField({
       roadDirections: [dir(1)],
