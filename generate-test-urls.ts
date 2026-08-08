@@ -8,7 +8,7 @@
 import { writeFileSync } from 'node:fs';
 import { encodeBurgParam, type AzgaarBurgInput } from './src/index.js';
 
-const BASE = 'https://settlemaker.netlify.app';
+const BASE = 'https://settlemaker.com';
 /** The machine endpoint; the bare site root serves the human builder. */
 const IMG = `${BASE}/fmg`;
 

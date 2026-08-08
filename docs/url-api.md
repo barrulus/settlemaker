@@ -16,8 +16,20 @@ JavaScript SDK to install. AFMG (or any host page) owns all surrounding UI
 — map chrome, burg picker, zoom controls — and only needs to construct a URL
 and drop it into an iframe `src`.
 
-Throughout this document, the renderer's base URL is written as
-`https://<site>.netlify.app/fmg` — substitute the actual deployed origin. (The bare site root `/` serves a human-facing builder page; the machine endpoint that renders from URL parameters is `/fmg`.)
+The renderer is deployed at **`https://settlemaker.com/fmg`** — that is the
+URL to build against.
+
+The site serves three paths, and only one of them is this API:
+
+| Path | Audience | What it is |
+|---|---|---|
+| `/fmg` | machines | **The endpoint this document specifies.** Chrome-free renderer; the query string is the entire input. |
+| `/` | humans | A builder page — a form that composes a link and previews it live. Ignores `i=` and the flat params. |
+| `/symbols` | artists | Reference sheet for the SVG symbol library and its authoring spec. Not part of the API. |
+
+Point iframes at `/fmg`, never at `/`. (Links predating 2026-08-06 used the
+bare root as the render endpoint; those now land on the builder page and
+silently ignore their parameters.)
 
 ## 2. Quick start
 
@@ -25,14 +37,14 @@ Throughout this document, the renderer's base URL is written as
 seeded from the page load, so it demos something on first visit:
 
 ```
-https://<site>.netlify.app/fmg
+https://settlemaker.com/fmg
 ```
 
 **Flat tier** — human-typable query params, useful for manual testing and
 simple links:
 
 ```
-https://<site>.netlify.app/fmg?name=Salt+Harbour&pop=4200&seed=7&port=1&walls=1&oceanBearing=135&harbourSize=large
+https://settlemaker.com/fmg?name=Salt+Harbour&pop=4200&seed=7&port=1&walls=1&oceanBearing=135&harbourSize=large
 ```
 
 **Real integrations use `i=`.** The flat tier only covers a handful of
@@ -166,6 +178,15 @@ the matching gate output feature.
   `harbourSize`, `urbanDensity`, `biome`, `trade`, `coastlineGeometry`) is
   genuinely optional and can be omitted (not set to `null`) when unknown.
 
+**Fields accepted but not yet consumed.** `culture`, `elevation` and
+`temperature` are part of the interface and decode fine, but nothing in the
+current generator reads them — sending them changes no pixel today. They are
+declared because they're the fields most likely to drive future output
+(culture-specific asset sets, elevation-aware terrain, temperature-driven
+vegetation), so an adapter that populates them now will pick up that
+behaviour without a payload change. Everything else in the interface is
+live.
+
 ### Adapter snippet
 
 This is the exact encoding pipeline in plain browser JavaScript — no
@@ -188,7 +209,7 @@ async function settlemakerUrl(base, burg, seed) {
 Usage:
 
 ```js
-const url = await settlemakerUrl('https://<site>.netlify.app/fmg', {
+const url = await settlemakerUrl('https://settlemaker.com/fmg', {
   name: 'Toprak',
   population: 13,
   port: true,
@@ -355,10 +376,16 @@ apply and the palette default shows through instead.
   `i=`/flat params + seed → byte-identical output) is unaffected, since the
   curve is a pure function of `population` alone. The number of Voronoi
   patches (and so the physical size of the walled area and the count of
-  distinct building footprints) also scales with population, up to a cap;
-  populations large enough to hit that cap keep growing the wall but express
-  the remaining population as denser texture within existing footprints
-  rather than more of them.
+  distinct building footprints) also scales with population, up to a hard cap
+  of 220 patches (`MAX_PATCHES` in `src/input/azgaar-input.ts`, chosen so
+  generation stays inside an 8-second budget at the top of the range). Per-patch
+  texture scales alongside it — from ~9 airy detached houses per patch for
+  villages to ~30 tight blocks per patch for cities (`perPatchDensity`,
+  log-scaled between population 1 000 and 20 000). The cap binds at roughly
+  population 79 000; past that, footprint count and per-patch layout stop
+  growing and the extra population is absorbed as denser texture inside
+  existing patches rather than as more distinct footprints. Wall size keeps
+  scaling with population either way.
 
 ## 7. Evolution policy
 
