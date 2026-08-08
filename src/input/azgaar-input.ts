@@ -135,13 +135,21 @@ export function mapToGenerationParams(
     return { point, bearingDeg, routeId: b.route_id, kind: b.kind };
   });
 
+  const nPatches = populationToPatches(burg.population, burg.urbanDensity);
+  const nCoreUnclamped = corePatchCount(
+    burg.population,
+    burg.coreCapacity ?? DEFAULT_CORE_CAPACITY,
+    burg.urbanDensity,
+  );
+  // Clamp nCore to not exceed nPatches. populationToPatches is not monotonic
+  // in population: households = round(p / density) and perPatchDensity(p) step
+  // at different granularities, so a clamped (smaller) population can land on
+  // a local peak and yield more patches than the unclamped version.
+  const nCore = Math.min(nCoreUnclamped, nPatches);
+
   return {
-    nPatches: populationToPatches(burg.population, burg.urbanDensity),
-    nCore: corePatchCount(
-      burg.population,
-      burg.coreCapacity ?? DEFAULT_CORE_CAPACITY,
-      burg.urbanDensity,
-    ),
+    nPatches,
+    nCore,
     population: burg.population,
     plazaNeeded: burg.plaza || burg.trade === true,
     citadelNeeded: burg.citadel,
