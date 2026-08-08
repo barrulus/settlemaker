@@ -6,3 +6,7 @@ test-output.svg
 tiles/
 web/node_modules/
 web/dist/
+
+# local tooling artefacts
+.direnv/
+repomix-output.xml
