@@ -15,7 +15,9 @@ export function buildAdjacency(patches: Patch[]): PatchAdjacency {
   // Vertex identity → patches touching it.
   const byVertex = new Map<Point, Patch[]>();
   for (const patch of patches) {
-    for (const v of patch.shape.vertices) {
+    // Deduplicate this patch's vertices to avoid adding it multiple times per vertex.
+    const uniqueVertices = new Set(patch.shape.vertices);
+    for (const v of uniqueVertices) {
       const bucket = byVertex.get(v);
       if (bucket === undefined) byVertex.set(v, [patch]);
       else bucket.push(patch);
@@ -25,7 +27,9 @@ export function buildAdjacency(patches: Patch[]): PatchAdjacency {
   const neighbours = new Map<Patch, Patch[]>();
   for (const patch of patches) {
     const shared = new Map<Patch, number>();
-    for (const v of patch.shape.vertices) {
+    // Deduplicate this patch's vertices by identity to avoid double-counting.
+    const uniqueVertices = new Set(patch.shape.vertices);
+    for (const v of uniqueVertices) {
       for (const other of byVertex.get(v) ?? []) {
         if (other === patch) continue;
         shared.set(other, (shared.get(other) ?? 0) + 1);
