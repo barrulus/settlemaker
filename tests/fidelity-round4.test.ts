@@ -64,9 +64,15 @@ describe('fidelity round 4: probe path', () => {
     // legitimately changed again for the same reason (still > 1000).
     // Re-pinned again in Round 4 Task 4: warping core selection changes
     // output for every settlement by design.
+    // Re-pinned in Round 4 Task 6 (zoning): buildWalls now keeps radius*12
+    // of countryside (was radius*3) so sprawl has room to grow — pop 1400
+    // has no sprawl of its own (well under the default 10000 coreCapacity)
+    // but the much larger farm ring still legitimately changes this burg's
+    // farmland geometry. Verified non-degenerate: svg.length 81716,
+    // 144 patches, 39 wards with geometry (measured locally).
     const { svg } = generateFromBurg(aldford(1400), { seed: 9 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('72be71789e9f535984f289058cf7749f86278a44c727a662f4afe1d74f080fc5');
+    expect(sha256(svg)).toBe('884c3e6721b59f3621a1f27a54910be825b600f6323ec34acb26d147110316dc');
   });
 
   it('pins current village output at pop 800 (not a base-equality guarantee)', () => {
@@ -86,9 +92,12 @@ describe('fidelity round 4: probe path', () => {
     // re-pinning, same as the pop-1400 hash above.
     // Re-pinned in Round 4 Task 4: warping core selection changes output
     // for every settlement by design.
+    // Re-pinned in Round 4 Task 6 (zoning): same radius*12 farm-ring reason
+    // as the pop-1400 hash above. Verified non-degenerate: svg.length
+    // 50737, 131 patches, 26 wards with geometry (measured locally).
     const { svg } = generateFromBurg(aldford(800), { seed: 1 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('95b5b42e98f547abadc1f982621a45b449f6b4f8d2b4e03c917788e645c0ec6e');
+    expect(sha256(svg)).toBe('ada2c9992130905dbfa0fe0cc40d626d2f91f876006b4bc58a48117d23f80786');
   });
 });
 
@@ -191,18 +200,26 @@ describe('fidelity round 4: footprint and texture scale with population', () => 
     const BUDGET_EXEMPT = new Set([
       WardType.Castle, WardType.Cathedral, WardType.Market, WardType.Harbour, WardType.Park,
     ]);
-    const totalOrdinary = (model: Model): number => {
+    // Round-4 Task 6 (zoning): sprawl (suburb/satellite) and the much larger
+    // farm ring buildWalls now keeps (radius*12, was radius*3) both produce
+    // ordinary buildings of their own and share model.patches with the
+    // walled core, so a city-wide pre/post-trim ratio no longer isolates
+    // what this test is actually about — whether baseMinSqScale's CORE
+    // texture is well-calibrated. Scope to zone 'core' (matching
+    // Model.refineDensity/applyBuildingBudget's own core/other split) so the
+    // property under test (core texture barely trims) is unchanged.
+    const totalCoreOrdinary = (model: Model): number => {
       let n = 0;
       for (const patch of model.patches) {
-        if (!patch.ward || BUDGET_EXEMPT.has(patch.ward.type)) continue;
+        if (patch.zone !== 'core' || !patch.ward || BUDGET_EXEMPT.has(patch.ward.type)) continue;
         n += patch.ward.geometry.length;
       }
       return n;
     };
     for (const population of [20000, 70000]) {
       const { model } = generateFromBurg(aldford(population), { seed: 9 });
-      const preTrim = model.pretrimOrdinaryCount;
-      const postTrim = totalOrdinary(model);
+      const preTrim = model.pretrimCoreOrdinaryCount;
+      const postTrim = totalCoreOrdinary(model);
       expect(preTrim).toBeGreaterThan(0);
       const trimmedFrac = (preTrim - postTrim) / preTrim;
       expect(trimmedFrac).toBeLessThan(0.12);

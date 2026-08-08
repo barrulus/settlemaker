@@ -17,6 +17,8 @@ import type { Street } from '../types/interfaces.js';
 
 import { createShapeField, type ShapeField } from './shape-field.js';
 import { buildAdjacency, type PatchAdjacency } from './adjacency.js';
+import { assignSprawl } from './zoning.js';
+import type { UrbanisationField } from './urbanisation.js';
 
 import { Ward } from '../wards/ward.js';
 import { GateWard } from '../wards/gate-ward.js';
@@ -26,6 +28,7 @@ import { Farm } from '../wards/farm.js';
 import { Slum } from '../wards/slum.js';
 import { Harbour } from '../wards/harbour.js';
 import { CommonWard } from '../wards/common-ward.js';
+import { CraftsmenWard } from '../wards/craftsmen-ward.js';
 import { buildWardDistribution, type WardConstructor } from '../wards/ward-distribution.js';
 
 const MAX_ATTEMPTS = 20;
@@ -115,6 +118,8 @@ export class Model {
   shapeField: ShapeField | null = null;
   /** Built once per buildPatches pass, rebuilt at the start of createWards. */
   adjacency: PatchAdjacency | null = null;
+  /** The field zoning used to place sprawl. Null before createWards runs. */
+  urbanisationField: UrbanisationField | null = null;
 
   topology: Topology | null = null;
   patches: Patch[] = [];
@@ -172,6 +177,16 @@ export class Model {
    * without a second code path. 0 before geometry has been built.
    */
   pretrimOrdinaryCount = 0;
+
+  /**
+   * `pretrimOrdinaryCount`'s walled-core-only counterpart: for a sprawling
+   * settlement (suburb/satellite patches present), sprawl and the much
+   * larger radius*12 farm ring both count toward `pretrimOrdinaryCount` but
+   * aren't what `applyBuildingBudget`'s core/other split (or its trim
+   * fraction) is about — this isolates the core's own pre-trim/post-trim
+   * ratio. Equal to `pretrimOrdinaryCount` when there's no sprawl.
+   */
+  pretrimCoreOrdinaryCount = 0;
 
   arteries: Street[] = [];
   streets: Street[] = [];
@@ -304,6 +319,7 @@ export class Model {
     this.syntheticCoast = null;
     this.minSqScale = this.baseMinSqScale;
     this.pretrimOrdinaryCount = 0;
+    this.pretrimCoreOrdinaryCount = 0;
   }
 
   private build(): void {
@@ -545,9 +561,11 @@ export class Model {
     }
 
     const radius = this.border.getRadius();
-    this.patches = this.patches.filter(p =>
-      p.shape.distance(this.center) < radius * 3,
-    );
+    // Sprawl reaches ~4x the core radius along roads, plus satellites beyond
+    // that; keep enough countryside for both, and for the farm belt outside
+    // them. (Was `radius * 3`, which assumed the wall bounded the settlement.)
+    const keepRadius = radius * 12;
+    this.patches = this.patches.filter(p => p.shape.distance(this.center) < keepRadius);
 
     this.gates = this.border.gates.slice();
 
@@ -879,6 +897,17 @@ export class Model {
     // (zoning, field placement) need adjacency over this settled geometry.
     this.adjacency = buildAdjacency(this.patches);
 
+    this.urbanisationField = assignSprawl({
+      patches: this.patches,
+      inner: this.inner,
+      adjacency: this.adjacency!,
+      roadDirections: (this.params.roadEntryPoints ?? []).map(r => r.point),
+      coreRadius: this.border!.getRadius(),
+      population: this.params.population,
+      isBuildable: (p) => p.ward === null && !this.waterbody.includes(p) && !this.isWaterAt(p.shape.center),
+      budget: Math.max(0, this.nPatches - this.inner.length),
+    });
+
     const rng = this.rng;
     const unassigned = this.inner.slice();
 
@@ -937,7 +966,7 @@ export class Model {
     // Outskirts
     if (this.wall !== null) {
       for (const gate of this.wall.gates) {
-        if (!rng.bool(1 / (this.nCore - 5))) {
+        if (!rng.bool(1 / Math.max(2, this.nCore - 5))) {
           for (const patch of this.patchByVertex(gate)) {
             if (patch.ward === null) {
               patch.withinCity = true;
@@ -946,6 +975,13 @@ export class Model {
           }
         }
       }
+    }
+
+    // Extramural fabric: ordinary wards, denser near the walls, poorer further out.
+    for (const patch of this.patches) {
+      if (patch.ward !== null) continue;
+      if (patch.zone === 'suburb') patch.ward = new CraftsmenWard(this, patch);
+      else if (patch.zone === 'satellite') patch.ward = new Slum(this, patch);
     }
 
     // Build farmland with sinusoidal boundary
@@ -1003,6 +1039,9 @@ export class Model {
     this.refineDensity();
     this.removeDrownedGeometry();
     this.pretrimOrdinaryCount = this.countOrdinaryBuildings();
+    this.pretrimCoreOrdinaryCount = this.patches.some(p => p.zone === 'suburb' || p.zone === 'satellite')
+      ? this.countCoreOrdinaryBuildings()
+      : this.pretrimOrdinaryCount;
     this.applyBuildingBudget();
   }
 
@@ -1033,16 +1072,43 @@ export class Model {
    */
   private refineDensity(): void {
     const target = buildingBudget(this.params.population, this.params.urbanDensity);
-    const count = this.countOrdinaryBuildings();
+    // Sprawl (suburb/satellite) patches now also carry ordinary buildings
+    // (CraftsmenWard/Slum) and countryside farmsteads reach much further
+    // now that buildWalls keeps radius*12 instead of radius*3. Both would
+    // count toward `target`'s pre-sprawl semantics — `target` and
+    // `baseScaleForYield`'s calibration assumed this.patches's ordinary
+    // yield WAS the walled settlement's yield. Folding sprawl's volume in
+    // satisfies the >= target*0.65 gate on volume alone and starves the
+    // core of the density boost it still needs (measured: core density
+    // collapsed from ~21-30/patch to ~5-6/patch at pop 70000 without this
+    // scoping). Scoping is conditional on sprawl actually existing so a
+    // settlement with no suburb/satellite patches (population at or below
+    // coreCapacity — every previously-pinned fixture) takes the exact same
+    // path as before, unchanged.
+    const hasSprawl = this.patches.some(p => p.zone === 'suburb' || p.zone === 'satellite');
+    const count = hasSprawl ? this.countCoreOrdinaryBuildings() : this.countOrdinaryBuildings();
     if (count === 0 || count >= target * 0.65) return;
 
     this.minSqScale = this.baseMinSqScale * Math.max(0.25, count / target);
     for (const patch of this.patches) {
+      if (hasSprawl && (patch.zone === 'suburb' || patch.zone === 'satellite')) continue;
       if (patch.ward instanceof CommonWard && !this.waterbody.includes(patch)) {
         patch.ward.createGeometry();
       }
     }
     this.minSqScale = this.baseMinSqScale;
+  }
+
+  /** Ordinary-building count within the walled core only — see refineDensity's doc comment. */
+  private countCoreOrdinaryBuildings(): number {
+    let n = 0;
+    for (const patch of this.patches) {
+      if (patch.zone !== 'core') continue;
+      const ward = patch.ward;
+      if (!ward || ward.type === WardType.Park || BUDGET_EXEMPT_WARD_TYPES.has(ward.type)) continue;
+      n += ward.geometry.length;
+    }
+    return n;
   }
 
   /**
@@ -1128,12 +1194,54 @@ export class Model {
   private applyBuildingBudget(): void {
     const budget = buildingBudget(this.params.population, this.params.urbanDensity);
 
+    // Sprawl (suburb/satellite, plus the much larger farm ring now kept by
+    // buildWalls' radius*12 cull) shares this.patches with the walled core.
+    // A single global trim divides the SAME population-sized budget across
+    // all of it, which — because sprawl now vastly outnumbers the core in
+    // patch count — starves the core's share regardless of how well
+    // refineDensity boosted it (measured: core density collapsed from
+    // ~23/patch pre-trim to ~19/patch post-trim at pop 70000). Give the core
+    // a budget slice sized the same way its patch count was sized
+    // (nCore/nPatches — the same ratio `buildingBudget/nPatches ≈
+    // perPatchDensity(population)` relationship `baseScaleForYield`'s
+    // calibration relies on), and trim the rest of the budget separately
+    // against everything else. No-sprawl settlements (population at or
+    // below coreCapacity — every previously-pinned fixture) have zero
+    // suburb/satellite patches, so this takes the single-group path,
+    // unchanged from before.
+    const hasSprawl = this.patches.some(p => p.zone === 'suburb' || p.zone === 'satellite');
+    if (!hasSprawl) {
+      this.applyBuildingBudgetToGroup(this.patches, budget);
+      return;
+    }
+
+    const corePatches = this.patches.filter(p => p.zone === 'core');
+    const otherPatches = this.patches.filter(p => p.zone !== 'core');
+    const coreBudget = Math.round(budget * (corePatches.length / this.nPatches));
+    this.applyBuildingBudgetToGroup(corePatches, coreBudget);
+    this.applyBuildingBudgetToGroup(otherPatches, Math.max(0, budget - coreBudget));
+  }
+
+  /**
+   * Trim ordinary buildings in `patches` down to `budget`. Two policies:
+   * — Small unwalled settlements (budget ≤ 40, no wall): keep the buildings
+   *   closest to the town centre — hamlets read as one tight cluster.
+   * — Walled or large settlements: trim each patch proportionally
+   *   (largest-remainder quotas), keeping buildings nearest each patch's own
+   *   centre. The wall is built around the full patch footprint in phase 3,
+   *   so a global nearest-centre trim would hollow the periphery inside it
+   *   (live-site defect: wall r=214 vs outermost building r=116).
+   * Landmark wards and park groves are exempt; farm plots live outside
+   * ward.geometry. Deterministic: sorts with coordinate tiebreaks,
+   * no rng.
+   */
+  private applyBuildingBudgetToGroup(patches: Patch[], budget: number): void {
     const isBudgeted = (ward: Ward): boolean =>
       ward.type !== WardType.Park && !BUDGET_EXEMPT_WARD_TYPES.has(ward.type);
 
     const perPatch: Array<{ ward: Ward; count: number }> = [];
     let total = 0;
-    for (const patch of this.patches) {
+    for (const patch of patches) {
       if (!patch.ward || !isBudgeted(patch.ward) || patch.ward.geometry.length === 0) continue;
       perPatch.push({ ward: patch.ward, count: patch.ward.geometry.length });
       total += patch.ward.geometry.length;
