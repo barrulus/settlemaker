@@ -23,10 +23,10 @@
 - **`coreCapacity` is a CEILING, not a target.** A settlement below the cap must not put its whole population inside the walls — faubourgs outside the gates and ribbon development along the approach roads were normal at every size. The core holds `min(population × (1 − extramuralShare(population)), coreCapacity)` people, where
 
   ```
-  extramuralShare(pop) = clamp(0.08 + 0.1116 × (log10(pop) − log10(300)), 0.05, 0.25)
+  extramuralShare(pop) = clamp(0.20 + 0.1642 × (log10(pop) − log10(300)), 0.20, 0.45)
   ```
 
-  giving ~8% outside at population 300, ~14% at 1 200, ~20% at 4 000, ~25% at 10 000, after which the cap binds instead. The curve is continuous, so nothing changes abruptly at the cap boundary.
+  giving ~20% outside at population 300, ~30% at 1 200, ~38.5% at 4 000, ~45% at 10 000, after which the cap binds instead. The curve is continuous, so nothing changes abruptly at the cap boundary. **These values are set by what renders as a visible skirt at small walled settlements, not by a demographic estimate** — the original curve (8% → 25%) bought a 4 000-person town only 5 patches of extramural growth, too few to ring a core, and measured 11–17 of 24 angular sectors covered against 24/24 for cities.
 
   **Why this is called out:** `min(population, coreCapacity)` and `population` are the SAME expression for any burg at or below the cap, so a naive `nCore` makes the sprawl budget `nPatches − nCore` evaluate to exactly zero and every settlement under 10 000 becomes 100% intramural. This was a real defect in the first implementation.
 
