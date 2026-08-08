@@ -75,6 +75,11 @@ export function baseScaleForYield(targetPerPatch: number): number {
 export interface GenerationParams {
   /** Number of Voronoi patches for the inner city */
   nPatches: number;
+  /**
+   * Patches in the walled core. `nPatches` is the TOTAL built budget (core
+   * plus extramural sprawl); this is the core's share of it.
+   */
+  nCore: number;
   /** Population used for scale emission in GeoJSON metadata. */
   population: number;
   /** Whether to generate a central market plaza */

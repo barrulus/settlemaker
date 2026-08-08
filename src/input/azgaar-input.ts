@@ -43,6 +43,12 @@ export interface AzgaarBurgInput {
   harbourSize?: 'large' | 'small';
   /** People per household — FMG's urbanDensityInput. Drives the building budget. */
   urbanDensity?: number;
+  /**
+   * People the walled core may hold. Population beyond this grows outside
+   * the walls along roads. Default DEFAULT_CORE_CAPACITY (10 000) — walls
+   * historically enclosed a core, not an entire metropolis.
+   */
+  coreCapacity?: number;
   /** Azgaar biome name (e.g. "desert", "temperate") — selects default asset set + palette. */
   biome?: string;
   /** Trade-center burg — guarantees a market/plaza ward (Azgaar wishlist). */
@@ -84,6 +90,9 @@ export interface AzgaarBurgInput {
  * footprints all the way to the top of the calibrated population range. */
 export const MAX_PATCHES = 220;
 
+/** People a walled core holds unless the caller says otherwise. */
+export const DEFAULT_CORE_CAPACITY = 10000;
+
 /**
  * Patch count derives from the household target (pop / urbanDensity) so the
  * settlement's footprint scales with how many buildings it must hold —
@@ -94,6 +103,18 @@ export const MAX_PATCHES = 220;
 function populationToPatches(population: number, urbanDensity?: number): number {
   const households = Math.max(2, Math.round(population / (urbanDensity ?? densityCurve(population))));
   return Math.max(3, Math.min(MAX_PATCHES, Math.ceil(households / perPatchDensity(population))));
+}
+
+/**
+ * Patches in the walled core. Population above `coreCapacity` does not
+ * enlarge the core — it becomes extramural sprawl (see `urbanisation.ts`).
+ */
+export function corePatchCount(
+  population: number,
+  coreCapacity: number,
+  urbanDensity?: number,
+): number {
+  return populationToPatches(Math.min(population, coreCapacity), urbanDensity);
 }
 
 /**
@@ -116,6 +137,11 @@ export function mapToGenerationParams(
 
   return {
     nPatches: populationToPatches(burg.population, burg.urbanDensity),
+    nCore: corePatchCount(
+      burg.population,
+      burg.coreCapacity ?? DEFAULT_CORE_CAPACITY,
+      burg.urbanDensity,
+    ),
     population: burg.population,
     plazaNeeded: burg.plaza || burg.trade === true,
     citadelNeeded: burg.citadel,

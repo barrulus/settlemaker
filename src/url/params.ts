@@ -74,7 +74,7 @@ export function sanitizeThemeOverrides(value: unknown): Partial<RenderTheme> {
 
 const FLAT_DATA_PARAMS = [
   'name', 'pop', 'seed', 'port', 'citadel', 'walls', 'plaza', 'temple',
-  'shanty', 'capital', 'trade', 'oceanBearing', 'harbourSize', 'biome', 'urbanDensity',
+  'shanty', 'capital', 'trade', 'oceanBearing', 'harbourSize', 'biome', 'urbanDensity', 'coreCapacity',
 ] as const;
 
 function bool(params: URLSearchParams, key: string): boolean {
@@ -133,6 +133,7 @@ export async function parseSettlementUrl(
     const name = params.get('name') ?? `Burg ${num(params, 'seed') ?? num(params, 'pop') ?? 0}`;
     const harbourSizeRaw = params.get('harbourSize');
     const urbanDensity = num(params, 'urbanDensity');
+    const coreCapacity = num(params, 'coreCapacity');
     const oceanBearing = num(params, 'oceanBearing');
     burg = {
       name,
@@ -149,6 +150,7 @@ export async function parseSettlementUrl(
       ...(harbourSizeRaw === 'large' || harbourSizeRaw === 'small' ? { harbourSize: harbourSizeRaw } : {}),
       ...(params.get('biome') !== null ? { biome: params.get('biome')! } : {}),
       ...(urbanDensity !== undefined && urbanDensity > 0 ? { urbanDensity } : {}),
+      ...(coreCapacity !== undefined && coreCapacity > 0 ? { coreCapacity } : {}),
     };
     seedOverride = num(params, 'seed');
   } else {
