@@ -28,6 +28,8 @@ export interface UrbanisationField {
 
 export function createUrbanisationField(opts: UrbanisationOptions): UrbanisationField {
   const { roadDirections, coreRadius, reach, corridorHalfWidth, satellites, satelliteSpacing } = opts;
+  // When reach <= coreRadius, the ribbon branch can never fire, because the outer
+  // `along > coreRadius` guard already makes `along < reach` impossible.
   const span = Math.max(1, reach - coreRadius);
 
   function scoreAt(p: Point): number {
@@ -40,15 +42,25 @@ export function createUrbanisationField(opts: UrbanisationOptions): Urbanisation
       const perpX = p.x - along * d.x;
       const perpY = p.y - along * d.y;
       const perp = Math.sqrt(perpX * perpX + perpY * perpY);
-      const lateral = Math.exp(-(perp * perp) / (corridorHalfWidth * corridorHalfWidth));
+
+      // Guard against NaN when corridorHalfWidth === 0: return 1 only if exactly
+      // on the road (perp === 0), 0 otherwise, representing an infinitely sharp corridor.
+      let lateral: number;
+      if (corridorHalfWidth === 0) {
+        lateral = perp === 0 ? 1 : 0;
+      } else {
+        lateral = Math.exp(-(perp * perp) / (corridorHalfWidth * corridorHalfWidth));
+      }
 
       // Continuous ribbon: linear decay from the core out to `reach`.
       if (along < reach) {
         score += lateral * (1 - (along - coreRadius) / span);
       }
 
-      // Satellites: gaussian bumps further out on the SAME ray, so outlying
-      // hamlets are on-road by construction.
+      // Satellites: gaussian bumps on the SAME ray, so outlying hamlets are on-road
+      // by construction. The satellite loop runs at every `along` value when satellites
+      // is true; separation from the ribbon comes purely from gaussian decay around
+      // each bump centre at reach + k*satelliteSpacing.
       if (satellites) {
         for (let k = 1; k <= SATELLITE_COUNT; k++) {
           const centre = reach + k * satelliteSpacing;
