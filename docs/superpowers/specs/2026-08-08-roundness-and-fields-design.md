@@ -176,8 +176,11 @@ Satellites get no knob; they are automatic above a population threshold.
 
 Zone labels must reach the `Scene` as semantic data rather than staying
 internal to the generator. `BuildingFeature.kind` already carries ward type
-for exactly this purpose; `zone` joins it, and `FieldPlot` gains the same.
-`SCENE_VERSION` bumps.
+for exactly this purpose; `zone` joins it. `FieldPlot` gains `ringDepth`
+(adjacency hops from built fabric) rather than `zone` — every field plot is
+by definition in the `farm` zone, so a zone tag would carry no information,
+whereas ring depth is what distinguishes near orchards from open crop
+further out. `SCENE_VERSION` bumps.
 
 This is the hook the SVG symbol library (`web/public/symbols/batch001/`, 38
 symbols and an authoring spec) will key off in a later round: satellite
