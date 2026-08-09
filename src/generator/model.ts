@@ -35,15 +35,8 @@ import { buildWardDistribution, type WardConstructor } from '../wards/ward-distr
 const MAX_ATTEMPTS = 20;
 const MIN_POPULATION_FOR_WALLS = 150;
 
-/** Voronoi points per requested patch. Countryside ring (farms/wilderness)
- * comes from the surplus. Scaled down for large meshes per round-4 Task 2
- * calibration (see task-2-report.md): at nPatches ≤ 60 the 8x multiplier is
- * unchanged (small/medium settlements untouched); above that it tapers
- * toward a floor of 4x so the Voronoi build cost (which scales with the
- * number of points, not just nPatches) stays bounded for the largest
- * footprints admitted by MAX_PATCHES. */
-const VORONOI_POINT_MULTIPLIER = (nPatches: number): number =>
-  nPatches <= 60 ? 8 : Math.max(4, Math.round(480 / nPatches) + 3);
+/** Golden angle: consecutive seed points never align into spokes. */
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
 /** Ward types whose buildings are feature landmarks, exempt from the population budget. */
 const BUDGET_EXEMPT_WARD_TYPES = new Set<WardType>([
@@ -349,11 +342,35 @@ export class Model {
   private buildPatches(): void {
     const rng = this.rng;
     const sa = rng.float() * 2 * Math.PI;
-    const points: Point[] = [];
-    for (let i = 0; i < this.nPatches * VORONOI_POINT_MULTIPLIER(this.nPatches); i++) {
-      const a = sa + Math.sqrt(i) * 5;
-      const r = i === 0 ? 0 : 10 + i * (2 + rng.float());
-      points.push(new Point(Math.cos(a) * r, Math.sin(a) * r));
+
+    // Seed points at controlled density rather than the historical linear
+    // spiral (`r = 10 + i*(2+rand)`), whose density fell off as 1/r — patch
+    // area grew linearly with distance from the centre, so once the mesh was
+    // kept out to radius*12 for sprawl, every farm/countryside patch was
+    // 2-8x the area of a city ward. The farm belt (measured in adjacency
+    // hops) then covered ~3.6x the built settlement's area and read as
+    // landscape instead of a ring, and — since farms carry visible ink —
+    // ballooned the frame until the settlement was a speck (~20% of the
+    // image at pop 4000).
+    //
+    // Here the cell size stays uniform (matched to core-ward size) out to
+    // `uniformR`, which must cover the built settlement plus its sprawl
+    // (ribbons reach ~4x the core radius along roads) plus the farm belt
+    // just outside the built edge; beyond it cells coarsen linearly, so
+    // the far wilderness stays cheap. Radial step per point follows from
+    // the target cell area s²: d(πr²)/di = s(r)² → dr = s²/(2πr).
+    const coreR = 10 + this.nCore * 2.5;
+    const s0 = coreR * Math.sqrt(Math.PI / this.nCore);
+    const uniformR = 4 * coreR;
+    const maxR = 12 * coreR;
+    const points: Point[] = [new Point(0, 0)];
+    let r = s0 * 0.6;
+    for (let i = 1; r < maxR && i < 20000; i++) {
+      const a = sa + i * GOLDEN_ANGLE;
+      const jr = r * (0.9 + 0.2 * rng.float());
+      points.push(new Point(Math.cos(a) * jr, Math.sin(a) * jr));
+      const s = r <= uniformR ? s0 : s0 * (1 + (r - uniformR) / coreR);
+      r += (s * s) / (2 * Math.PI * r);
     }
 
     let voronoi = Voronoi.build(points);
@@ -370,9 +387,9 @@ export class Model {
       voronoi = Voronoi.relax(voronoi, toRelax);
     }
 
-    // Estimated core radius from the spiral seeding (r ≈ 10 + i·2.5), used
-    // only to probe water at a plausible distance.
-    const probeRadius = 10 + this.nCore * 2.5;
+    // Estimated core radius from the seeding, used only to probe water at a
+    // plausible distance.
+    const probeRadius = coreR;
     this.shapeField = createShapeField({
       roadDirections: (this.params.roadEntryPoints ?? []).map(r => r.point),
       probeRadius,
