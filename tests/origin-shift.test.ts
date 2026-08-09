@@ -209,14 +209,17 @@ describe('SVG output reflects shift', () => {
     // (re-measured at ~5.02 units, was ~2.2).
     //
     // computeLocalBounds now only expands over patches that actually render
-    // something (buildings/fields/greens/water/piers), not every countryside
-    // patch — see src/generator/bounds.ts. Water occupies roughly half of
-    // this fixture's map, so the coastal run's farm ring has to reach
-    // further inland (away from the coast) to pick up the same quota of
-    // farmland patches the inland run gets on all sides "for free". That's
-    // real, legitimate content-bbox asymmetry — not shift-tracking noise —
-    // and it dwarfs the previous ~5-unit residual (re-measured at ~312
-    // units at this population). This assertion is deliberately loose (its
+    // something (buildings/fields/greens/piers) — not every countryside
+    // patch, and (as of the water-bounds fix) not water either, since the
+    // ocean's synthesised coastline ring reaches the mesh edge and would
+    // otherwise dominate the frame — see src/generator/bounds.ts. Water
+    // still occupies roughly half of this fixture's map, so the coastal
+    // run's farm ring has to reach further inland (away from the coast) to
+    // pick up the same quota of farmland patches the inland run gets on all
+    // sides "for free". That's real, legitimate content-bbox asymmetry —
+    // not shift-tracking noise — and it dwarfs the previous ~5-unit residual
+    // (re-measured at ~312 units at this population, pre water-bounds-fix).
+    // This assertion is deliberately loose (its
     // own comment history says so): it only checks the viewBox still moves
     // in the shift's direction by at least the shift itself, not that the
     // two bboxes are otherwise identical — that precise check lives in "SVG

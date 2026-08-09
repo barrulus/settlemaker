@@ -24,15 +24,19 @@ describe('computeLocalBounds', () => {
   it('returns an AABB that contains every vertex of every patch that renders something', () => {
     const { model } = generateFromBurg(makeBurg(), { seed: 42 });
     const bounds = computeLocalBounds(model, 20);
-    const waterbody = new Set(model.waterbody);
 
+    // Water patches are deliberately EXCLUDED from "renders something" here:
+    // for a coastal burg the ocean's synthesised coastline ring reaches the
+    // (radius*12) mesh edge, and letting it count would squeeze the
+    // settlement into a sliver against the frame edge. Water fills whatever
+    // part of the frame it reaches and is clipped by #frame-clip instead —
+    // see the dedicated "does NOT expand over water patches" test below.
     for (const patch of model.patches) {
       const ward = patch.ward;
       const rendersSomething =
         (ward !== null && ward.geometry.length > 0) ||
         (ward instanceof Farm && ward.subPlots.length > 0) ||
-        (ward instanceof Harbour && ward.piers.length > 0) ||
-        waterbody.has(patch);
+        (ward instanceof Harbour && ward.piers.length > 0);
       if (!rendersSomething) continue;
 
       for (const v of patch.shape.vertices) {
@@ -51,15 +55,13 @@ describe('computeLocalBounds', () => {
     // balloon the frame around a sea of invisible wilderness patches.
     const { model } = generateFromBurg(makeBurg(), { seed: 42 });
     const bounds = computeLocalBounds(model, 20);
-    const waterbody = new Set(model.waterbody);
 
     const bareCountrysidePatches = model.patches.filter(patch => {
       const ward = patch.ward;
       const rendersSomething =
         (ward !== null && ward.geometry.length > 0) ||
         (ward instanceof Farm && ward.subPlots.length > 0) ||
-        (ward instanceof Harbour && ward.piers.length > 0) ||
-        waterbody.has(patch);
+        (ward instanceof Harbour && ward.piers.length > 0);
       return !rendersSomething;
     });
     // This fixture must actually have some — otherwise the assertion below
@@ -72,6 +74,44 @@ describe('computeLocalBounds', () => {
       ),
     );
     expect(outside).toBe(true);
+  });
+
+  it('does NOT expand over water patches for a coastal port (piers still do)', () => {
+    // Owner's rule: "focus should be on the landward side of the image with
+    // just enough water to show the coastline." The ocean's synthesised
+    // coastline ring reaches the mesh edge, far beyond the settlement, so it
+    // must not set the frame. Water is drawn clipped to #frame-clip instead
+    // (see assemble-svg.ts / the svg-render suite).
+    const { model } = generateFromBurg(
+      makeBurg({ port: true, population: 20000, oceanBearing: 90, harbourSize: 'large' }),
+      { seed: 3 },
+    );
+    const bounds = computeLocalBounds(model, 0);
+    const waterbody = new Set(model.waterbody);
+    expect(waterbody.size).toBeGreaterThan(0);
+
+    const someWaterOutside = [...waterbody].some(patch =>
+      patch.shape.vertices.some(v =>
+        v.x < bounds.min_x || v.x > bounds.max_x || v.y < bounds.min_y || v.y > bounds.max_y,
+      ),
+    );
+    expect(someWaterOutside).toBe(true);
+
+    // Piers are the one water-adjacent thing that still expands the frame.
+    let pierCount = 0;
+    for (const patch of model.patches) {
+      if (!(patch.ward instanceof Harbour)) continue;
+      for (const pier of patch.ward.piers) {
+        pierCount++;
+        for (const v of pier.vertices) {
+          expect(v.x).toBeGreaterThanOrEqual(bounds.min_x);
+          expect(v.x).toBeLessThanOrEqual(bounds.max_x);
+          expect(v.y).toBeGreaterThanOrEqual(bounds.min_y);
+          expect(v.y).toBeLessThanOrEqual(bounds.max_y);
+        }
+      }
+    }
+    expect(pierCount).toBeGreaterThan(0);
   });
 
   it('respects the padding argument', () => {

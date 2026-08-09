@@ -15,8 +15,8 @@ export interface LocalBounds {
 
 /**
  * Compute the AABB of every feature that actually renders visible ink in
- * the model — patches with buildings/fields/greens, harbour piers, water
- * patches, walls — plus a uniform padding applied to all four sides.
+ * the model — patches with buildings/fields/greens, harbour piers, walls —
+ * plus a uniform padding applied to all four sides.
  *
  * Deliberately EXCLUDED:
  *  - Countryside/wilderness patches carrying a bare `Ward` (or no ward at
@@ -28,6 +28,16 @@ export interface LocalBounds {
  *    to run to (and past) the frame edge — that's existing, documented
  *    product behaviour for external roads — but they no longer dictate the
  *    frame size. They're clipped by the SVG viewBox instead.
+ *  - Water patches: for a coastal burg the ocean's synthesised coastline
+ *    ring runs out to the (now much larger, radius*12) mesh edge, so
+ *    letting water expand the frame squeezes the settlement into a sliver
+ *    against one edge with the sea dominating the image. The owner's rule
+ *    is "focus on the landward side, just enough water to show the
+ *    coastline" — so water fills whatever part of the frame it reaches and
+ *    is clipped by `#frame-clip`, but does not itself set the frame. Piers
+ *    are built structures and are the one water-adjacent thing that still
+ *    expands the frame — they nudge it just far enough seaward that the
+ *    waterline stays visible.
  *
  * Both the SVG viewBox and the GeoJSON `metadata.local_bounds` derive from
  * this so they cannot drift. Pass the same padding to both callers.
@@ -42,15 +52,12 @@ export function computeLocalBounds(model: Model, padding = 20, shift?: OriginShi
     if (p.y > maxY) maxY = p.y;
   };
 
-  const waterbody = new Set(model.waterbody);
-
   for (const patch of model.patches) {
     const ward = patch.ward;
     const hasPiers = ward instanceof Harbour && ward.piers.length > 0;
     const hasFields = ward instanceof Farm && ward.subPlots.length > 0;
     const hasGeometry = ward !== null && ward.geometry.length > 0;
-    const isWaterPatch = waterbody.has(patch);
-    if (!hasGeometry && !hasFields && !hasPiers && !isWaterPatch) continue;
+    if (!hasGeometry && !hasFields && !hasPiers) continue;
 
     for (const v of patch.shape.vertices) expand(v);
     if (hasPiers) {
