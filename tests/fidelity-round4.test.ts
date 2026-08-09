@@ -184,17 +184,23 @@ describe('fidelity round 4: probe path', () => {
 
 describe('fidelity round 4: footprint and texture scale with population', () => {
   it('perPatchDensity reference points', () => {
+    // Round-cores-faubourgs task 5 (2026-08-09): anchors moved from
+    // (<=1000, 1000-20000) to (<=600, 600-10000) so city texture is reached
+    // at the coreCapacity default (10 000) instead of 20 000.
     expect(perPatchDensity(300)).toBeCloseTo(9, 5);
-    expect(perPatchDensity(1000)).toBeCloseTo(9, 5);
-    expect(perPatchDensity(5000)).toBeCloseTo(20.3, 1);
-    expect(perPatchDensity(20000)).toBeCloseTo(30, 5);
+    expect(perPatchDensity(600)).toBeCloseTo(9, 5);
+    expect(perPatchDensity(1000)).toBeCloseTo(12.81, 2);
+    expect(perPatchDensity(5000)).toBeCloseTo(24.83, 1);
+    expect(perPatchDensity(10000)).toBeCloseTo(30, 5);
     expect(perPatchDensity(200000)).toBeCloseTo(30, 5);
   });
 
-  it('pop ≤ 1000 patch counts are unchanged (village stability)', () => {
+  it('pop ≤ 600 patch counts are unchanged (village stability)', () => {
+    // Round-cores-faubourgs task 5: the village-stable floor moved from
+    // 1000 to 600 along with the perPatchDensity anchor.
     expect(mapToGenerationParams(aldford(300), 9).nPatches).toBe(9);   // 75 households / 9
-    expect(mapToGenerationParams(aldford(1000), 9).nPatches).toBe(
-      Math.max(3, Math.ceil(Math.round(1000 / densityCurve(1000)) / 9)),
+    expect(mapToGenerationParams(aldford(600), 9).nPatches).toBe(
+      Math.max(3, Math.ceil(Math.round(600 / densityCurve(600)) / 9)),
     );
   });
 

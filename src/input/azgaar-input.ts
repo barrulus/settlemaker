@@ -121,25 +121,25 @@ function populationToPatches(population: number, urbanDensity?: number): number 
  * implementation — 84 measured runs across pop 400-10000 x seeds 1-12
  * produced zero suburb/satellite patches).
  *
- * `~20%` outside at population 300, rising log-linearly to `~30%` at 1200,
- * `~38.5%` at 4000 and `~45%` at population 10000
- * (`DEFAULT_CORE_CAPACITY`), where the cap itself takes over as the binding
- * constraint — continuous across that boundary, so nothing changes abruptly
- * there.
+ * `~10%` outside at population 300, rising log-linearly to `20%` at
+ * population 10000 (`DEFAULT_CORE_CAPACITY`), where the cap itself takes
+ * over as the binding constraint — continuous across that boundary, so
+ * nothing changes abruptly there.
  *
- * These numbers are set by what RENDERS as a visible skirt, not by a
- * demographic estimate. The first curve (8% at 300 rising to 25% at 10000)
- * was set from historical intuition and proved far too low to read as
- * anything: a town of 4000 has ~26 patches in total, so a 20% share bought
- * only 5 patches of extramural growth, which cannot physically ring a core
- * (measured: 11-17 of 24 angular sectors covered, against 24/24 for cities,
- * whose share is driven by the cap rather than by this curve). The share is
- * therefore set by what reads correctly at the smallest walled settlements.
- * See docs/superpowers/specs/2026-08-08-roundness-and-fields-design.md.
+ * Owner decision 2026-08-09 (replaces the 20-45% curve from round 4 task 6):
+ * most people stay INSIDE the walls at below-cap sizes, and the walled
+ * interior packs tight (Saint-Malo-style), rather than a large share
+ * draining out to a suburb ring. Growth outside the walls is sparse and
+ * asymmetric, not a uniform skirt. See
+ * docs/superpowers/sdd/2026-08-09-round-cores-faubourgs/ for the full spec.
  */
 export function extramuralShare(population: number): number {
-  const raw = 0.20 + 0.1642 * (Math.log10(population) - Math.log10(300));
-  return Math.min(0.45, Math.max(0.20, raw));
+  // 10% at pop 300 rising log-linearly to 20% at DEFAULT_CORE_CAPACITY
+  // (10 000), where the capacity ceiling takes over as the binding
+  // constraint. Owner decision 2026-08-09 (replaces the 20-45% curve):
+  // most people stay inside; growth outside is sparse and asymmetric.
+  const raw = 0.10 + 0.0657 * (Math.log10(population) - Math.log10(300));
+  return Math.min(0.20, Math.max(0.10, raw));
 }
 
 /**

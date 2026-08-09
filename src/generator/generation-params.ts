@@ -40,13 +40,16 @@ export function densityCurve(population: number): number {
 /**
  * Ordinary buildings a patch holds at this settlement's texture. Villages
  * are airy (~9 detached houses per patch, the watabou village look);
- * cities pack ~30 tight blocks per patch (the watabou city look),
- * log-scaled between pop 1 000 and 20 000. Drives BOTH the patch count
- * (footprint) and the default block size (texture) so they stay coherent.
+ * walled settlements pack tight (Saint-Malo ~6000 in a compact circuit):
+ * city texture (~30 tight blocks per patch) is now reached at the
+ * coreCapacity default (population 10 000), not 20 000 — owner decision
+ * 2026-08-09. Log-scaled between pop 600 and 10 000. Drives BOTH the patch
+ * count (footprint) and the default block size (texture) so they stay
+ * coherent.
  */
 export function perPatchDensity(population: number): number {
-  if (population <= 1000) return 9;
-  return Math.min(30, 9 + 21 * Math.log10(population / 1000) / Math.log10(20));
+  if (population <= 600) return 9;
+  return Math.min(30, 9 + 21 * Math.log10(population / 600) / Math.log10(10000 / 600));
 }
 
 /**
@@ -62,17 +65,37 @@ export function perPatchDensity(population: number): number {
  *
  * Anchored and log-interpolated exactly like `perPatchDensity` itself:
  * - (9, 1.0): villages, unchanged -- hard-pinned, not re-fitted, because
- *   pop <= 1000 output must stay byte-stable (existing pinned-hash tests).
- * - (30, 9.0): the largest scale, measured against a fixed Aldford (seed 9,
- *   walled) fixture at BOTH pop 20000 and pop 70000 (`calibrate-yield.ts`),
- *   that keeps pre-trim yield within a <12%-trim margin of target at both
- *   populations simultaneously -- their patches differ in average area by
- *   ~2.9x (bigger cities get bigger patches, not just more of them), so a
- *   single scale can't perfectly match both, but 9.0 keeps trim at 0% (pop
- *   20000) and 3.3% (pop 70000), both comfortably under the 12% ceiling,
- *   with post-trim density landing at 0.76x/0.94x target respectively (both
- *   inside the accepted [0.7, 1.2]x band). See task-2-report.md's
- *   "Fix round 2" section for the full measured curve.
+ *   pop <= 600 output must stay byte-stable (existing pinned-hash tests;
+ *   the village floor itself moved from 1000 to 600 with round-cores-
+ *   faubourgs task 5, but the (9, 1.0) anchor pair is untouched).
+ * - (30, 9.0): the largest scale. Originally measured against a fixed
+ *   Aldford (seed 9, walled) fixture at pop 20000 and pop 70000 -- both
+ *   populations `perPatchDensity` saturated at target 30 for under the
+ *   pre-2026-08-09 curve (which reached 30 at pop 20000).
+ *
+ *   Round-cores-faubourgs task 5 (2026-08-09) moved the saturation point to
+ *   pop 10000 (Saint-Malo-style dense walled core reached at the
+ *   coreCapacity default, not double it). Re-measured at the new anchor
+ *   (pop 10000) with the SAME fixture/scale: at scale 9.0, trim stays 0%
+ *   (comfortably under the 12% margin -- the actual gate this anchor is
+ *   fitted to), same as at pop 70000 (also 0% trim at scale 9.0). Trim
+ *   never engages meaningfully anywhere in the scale 4-20 range tested at
+ *   either population, so the trim-margin gate does not force a refit.
+ *
+ *   Post-trim density (informational, not the gate): 0.65x target at pop
+ *   10000 vs 1.56x target at pop 70000 -- both now outside the old
+ *   [0.7, 1.2]x informal band (was 0.76x/0.94x at the old pop 20000/70000
+ *   anchors). The two bookend populations' average patch area diverges more
+ *   now that the near anchor moved from 20000 to 10000 (fewer, bigger core
+ *   patches at pop 10000 than pop 20000 used to have at the same target),
+ *   so a single scale fits both worse than before; no scale in [4, 20]
+ *   brings both simultaneously inside [0.7, 1.2] (swept: pop 10000 needs
+ *   scale ~6, pop 70000 needs scale ~16). Left at 9.0 (unchanged) since the
+ *   named acceptance gate -- trim margin -- is unaffected either way, and
+ *   `tests/fidelity-round4.test.ts`'s "fix round 2: yield-matched texture"
+ *   test (which pins the [0.7, 1.2] density band at pop 20000/70000) was
+ *   already failing before this task for the same reason and remains in
+ *   the known-failing set.
  *
  * Values outside [9, 30] clamp to the anchors -- `perPatchDensity` never
  * actually leaves that range, so this is a safety net, not a live branch.

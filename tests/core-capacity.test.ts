@@ -20,11 +20,11 @@ describe('coreCapacity', () => {
   });
 
   it('caps core size once population is well past the capacity', () => {
-    // Below the cap, extramuralShare keeps rising (25% at 10000) so the core
+    // Below the cap, extramuralShare keeps rising (20% at 10000) so the core
     // itself keeps growing right up to the cap boundary — 10000 is where the
     // cap first *starts* to bind, not where it's already fully binding.
     // Compare two populations comfortably past that (extramuralShare clamped
-    // at its 25% ceiling for both, so the cap alone decides core size).
+    // at its 20% ceiling for both, so the cap alone decides core size).
     const wellOver = corePatchCount(50000, DEFAULT_CORE_CAPACITY);
     const wayOver = corePatchCount(250000, DEFAULT_CORE_CAPACITY);
     expect(wayOver).toBe(wellOver);
@@ -82,20 +82,29 @@ describe('coreCapacity', () => {
   });
 
   describe('extramuralShare — coreCapacity is a ceiling, not a target', () => {
-    // Target curve from docs/superpowers/specs/2026-08-08-roundness-and-fields-design.md:
-    // ~20% at 300, ~30% at 1200, ~38.5% at 4000, ~45% at 10000 (where the cap
+    // Owner decision 2026-08-09 (round-cores-faubourgs task 5), replacing the
+    // 20-45% curve above: most people stay INSIDE the walls at below-cap
+    // sizes, and the walled interior packs tight (Saint-Malo-style) rather
+    // than draining a large share out to a suburb ring. Target curve:
+    // ~10% at 300, ~14% at 1200, ~17% at 4000, ~20% at 10000 (where the cap
     // takes over). Tolerance is generous (2 percentage points) — this pins
-    // the shape of the curve, not the exact fitted constants. The anchors are
-    // set by what renders as a visible skirt, not by a demographic estimate:
-    // the first curve (8% at 300 to 25% at 10000) bought a pop-4000 town only
-    // 5 extramural patches, which cannot physically ring a core.
+    // the shape of the curve, not the exact fitted constants.
     it.each([
-      [300, 0.20],
-      [1200, 0.30],
-      [4000, 0.385],
-      [10000, 0.45],
+      [300, 0.10],
+      [1200, 0.14],
+      [4000, 0.17],
+      [10000, 0.20],
     ])('is ~%i%% at population %i', (population, target) => {
       expect(extramuralShare(population)).toBeCloseTo(target, 1);
+    });
+
+    it('extramural share: 10% at 300 rising to 20% at the cap', () => {
+      expect(extramuralShare(300)).toBeCloseTo(0.10, 2);
+      expect(extramuralShare(10000)).toBeCloseTo(0.20, 2);
+      expect(extramuralShare(2000)).toBeGreaterThan(0.10);
+      expect(extramuralShare(2000)).toBeLessThan(0.20);
+      expect(extramuralShare(100)).toBeCloseTo(0.10, 2);  // clamped
+      expect(extramuralShare(250000)).toBeCloseTo(0.20, 2); // clamped; cap governs above anyway
     });
 
     it('is continuous across the coreCapacity boundary (no jump at 10000)', () => {
