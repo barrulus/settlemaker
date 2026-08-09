@@ -15,7 +15,6 @@ import { densityCurve, perPatchDensity, baseScaleForYield } from './generation-p
 import { WardType } from '../types/interfaces.js';
 import type { Street } from '../types/interfaces.js';
 
-import { createShapeField, type ShapeField } from './shape-field.js';
 import { buildAdjacency, type PatchAdjacency } from './adjacency.js';
 import { assignSprawl } from './zoning.js';
 import type { UrbanisationField } from './urbanisation.js';
@@ -113,8 +112,6 @@ export class Model {
   private wallsNeeded: boolean;
   readonly params: GenerationParams;
 
-  /** Direction-dependent radial scale; warps core selection away from a disc. */
-  shapeField: ShapeField | null = null;
   /** Built once per buildPatches pass, rebuilt at the start of createWards. */
   adjacency: PatchAdjacency | null = null;
   /** The field zoning used to place sprawl. Null before createWards runs. */
@@ -394,27 +391,26 @@ export class Model {
       voronoi = Voronoi.relax(voronoi, toRelax);
     }
 
-    // Estimated core radius from the seeding, used only to probe water at a
-    // plausible distance.
-    const probeRadius = coreR;
-    this.shapeField = createShapeField({
-      roadDirections: (this.params.roadEntryPoints ?? []).map(r => r.point),
-      probeRadius,
-      ...(this.getWaterRings().length > 0 ? { isWaterAt: (p: Point) => this.isWaterAt(p) } : {}),
-      rng,
-    });
-    const field = this.shapeField;
+    // Mild seeded ovoid: the walled core is relatively circular/ovoid; routes
+    // and terrain shape the OUTSIDE (spec 2026-08-09 §2). Water never joins
+    // the core.
+    const ecc = 1 + rng.float() * 0.25;
+    const axisA = rng.float() * Math.PI;
+    const cosA = Math.cos(axisA), sinA = Math.sin(axisA);
+    const hasWater = this.getWaterRings().length > 0;
+    const coreRank = (p: Point): number => {
+      if (hasWater && this.isWaterAt(p)) return Infinity;
+      const u = p.x * cosA + p.y * sinA;
+      const v = -p.x * sinA + p.y * cosA;
+      return Math.hypot(u / ecc, v);
+    };
 
-    // Decorate-sort-undecorate: scaleAt (road-loop + harmonics + up to two
-    // point-in-polygon water probes) is computed once per point instead of
-    // twice per comparison. At pop 200000 (~44k points) a naive comparator
-    // reran it ~2*n*log2(n) times per buildPatches call, and buildPatches
-    // reruns on every retry in the generate() ladder.
-    const decorated = voronoi.points.map((p): [Point, number] => {
-      // Distance warped by the shape field: small = "belongs in the core".
-      const warped = p.length / field.scaleAt(Math.atan2(p.y, p.x));
-      return [p, warped];
-    });
+    // Decorate-sort-undecorate: coreRank (one isWaterAt probe plus the ovoid
+    // distance) is computed once per point instead of twice per comparison.
+    // At pop 200000 (~44k points) a naive comparator reran it ~2*n*log2(n)
+    // times per buildPatches call, and buildPatches reruns on every retry in
+    // the generate() ladder.
+    const decorated = voronoi.points.map((p): [Point, number] => [p, coreRank(p)]);
     decorated.sort((a, b) => sign(a[1] - b[1]));
     voronoi.points = decorated.map(([p]) => p);
     const regions = voronoi.partitioning();
@@ -452,11 +448,10 @@ export class Model {
       count++;
     }
 
-    // Interim water exclusion: keep core (and citadel) membership off water,
-    // letting selection run further down the sorted order so the core still
-    // lands on exactly `nCore` patches. Task 4 replaces this with
-    // ranking-level exclusion (water pushed down the sort itself).
-    //
+    // Water exclusion for core (and citadel) membership: `coreRank` already
+    // pushed water *seed points* to the end of `sortedPatches`, but a
+    // patch's Voronoi cell can still straddle the coast even when its seed
+    // is dry, so selection still needs a land/shoreline/water split here.
     // Tiered so a land-starved layout (e.g. a settlement on a narrow spit,
     // narrower than one patch) degrades gracefully instead of failing to
     // generate at all: prefer patches whose centroid AND every vertex are on
@@ -465,13 +460,23 @@ export class Model {
     // coastal-core.test.ts); fall back to centroid-only land if that tier
     // can't fill the core; fall back to any remaining patch (the old,
     // water-blind behaviour) only if land is too scarce for either.
-    const isStrictLand = (p: Patch): boolean =>
-      !this.isWaterAt(p.shape.center) && !p.shape.vertices.some(v => this.isWaterAt(v));
-    const isCentroidLand = (p: Patch): boolean => !this.isWaterAt(p.shape.center);
-
-    const strictTier = sortedPatches.filter(isStrictLand);
-    const centroidTier = sortedPatches.filter(p => !isStrictLand(p) && isCentroidLand(p));
-    const waterTier = sortedPatches.filter(p => !isCentroidLand(p));
+    //
+    // Single pass over `sortedPatches`, each patch classified once (not the
+    // three redundant re-filtering passes this replaced — that tripled
+    // isWaterAt calls and measured a 3.4x buildPatches slowdown at pop
+    // 200000 coastal).
+    const strictTier: Patch[] = [];
+    const centroidTier: Patch[] = [];
+    const waterTier: Patch[] = [];
+    for (const patch of sortedPatches) {
+      if (this.isWaterAt(patch.shape.center)) {
+        waterTier.push(patch);
+      } else if (patch.shape.vertices.some(v => this.isWaterAt(v))) {
+        centroidTier.push(patch);
+      } else {
+        strictTier.push(patch);
+      }
+    }
     const tiers = [strictTier, centroidTier, waterTier];
 
     for (const tier of tiers) {
@@ -544,20 +549,21 @@ export class Model {
       const fallbackCandidates = new Set<Patch>();
       for (const p of this.inner) {
         for (const n of adj.neighboursOf(p)) {
-          // Exclude the citadel explicitly (it sits at sorted index nCore —
-          // the single nearest unselected patch — so it is very often the
-          // top-up's nearest-centre pick) and, defensively, any patch that
-          // already has a ward assigned. Absorbing the citadel into `inner`
-          // would make createWards overwrite its Castle with an ordinary
-          // ward while buildWalls's castle gates and this.citadel both still
-          // point at it — a silent "citadel present but no Castle" defect.
+          // Exclude the citadel explicitly (buildPatches picks it as the
+          // nearest unselected patch in tier order right after core
+          // selection, so it is very often the top-up's nearest-centre pick
+          // too) and, defensively, any patch that already has a ward
+          // assigned. Absorbing the citadel into `inner` would make
+          // createWards overwrite its Castle with an ordinary ward while
+          // buildWalls's castle gates and this.citadel both still point at
+          // it — a silent "citadel present but no Castle" defect.
           if (n === this.citadel) continue;
           if (n.ward !== null) continue;
           if (connected.has(n)) continue;
-          // Interim water exclusion (see buildPatches): prefer a patch that
-          // doesn't touch water (centroid or any vertex) at all; only fall
-          // back to a water-touching one if that's all that's left, so a
-          // land-starved layout still tops up instead of stalling forever.
+          // Water exclusion (see buildPatches's tiering): prefer a patch
+          // that doesn't touch water (centroid or any vertex) at all; only
+          // fall back to a water-touching one if that's all that's left, so
+          // a land-starved layout still tops up instead of stalling forever.
           if (!this.isWaterAt(n.shape.center) && !n.shape.vertices.some(v => this.isWaterAt(v))) {
             candidates.add(n);
           } else {
@@ -1023,9 +1029,10 @@ export class Model {
       adjacency: this.adjacency!,
       roadDirections: (this.params.roadEntryPoints ?? []).map(r => r.point),
       coreRadius: this.border!.getRadius(),
-      // The core is lobed (shape-field warping), so the circumscribed radius
-      // alone would anchor the halo at the lobe tips and leave the ground
-      // between lobes unscored. Hand the field the actual outline.
+      // The core is a mild seeded ovoid (not a perfect circle), so the
+      // circumscribed radius alone would anchor the halo at the long-axis
+      // tips and leave the ground near the short axis underscored. Hand the
+      // field the actual outline.
       coreOutline: this.border!.shape.vertices,
       population: this.params.population,
       // Centroid-only was insufficient: a patch straddling the shoreline can
