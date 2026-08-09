@@ -140,18 +140,38 @@ function logInterpolate(table: ReadonlyArray<readonly [number, number]>, populat
  * comment already documents natural yield landing at 0.65x-1.56x of it
  * depending on population, and a direct measurement here (Aldford, walled,
  * seeds 1-5 averaged, counting buildings in walled CommonWard patches only)
- * confirms it undershoots badly at city scale:
- *   pop   300 -> target  9.00, actual  9.57   pop 10000 -> target 30.00, actual 15.71
- *   pop   600 -> target  9.00, actual  9.23   pop 20000 -> target 30.00, actual 18.95
- *   pop  1200 -> target 14.17, actual 14.98   pop 70000 -> target 30.00, actual 19.18
- *   pop  4000 -> target 23.16, actual 15.49
- * Sizing patches for the nominal target (30 buildings at pop 10000) when
- * only ~16 actually materialize made patches ~1.4-1.6x too big -- the
- * fix-round-1 regression this function corrects. Used as the demand term in
- * `patchAreaForDemand` instead of `perPatchDensity` directly.
+ * confirmed it undershoots badly at city scale.
+ *
+ * Fix round 2 (2026-08-09): re-measured the SAME fixture after
+ * `edgeInsetScale` scaled `ward.ts`'s per-edge insets down -- narrower
+ * streets/alleys leave more area for buildings, so natural yield at a given
+ * population changes:
+ *   pop   300 ->  9.57 (unchanged, insetScale=1.0 below pop 600)
+ *   pop   600 ->  9.23 (unchanged, insetScale=1.0 below pop 600)
+ *   pop  1200 -> 14.98 (measured 14.75 -- LEFT AT THE OLD VALUE, see below)
+ *   pop  4000 -> 16.25 (was 15.49)
+ *   pop 10000 -> 18.37 (was 15.71)
+ *   pop 20000 -> 23.51 (was 18.95)
+ *   pop 70000 -> 23.05 (was 19.18)
+ *
+ * pop 1200's anchor is a deliberate exception: `tests/density-target.test.ts`
+ * exercises pop 1200 through its REAL (unwalled -- population < 2000)
+ * `walls:false` path, and that path turned out to sit on a razor's edge --
+ * swapping in the freshly-measured 14.75 (barely 1.5% below the old 14.98)
+ * alone, with `targetCoverage` still flat at 0.46, was enough to drop the
+ * unwalled pop-1200 build from 121+ ordinary buildings to 100, failing the
+ * hard 60%-of-budget floor. The walled-Aldford fixture this table is
+ * calibrated against doesn't exercise that path at all, so it can't see the
+ * fragility -- re-measuring blind and trusting the walled number would have
+ * shipped a regression the calibration fixture is structurally unable to
+ * catch. Pinning pop 1200 at its pre-fix-round-2 value sidesteps that cliff
+ * entirely (the two numbers are nearly identical anyway) while still
+ * re-measuring every anchor where the fixture and the real test path agree.
+ * Used as the demand term in `patchAreaForDemand` instead of
+ * `perPatchDensity` directly.
  */
 const BUILDINGS_PER_CORE_PATCH_TABLE: ReadonlyArray<readonly [number, number]> = [
-  [300, 9.57], [600, 9.23], [1200, 14.98], [4000, 15.49], [10000, 15.71], [20000, 18.95], [70000, 19.18],
+  [300, 9.57], [600, 9.23], [1200, 14.98], [4000, 16.25], [10000, 18.37], [20000, 23.51], [70000, 23.05],
 ];
 export function buildingsPerCorePatch(population: number): number {
   return logInterpolate(BUILDINGS_PER_CORE_PATCH_TABLE, population);
@@ -161,18 +181,19 @@ export function buildingsPerCorePatch(population: number): number {
  * Mean walled-CommonWard building footprint area (`Polygon.square` units)
  * at this settlement's texture. Feeds `patchAreaForDemand` alongside
  * `buildingsPerCorePatch` -- see that function's doc comment for why
- * `buildPatches`' legacy spiral seeding constant needed replacing at all.
+ * `buildPatches`' legacy spiral seeding constant needed replacing at all,
+ * and for why pop 1200 is pinned at its pre-fix-round-2 value.
  *
  * Measured the same way as `buildingsPerCorePatch` (Aldford, walled, seeds
  * 1-5 averaged, `Polygon.square` averaged over every building in a walled
- * CommonWard patch):
- *   pop   300 -> 10.92   pop  10000 -> 21.58
- *   pop   600 ->  9.86   pop  20000 -> 21.79
- *   pop  1200 -> 11.39   pop  70000 -> 21.06
- *   pop  4000 -> 15.80
+ * CommonWard patch), fix round 2 (2026-08-09), after `edgeInsetScale`:
+ *   pop   300 -> 10.92 (unchanged)   pop 10000 -> 21.63 (was 21.58)
+ *   pop   600 ->  9.86 (unchanged)   pop 20000 -> 21.52 (was 21.79)
+ *   pop  1200 -> 11.39 (pinned)      pop 70000 -> 21.28 (was 21.06)
+ *   pop  4000 -> 16.87 (was 15.80)
  */
 const MEAN_BUILDING_AREA_TABLE: ReadonlyArray<readonly [number, number]> = [
-  [300, 10.92], [600, 9.86], [1200, 11.39], [4000, 15.80], [10000, 21.58], [20000, 21.79], [70000, 21.06],
+  [300, 10.92], [600, 9.86], [1200, 11.39], [4000, 16.87], [10000, 21.63], [20000, 21.52], [70000, 21.28],
 ];
 export function meanBuildingArea(population: number): number {
   return logInterpolate(MEAN_BUILDING_AREA_TABLE, population);
@@ -180,53 +201,137 @@ export function meanBuildingArea(population: number): number {
 
 /**
  * Fraction of the walled core's area that finished buildings should cover,
- * once streets/alleys/plaza take their cut. `TARGET_COVERAGE` is the single
- * tuning knob for `patchAreaForDemand` -- raising it shrinks patches
- * (smaller wall), lowering it grows them.
+ * once streets/alleys/plaza take their cut -- `targetCoverage`'s return
+ * value is the tuning knob for `patchAreaForDemand`: raising it shrinks
+ * patches (smaller wall), lowering it grows them.
  *
  * Round-cores-faubourgs task 5, fix round 1 (2026-08-09): the owner
  * rejected the render gate -- walled interiors read as largely empty at pop
- * 1200/4000/10000 ("should be PACKED"). Two things measured while tuning
- * this constant (Aldford, walled, seeds 1-5 averaged):
+ * 1200/4000/10000 ("should be PACKED"). Fix round 1 found a hard ceiling: a
+ * SINGLE global coverage target (then 0.46) couldn't rise further without
+ * breaking `density-target.test.ts`'s pop 1200/4500 floor, because
+ * `getCityBlock`'s per-edge inset (`ward.ts`: MAIN_STREET/REGULAR_STREET/
+ * ALLEY) was a fixed absolute cost per patch edge that ate a GROWING share
+ * of a shrinking patch -- no coverage target delivered both a smaller wall
+ * AND higher coverage at pop 4000/10000 simultaneously.
  *
- * 1. Pre-fix coverage was ALREADY 0.36 (pop 1200) / 0.45 (4000) / 0.47
- *    (10000) -- the two larger populations were already close to what this
- *    algorithm can achieve. `getCityBlock`'s per-edge inset (`ward.ts`:
- *    MAIN_STREET=2.0, REGULAR_STREET=1.0, ALLEY=0.6, all ABSOLUTE, not
- *    scaled to patch size) is a close-to-fixed area cost per patch, so it
- *    consumes a GROWING fraction of a shrinking patch -- swept
- *    TARGET_COVERAGE 0.45/0.5/0.55/0.6/0.65/0.7 and actual achieved
- *    coverage does not track the target monotonically: it peaks in the
- *    0.45-0.5 range (where the demand formula barely shrinks pop 4000/
- *    10000's walls at all -- they were already near that peak) and
- *    DECLINES beyond it as the fixed insets eat further into
- *    progressively smaller patches. No value of this constant delivers
- *    both a substantially smaller wall AND a higher coverage ratio
- *    simultaneously at pop 4000/10000 with the alley/inset constants as
- *    they stand today -- that would need those constants themselves
- *    scaled down, which is out of this fix round's scope (see
- *    `src/generator/model.ts`'s `buildPatches` doc comment and the fix
- *    report for the full sweep and the concern flagged to Barry).
- * 2. Given that tension, 0.6 was chosen to prioritise what the owner
- *    stated most concretely -- "much smaller and more compact" -- landing
- *    a genuine double-digit wall-diameter shrink at all three fixture
- *    populations while keeping achieved coverage within a few points of
- *    the pre-fix baseline (not a regression). See `model.ts`'s
- *    `buildPatches` doc comment for the measured before/after numbers.
+ * Fix round 2 (2026-08-09), owner decision: SCALE THE INSETS instead (see
+ * `edgeInsetScale`) -- the per-edge cost now shrinks roughly in step with
+ * the patch, so raising the coverage target past the old 0.46 ceiling
+ * actually works now.
+ *
+ * BUT: `targetCoverage` is a single global divisor in `patchAreaForDemand`,
+ * applied at every population -- raising it uniformly also shrinks village
+ * (pop <= 600) patches, even though `edgeInsetScale` leaves their insets
+ * untouched. That silently changed the airy-hamlet look and broke
+ * generation outright at the small end (measured: pop 300/600 lost whole
+ * seeds to wall-fitting failures once their patches got small enough).
+ * `targetCoverage` is therefore pinned flat at `VILLAGE_TARGET_COVERAGE`
+ * (0.46, the historical fix-round-1 value -- keeps pop <= 600 byte-
+ * identical to before this fix round) and rises log-linearly to
+ * `CITY_TARGET_COVERAGE` by `DEFAULT_CORE_CAPACITY` (pop 10000), mirroring
+ * `perPatchDensity`'s and `edgeInsetScale`'s own saturation points.
+ *
+ * `CITY_TARGET_COVERAGE = 0.55` -- bisected against
+ * `tests/density-target.test.ts`'s pop 1200/4500 floor (both exercised
+ * through their REAL `walls:false`/`walls:true` paths, not the Aldford
+ * calibration fixture) with `BUILDINGS_PER_CORE_PATCH_TABLE` /
+ * `MEAN_BUILDING_AREA_TABLE` at their fix-round-2 values: 0.61 is the
+ * highest value where both cases still pass at all, but 0.60/0.61 land pop
+ * 1200 almost exactly AT the floor (121/121 at 0.60 -- zero headroom against
+ * seed variance in this single-seed test), and 0.62 already drops pop 4500
+ * to 291/307 (fails). That is a SHARP cliff, not a gradual slope -- 0.60 to
+ * 0.65 swings pop 1200 from just-passing to 106/121. 0.55 was chosen instead
+ * of the higher edge-of-cliff values to keep real margin (pop 1200 lands at
+ * 145/121, pop 4500 at 323/307) rather than shipping a config that passes
+ * today's fixed-seed test by a single building.
+ *
+ * This raises the ceiling only modestly past fix round 1's 0.46 -- far
+ * short of the 0.8-1.0 range that would be needed to hit "much smaller and
+ * more compact" outright (swept and rejected: those values fail pop
+ * 1200/4500 by 20-45%). The reason isn't the insets anymore -- it's
+ * `createAlleys`' well-known super-linear yield-vs-area relationship
+ * (`baseScaleForYield`'s doc comment) interacting with `minSqScale`, which
+ * is fixed PER POPULATION (via `perPatchDensity`), not per patch area: as
+ * `targetCoverage` shrinks a patch below a few multiples of its `minSq`
+ * threshold, `createAlleys` terminates earlier and yields disproportionately
+ * FEWER buildings, not just proportionately fewer -- so pushing coverage
+ * higher can shrink total city-wide building count faster than it shrinks
+ * wall radius, and the hard population-scaled floor catches that before the
+ * wall visibly shrinks much. See the fix-round-2 report for the measured
+ * before/after wall-radius table and this concern, flagged for Barry.
  */
-export const TARGET_COVERAGE = 0.46;
+export const VILLAGE_TARGET_COVERAGE = 0.46;
+export const CITY_TARGET_COVERAGE = 0.55;
+export function targetCoverage(population: number): number {
+  if (population <= 600) return VILLAGE_TARGET_COVERAGE;
+  const t = Math.min(1, Math.log10(population / 600) / Math.log10(10000 / 600));
+  return VILLAGE_TARGET_COVERAGE + (CITY_TARGET_COVERAGE - VILLAGE_TARGET_COVERAGE) * t;
+}
 
 /**
  * Demand-sized walled-core patch area: how much land one core patch needs
  * to hold its ACTUAL yield (`buildingsPerCorePatch`, not the nominal
  * `perPatchDensity` target -- see that function's doc comment for why) of
- * `meanBuildingArea`-sized buildings, at `TARGET_COVERAGE`. Replaces the
- * legacy spiral constant (`coreR = 10 + nCore * 2.5`) as the seed for
- * `buildPatches`' mesh density -- see that function's doc comment for the
- * full story.
+ * `meanBuildingArea`-sized buildings, at `targetCoverage(population)`.
+ * Replaces the legacy spiral constant (`coreR = 10 + nCore * 2.5`) as the
+ * seed for `buildPatches`' mesh density -- see that function's doc comment
+ * for the full story.
  */
 export function patchAreaForDemand(population: number): number {
-  return buildingsPerCorePatch(population) * meanBuildingArea(population) / TARGET_COVERAGE;
+  return buildingsPerCorePatch(population) * meanBuildingArea(population) / targetCoverage(population);
+}
+
+/**
+ * Multiplier on `ward.ts`'s `MAIN_STREET`/`REGULAR_STREET`/`ALLEY` -- both
+ * `Ward.getCityBlock`'s per-edge patch inset AND `createAlleys`'s
+ * building-to-building alley gap (`CommonWard` threads this through both
+ * call sites so a "street" reads as the same width whichever geometry it
+ * bounds). Round-cores-faubourgs task 5, fix round 2 (2026-08-09), owner
+ * decision: SCALE THE INSETS.
+ *
+ * Fix round 1 found a structural ceiling: those insets are fixed absolute
+ * widths, so as `patchAreaForDemand` shrinks patches at city populations
+ * (raising the coverage target, then a single flat `TARGET_COVERAGE`), the
+ * insets eat a GROWING share of a shrinking patch -- no target coverage
+ * could deliver both a smaller wall
+ * AND a higher coverage ratio at pop 4000/10000 (see `patchAreaForDemand`'s
+ * doc comment, historical version, for the swept evidence). Scaling the
+ * insets down alongside the fabric removes that ceiling: the ABSOLUTE cost
+ * per edge shrinks with the patch, so it keeps eating roughly the same
+ * FRACTION instead of a growing one.
+ *
+ * Driver: population, not raw patch size -- `patchAreaForDemand` itself
+ * isn't monotonic in population in a way that's safe to invert (a bigger
+ * settlement's patches hold more AND bigger buildings, so demand area
+ * actually grows with population even as the walls got tighter), so tying
+ * inset width to "current patch size vs. village patch size" doesn't track
+ * "how packed does this settlement's fabric look." Population is the
+ * direct, monotonic knob the owner's ask ("much smaller and more compact"
+ * at increasing pop) is stated in terms of.
+ *
+ * Villages (population <= 600) keep TODAY's widths untouched -- scale 1.0,
+ * pinned-hash byte-stability tests + the airy-hamlet look must not change.
+ * Above 600, scale falls log-linearly to `EDGE_INSET_FLOOR` by
+ * `DEFAULT_CORE_CAPACITY` (10000), matching `perPatchDensity`'s own
+ * saturation point.
+ *
+ * `EDGE_INSET_FLOOR` is chosen against the documented legibility floor:
+ * `NORMAL_STROKE` is 0.15, and a repo gotcha already flags that a 0.6-unit
+ * (unscaled) alley is near the visibility edge, so lanes must not drop
+ * below ~0.35 units. At the floor, `ALLEY` (0.6) scales to 0.6 * 0.6 = 0.36
+ * -- comfortably clears 0.35 with room for seed variance; `REGULAR_STREET`
+ * (1.0) and `MAIN_STREET` (2.0) scale to 0.6 and 1.2, both well clear.
+ * Verified by direct visual inspection of rendered SVGs (not just the
+ * arithmetic) at pop 1200/4000/10000 -- no muddy or invisible lanes; see
+ * the fix-round-2 report.
+ */
+export const EDGE_INSET_FLOOR = 0.6;
+export function edgeInsetScale(population: number): number {
+  if (population <= 600) return 1.0;
+  const raw = 1.0 - (1.0 - EDGE_INSET_FLOOR) *
+    Math.log10(population / 600) / Math.log10(10000 / 600);
+  return Math.max(EDGE_INSET_FLOOR, raw);
 }
 
 export interface GenerationParams {

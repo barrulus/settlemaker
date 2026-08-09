@@ -7,6 +7,7 @@ import { interpolate, scalar, distance2line } from '../geom/geom-utils.js';
 import { minBy } from '../utils/array-utils.js';
 import type { Model } from '../generator/model.js';
 import type { Patch } from '../generator/patch.js';
+import { edgeInsetScale } from '../generator/generation-params.js';
 
 export const MAIN_STREET = 2.0;
 export const REGULAR_STREET = 1.0;
@@ -27,6 +28,16 @@ export class Ward {
     return this.model.rng;
   }
 
+  /**
+   * Multiplier on `MAIN_STREET`/`REGULAR_STREET`/`ALLEY` for this ward's
+   * settlement population -- see `edgeInsetScale`'s doc comment. 1.0 for
+   * villages (today's widths, unchanged); shrinks toward the legibility
+   * floor as population climbs toward the core-capacity default.
+   */
+  get insetScale(): number {
+    return edgeInsetScale(this.model.params.population);
+  }
+
   createGeometry(): void {
     this.geometry = [];
   }
@@ -34,10 +45,11 @@ export class Ward {
   getCityBlock(): Polygon {
     const insetDist: number[] = [];
     const innerPatch = this.model.wall === null || this.patch.withinWalls;
+    const scale = this.insetScale;
 
     this.patch.shape.forEdge((v0, v1) => {
       if (this.model.wall !== null && this.model.wall.bordersBy(this.patch, v0, v1)) {
-        insetDist.push(MAIN_STREET / 2);
+        insetDist.push(MAIN_STREET * scale / 2);
       } else {
         let onStreet = innerPatch && (this.model.plaza !== null &&
           this.model.plaza.shape.findEdge(v1, v0) !== -1);
@@ -49,7 +61,7 @@ export class Ward {
             }
           }
         }
-        insetDist.push((onStreet ? MAIN_STREET : (innerPatch ? REGULAR_STREET : ALLEY)) / 2);
+        insetDist.push((onStreet ? MAIN_STREET : (innerPatch ? REGULAR_STREET : ALLEY)) * scale / 2);
       }
     });
 
@@ -275,6 +287,7 @@ export function createAlleys(
   sizeChaos: number,
   emptyProb: number = 0.04,
   split: boolean = true,
+  alleyWidth: number = ALLEY,
 ): Polygon[] {
   // Find longest edge
   let v: Point | null = null;
@@ -293,7 +306,7 @@ export function createAlleys(
   const angleSpread = (Math.PI / 6) * gridChaos * (p.square < minSq * 4 ? 0 : 1);
   const b = (rng.float() - 0.5) * angleSpread;
 
-  const halves = bisect(p, v!, ratio, b, split ? ALLEY : 0);
+  const halves = bisect(p, v!, ratio, b, split ? alleyWidth : 0);
   const buildings: Polygon[] = [];
 
   // Bisect returns a single polygon when it couldn't find two edge intersections —
@@ -311,6 +324,7 @@ export function createAlleys(
         ...createAlleys(
           half, rng, minSq, gridChaos, sizeChaos, emptyProb,
           half.square > minSq / (rng.float() * rng.float()),
+          alleyWidth,
         ),
       );
     }

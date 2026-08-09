@@ -1,5 +1,5 @@
 import { WardType } from '../types/interfaces.js';
-import { Ward, createAlleys } from './ward.js';
+import { Ward, createAlleys, ALLEY } from './ward.js';
 import type { Model } from '../generator/model.js';
 import type { Patch } from '../generator/patch.js';
 
@@ -23,7 +23,11 @@ export class CommonWard extends Ward {
 
   override createGeometry(): void {
     const block = this.getCityBlock();
-    this.geometry = createAlleys(block, this.rng, this.minSq * this.model.minSqScale, this.gridChaos, this.sizeChaos, this.emptyProb);
+    const alleyWidth = ALLEY * this.insetScale;
+    this.geometry = createAlleys(
+      block, this.rng, this.minSq * this.model.minSqScale, this.gridChaos, this.sizeChaos,
+      this.emptyProb, true, alleyWidth,
+    );
 
     if (!this.model.isEnclosed(this.patch)) {
       this.filterOutskirts();
