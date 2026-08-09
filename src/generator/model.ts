@@ -360,6 +360,13 @@ export class Model {
     // the far wilderness stays cheap. Radial step per point follows from
     // the target cell area s²: d(πr²)/di = s(r)² → dr = s²/(2πr).
     const coreR = 10 + this.nCore * 2.5;
+    // Classify water against the estimated core radius before core
+    // selection runs, so the core (and later the wall) never straddles the
+    // coast. `ensureWaterRings` caches on first call per attempt (reset() in
+    // the retry ladder clears `syntheticCoast`), so this is the ONE place
+    // the synthetic ring's radius is chosen for this pass; classifyWater
+    // just reads the cached rings back.
+    this.ensureWaterRings(coreR);
     const s0 = coreR * Math.sqrt(Math.PI / this.nCore);
     const uniformR = 4 * coreR;
     const maxR = 12 * coreR;
@@ -414,11 +421,14 @@ export class Model {
 
     this.patches = [];
     this.inner = [];
+    this.citadel = null;
 
     let count = 0;
+    const sortedPatches: Patch[] = [];
     for (const r of regions) {
       const patch = Patch.fromRegion(r);
       this.patches.push(patch);
+      sortedPatches.push(patch);
 
       if (count === 0) {
         // Find vertex closest to origin for center
@@ -426,18 +436,65 @@ export class Model {
         if (this.plazaNeeded) {
           this.plaza = patch;
         }
-      } else if (count === this.nCore && this.citadelNeeded) {
-        this.citadel = patch;
-        this.citadel.withinCity = true;
-      }
-
-      if (count < this.nCore) {
+        // The origin-closest patch is always core, independent of the water
+        // tiering below — it's the settlement's own centre (and the plaza
+        // candidate), not a boundary patch subject to coastline exclusion.
+        // Forcing it in here preserves the pre-existing invariant that this
+        // patch is always in `inner`; without it, a wet-vertex origin patch
+        // could fall behind land patches in the tiers and get excluded from
+        // `inner` entirely while still being `this.plaza` — leaving the
+        // plaza pointing at a patch outside the core.
         patch.withinCity = true;
         patch.withinWalls = this.wallsNeeded;
         this.inner.push(patch);
       }
 
       count++;
+    }
+
+    // Interim water exclusion: keep core (and citadel) membership off water,
+    // letting selection run further down the sorted order so the core still
+    // lands on exactly `nCore` patches. Task 4 replaces this with
+    // ranking-level exclusion (water pushed down the sort itself).
+    //
+    // Tiered so a land-starved layout (e.g. a settlement on a narrow spit,
+    // narrower than one patch) degrades gracefully instead of failing to
+    // generate at all: prefer patches whose centroid AND every vertex are on
+    // land (buildWalls later walks patch edges, so a vertex-only-wet
+    // boundary patch would still leave a wall vertex in the water — see
+    // coastal-core.test.ts); fall back to centroid-only land if that tier
+    // can't fill the core; fall back to any remaining patch (the old,
+    // water-blind behaviour) only if land is too scarce for either.
+    const isStrictLand = (p: Patch): boolean =>
+      !this.isWaterAt(p.shape.center) && !p.shape.vertices.some(v => this.isWaterAt(v));
+    const isCentroidLand = (p: Patch): boolean => !this.isWaterAt(p.shape.center);
+
+    const strictTier = sortedPatches.filter(isStrictLand);
+    const centroidTier = sortedPatches.filter(p => !isStrictLand(p) && isCentroidLand(p));
+    const waterTier = sortedPatches.filter(p => !isCentroidLand(p));
+    const tiers = [strictTier, centroidTier, waterTier];
+
+    for (const tier of tiers) {
+      for (const patch of tier) {
+        if (this.inner.length >= this.nCore) break;
+        if (patch.withinCity) continue; // already forced in (the origin patch)
+        patch.withinCity = true;
+        patch.withinWalls = this.wallsNeeded;
+        this.inner.push(patch);
+      }
+      if (this.inner.length >= this.nCore) break;
+    }
+
+    if (this.citadelNeeded) {
+      const innerSet = new Set(this.inner);
+      for (const tier of tiers) {
+        const next = tier.find(p => !innerSet.has(p));
+        if (next) {
+          this.citadel = next;
+          this.citadel.withinCity = true;
+          break;
+        }
+      }
     }
 
     // Built here, right after selection, because enforceCoreConnectivity
@@ -484,6 +541,7 @@ export class Model {
 
     while (this.inner.length < this.nCore) {
       const candidates = new Set<Patch>();
+      const fallbackCandidates = new Set<Patch>();
       for (const p of this.inner) {
         for (const n of adj.neighboursOf(p)) {
           // Exclude the citadel explicitly (it sits at sorted index nCore —
@@ -495,11 +553,21 @@ export class Model {
           // point at it — a silent "citadel present but no Castle" defect.
           if (n === this.citadel) continue;
           if (n.ward !== null) continue;
-          if (!connected.has(n)) candidates.add(n);
+          if (connected.has(n)) continue;
+          // Interim water exclusion (see buildPatches): prefer a patch that
+          // doesn't touch water (centroid or any vertex) at all; only fall
+          // back to a water-touching one if that's all that's left, so a
+          // land-starved layout still tops up instead of stalling forever.
+          if (!this.isWaterAt(n.shape.center) && !n.shape.vertices.some(v => this.isWaterAt(v))) {
+            candidates.add(n);
+          } else {
+            fallbackCandidates.add(n);
+          }
         }
       }
-      if (candidates.size === 0) break;
-      const best = minBy([...candidates], (p: Patch) => p.shape.center.length);
+      const pool = candidates.size > 0 ? candidates : fallbackCandidates;
+      if (pool.size === 0) break;
+      const best = minBy([...pool], (p: Patch) => p.shape.center.length);
       connected.add(best);
       best.withinCity = true;
       best.withinWalls = this.wallsNeeded;
@@ -608,6 +676,58 @@ export class Model {
     }
   }
 
+  /**
+   * Water rings for this generation pass: the caller-supplied vector
+   * coastline when present, else a coastline synthesized from
+   * `oceanBearing` (cached in `syntheticCoast` after the first call), else
+   * `[]` for a landlocked burg. Idempotent per attempt — `reset()` clears
+   * `syntheticCoast` between retries in the generation ladder, so the first
+   * call each attempt re-synthesizes and every later call in that attempt
+   * reads the cache back.
+   *
+   * Called from `buildPatches` (right after `coreR` is known) so core
+   * selection can exclude water before the wall is ever drawn; `radius`
+   * therefore is the *estimated* core radius, not `border.getRadius()`
+   * (which doesn't exist yet at that point in the pipeline). Wobble phases
+   * derive from `params.seed` arithmetically — no rng stream draws — so
+   * moving the synthesis earlier does not change layouts per seed.
+   */
+  private ensureWaterRings(radius: number): Point[][] {
+    const coast = this.params.coastlineGeometry;
+    const hasCoast = coast != null && coast.length > 0 && coast.some(p => p.length >= 3);
+    if (hasCoast) return this.getWaterRings();
+
+    if (this.params.oceanBearing == null) return [];
+    if (this.syntheticCoast !== null) return this.syntheticCoast;
+
+    // Synthesize an organic coastline from the bearing, then classify
+    // against it exactly like a caller-supplied ring — one water
+    // definition for placement, drowning, road clipping, AND painting.
+    const rad = this.params.oceanBearing * Math.PI / 180;
+    const oceanDirX = Math.sin(rad);
+    const oceanDirY = -Math.cos(rad);
+    const threshold = radius * 0.3;
+    const R = radius * 20;
+    const tx = -oceanDirY, ty = oceanDirX;
+    const seed = this.params.seed;
+    const p1 = (seed % 97) * 0.13, p2 = (seed % 71) * 0.29, p3 = (seed % 53) * 0.41;
+    const ring: Point[] = [];
+    const step = radius * 0.2;
+    for (let s = -R; s <= R; s += step) {
+      const w = radius * (
+        0.09 * Math.sin(s / (radius * 0.9) + p1) +
+        0.05 * Math.sin(s / (radius * 0.31) + p2) +
+        0.02 * Math.sin(s / (radius * 0.11) + p3)
+      );
+      const d = threshold + w;
+      ring.push(new Point(tx * s + oceanDirX * d, ty * s + oceanDirY * d));
+    }
+    ring.push(new Point(tx * R + oceanDirX * R, ty * R + oceanDirY * R));
+    ring.push(new Point(-tx * R + oceanDirX * R, -ty * R + oceanDirY * R));
+    this.syntheticCoast = [ring];
+    return this.syntheticCoast;
+  }
+
   // Phase 3.5: Classify water patches for port cities
   private classifyWater(): void {
     const coast = this.params.coastlineGeometry;
@@ -615,6 +735,8 @@ export class Model {
     const hasBearing = this.params.oceanBearing != null;
     if (!hasCoast && !hasBearing) return;
 
+    // Rings were already synthesized/cached from buildPatches (or supplied
+    // by the caller); classifyWater just reads them back via isWaterAt.
     // Prefer the caller-supplied coastline: patch is water iff its centroid
     // lies inside an ODD number of the supplied rings (even-odd fill rule).
     // Callers may pass polygon holes as additional rings: a centroid inside
@@ -633,34 +755,6 @@ export class Model {
         return containing % 2 === 1;
       };
     } else {
-      // Synthesize an organic coastline from the bearing, then classify
-      // against it exactly like a caller-supplied ring — one water
-      // definition for placement, drowning, road clipping, AND painting.
-      // Wobble phases derive from the seed arithmetically so the rng
-      // stream is untouched (bearing burgs keep their layouts per seed).
-      const rad = this.params.oceanBearing! * Math.PI / 180;
-      const oceanDirX = Math.sin(rad);
-      const oceanDirY = -Math.cos(rad);
-      const radius = this.border!.getRadius();
-      const threshold = radius * 0.3;
-      const R = radius * 20;
-      const tx = -oceanDirY, ty = oceanDirX;
-      const seed = this.params.seed;
-      const p1 = (seed % 97) * 0.13, p2 = (seed % 71) * 0.29, p3 = (seed % 53) * 0.41;
-      const ring: Point[] = [];
-      const step = radius * 0.2;
-      for (let s = -R; s <= R; s += step) {
-        const w = radius * (
-          0.09 * Math.sin(s / (radius * 0.9) + p1) +
-          0.05 * Math.sin(s / (radius * 0.31) + p2) +
-          0.02 * Math.sin(s / (radius * 0.11) + p3)
-        );
-        const d = threshold + w;
-        ring.push(new Point(tx * s + oceanDirX * d, ty * s + oceanDirY * d));
-      }
-      ring.push(new Point(tx * R + oceanDirX * R, ty * R + oceanDirY * R));
-      ring.push(new Point(-tx * R + oceanDirX * R, -ty * R + oceanDirY * R));
-      this.syntheticCoast = [ring];
       isWater = (patch) => this.isWaterAt(patch.shape.center);
     }
 
