@@ -12,6 +12,9 @@ export class Patch {
   /** Settlement role. Set by zoning; drives ward choice, fields and symbols. */
   zone: Zone = 'wilderness';
 
+  /** Adjacency hops from the nearest built patch. 0 = built. -1 = unreached. */
+  ringDepth: number = -1;
+
   constructor(vertices: Point[]) {
     this.shape = new Polygon(vertices);
   }

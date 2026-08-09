@@ -140,6 +140,9 @@ export class Model {
   wall: CurtainWall | null = null;
 
   cityRadius: number = 0;
+
+  /** Adjacency-hop depth of the farm belt; scales with population. */
+  farmRingDepth: number = 1;
   gates: Point[] = [];
   readonly degradedFlags: Set<DegradedFlag> = new Set();
 
@@ -1050,20 +1053,21 @@ export class Model {
   }
 
   /**
-   * Assign countryside patches as Farm or wilderness using a sinusoidal boundary.
-   * Port of watabou's buildFarms — uses a*sin(θ+c) + b*sin(2θ+d) to create
-   * an organic farm/wilderness boundary around the city.
+   * Fields hug the built edge. A patch becomes farmland when it is near built
+   * fabric but not itself built, measured in ADJACENCY HOPS rather than by
+   * radius — a radius cannot track a lobed outline, and the previous
+   * sinusoidal boundary (`a·sin(θ+c) + b·sin(2θ+d)` against one global
+   * `cityRadius`, with unbounded normal-drawn amplitudes) could balloon over
+   * one arc and go negative over another. With the mesh now reaching 12× the
+   * wall radius so sprawl has countryside to occupy, that wave painted
+   * farmland across a region far larger than the settlement, which dominated
+   * the rendered frame.
+   *
+   * Belt depth scales with population: more mouths, more fields.
    */
   private buildFarms(): void {
     const rng = this.rng;
 
-    // Random wave parameters (a uses normal-ish 3-sample average × 2)
-    const a = rng.normal() * 2;
-    const b = rng.normal();
-    const c = rng.float() * Math.PI * 2;
-    const d = rng.float() * Math.PI * 2;
-
-    // Calculate city radius from inner patches
     this.cityRadius = 0;
     for (const patch of this.patches) {
       if (patch.withinCity) {
@@ -1073,16 +1077,27 @@ export class Model {
       }
     }
 
-    // Assign countryside wards using sinusoidal boundary
+    const built = this.patches.filter(
+      p => p.zone === 'core' || p.zone === 'suburb' || p.zone === 'satellite',
+    );
+    this.farmRingDepth = this.params.population >= 20000 ? 3
+      : this.params.population >= 2000 ? 2
+      : 1;
+
+    const hops = this.adjacency!.hopDistances(built, this.farmRingDepth);
+    for (const patch of this.patches) {
+      patch.ringDepth = hops.get(patch) ?? -1;
+    }
+
     for (const patch of this.patches) {
       if (patch.withinCity || patch.ward !== null || this.waterbody.includes(patch)) continue;
 
-      const center = patch.shape.center;
-      const dir = center.subtract(this.center);
-      const angle = Math.atan2(dir.y, dir.x);
-      const waveRadius = a * Math.sin(angle + c) + b * Math.sin(2 * angle + d);
-
-      if (dir.length < (waveRadius + 1) * this.cityRadius) {
+      const depth = patch.ringDepth;
+      const inBelt = depth > 0 && depth <= this.farmRingDepth;
+      // A single draw per patch keeps the outer edge ragged rather than a
+      // uniform offset curve; the outermost ring is sparser than the inner.
+      if (inBelt && rng.bool(depth === this.farmRingDepth ? 0.6 : 0.95)) {
+        patch.zone = 'farm';
         patch.ward = new Farm(this, patch);
       } else {
         patch.ward = new Ward(this, patch);
