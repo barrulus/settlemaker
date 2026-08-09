@@ -11,7 +11,7 @@ import { CurtainWall } from './curtain-wall.js';
 import { Topology } from './topology.js';
 import { pointInPolygon } from '../geom/point-in-polygon.js';
 import type { GenerationParams, DegradedFlag } from './generation-params.js';
-import { densityCurve, perPatchDensity, baseScaleForYield } from './generation-params.js';
+import { densityCurve, perPatchDensity, baseScaleForYield, patchAreaForDemand } from './generation-params.js';
 import { WardType } from '../types/interfaces.js';
 import type { Street } from '../types/interfaces.js';
 
@@ -356,7 +356,38 @@ export class Model {
     // just outside the built edge; beyond it cells coarsen linearly, so
     // the far wilderness stays cheap. Radial step per point follows from
     // the target cell area s²: d(πr²)/di = s(r)² → dr = s²/(2πr).
-    const coreR = 10 + this.nCore * 2.5;
+    //
+    // Round-cores-faubourgs task 5, fix round 1 (2026-08-09): the core-ward
+    // cell size `s0` (and, via it, `coreR`) used to derive from a legacy
+    // spiral constant (`coreR = 10 + nCore * 2.5`) with no relationship to
+    // how much area the buildings actually generated inside it need. The
+    // owner's fix-round-1 verdict at pop 1200/4000/10000: "largely empty
+    // inside", "should be PACKED". `patchAreaForDemand` sizes the core
+    // patch from ACTUAL demand instead — `buildingsPerCorePatch(population)`
+    // buildings (measured yield, not the nominal `perPatchDensity` target —
+    // see that function's doc comment for why the distinction mattered) of
+    // `meanBuildingArea` each, at `TARGET_COVERAGE` — and `coreR` is
+    // derived FROM that area (inverting `s0 = coreR * sqrt(pi / nCore)`),
+    // not the other way around.
+    //
+    // Measured (Aldford, walled, seeds 1-5 averaged) coverage (Σ building
+    // area / wall area) and wall RADIUS, before -> after:
+    //   pop  1200: coverage 0.364 -> 0.376, radius 50.08 -> 39.32 (-21.5%)
+    //   pop  4000: coverage 0.446 -> 0.405, radius 61.74 -> 55.27 (-10.5%)
+    //   pop 10000: coverage 0.472 -> 0.455, radius 85.91 -> 78.33  (-8.8%)
+    // Coverage did NOT rise the way the mechanism's first draft assumed it
+    // would (it even dips slightly at 4000/10000) — `getCityBlock`'s
+    // per-edge street/alley inset (`ward.ts`: MAIN_STREET/REGULAR_STREET/
+    // ALLEY) is close to a FIXED absolute cost per patch edge, so it eats a
+    // growing fraction of a shrinking patch, capping how far coverage can
+    // rise through patch-sizing alone — swept in generation-params.ts's
+    // `TARGET_COVERAGE` doc comment; a genuinely higher coverage ceiling
+    // would need those inset constants scaled down too, out of this fix
+    // round's scope. What this fix reliably delivers is the wall-diameter
+    // shrink above — see the fix report for the full sweep and the
+    // concern flagged to Barry.
+    const s0 = Math.sqrt(patchAreaForDemand(this.params.population));
+    const coreR = s0 * Math.sqrt(this.nCore / Math.PI);
     // Classify water against the estimated core radius before core
     // selection runs, so the core (and later the wall) never straddles the
     // coast. `ensureWaterRings` caches on first call per attempt (reset() in
@@ -364,7 +395,6 @@ export class Model {
     // the synthetic ring's radius is chosen for this pass; classifyWater
     // just reads the cached rings back.
     this.ensureWaterRings(coreR);
-    const s0 = coreR * Math.sqrt(Math.PI / this.nCore);
     const uniformR = 4 * coreR;
     const maxR = 12 * coreR;
     const points: Point[] = [new Point(0, 0)];

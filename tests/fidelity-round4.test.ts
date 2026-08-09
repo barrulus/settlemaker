@@ -285,9 +285,16 @@ describe('fidelity round 4: footprint and texture scale with population', () => 
     expect(city).toBeGreaterThanOrEqual(perPatchDensity(20000) * 0.55);
     expect(city).toBeLessThanOrEqual(perPatchDensity(20000) * 1.15);
     // Village: pop 800 walled is degraded (pop<150 rule doesn't apply; walls stay) —
-    // use pop 800 with walls; texture must stay near 9.
+    // use pop 800 with walls; texture must stay near perPatchDensity(800).
+    // Round-cores-faubourgs task 5 moved the village-floor threshold from
+    // 1000 to 600, so pop 800 is no longer flat at the 9-building floor
+    // (perPatchDensity(800) ~= 11.15) -- this bound used to hardcode the
+    // pre-task-5 floor (9 * 1.3 = 11.7), which the fix-round-1 demand-sized
+    // patch footprint (measured actual yield 12.42 at seed 9) now exceeds.
+    // Bound made relative to the current target instead of re-pinning a
+    // second stale constant.
     const village = densityOf(800);
-    expect(village).toBeLessThanOrEqual(9 * 1.3);
+    expect(village).toBeLessThanOrEqual(perPatchDensity(800) * 1.3);
   });
 
   it('fix round 2: yield-matched texture barely trims and lands near the per-patch target', () => {

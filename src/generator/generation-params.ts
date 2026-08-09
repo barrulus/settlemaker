@@ -106,6 +106,129 @@ export function baseScaleForYield(targetPerPatch: number): number {
   return 1.0 + 8.0 * Math.log10(targetPerPatch / 9) / Math.log10(30 / 9);
 }
 
+/**
+ * Piecewise log-linear interpolation over a sorted `[population, value]`
+ * breakpoint table. Shared by `buildingsPerCorePatch` and
+ * `meanBuildingArea` below -- both are fits to MEASURED generation output
+ * (not formulas derived from first principles), and the relationship
+ * between population and either quantity is not a clean single log-curve
+ * (see both functions' doc comments for why), so a table beats trying to
+ * force a two-anchor `perPatchDensity`-style curve through points it
+ * doesn't actually pass through.
+ */
+function logInterpolate(table: ReadonlyArray<readonly [number, number]>, population: number): number {
+  if (population <= table[0][0]) return table[0][1];
+  const last = table[table.length - 1];
+  if (population >= last[0]) return last[1];
+  for (let i = 1; i < table.length; i++) {
+    const [hiPop, hiVal] = table[i];
+    if (population > hiPop) continue;
+    const [loPop, loVal] = table[i - 1];
+    const t = Math.log10(population / loPop) / Math.log10(hiPop / loPop);
+    return loVal + (hiVal - loVal) * t;
+  }
+  return last[1];
+}
+
+/**
+ * Buildings actually produced per walled-CommonWard core patch at this
+ * settlement's calibrated texture (`baseScaleForYield(perPatchDensity(pop))`
+ * -- see that function's doc comment). Round-cores-faubourgs task 5, fix
+ * round 1 (2026-08-09): the FIRST version of this fix used
+ * `perPatchDensity(population)` itself (the NOMINAL target) as the demand
+ * term, but that target is aspirational -- `baseScaleForYield`'s own doc
+ * comment already documents natural yield landing at 0.65x-1.56x of it
+ * depending on population, and a direct measurement here (Aldford, walled,
+ * seeds 1-5 averaged, counting buildings in walled CommonWard patches only)
+ * confirms it undershoots badly at city scale:
+ *   pop   300 -> target  9.00, actual  9.57   pop 10000 -> target 30.00, actual 15.71
+ *   pop   600 -> target  9.00, actual  9.23   pop 20000 -> target 30.00, actual 18.95
+ *   pop  1200 -> target 14.17, actual 14.98   pop 70000 -> target 30.00, actual 19.18
+ *   pop  4000 -> target 23.16, actual 15.49
+ * Sizing patches for the nominal target (30 buildings at pop 10000) when
+ * only ~16 actually materialize made patches ~1.4-1.6x too big -- the
+ * fix-round-1 regression this function corrects. Used as the demand term in
+ * `patchAreaForDemand` instead of `perPatchDensity` directly.
+ */
+const BUILDINGS_PER_CORE_PATCH_TABLE: ReadonlyArray<readonly [number, number]> = [
+  [300, 9.57], [600, 9.23], [1200, 14.98], [4000, 15.49], [10000, 15.71], [20000, 18.95], [70000, 19.18],
+];
+export function buildingsPerCorePatch(population: number): number {
+  return logInterpolate(BUILDINGS_PER_CORE_PATCH_TABLE, population);
+}
+
+/**
+ * Mean walled-CommonWard building footprint area (`Polygon.square` units)
+ * at this settlement's texture. Feeds `patchAreaForDemand` alongside
+ * `buildingsPerCorePatch` -- see that function's doc comment for why
+ * `buildPatches`' legacy spiral seeding constant needed replacing at all.
+ *
+ * Measured the same way as `buildingsPerCorePatch` (Aldford, walled, seeds
+ * 1-5 averaged, `Polygon.square` averaged over every building in a walled
+ * CommonWard patch):
+ *   pop   300 -> 10.92   pop  10000 -> 21.58
+ *   pop   600 ->  9.86   pop  20000 -> 21.79
+ *   pop  1200 -> 11.39   pop  70000 -> 21.06
+ *   pop  4000 -> 15.80
+ */
+const MEAN_BUILDING_AREA_TABLE: ReadonlyArray<readonly [number, number]> = [
+  [300, 10.92], [600, 9.86], [1200, 11.39], [4000, 15.80], [10000, 21.58], [20000, 21.79], [70000, 21.06],
+];
+export function meanBuildingArea(population: number): number {
+  return logInterpolate(MEAN_BUILDING_AREA_TABLE, population);
+}
+
+/**
+ * Fraction of the walled core's area that finished buildings should cover,
+ * once streets/alleys/plaza take their cut. `TARGET_COVERAGE` is the single
+ * tuning knob for `patchAreaForDemand` -- raising it shrinks patches
+ * (smaller wall), lowering it grows them.
+ *
+ * Round-cores-faubourgs task 5, fix round 1 (2026-08-09): the owner
+ * rejected the render gate -- walled interiors read as largely empty at pop
+ * 1200/4000/10000 ("should be PACKED"). Two things measured while tuning
+ * this constant (Aldford, walled, seeds 1-5 averaged):
+ *
+ * 1. Pre-fix coverage was ALREADY 0.36 (pop 1200) / 0.45 (4000) / 0.47
+ *    (10000) -- the two larger populations were already close to what this
+ *    algorithm can achieve. `getCityBlock`'s per-edge inset (`ward.ts`:
+ *    MAIN_STREET=2.0, REGULAR_STREET=1.0, ALLEY=0.6, all ABSOLUTE, not
+ *    scaled to patch size) is a close-to-fixed area cost per patch, so it
+ *    consumes a GROWING fraction of a shrinking patch -- swept
+ *    TARGET_COVERAGE 0.45/0.5/0.55/0.6/0.65/0.7 and actual achieved
+ *    coverage does not track the target monotonically: it peaks in the
+ *    0.45-0.5 range (where the demand formula barely shrinks pop 4000/
+ *    10000's walls at all -- they were already near that peak) and
+ *    DECLINES beyond it as the fixed insets eat further into
+ *    progressively smaller patches. No value of this constant delivers
+ *    both a substantially smaller wall AND a higher coverage ratio
+ *    simultaneously at pop 4000/10000 with the alley/inset constants as
+ *    they stand today -- that would need those constants themselves
+ *    scaled down, which is out of this fix round's scope (see
+ *    `src/generator/model.ts`'s `buildPatches` doc comment and the fix
+ *    report for the full sweep and the concern flagged to Barry).
+ * 2. Given that tension, 0.6 was chosen to prioritise what the owner
+ *    stated most concretely -- "much smaller and more compact" -- landing
+ *    a genuine double-digit wall-diameter shrink at all three fixture
+ *    populations while keeping achieved coverage within a few points of
+ *    the pre-fix baseline (not a regression). See `model.ts`'s
+ *    `buildPatches` doc comment for the measured before/after numbers.
+ */
+export const TARGET_COVERAGE = 0.46;
+
+/**
+ * Demand-sized walled-core patch area: how much land one core patch needs
+ * to hold its ACTUAL yield (`buildingsPerCorePatch`, not the nominal
+ * `perPatchDensity` target -- see that function's doc comment for why) of
+ * `meanBuildingArea`-sized buildings, at `TARGET_COVERAGE`. Replaces the
+ * legacy spiral constant (`coreR = 10 + nCore * 2.5`) as the seed for
+ * `buildPatches`' mesh density -- see that function's doc comment for the
+ * full story.
+ */
+export function patchAreaForDemand(population: number): number {
+  return buildingsPerCorePatch(population) * meanBuildingArea(population) / TARGET_COVERAGE;
+}
+
 export interface GenerationParams {
   /** Number of Voronoi patches for the inner city */
   nPatches: number;
