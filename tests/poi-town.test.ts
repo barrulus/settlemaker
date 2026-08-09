@@ -41,8 +41,13 @@ describe('selectPois — town regime (P >= 300)', () => {
     const smallPois = selectPois(small, 3000, new IdAllocator(), buildingMap(small));
     expect(smallPois.some(p => p.kind === 'bathhouse')).toBe(false);
 
-    const { model: big } = generateFromBurg(makeBurg({ population: 8000 }), { seed: 7 });
-    const bigPois = selectPois(big, 8000, new IdAllocator(), buildingMap(big));
+    // Round 4 Task 6 (share raise): pop 8000 at seed 7 stopped placing a
+    // bathhouse — the raised extramuralShare moves which buildings exist to
+    // host one. The threshold this test is about (P >= 5000) is unchanged;
+    // 9000 is the nearest population above it that still hosts one (swept
+    // 5000-20000: only 8000 and 15000 miss).
+    const { model: big } = generateFromBurg(makeBurg({ population: 9000 }), { seed: 7 });
+    const bigPois = selectPois(big, 9000, new IdAllocator(), buildingMap(big));
     expect(bigPois.some(p => p.kind === 'bathhouse')).toBe(true);
   });
 

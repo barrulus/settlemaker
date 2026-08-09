@@ -53,6 +53,11 @@ const BUDGET_EXEMPT_WARD_TYPES = new Set<WardType>([
   WardType.Harbour,
 ]);
 
+/** Ordinary buildings — those the population budget applies to. */
+function isBudgetedWard(ward: Ward): boolean {
+  return ward.type !== WardType.Park && !BUDGET_EXEMPT_WARD_TYPES.has(ward.type);
+}
+
 /**
  * Above this budget (and for any walled settlement, regardless of budget),
  * applyBuildingBudget switches from the hamlet's global nearest-centre trim
@@ -1142,12 +1147,55 @@ export class Model {
     // coreCapacity — every previously-pinned fixture) takes the exact same
     // path as before, unchanged.
     const hasSprawl = this.patches.some(p => p.zone === 'suburb' || p.zone === 'satellite');
+    const isSprawl = (p: Patch): boolean => p.zone === 'suburb' || p.zone === 'satellite';
     const count = hasSprawl ? this.countCoreOrdinaryBuildings() : this.countOrdinaryBuildings();
-    if (count === 0 || count >= target * 0.65) return;
+    this.densifyGroup(p => !hasSprawl || !isSprawl(p), count, target);
 
+    // Sprawl gets the same corrective pass against its OWN share of the
+    // target, for the same reason the trim in `applyBuildingBudget` splits
+    // the budget: extramural patches are the LARGE outer cells of the mesh
+    // (the inner ones become the core), so at base texture scale they render
+    // nearly empty — measured 4-6 buildings per patch against the core's 20.
+    // That was tolerable while `extramuralShare` was ~20% and the core still
+    // carried the settlement; at ~38% it is not. Measured at pop 4200 once
+    // the share rose: 12 sprawl patches produced 55 buildings against a
+    // ~187 share, and the settlement rendered at 60% of its population
+    // target, below the 65% floor `refineDensity` exists to defend. The core
+    // cannot make the shortfall up — its own pass is already saturated at
+    // the 0.25 clamp — and it should not: those people live outside the
+    // walls, so their houses belong out there.
+    //
+    // Scoped to CORE-DOMINATED settlements — those whose walled core is at
+    // least half the mesh. That is the proxy for "the core is share-bound,
+    // not capacity-bound": below `coreCapacity` the raised share is what
+    // pushed the budget outside the walls, and it is those settlements that
+    // render short. A cap-bound city is the other way round — its core is a
+    // small fraction of the mesh (measured nCore/nPatches: 0.70 at pop 1200,
+    // 0.62 at 4200, 0.55 at 20000, 0.45 at 30000, 0.27 at 50000, 0.17 at
+    // 250000) and its sprawl is already dense (16 buildings per patch at pop
+    // 50000, against a town's 4-6), so the pass would neither be fixing a
+    // regression — city yield is byte-identical before and after the share
+    // raise, since the cap governs their core either way — nor be affordable:
+    // regenerating ~180 sprawl wards at a finer texture took pop 250000 from
+    // 1.9 s to 5.8 s per generation, past the ~4.9 s worst case MAX_PATCHES
+    // was calibrated against.
+    const coreShare = this.patches.filter(p => p.zone === 'core').length / this.nPatches;
+    if (hasSprawl && coreShare >= 0.5) {
+      const sprawlTarget = target * Math.max(0, 1 - coreShare);
+      this.densifyGroup(isSprawl, this.countBudgetedBuildings(this.patches.filter(isSprawl)), sprawlTarget);
+    }
+  }
+
+  /**
+   * One corrective density pass over the patches `select` accepts: if their
+   * ordinary yield `count` falls short of `target`, rebuild their common
+   * wards at a proportionally smaller texture scale. See `refineDensity`.
+   */
+  private densifyGroup(select: (p: Patch) => boolean, count: number, target: number): void {
+    if (count === 0 || target <= 0 || count >= target * 0.65) return;
     this.minSqScale = this.baseMinSqScale * Math.max(0.25, count / target);
     for (const patch of this.patches) {
-      if (hasSprawl && (patch.zone === 'suburb' || patch.zone === 'satellite')) continue;
+      if (!select(patch)) continue;
       if (patch.ward instanceof CommonWard && !this.waterbody.includes(patch)) {
         patch.ward.createGeometry();
       }
@@ -1273,9 +1321,39 @@ export class Model {
 
     const corePatches = this.patches.filter(p => p.zone === 'core');
     const otherPatches = this.patches.filter(p => p.zone !== 'core');
-    const coreBudget = Math.round(budget * (corePatches.length / this.nPatches));
-    this.applyBuildingBudgetToGroup(corePatches, coreBudget);
-    this.applyBuildingBudgetToGroup(otherPatches, Math.max(0, budget - coreBudget));
+    const coreShareBudget = Math.round(budget * (corePatches.length / this.nPatches));
+    // The share is a SPLIT of a cap, not an allocation of buildings that
+    // exist: extramural wards are sparse by design and routinely produce far
+    // fewer buildings than their share of the budget. Handing them the share
+    // anyway strands the difference — nobody builds it, and the settlement
+    // renders below its population target. Measured at pop 4200 once
+    // `extramuralShare` rose to ~38%: the non-core group was given 187 of a
+    // 487 budget and produced 78, while the core was trimmed from its natural
+    // 393 down to its 300 share, for a total of 292 (60% of target, against a
+    // 65% floor). Give the non-core group only what it can actually use and
+    // let the core keep the slack; a group that fills its share is capped
+    // exactly as before, so no settlement whose sprawl is productive (every
+    // city — measured unchanged at pop 50000 and 250000) moves at all.
+    const otherBudget = Math.min(
+      Math.max(0, budget - coreShareBudget),
+      this.countBudgetedBuildings(otherPatches),
+    );
+    this.applyBuildingBudgetToGroup(corePatches, budget - otherBudget);
+    this.applyBuildingBudgetToGroup(otherPatches, otherBudget);
+  }
+
+  /**
+   * Buildings in `patches` that count against the population budget — the
+   * same predicate `applyBuildingBudgetToGroup` trims by, so a group's
+   * measured yield and the budget it is handed are in the same units.
+   */
+  private countBudgetedBuildings(patches: Patch[]): number {
+    let total = 0;
+    for (const patch of patches) {
+      if (!patch.ward || !isBudgetedWard(patch.ward)) continue;
+      total += patch.ward.geometry.length;
+    }
+    return total;
   }
 
   /**
@@ -1292,13 +1370,10 @@ export class Model {
    * no rng.
    */
   private applyBuildingBudgetToGroup(patches: Patch[], budget: number): void {
-    const isBudgeted = (ward: Ward): boolean =>
-      ward.type !== WardType.Park && !BUDGET_EXEMPT_WARD_TYPES.has(ward.type);
-
     const perPatch: Array<{ ward: Ward; count: number }> = [];
     let total = 0;
     for (const patch of patches) {
-      if (!patch.ward || !isBudgeted(patch.ward) || patch.ward.geometry.length === 0) continue;
+      if (!patch.ward || !isBudgetedWard(patch.ward) || patch.ward.geometry.length === 0) continue;
       perPatch.push({ ward: patch.ward, count: patch.ward.geometry.length });
       total += patch.ward.geometry.length;
     }

@@ -41,7 +41,12 @@ describe('fidelity round 4: probe path', () => {
     // moving which seeds retry yet again — seed 15 at pop 350 no longer
     // diverges. Re-swept the same grid and re-pinned to seed 10 at pop 350,
     // which still diverges (measured: probe ~36.036, full ~38.121).
-    const params = mapToGenerationParams(aldford(350), 10);
+    // Round 4 Task 6 (share raise): the raised extramuralShare curve moves
+    // nCore again, and seed 10 at pop 350 no longer diverges. Re-swept the
+    // same {350, 4200, 20000} x seeds 1-20 grid (11 of the 60 still diverge)
+    // and re-pinned to seed 1 at pop 350 (measured: probe ~35.735, full
+    // ~36.758).
+    const params = mapToGenerationParams(aldford(350), 1);
     const probe = new Model({ ...params, coastlineGeometry: undefined, harbourSize: undefined });
     const probeRadius = probe.probeWallRadius();
     const full = new Model({ ...params, coastlineGeometry: undefined, harbourSize: undefined }).generate();
@@ -54,8 +59,8 @@ describe('fidelity round 4: probe path', () => {
     // Not equal within 0.5 units — i.e. the divergence is real and not noise.
     expect(Math.abs(probeRadius - fullRadius)).toBeGreaterThan(0.5);
     // Pin the measured values (reproduced locally: probe ~36.036, full ~38.121).
-    expect(probeRadius).toBeCloseTo(36.0361873776777, 3);
-    expect(fullRadius).toBeCloseTo(38.12128125573297, 3);
+    expect(probeRadius).toBeCloseTo(35.73475401060169, 3);
+    expect(fullRadius).toBeCloseTo(36.75822559298853, 3);
   });
 
   it('generateFromBurg output is unchanged for an inland burg (probe swap is invisible)', () => {
@@ -102,9 +107,18 @@ describe('fidelity round 4: probe path', () => {
     // underlying model. Verified non-degenerate: viewBox
     // "-82.9 -149.6 363.2 367.6" (was much larger before the fix), svg.length
     // 81084, 143 patches, 34 wards with geometry (measured locally).
+    // Re-pinned again for the roundness-and-fields share raise
+    // (extramuralShare now clamps at 45%, and assignSprawl prefers an
+    // uncovered bearing over thickening a cluster). The walled core shrinks
+    // (14 patches, was 19) and its farm belt with it, so the frame is
+    // tighter and the SVG shorter. Verified non-degenerate and deterministic
+    // (two runs byte-identical): viewBox "-156.4 -101.1 255.9 288.7",
+    // svg.length 52925, 142 patches, 28 wards with geometry, 8 suburb
+    // patches of which 4 are non-GateWard — real corridor sprawl, up from 3
+    // (measured locally).
     const { svg } = generateFromBurg(aldford(1400), { seed: 9 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('9977a167383f50f109a7ea58176dbf07af20665408169e14b9847216666c3850');
+    expect(sha256(svg)).toBe('8f904847ecda2cdaabcf42228e14c2444fb64d019a90da2a1430b348c10b6948');
   });
 
   it('pins current village output at pop 800 (not a base-equality guarantee)', () => {
@@ -156,9 +170,15 @@ describe('fidelity round 4: probe path', () => {
     // invisible countryside patches and full road extents. Verified
     // non-degenerate: viewBox "-114.6 -124.3 333.0 272.3", svg.length 53181,
     // 131 patches, 23 wards with geometry (measured locally).
+    // Re-pinned again for the roundness-and-fields share raise (same cause
+    // as the pop-1400 hash above). Verified non-degenerate and deterministic
+    // (two runs byte-identical): viewBox "-105.1 -138.7 270.7 269.7",
+    // svg.length 42535, 129 patches, 22 wards with geometry, 13 core
+    // patches, 7 suburb patches of which 3 are non-GateWard — real corridor
+    // sprawl, up from 1 (measured locally).
     const { svg } = generateFromBurg(aldford(800), { seed: 1 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('b94cb02e69db463870d1f95c618c9442e5923500b8de1f69904c24a30b226561');
+    expect(sha256(svg)).toBe('4f2759e79320e83edf63371efea4fd973a417f9d5ab59b515c5f6bff8f8df2fb');
   });
 });
 
@@ -211,9 +231,19 @@ describe('fidelity round 4: footprint and texture scale with population', () => 
     // enough — a 200k city's walled core can be physically smaller than a
     // 20k city's — that it needs its own coverage rather than silently
     // dropping the check.
+    // Round 4 Task 6 (share raise): the plateau now starts LATER in this
+    // series. The share-based core (nPatches - round(nPatches * 0.45)) only
+    // reaches the capacity ceiling (populationToPatches(10000) = 38 patches)
+    // once nPatches passes ~69, which happens around population 25000 — so
+    // pop 20000 is share-bound, not cap-bound (measured nCore: 31, 38, 38,
+    // 38). The contract is unchanged in substance: nCore never falls with
+    // population, and plateaus once the cap binds.
     const nCores = pops.map(p => mapToGenerationParams(aldford(p), 9).nCore);
     for (let i = 1; i < nCores.length; i++) {
-      expect(nCores[i]).toBe(nCores[0]);
+      expect(nCores[i]).toBeGreaterThanOrEqual(nCores[i - 1]);
+    }
+    for (let i = 2; i < nCores.length; i++) {
+      expect(nCores[i]).toBe(nCores[1]);
     }
 
     // Measured: pairs tie exactly, 20000≈30000 at r≈153.99, 70000≈200000 at
@@ -225,8 +255,13 @@ describe('fidelity round 4: footprint and texture scale with population', () => 
     // — so no weaker monotonic form is pinnable; assert the actual contract
     // instead: the last (largest-population) radius is no bigger than the
     // first (smallest-population, still above coreCapacity) radius.
+    // Measured after the share raise: 120.41, 153.99, 140.03, 140.03. pops[0]
+    // is share-bound (a smaller core), so the "no bigger than the smallest
+    // population's" form must be read over the cap-bound tail — where the
+    // radius still DECREASES (153.99 -> 140.03) rather than merely
+    // plateauing, which is the surprising contract this check exists for.
     const radii = pops.map(p => generateFromBurg(aldford(p), { seed: 9 }).model.wall!.getRadius());
-    expect(radii[3]).toBeLessThanOrEqual(radii[0]);
+    expect(radii[3]).toBeLessThanOrEqual(radii[1]);
   }, 20000);
 
   it('city texture is packed, village texture stays airy', () => {

@@ -83,14 +83,17 @@ describe('coreCapacity', () => {
 
   describe('extramuralShare — coreCapacity is a ceiling, not a target', () => {
     // Target curve from docs/superpowers/specs/2026-08-08-roundness-and-fields-design.md:
-    // ~8% at 300, ~14% at 1200, ~20% at 4000, ~25% at 10000 (where the cap
+    // ~20% at 300, ~30% at 1200, ~38.5% at 4000, ~45% at 10000 (where the cap
     // takes over). Tolerance is generous (2 percentage points) — this pins
-    // the shape of the curve, not the exact fitted constants.
+    // the shape of the curve, not the exact fitted constants. The anchors are
+    // set by what renders as a visible skirt, not by a demographic estimate:
+    // the first curve (8% at 300 to 25% at 10000) bought a pop-4000 town only
+    // 5 extramural patches, which cannot physically ring a core.
     it.each([
-      [300, 0.08],
-      [1200, 0.14],
-      [4000, 0.20],
-      [10000, 0.25],
+      [300, 0.20],
+      [1200, 0.30],
+      [4000, 0.385],
+      [10000, 0.45],
     ])('is ~%i%% at population %i', (population, target) => {
       expect(extramuralShare(population)).toBeCloseTo(target, 1);
     });

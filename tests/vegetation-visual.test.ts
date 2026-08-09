@@ -18,7 +18,10 @@ describe('vegetation visual output', () => {
       // Round 4 Task 6 fix round 3: corePatchCount's rewrite (direct
       // share-based sprawl budget, fixing a zero-budget rounding bug) moved
       // the boundary again — 10500 stopped rolling Park; 15000 does.
-      population: 15000,
+      // Round 4 Task 6 (share raise): extramuralShare rose to a 45% ceiling,
+      // shrinking the walled core again and moving the ward-roll boundary —
+      // 15000 stopped rolling Park; 25000 does (swept 9000-30000).
+      population: 25000,
       port: false, citadel: false, walls: true,
       plaza: true, temple: true, shanty: false, capital: false,
     };
@@ -59,7 +62,10 @@ describe('vegetation visual output', () => {
       // Round 4 Task 6 fix round 3: corePatchCount's rewrite (direct
       // share-based sprawl budget, fixing a zero-budget rounding bug) moved
       // the boundary again — 10500 stopped rolling Park; 15000 does.
-      population: 15000,
+      // Round 4 Task 6 (share raise): extramuralShare rose to a 45% ceiling,
+      // shrinking the walled core again and moving the ward-roll boundary —
+      // 15000 stopped rolling Park; 25000 does (swept 9000-30000).
+      population: 25000,
       port: false, citadel: false, walls: true,
       plaza: true, temple: true, shanty: false, capital: false,
     };

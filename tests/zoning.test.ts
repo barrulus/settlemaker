@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { generateFromBurg, mapToGenerationParams, WardType, type AzgaarBurgInput } from '../src/index.js';
 import { MAX_PATCHES } from '../src/input/azgaar-input.js';
+import { radialProfile } from '../src/generator/urbanisation.js';
 
 function metropolis(roadBearings: number[]): AzgaarBurgInput {
   return {
@@ -22,14 +23,17 @@ describe('zoning', () => {
   it('keeps the walled core small regardless of population', () => {
     const { model } = generateFromBurg(metropolis([0, 120, 240]), { seed: 5 });
     // Round 4 Task 6 fix round: coreCapacity is a ceiling, not a target —
-    // extramuralShare(population) keeps rising right up to its 25% ceiling
-    // at population 10000, so 10000 itself is where the cap *starts* to
-    // bind, not where it's already fully binding (corePopulation keeps
-    // growing with population — at its 25%-share ceiling — until
-    // population*0.75 first reaches coreCapacity, around population
-    // 13333). Use 20000, comfortably past that, so both runs are fully
-    // cap-bound and their core sizes are actually comparable.
-    const small = generateFromBurg({ ...metropolis([0, 120, 240]), population: 20000 }, { seed: 5 });
+    // extramuralShare(population) keeps rising right up to its ceiling at
+    // population 10000, so 10000 itself is where the cap *starts* to bind,
+    // not where it's already fully binding. The share-based core
+    // (nPatches - round(nPatches * 0.45)) only reaches the capacity ceiling
+    // (populationToPatches(10000) = 38 patches) once nPatches passes ~69,
+    // which happens at population 25000. Raising the share curve to 45%
+    // pushed that boundary out from 20000, where this test used to sample
+    // (measured nCore: 21 at pop 10000, 31 at 20000, 38 from 25000 up). Use
+    // 30000, comfortably past it, so both runs are fully cap-bound and their
+    // core sizes are actually comparable.
+    const small = generateFromBurg({ ...metropolis([0, 120, 240]), population: 30000 }, { seed: 5 });
     // A 250k city's core is no bigger than a fully cap-bound 20k city's core.
     expect(model.inner.length).toBeLessThanOrEqual(small.model.inner.length + 2);
   }, 20000);
@@ -73,6 +77,56 @@ describe('zoning', () => {
       expect(bandCoverage(model)).toBeGreaterThanOrEqual(22);
     }
   }, 30000);
+
+  /**
+   * The same measure, but the annulus tracks the LOBED core edge in each
+   * direction instead of the circumscribed radius. At metropolis scale the
+   * two agree (both read 24/24), but at town scale they do not: the walled
+   * core is strongly lobed (measured Rmin/Rmax 0.44-0.57 at pops 1200-4000),
+   * and 62% of extramural patches sit in the notches between the lobes — at
+   * r/R 0.5-0.9, outside the wall polygon but INSIDE the circumscribed
+   * radius (verified: 0 of 164 sampled extramural centroids fall inside the
+   * wall polygon, so this is faubourg ground, not a zoning bug). `R..2.2R`
+   * is structurally blind to all of it, which is why it has a hard floor
+   * around 13-16 bins at pop 4000 however the placement is tuned.
+   */
+  function edgeBandCoverage(model: ReturnType<typeof generateFromBurg>['model'], bins = 24): number {
+    const edgeAt = radialProfile(model.border!.shape.vertices);
+    const hit = new Array<boolean>(bins).fill(false);
+    for (const patch of model.patches) {
+      for (const building of patch.ward?.geometry ?? []) {
+        const c = building.center;
+        const r = Math.sqrt(c.x * c.x + c.y * c.y);
+        const edge = edgeAt(c);
+        if (r <= edge || r > edge * 2.2) continue;
+        const a = Math.atan2(c.y, c.x);
+        hit[Math.min(bins - 1, Math.floor(((a + Math.PI) / (2 * Math.PI)) * bins))] = true;
+      }
+    }
+    return hit.filter(Boolean).length;
+  }
+
+  it('a walled town rings its core too, not just a metropolis', () => {
+    // THE regression the share raise plus the angular-coverage preference
+    // exist to fix. A pop-4000 town used to cover 11-19 of 24 bins (seeds
+    // 1-8, edge-relative measure); the raised `extramuralShare` gives it 10
+    // extramural patches instead of 5, and `assignSprawl`'s coverage
+    // preference spends them on bearings the ring does not cover yet rather
+    // than thickening whichever side got started first. Measured after:
+    // 16-24 with three roads, 20-23 with two, 19-23 with none. The bar sits
+    // below the measured minimum and above the old maximum, so it can only
+    // be cleared by the fix and not by seed luck.
+    for (const roadBearings of [[0, 120, 240], [0, 180], []]) {
+      for (const seed of [1, 3, 5, 7]) {
+        const burg: AzgaarBurgInput = {
+          name: 'Faubourg', population: 4000, port: false, citadel: false, walls: true,
+          plaza: true, temple: false, shanty: false, capital: false, roadBearings,
+        };
+        const { model } = generateFromBurg(burg, { seed });
+        expect(edgeBandCoverage(model)).toBeGreaterThanOrEqual(15);
+      }
+    }
+  }, 20000);
 
   it('wraps the walls even with no roads at all', () => {
     // The halo is a function of distance from the core edge and of nothing
