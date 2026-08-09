@@ -3,6 +3,9 @@ import { Point } from '../types/point.js';
 /** Narrative/transport category of an approaching route. */
 export type RouteKind = 'road' | 'foot' | 'sea';
 
+/** Corridor relief walking outward from the burg. */
+export type RouteRelief = 'descent' | 'ascent' | 'valley' | 'ridge' | 'flat';
+
 /**
  * Road entry hint threaded from caller → curtain wall. `point` is a unit direction
  * vector from the burg centroid (SVG coords, y-down); `bearingDeg` is the same
@@ -13,6 +16,14 @@ export interface RoadEntry {
   bearingDeg: number;
   routeId?: string;
   kind?: RouteKind;
+  /** FMG land-route group. Absent = unknown, treated like 'roads'. */
+  group?: 'roads' | 'trails';
+  /** Route continues past the burg (true) vs terminates here. */
+  through?: boolean;
+  /** Corridor relief walking outward. */
+  relief?: RouteRelief;
+  /** Road runs along a river (valley road). */
+  followsRiver?: boolean;
 }
 
 /**

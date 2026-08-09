@@ -1,5 +1,5 @@
 import { Point } from '../types/point.js';
-import type { GenerationParams, RoadEntry, RouteKind } from '../generator/generation-params.js';
+import type { GenerationParams, RoadEntry, RouteKind, RouteRelief } from '../generator/generation-params.js';
 import { densityCurve, perPatchDensity } from '../generator/generation-params.js';
 
 /**
@@ -13,6 +13,10 @@ export type RoadBearingInput =
       bearing_deg: number;
       route_id?: string;
       kind?: RouteKind;
+      group?: 'roads' | 'trails';
+      through?: boolean;
+      relief?: RouteRelief;
+      followsRiver?: boolean;
     };
 
 /**
@@ -195,7 +199,7 @@ export function mapToGenerationParams(
     const rad = bearingDeg * Math.PI / 180;
     const point = new Point(Math.sin(rad), -Math.cos(rad));
     if (typeof b === 'number') return { point, bearingDeg };
-    return { point, bearingDeg, routeId: b.route_id, kind: b.kind };
+    return { point, bearingDeg, routeId: b.route_id, kind: b.kind, group: b.group, through: b.through, relief: b.relief, followsRiver: b.followsRiver };
   });
 
   const nPatches = populationToPatches(burg.population, burg.urbanDensity);
