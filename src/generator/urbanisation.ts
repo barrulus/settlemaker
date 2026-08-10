@@ -1,4 +1,5 @@
 import { Point } from '../types/point.js';
+import type { WeightedRoad } from './route-weight.js';
 
 /** Population above which outlying hamlets appear along the road corridors. */
 export const SATELLITE_POP_THRESHOLD = 50000;
@@ -37,8 +38,14 @@ const MIN_TAPER = 0.3;
 const SATELLITE_WEIGHT = 1;
 
 export interface UrbanisationOptions {
-  /** Unit direction vectors of approaching roads (`RoadEntry.point`). May be empty. */
-  roadDirections: Point[];
+  /**
+   * Approaching roads, weighted by how much extramural growth each pulls
+   * (`route-weight.ts`). May be empty. The weight multiplies both the
+   * ribbon and satellite terms, so a bare trail or a ridge approach still
+   * scores something (roads never gate to zero) but a through-route on flat
+   * ground dominates.
+   */
+  roads: WeightedRoad[];
   /** Sprawl starts outside this radius — inside it is the core's business. */
   coreRadius: number;
   /**
@@ -121,7 +128,7 @@ export function radialProfile(outline: Point[], bins: number = 36): (p: Point) =
 
 export function createUrbanisationField(opts: UrbanisationOptions): UrbanisationField {
   const {
-    roadDirections, coreRadius, haloDepth, reach, corridorHalfWidth,
+    roads, coreRadius, haloDepth, reach, corridorHalfWidth,
     satellites, satelliteSpacing,
   } = opts;
   const haloReach = opts.haloReach ?? reach;
@@ -143,7 +150,7 @@ export function createUrbanisationField(opts: UrbanisationOptions): Urbanisation
       if (d > 0 && r < haloReach) score += HALO_WEIGHT * Math.exp(-d / haloDepth);
     }
 
-    for (const d of roadDirections) {
+    for (const { direction: d, weight } of roads) {
       const along = p.x * d.x + p.y * d.y;
       if (along <= coreRadius) continue;
 
@@ -167,7 +174,7 @@ export function createUrbanisationField(opts: UrbanisationOptions): Urbanisation
 
       // Continuous ribbon: linear decay from the core out to `reach`.
       if (along < reach) {
-        score += SPOKE_WEIGHT * lateral * (1 - (along - coreRadius) / span);
+        score += weight * SPOKE_WEIGHT * lateral * (1 - (along - coreRadius) / span);
       }
 
       // Satellites: gaussian bumps on the SAME ray, so outlying hamlets are on-road
@@ -178,7 +185,7 @@ export function createUrbanisationField(opts: UrbanisationOptions): Urbanisation
         for (let k = 1; k <= SATELLITE_COUNT; k++) {
           const centre = reach + k * satelliteSpacing;
           const u = (along - centre) / (satelliteSpacing * 0.5);
-          score += SATELLITE_WEIGHT * lateral * Math.exp(-u * u) * Math.pow(SATELLITE_FALLOFF, k);
+          score += weight * SATELLITE_WEIGHT * lateral * Math.exp(-u * u) * Math.pow(SATELLITE_FALLOFF, k);
         }
       }
     }

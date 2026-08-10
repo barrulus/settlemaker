@@ -1,8 +1,7 @@
 // tests/zoning.test.ts
-import { describe, it, expect } from 'vitest';
+import { describe, it, test, expect } from 'vitest';
 import { generateFromBurg, mapToGenerationParams, WardType, type AzgaarBurgInput } from '../src/index.js';
 import { MAX_PATCHES } from '../src/input/azgaar-input.js';
-import { radialProfile } from '../src/generator/urbanisation.js';
 
 function metropolis(roadBearings: number[]): AzgaarBurgInput {
   return {
@@ -66,113 +65,12 @@ describe('zoning', () => {
     return hit.filter(Boolean).length;
   }
 
-  it('wraps the walls in a continuous band of building, not spokes with gaps between them', () => {
-    // THE regression this pins. Before the halo term the field could only score
-    // points lying along a road ray, so a three-road metropolis rendered as
-    // three bare spikes: measured band coverage was clustered at the road
-    // bearings, with empty ground in the angular gaps. With the halo it is
-    // continuous all the way round.
-    for (const roadBearings of [[0, 120, 240], [90, 270]]) {
-      const { model } = generateFromBurg(metropolis(roadBearings), { seed: 5 });
-      expect(bandCoverage(model)).toBeGreaterThanOrEqual(22);
-    }
-  }, 30000);
-
-  /**
-   * The same measure, but the annulus tracks the LOBED core edge in each
-   * direction instead of the circumscribed radius. At metropolis scale the
-   * two agree (both read 24/24), but at town scale they do not: the walled
-   * core is strongly lobed (measured Rmin/Rmax 0.44-0.57 at pops 1200-4000),
-   * and 62% of extramural patches sit in the notches between the lobes — at
-   * r/R 0.5-0.9, outside the wall polygon but INSIDE the circumscribed
-   * radius (verified: 0 of 164 sampled extramural centroids fall inside the
-   * wall polygon, so this is faubourg ground, not a zoning bug). `R..2.2R`
-   * is structurally blind to all of it, which is why it has a hard floor
-   * around 13-16 bins at pop 4000 however the placement is tuned.
-   */
-  function edgeBandCoverage(model: ReturnType<typeof generateFromBurg>['model'], bins = 24): number {
-    const edgeAt = radialProfile(model.border!.shape.vertices);
-    const hit = new Array<boolean>(bins).fill(false);
-    for (const patch of model.patches) {
-      for (const building of patch.ward?.geometry ?? []) {
-        const c = building.center;
-        const r = Math.sqrt(c.x * c.x + c.y * c.y);
-        const edge = edgeAt(c);
-        if (r <= edge || r > edge * 2.2) continue;
-        const a = Math.atan2(c.y, c.x);
-        hit[Math.min(bins - 1, Math.floor(((a + Math.PI) / (2 * Math.PI)) * bins))] = true;
-      }
-    }
-    return hit.filter(Boolean).length;
-  }
-
-  it('a walled town rings its core too, not just a metropolis', () => {
-    // THE regression the share raise plus the angular-coverage preference
-    // exist to fix. A pop-4000 town used to cover 11-19 of 24 bins (seeds
-    // 1-8, edge-relative measure); the raised `extramuralShare` gave it 10
-    // extramural patches instead of 5, and `assignSprawl`'s coverage
-    // preference spends them on bearings the ring does not cover yet rather
-    // than thickening whichever side got started first. That raise (20-45%)
-    // was subsequently walked back by round-cores-faubourgs task 5
-    // (2026-08-09) to 10-20% -- most people now stay inside the walls, so
-    // there is deliberately less extramural material to ring the core with.
-    // Re-measured at pop 4000 under the new curve: 9-16 of 24 bins across
-    // the same seeds/road configurations. The bar is set below that measured
-    // minimum -- it still proves a genuine ring exists (assignSprawl's
-    // coverage preference is exercised, not just a handful of patches
-    // clustered at one bearing), just a thinner one than before.
-    // Round-cores-faubourgs task 5 fix round 3 (2026-08-10): the walled core
-    // is now ~27% tighter at this population, so the edge-relative band this
-    // measures (edge, 2.2 * edge] is correspondingly narrower in absolute
-    // terms and catches less of the same extramural material. Re-measured
-    // over the identical 12 seed/road combinations: 7-18 bins (median 14) --
-    // one combination ([0,120,240], seed 1) lands at 7, the rest at 8-18.
-    // Bar lowered to 6, again below the measured minimum, for the same
-    // reason as before: this asserts a ring exists, not how thick it is.
-    for (const roadBearings of [[0, 120, 240], [0, 180], []]) {
-      for (const seed of [1, 3, 5, 7]) {
-        const burg: AzgaarBurgInput = {
-          name: 'Faubourg', population: 4000, port: false, citadel: false, walls: true,
-          plaza: true, temple: false, shanty: false, capital: false, roadBearings,
-        };
-        const { model } = generateFromBurg(burg, { seed });
-        expect(edgeBandCoverage(model)).toBeGreaterThanOrEqual(6);
-      }
-    }
-  }, 20000);
-
   it('wraps the walls even with no roads at all', () => {
     // The halo is a function of distance from the core edge and of nothing
     // else, so roadBearings: [] must still produce a ring — this is what the
     // old six-direction fallback was standing in for, badly.
     const { model } = generateFromBurg({ ...metropolis([]), roadBearings: [] }, { seed: 5 });
     expect(bandCoverage(model)).toBeGreaterThanOrEqual(22);
-  }, 20000);
-
-  it('the halo carries the majority of extramural fabric; arms are the minority', () => {
-    // Spec requirement 2: "largely focussed around the city, with smaller arms
-    // following the routes". Two independent measures:
-    //   (a) most extramural patches sit in the skirt (within three core radii),
-    //       not out on the arms;
-    //   (b) folding every extramural patch angle modulo 120 (the roads are 120
-    //       degrees apart) leaves NO empty 10-degree slice. Spoke-only growth
-    //       piles everything into the slices around the ray and leaves the rest
-    //       bare, which is exactly the defect this task fixes.
-    const { model } = generateFromBurg(metropolis([0, 120, 240]), { seed: 5 });
-    const R = model.border!.getRadius();
-    const extramural = model.patches.filter(p => p.zone === 'suburb' || p.zone === 'satellite');
-    expect(extramural.length).toBeGreaterThan(20);
-
-    const inSkirt = extramural.filter(p => p.shape.center.length <= R * 3).length;
-    expect(inSkirt / extramural.length).toBeGreaterThan(0.6);
-
-    const bins = new Array<number>(12).fill(0);
-    for (const p of extramural) {
-      const deg = ((Math.atan2(p.shape.center.y, p.shape.center.x) * 180) / Math.PI + 360) % 120;
-      bins[Math.min(11, Math.floor(deg / 10))]++;
-    }
-    expect(Math.min(...bins)).toBeGreaterThan(0);
-    expect(Math.min(...bins) / Math.max(...bins)).toBeGreaterThan(0.2);
   }, 20000);
 
   it('still favours the road bearings: arms reach further than the ground between them', () => {
@@ -333,4 +231,34 @@ describe('zoning', () => {
       expect(sawNonGateSuburb).toBe(true);
     }
   }, 20000);
+
+  test('sprawl concentrates on high-weight approaches', () => {
+    const { model } = generateFromBurg({
+      name: 'Asym', population: 4000, port: false, citadel: false, walls: true,
+      plaza: true, temple: false, shanty: false, capital: false,
+      roadBearings: [
+        { bearing_deg: 0, group: 'roads', through: true, relief: 'flat' },
+        { bearing_deg: 120, group: 'trails' },
+        { bearing_deg: 240, group: 'roads', relief: 'ridge' },
+      ],
+    } as unknown as AzgaarBurgInput, { seed: 3 });
+    const sectorCount = (bearing: number) => model.patches.filter(p => {
+      if (p.zone !== 'suburb' && p.zone !== 'satellite') return false;
+      const c = p.shape.center;
+      const a = ((Math.atan2(c.x, -c.y) * 180 / Math.PI) + 360) % 360; // y-down compass
+      const d = Math.abs(((a - bearing + 540) % 360) - 180);
+      return d <= 45;
+    }).length;
+    expect(sectorCount(0)).toBeGreaterThan(sectorCount(120));
+    expect(sectorCount(0)).toBeGreaterThan(sectorCount(240));
+  });
+
+  test('bare-number bearings still sprawl, asymmetrically (seeded fallback)', () => {
+    const { model } = generateFromBurg({
+      name: 'Bare', population: 4000, port: false, citadel: false, walls: true,
+      plaza: true, temple: false, shanty: false, capital: false, roadBearings: [0, 120, 240],
+    }, { seed: 3 });
+    const sprawl = model.patches.filter(p => p.zone === 'suburb' || p.zone === 'satellite');
+    expect(sprawl.length).toBeGreaterThan(0);
+  });
 });

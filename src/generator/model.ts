@@ -18,6 +18,7 @@ import type { Street } from '../types/interfaces.js';
 import { buildAdjacency, type PatchAdjacency } from './adjacency.js';
 import { assignSprawl } from './zoning.js';
 import type { UrbanisationField } from './urbanisation.js';
+import { routeWeights } from './route-weight.js';
 import { MAX_PATCHES } from '../input/azgaar-input.js';
 
 import { Ward } from '../wards/ward.js';
@@ -1076,11 +1077,17 @@ export class Model {
     // (zoning, field placement) need adjacency over this settled geometry.
     this.adjacency = buildAdjacency(this.patches);
 
+    // routeWeights draws exactly one rng.float() per entry (the jitter),
+    // regardless of the data on each entry, so this call site's rng draw
+    // count is deterministic across inputs — required for pinned-hash
+    // stability of downstream phases.
+    const roads = routeWeights(this.params.roadEntryPoints ?? [], this.rng);
+
     this.urbanisationField = assignSprawl({
       patches: this.patches,
       inner: this.inner,
       adjacency: this.adjacency!,
-      roadDirections: (this.params.roadEntryPoints ?? []).map(r => r.point),
+      roads,
       coreRadius: this.border!.getRadius(),
       // The core is a mild seeded ovoid (not a perfect circle), so the
       // circumscribed radius alone would anchor the halo at the long-axis

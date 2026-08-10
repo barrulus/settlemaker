@@ -3,7 +3,7 @@ import { createUrbanisationField, radialProfile } from '../src/generator/urbanis
 import { Point } from '../src/types/point.js';
 
 const eastward = () => createUrbanisationField({
-  roadDirections: [new Point(1, 0)],
+  roads: [{ direction: new Point(1, 0), weight: 1 }],
   coreRadius: 100,
   haloDepth: 75,
   reach: 400,
@@ -40,7 +40,7 @@ describe('urbanisation field', () => {
 
   it('places satellite bumps along the road beyond reach when enabled', () => {
     const f = createUrbanisationField({
-      roadDirections: [new Point(1, 0)],
+      roads: [{ direction: new Point(1, 0), weight: 1 }],
       coreRadius: 100, haloDepth: 75, reach: 400, corridorHalfWidth: 40,
       satellites: true, satelliteSpacing: 150,
     });
@@ -54,7 +54,7 @@ describe('urbanisation field', () => {
     // otherwise dilute the ratio without saying anything about summation.
     // Single road provides a baseline score at the test point.
     const singleRoad = createUrbanisationField({
-      roadDirections: [new Point(1, 0)],
+      roads: [{ direction: new Point(1, 0), weight: 1 }],
       coreRadius: 100, haloDepth: 0, reach: 400, corridorHalfWidth: 40,
       satellites: false, satelliteSpacing: 150,
     });
@@ -65,7 +65,7 @@ describe('urbanisation field', () => {
     // corridor contributions must be meaningfully greater than the single-road
     // score at the same point. This fails for max() or nearest-only logic.
     const twoRoads = createUrbanisationField({
-      roadDirections: [new Point(1, 0), new Point(0.966, 0.259)],  // 15 degrees apart
+      roads: [{ direction: new Point(1, 0), weight: 1 }, { direction: new Point(0.966, 0.259), weight: 1 }],  // 15 degrees apart
       coreRadius: 100, haloDepth: 0, reach: 400, corridorHalfWidth: 40,
       satellites: false, satelliteSpacing: 150,
     });
@@ -80,7 +80,7 @@ describe('urbanisation field', () => {
     // haloDepth: 0 to isolate the corridor term — with a halo every dry point
     // outside the core scores non-zero, which is the whole point of the halo.
     const f = createUrbanisationField({
-      roadDirections: [new Point(1, 0)],
+      roads: [{ direction: new Point(1, 0), weight: 1 }],
       coreRadius: 100, haloDepth: 0, reach: 400, corridorHalfWidth: 0,
       satellites: false, satelliteSpacing: 150,
     });
@@ -98,7 +98,7 @@ describe('urbanisation field', () => {
     // nothing off a road ray, so a roadless burg got no extramural fabric and
     // a roaded one got bare spikes with empty ground between them.
     const f = createUrbanisationField({
-      roadDirections: [],
+      roads: [],
       coreRadius: 100, haloDepth: 75, reach: 400, corridorHalfWidth: 40,
       satellites: false, satelliteSpacing: 150,
     });
@@ -138,7 +138,7 @@ describe('urbanisation field', () => {
       outline.push(new Point(r * Math.cos(a), r * Math.sin(a)));
     }
     const f = createUrbanisationField({
-      roadDirections: [],
+      roads: [],
       coreRadius: 200, coreRadiusAt: radialProfile(outline),
       haloDepth: 75, reach: 800, corridorHalfWidth: 40,
       satellites: false, satelliteSpacing: 150,
@@ -153,7 +153,7 @@ describe('urbanisation field', () => {
     // Width, not just score. Compare the ratio of an off-axis score to the
     // on-axis score at the same distance: a narrower corridor loses more.
     const f = createUrbanisationField({
-      roadDirections: [new Point(1, 0)],
+      roads: [{ direction: new Point(1, 0), weight: 1 }],
       coreRadius: 100, haloDepth: 0, reach: 400, corridorHalfWidth: 40,
       satellites: false, satelliteSpacing: 150,
     });
