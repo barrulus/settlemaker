@@ -1719,7 +1719,20 @@ export class Model {
 
     const corePatches = this.patches.filter(p => p.zone === 'core');
     const otherPatches = this.patches.filter(p => p.zone !== 'core');
-    const coreShareBudget = Math.round(budget * (corePatches.length / this.nPatches));
+    // Same "a share is a cap, not an allocation" clamp the non-core group
+    // gets below, applied to the core — a share the core cannot fill is
+    // stranded exactly as the non-core group's was. It bites hardest at the
+    // small end, where the core is two or three patches and every one of
+    // them may be a landmark: measured at pop 60 seed 3, the core was the
+    // market plus one patch (yield 0 budgeted buildings) and took 10 of a
+    // 15-building budget, leaving 5 for 18 real houses outside — the
+    // settlement rendered at a third of its household target. Clamping is a
+    // no-op for any core that fills its share (every city: measured
+    // byte-identical at pop 4200/50000/250000).
+    const coreShareBudget = Math.min(
+      Math.round(budget * (corePatches.length / this.nPatches)),
+      this.countBudgetedBuildings(corePatches),
+    );
     // The share is a SPLIT of a cap, not an allocation of buildings that
     // exist: extramural wards are sparse by design and routinely produce far
     // fewer buildings than their share of the budget. Handing them the share

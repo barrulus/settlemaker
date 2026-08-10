@@ -9,6 +9,25 @@ import type { Model } from '../generator/model.js';
 import type { Patch } from '../generator/patch.js';
 import { edgeInsetScale, rowHousing, ROW_OUTSKIRTS_BITE } from '../generator/generation-params.js';
 
+/**
+ * Largest built-up area, in city patches, that `filterOutskirts` treats as
+ * having no interior to thin toward — see the guards in that method.
+ *
+ * Read off two sweeps. City-patch count is a step function of population and
+ * barely varies with seed: 3 up to pop 100, 4 at 140, 5 at 150, 6 at 200, 9
+ * at 300, 12 at 400, ~20 by 1000. Independently, "does this settlement
+ * contain an INTERIOR patch" (one whose every vertex is shared only with
+ * other city patches — exactly the vertices `filterOutskirts`' density field
+ * counts as populated) is NO at every seed up to pop 200, mixed at 300, and
+ * YES at every seed from 400 up. The two agree that a settlement of six
+ * patches or fewer has no interior, which is why the bound is a patch count
+ * and not a population. It stops short of pop 300 deliberately: the two
+ * pop-300 seeds that lack an interior patch still render 71-100% of their
+ * households, so the guards would buy nothing there and would move a render
+ * gated and approved as it stands.
+ */
+export const INTERIORLESS_CITY_PATCHES = 6;
+
 export const MAIN_STREET = 2.0;
 export const REGULAR_STREET = 1.0;
 export const ALLEY = 0.6;
@@ -131,6 +150,36 @@ export class Ward {
         : 0;
     });
 
+    // The thinning is RELATIVE: `minDist` is divided by the interpolated
+    // vertex density `p` below. A vertex reads 0 unless every patch meeting
+    // it is a city patch, so on a settlement only a few patches across `p`
+    // is near zero everywhere and `minDist / p` overshoots the roll for the
+    // WHOLE ward — the filter stops thinning an outskirt and demolishes the
+    // settlement. Measured at pop 60: the gate ward subdivided into 13
+    // buildings and the craftsmen ward into 15, and this filter deleted all
+    // 28; the hamlet rendered as bare fields. Below pop ~100 that was every
+    // seed (a 175-case sweep found 6 settlements with no house at all).
+    //
+    // Scoped to settlements with no interior to thin toward — see
+    // `INTERIORLESS_CITY_PATCHES` for the two sweeps that bound sets. Larger
+    // settlements keep the reference behaviour byte-for-byte: their ragged,
+    // thinning edge IS the look, and it is the look approved at five render
+    // gates.
+    const noInterior = this.model.patches.filter(p => p.withinCity).length
+      <= INTERIORLESS_CITY_PATCHES;
+
+    // With no populated vertex at all there is no gradient to thin along, so
+    // the filter has nothing to say and keeps what subdivision produced; the
+    // household budget in `applyBuildingBudget` still caps the count. The
+    // rng draw below is taken either way, so wards that DO thin are
+    // bit-identical to before.
+    const noGradient = noInterior && density.every(d => d <= 0);
+
+    // Drop scores, kept so the floor below can name the most interior
+    // building without re-deriving (or re-drawing) anything.
+    const scores = new Map<Polygon, number>();
+    const before = this.geometry;
+
     this.geometry = this.geometry.filter(building => {
       let minDist = 1.0;
       for (const edge of populatedEdges) {
@@ -149,8 +198,32 @@ export class Ward {
       }
       minDist /= p;
 
-      return this.rng.fuzzy(1) > minDist * bite;
+      scores.set(building, minDist * bite);
+      const roll = this.rng.fuzzy(1);
+      return noGradient || roll > minDist * bite;
     });
+
+    // Floor: this filter THINS the outskirts, it does not unbuild a ward the
+    // model decided to populate. A weak gradient can still take every
+    // building — a hamlet's interior is one or two shared vertices, so `p`
+    // is small everywhere and `minDist / p` overshoots the roll for the whole
+    // ward (measured at pop 60 seed 20: two craftsmen wards subdivided into
+    // 2 and 5 buildings and kept none, so the settlement had no houses at
+    // all). Keep the single most interior building in that case. Scoped like
+    // `noGradient` above, and it only fires where the ward would otherwise
+    // render empty, so no ward that keeps anything today moves and no rng
+    // draw is added.
+    if (noInterior && this.geometry.length === 0 && before.length > 0) {
+      let best = before[0];
+      for (const b of before) {
+        const s = scores.get(b)!;
+        const bs = scores.get(best)!;
+        if (s < bs || (s === bs && (b.center.x - best.center.x || b.center.y - best.center.y) < 0)) {
+          best = b;
+        }
+      }
+      this.geometry = [best];
+    }
   }
 
   getLabel(): string | null {
