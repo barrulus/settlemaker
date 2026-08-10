@@ -146,28 +146,39 @@ export function perPatchDensity(population: number): number {
  * Fix round 4 (2026-08-10) added the ROW-ONSET RAMP. `fillLots` switches on
  * as a step at `ROW_HOUSING_MIN_POPULATION`, and a whole lot is ~1.6x the
  * inscribed rectangle it replaced, so at pop 601 the curve above (still ~1.0
- * there, a village texture) produced buildings ~44% LARGER than a pop-600
- * village's -- measured mean ordinary building area 7.53 at pop 600 against
- * 10.85 at pop 601 (unwalled, seeds 1-3). That is the very inversion fix
- * round 3 set out to remove, relocated to the band bottom. The ramp cancels
- * the leaf-policy step at the boundary and unwinds itself by
- * `ROW_ONSET_BLEND_POPULATION`, so this curve returns fix round 3's exact
- * value at and above pop 1200 (measured: pop 1200/20000/50000 output is
- * byte-identical with only this change applied) and villages are untouched.
- * Measured after the ramp, mean ordinary building area (unwalled, seeds
- * 1-3): 7.53 at pop 600, 7.91 at 601, 8.20/8.57/8.07 at 625/650/700 -- the
- * largest step across the boundary is +5%, against +44% before.
+ * there, a village texture) produced buildings far LARGER than a pop-600
+ * village's. That is the very inversion fix round 3 set out to remove,
+ * relocated to the band bottom. The ramp cancels the leaf-policy step at the
+ * boundary and unwinds itself by `ROW_ONSET_BLEND_POPULATION`, so this curve
+ * returns fix round 3's exact value at and above pop 1200 (measured: pop
+ * 1200/20000/50000 output is byte-identical with only this change applied)
+ * and villages are untouched.
+ *
+ * Fix round 5 (2026-08-10) re-fitted the ramp strength under the
+ * VIEWER-FACING acceptance metric: pooled mean ordinary-building area over
+ * the FULL rendered settlement (all budgeted wards), unwalled diag-render
+ * defaults (crossroads roadBearings, plaza), seeds 1-10. Round 4's factor
+ * (0.60) was fitted against a narrower fixture (no roads, 3 seeds) and its
+ * pop-600 reference cell did not reproduce; under the viewer metric the
+ * boundary step still measured +46% (6.25 at pop 600 -> 9.12 at 601).
+ * Measured scale response at pop 601 (textureScaleOverride sweep, same
+ * metric): 0.60 -> 9.13, 0.50 -> 7.78, 0.45 -> 7.14, 0.40 -> 6.50. Factor
+ * 0.42 lands pop 601 at 6.70 (+7.2% vs pop 600) and every adjacent step
+ * across 550-800 within +/-9% -- see task-5-report.md fix round 5 for the
+ * full sweep table.
  */
 export const CITY_TEXTURE_SCALE = 0.6;
 export const CITY_TEXTURE_TARGET = 14.9;
 /**
  * Multiplier applied to the city-texture curve immediately above
  * `ROW_HOUSING_MIN_POPULATION`, unwinding linearly (in log yield) to 1.0 at
- * `ROW_ONSET_BLEND_POPULATION`. Fitted so the mean building area at pop 601
- * matches pop 600's: whole lots carry ~1.44x the area the rectangle leaf
- * kept at the same grid, so the grid has to come in by the reciprocal.
+ * `ROW_ONSET_BLEND_POPULATION`. Fitted (fix round 5) so the pooled mean
+ * ordinary-building area of the full unwalled settlement at pop 601 sits
+ * within a few percent of pop 600's -- the row-housing leaf keeps whole
+ * lots, so the grid has to come in by roughly the lot/rectangle area ratio
+ * for the fabric to read continuously across the boundary.
  */
-export const ROW_ONSET_TEXTURE_FACTOR = 0.60;
+export const ROW_ONSET_TEXTURE_FACTOR = 0.42;
 /**
  * Population at which the row-onset ramp is fully unwound. Chosen as the
  * lowest population any pinned calibration anchor or test sits on (the
