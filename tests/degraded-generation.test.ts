@@ -71,13 +71,16 @@ describe('citadel fallback via staged retries', () => {
   // population, moving which seeds exhaust the citadel-compactness retry
   // loop yet again — seed 180 no longer drops citadel at pop 170. Swept
   // seeds 1-500 and re-pinned to seed 43, which still exhausts the loop.
-  it('drops citadel via fallback instead of throwing (seed 43, pop=170)', () => {
+  // Task 9: seed 43 stopped exhausting it. The MECHANISM was verified first,
+  // not just the pin — swept seeds 1-500 at pop 170 with citadel: 101 seeds
+  // still take the fallback, 0 throw, 500 generate. Re-pinned to seed 44.
+  it('drops citadel via fallback instead of throwing (seed 44, pop=170)', () => {
     const result = generateFromBurg(burg({
-      name: 'S43',
+      name: 'S44',
       population: 170,
       citadel: true,
       walls: false,
-    }), { seed: 43 });
+    }), { seed: 44 });
     expect(result.model.degradedFlags.has('citadel')).toBe(true);
     expect(result.model.citadel).toBeNull();
   });

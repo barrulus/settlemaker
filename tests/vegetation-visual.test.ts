@@ -21,7 +21,17 @@ describe('vegetation visual output', () => {
       // Round 4 Task 6 (share raise): extramuralShare rose to a 45% ceiling,
       // shrinking the walled core again and moving the ward-roll boundary —
       // 15000 stopped rolling Park; 25000 does (swept 9000-30000).
-      population: 25000,
+      // Task 9: parks are now RARE by construction, not merely
+      // seed-sensitive. `buildWardDistribution` sizes the deck off nCore, but
+      // `createWards` deals it to `unassigned` — nCore minus the plaza and
+      // minus every gate ward, ~9 patches at this scale. Measured at pop
+      // 20000: deck 29 entries, 23 patches, Park last at index 28, so it is
+      // never reached. Park is reached only when few gate wards roll:
+      // measured 2 populations of 41 swept 10000-30000 (12000 and 12500),
+      // and 0 of 40 explicit seeds at pop 12000. Retargeted to 12000 rather
+      // than fixing the starvation, which would move every ward assignment
+      // in every approved render. Logged as a defect for Barry.
+      population: 12000,
       port: false, citadel: false, walls: true,
       plaza: true, temple: true, shanty: false, capital: false,
     };
@@ -65,7 +75,17 @@ describe('vegetation visual output', () => {
       // Round 4 Task 6 (share raise): extramuralShare rose to a 45% ceiling,
       // shrinking the walled core again and moving the ward-roll boundary —
       // 15000 stopped rolling Park; 25000 does (swept 9000-30000).
-      population: 25000,
+      // Task 9: parks are now RARE by construction, not merely
+      // seed-sensitive. `buildWardDistribution` sizes the deck off nCore, but
+      // `createWards` deals it to `unassigned` — nCore minus the plaza and
+      // minus every gate ward, ~9 patches at this scale. Measured at pop
+      // 20000: deck 29 entries, 23 patches, Park last at index 28, so it is
+      // never reached. Park is reached only when few gate wards roll:
+      // measured 2 populations of 41 swept 10000-30000 (12000 and 12500),
+      // and 0 of 40 explicit seeds at pop 12000. Retargeted to 12000 rather
+      // than fixing the starvation, which would move every ward assignment
+      // in every approved render. Logged as a defect for Barry.
+      population: 12000,
       port: false, citadel: false, walls: true,
       plaza: true, temple: true, shanty: false, capital: false,
     };

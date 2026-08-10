@@ -92,16 +92,18 @@ describe('zoning', () => {
   }, 20000);
 
   it('emits satellites only above the population threshold', () => {
-    // Three roads, not two: whether the budget ever reaches out past the
-    // ribbons depends on how many candidate patches the skirt can absorb
-    // first, which varies with the core radius the shape field happens to
-    // produce. metropolis([0, 180]) at seed 5 draws an unusually small core,
-    // so its skirt alone holds all 181 sprawl patches and nothing is left to
-    // claim a satellite bump. The threshold gate itself is what this test is
-    // about, and the negative half below is the half that can regress
-    // silently.
-    const big = generateFromBurg(metropolis([0, 120, 240]), { seed: 5 });
-    const small = generateFromBurg({ ...metropolis([0, 120, 240]), population: 12000 }, { seed: 5 });
+    // One road, not three: whether the budget ever reaches out past the
+    // ribbons depends on how many candidate patches the skirt absorbs first,
+    // which varies with the core radius the shape field happens to produce.
+    // Satellites are a thin tail even where they work — swept at pop 250000
+    // over seeds 1-8, three roads emit them on 2 seeds of 8, two roads on 2,
+    // four roads on none, and ONE road on 8 of 8 (1-3 bumps), because a
+    // single bearing concentrates the whole extramural budget on one axis.
+    // The threshold gate is what this test is about, so it samples where the
+    // mechanism is reliable rather than where it is marginal; the negative
+    // half below is the half that can regress silently.
+    const big = generateFromBurg(metropolis([90]), { seed: 5 });
+    const small = generateFromBurg({ ...metropolis([90]), population: 12000 }, { seed: 5 });
     expect(big.model.patches.some(p => p.zone === 'satellite')).toBe(true);
     expect(small.model.patches.some(p => p.zone === 'satellite')).toBe(false);
   }, 20000);

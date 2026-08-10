@@ -46,7 +46,12 @@ describe('fidelity round 4: probe path', () => {
     // same {350, 4200, 20000} x seeds 1-20 grid (11 of the 60 still diverge)
     // and re-pinned to seed 1 at pop 350 (measured: probe ~35.735, full
     // ~36.758).
-    const params = mapToGenerationParams(aldford(350), 1);
+    // Task 9: seed 1 at pop 350 no longer diverges either. Re-swept the same
+    // grid — 2 of the 60 still diverge, both at pop 20000 (seeds 11 and 19),
+    // so the retry path is rarer but intact. Re-pinned to seed 19 at pop
+    // 20000, the larger of the two (probe ~63.475, full ~70.633, an 11%
+    // divergence against seed 11's 2.5%).
+    const params = mapToGenerationParams(aldford(20000), 19);
     const probe = new Model({ ...params, coastlineGeometry: undefined, harbourSize: undefined });
     const probeRadius = probe.probeWallRadius();
     const full = new Model({ ...params, coastlineGeometry: undefined, harbourSize: undefined }).generate();
@@ -58,9 +63,9 @@ describe('fidelity round 4: probe path', () => {
     expect(fullRadius).toBeGreaterThan(0);
     // Not equal within 0.5 units — i.e. the divergence is real and not noise.
     expect(Math.abs(probeRadius - fullRadius)).toBeGreaterThan(0.5);
-    // Pin the measured values (reproduced locally: probe ~36.036, full ~38.121).
-    expect(probeRadius).toBeCloseTo(35.73475401060169, 3);
-    expect(fullRadius).toBeCloseTo(36.75822559298853, 3);
+    // Pin the measured values.
+    expect(probeRadius).toBeCloseTo(63.474896, 3);
+    expect(fullRadius).toBeCloseTo(70.632921, 3);
   });
 
   it('generateFromBurg output is unchanged for an inland burg (probe swap is invisible)', () => {
@@ -116,9 +121,18 @@ describe('fidelity round 4: probe path', () => {
     // svg.length 52925, 142 patches, 28 wards with geometry, 8 suburb
     // patches of which 4 are non-GateWard — real corridor sprawl, up from 3
     // (measured locally).
+    // Re-pinned for round-cores-faubourgs Tasks 1-8, all eight of whose
+    // render gates Barry approved (round cores, demand-sized walls, row
+    // housing, per-route faubourg weights, shoreline wall circuits, piers,
+    // plaza ring). This burg is a pop-1400 inland town in the same regime as
+    // the approved pop1200 ladder cell. Verified non-degenerate and
+    // deterministic (two runs byte-identical): viewBox "-69.0 -70.0 138.3
+    // 151.0", svg.length 43501, 323 patches, 20 wards with geometry, 13 core
+    // patches, 6 suburb patches of which 2 are non-GateWard (measured
+    // locally).
     const { svg } = generateFromBurg(aldford(1400), { seed: 9 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('8f904847ecda2cdaabcf42228e14c2444fb64d019a90da2a1430b348c10b6948');
+    expect(sha256(svg)).toBe('8646969169209ed9133f2d0b6fbdbbdcd3bd5e2964cd1578fc4781ffb93c30b6');
   });
 
   it('pins current village output at pop 800 (not a base-equality guarantee)', () => {
@@ -176,9 +190,16 @@ describe('fidelity round 4: probe path', () => {
     // svg.length 42535, 129 patches, 22 wards with geometry, 13 core
     // patches, 7 suburb patches of which 3 are non-GateWard — real corridor
     // sprawl, up from 1 (measured locally).
+    // Re-pinned for round-cores-faubourgs Tasks 1-8 (same approved gates as
+    // the pop-1400 hash above; this is a village in the regime of the
+    // approved pop300 ladder cell). Verified non-degenerate and
+    // deterministic (two runs byte-identical): viewBox "-71.4 -67.9 137.6
+    // 144.8", svg.length 35428, 327 patches, 21 wards with geometry, 13 core
+    // patches, 7 suburb patches of which 1 is non-GateWard (measured
+    // locally).
     const { svg } = generateFromBurg(aldford(800), { seed: 1 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('4f2759e79320e83edf63371efea4fd973a417f9d5ab59b515c5f6bff8f8df2fb');
+    expect(sha256(svg)).toBe('5163acc4d6ace47b5d919ca2e1b77ec23f770614c25f594d8a1060e46b3d10fc');
   });
 });
 
