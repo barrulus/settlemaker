@@ -45,6 +45,11 @@ const cells: Cell[] = [
   { label: 'pop 4 000 · two roads', note: 'opposed roads — should elongate', burg: burg({ name: 'Ribbonford', population: 4000, roadBearings: [90, 270] }), seed: 3 },
   { label: 'pop 4 000 · unwalled', note: 'walls: false — no gate wards to muddy the picture', burg: burg({ name: 'Openton', population: 4000, walls: false }), seed: 3 },
   { label: 'pop 20 000 · port', note: 'oceanBearing 90 — water must suppress that side', burg: burg({ name: 'Saltmouth', population: 20000, port: true, oceanBearing: 90, harbourSize: 'large' }), seed: 3 },
+  { label: 'pop 4 000 · rich routes', note: 'through flat road N, trail SE, ridge road SW — growth should favour N', burg: burg({ name: 'Datadriven', population: 4000, roadBearings: [
+    { bearing_deg: 0, group: 'roads', through: true, relief: 'flat' },
+    { bearing_deg: 120, group: 'trails' },
+    { bearing_deg: 240, group: 'roads', relief: 'ridge' },
+  ] as any }), seed: 3 },
 ];
 
 async function main(): Promise<void> {
