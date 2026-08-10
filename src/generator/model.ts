@@ -920,6 +920,16 @@ export class Model {
       const harbourGate = wallVerts.find(v => best.shape.contains(v));
       if (harbourGate) {
         if (!this.gates.includes(harbourGate)) this.gates.push(harbourGate);
+        // Also register on the wall's own gate list. `CurtainWall.buildTowers`
+        // and the SVG/GeoJSON wall pass (`wallFeature`) both read
+        // `border.gates`/`wall.gates`, not `model.gates` — without this the
+        // harbour vertex is a bare wall corner: no gate bar, and (until the
+        // post-placeHarbour re-tower in `build()`) a tower sealing the quay
+        // shut. Deliberately NOT excluded from `buildStreets`' outward-road
+        // pass by omission anymore; see the sea-only-route guard there
+        // instead, which is more precise (it also protects a caller-supplied
+        // land gate that happens to coincide with the harbour vertex).
+        if (!this.border.gates.includes(harbourGate)) this.border.gates.push(harbourGate);
         // Tag it so the GeoJSON output can render it as a harbour-kind gate.
         // The vertex may ALREADY be a road gate (the landward approach and the
         // quay can meet at the same corner of the circuit) — in that case the
@@ -969,8 +979,16 @@ export class Model {
         this.streets.push(new Polygon(street));
 
         if (this.border!.gates.includes(gate)) {
-          const hasRoute = (this.border!.gateMeta.get(gate)?.routes.length ?? 0) > 0;
-          if (!routeAware || hasRoute) {
+          const routes = this.border!.gateMeta.get(gate)?.routes ?? [];
+          const hasRoute = routes.length > 0;
+          // A gate whose ONLY route is the harbour's sea route (`placeHarbour`)
+          // exists purely so the wall renders a gate mark on the quay — it
+          // must never grow an outward LAND road toward the water. A gate
+          // that mixes a sea route with a land route (the quay happened to
+          // land on an existing road gate) keeps building its land road as
+          // normal: only the all-sea case is sea-only.
+          const seaOnly = routes.length > 0 && routes.every(r => r.kind === 'sea');
+          if (!seaOnly && (!routeAware || hasRoute)) {
             const dir = gate.norm(1000);
             let start: Point | null = null;
             let dist = Infinity;

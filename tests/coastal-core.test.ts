@@ -87,6 +87,15 @@ describe('coastal wall is a closed shoreline circuit', () => {
         expect(m.border!.gateMeta.get(gate!)?.kind).toBe('sea');
         // The quay itself stays OUTSIDE the walled core.
         expect(m.inner.includes(m.harbour!)).toBe(false);
+        // Pin the RENDERED contract, not just the model-level bookkeeping:
+        // `buildTowers` and the SVG/GeoJSON wall pass both read
+        // `wall.gates`/`wall.towers` (the CurtainWall's own fields), not
+        // `model.gates`. A gate that is only on `model.gates` renders as a
+        // bare wall corner — towered shut, no gate mark on the quay. This is
+        // the fix-round-1 regression test for that: the harbour vertex must
+        // be gate-marked on the wall itself, and must never carry a tower.
+        expect(m.wall!.gates.includes(gate!)).toBe(true);
+        expect(m.wall!.towers.includes(gate!)).toBe(false);
       }
     }
   });
