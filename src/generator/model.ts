@@ -1530,7 +1530,12 @@ export class Model {
     // (the inner ones become the core), so at base texture scale they render
     // nearly empty — measured 4-6 buildings per patch against the core's 20.
     // That was tolerable while `extramuralShare` was ~20% and the core still
-    // carried the settlement; at ~38% it is not. Measured at pop 4200 once
+    // carried the settlement; at ~38% it is not. (The 20-45% curve that
+    // produced that ~38% was walked back to 10-20% by the owner decision of
+    // 2026-08-09 — see `extramuralShare` — so the measurements below are the
+    // history that motivated this pass, not today's share. The pass still
+    // earns its keep: sprawl patches are the mesh's large outer cells
+    // whatever share reaches them.) Measured at pop 4200 once
     // the share rose: 12 sprawl patches produced 55 buildings against a
     // ~187 share, and the settlement rendered at 60% of its population
     // target, below the 65% floor `refineDensity` exists to defend. The core
@@ -1738,7 +1743,9 @@ export class Model {
     // fewer buildings than their share of the budget. Handing them the share
     // anyway strands the difference — nobody builds it, and the settlement
     // renders below its population target. Measured at pop 4200 once
-    // `extramuralShare` rose to ~38%: the non-core group was given 187 of a
+    // `extramuralShare` rose to ~38% (a curve since walked back to 10-20%,
+    // see that function — the measurement is the history that motivated this
+    // clamp, not today's share): the non-core group was given 187 of a
     // 487 budget and produced 78, while the core was trimmed from its natural
     // 393 down to its 300 share, for a total of 292 (60% of target, against a
     // 65% floor). Give the non-core group only what it can actually use and

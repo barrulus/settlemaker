@@ -10,6 +10,17 @@ export class Park extends Ward {
     this.type = WardType.Park;
   }
 
+  /**
+   * Intentionally unscaled: the grove cuts use the bare `ALLEY` constant,
+   * not `ALLEY * insetScale`. `edgeInsetScale` narrows STREETS as a
+   * settlement grows so its housing fabric can close up; a park's paths are
+   * scenery, and thinning them with population makes the groves merge into
+   * one blob. `getCityBlock` above (shared with every ward) does scale, so
+   * the park still sets back from the street like its neighbours -- only
+   * the internal cuts are fixed. Reviewed and left as-is at the end of
+   * round-cores-faubourgs; the park renders were part of the approved
+   * gates.
+   */
   override createGeometry(): void {
     const block = this.getCityBlock();
     this.geometry = block.compactness >= 0.7

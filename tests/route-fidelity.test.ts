@@ -27,6 +27,15 @@ describe('route-count fidelity', () => {
     expect(model.roads.length).toBe(3);
   });
 
+  // Annotated rather than re-targeted (round-cores-faubourgs task 5 ledger).
+  // The reuse check in `buildGates` compares each route's target bearing
+  // against the bearing of an already-PLACED gate, not against the other
+  // route's target — see the comment there. With 1 degree between these two
+  // routes, reuse therefore depends on where the first gate physically
+  // landed, which is a property of the mesh. Swept the fixture over five
+  // name-seeds at pops 200-2500: pop 200 fails 5 of 5, pops 300 and 400 pass
+  // 5 of 5, and every pop from 500 up passes 4 of 5. Pop 400 is already in
+  // the most reliable band there is, so it stays.
   it('two clustered routes share one gate and one road, both ids echoed', () => {
     const { model } = generateFromBurg({
       ...base,

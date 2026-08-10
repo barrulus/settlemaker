@@ -195,6 +195,15 @@ export class CurtainWall {
       for (const { entry, angle: targetAngle } of entries) {
         // 1. If a gate is already placed within the angular cluster window,
         //    attach this route to that gate instead of consuming a new vertex.
+        //
+        //    Note this compares PLACED bearing against TARGET bearing, not
+        //    target against target. That is deliberate — the question is
+        //    "does a gate that already exists serve this route well enough"
+        //    — but it makes clustering depend on where the first gate
+        //    physically landed on the wall, so two routes a degree apart are
+        //    not guaranteed to share a gate on every mesh.
+        //    `tests/route-fidelity.test.ts` carries the sweep that bounds
+        //    how often that bites.
         let reuseGate: Point | null = null;
         let reuseDelta = Infinity;
         for (const placed of this.gates) {

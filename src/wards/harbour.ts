@@ -109,6 +109,13 @@ export class Harbour extends Ward {
     const gridChaos = 0.15 + rng.float() * 0.15; // 0.15-0.30
     const sizeChaos = 0.3;
 
+    // Intentionally left on the historical leaf and the unscaled `ALLEY`
+    // default (no `fillLots`, no `insetScale`): warehouses are detached
+    // sheds with gaps for carts between them, not the contiguous row housing
+    // `fillLots` produces, and the lanes between them do not narrow as the
+    // city grows. Reviewed and left as-is at the end of
+    // round-cores-faubourgs; the four port cells were part of the approved
+    // render gates.
     this.geometry = createAlleys(block, this.rng, minSq, gridChaos, sizeChaos, 0.02);
   }
 

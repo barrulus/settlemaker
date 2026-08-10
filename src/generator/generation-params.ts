@@ -293,6 +293,20 @@ export function buildingsPerCorePatch(population: number): number {
  *   pop  1200 ->  7.67 (was 11.39)           pop 70000 -> 8.17 (was 21.28)
  *   pop  4000 ->  8.59 (was 16.87)
  *
+ * Re-measured at the end of round-cores-faubourgs (task 9, 2026-08-10), same
+ * method, after tasks 6-8 (per-route faubourg weights, shoreline wall
+ * circuits, piers, plaza ring) had all landed:
+ *   pop   300 -> 8.25 (table 10.92)   pop 10000 -> 8.04 (table  9.03)
+ *   pop   600 -> 8.17 (table  9.86)   pop 20000 -> 7.70 (table  8.17)
+ *   pop  1200 -> 8.36 (table  7.67)   pop 70000 -> 7.63 (table  8.17)
+ *   pop  4000 -> 8.48 (table  8.59)
+ * The table is DELIBERATELY not moved to those figures. It is a demand
+ * divisor feeding `patchAreaForDemand`, so editing it resizes the walled
+ * core at every population and therefore changes every render Barry
+ * approved at the five task-4-to-8 gates. The drift is recorded here so the
+ * next fixed-point iteration starts from measurements rather than from the
+ * older ones above; it needs its own render gate.
+ *
  * The 20000 and 70000 anchors are deliberately EQUAL. Both populations are
  * cap-bound (`MAX_PATCHES`), so `tests/fidelity-round4.test.ts` pins their
  * walled radius as non-increasing; a 0.4% difference between two
