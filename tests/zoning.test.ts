@@ -232,33 +232,97 @@ describe('zoning', () => {
     }
   }, 20000);
 
-  test('sprawl concentrates on high-weight approaches', () => {
-    const { model } = generateFromBurg({
-      name: 'Asym', population: 4000, port: false, citadel: false, walls: true,
-      plaza: true, temple: false, shanty: false, capital: false,
-      roadBearings: [
-        { bearing_deg: 0, group: 'roads', through: true, relief: 'flat' },
-        { bearing_deg: 120, group: 'trails' },
-        { bearing_deg: 240, group: 'roads', relief: 'ridge' },
-      ],
-    } as unknown as AzgaarBurgInput, { seed: 3 });
-    const sectorCount = (bearing: number) => model.patches.filter(p => {
+  // Shared angular-sector helper for the two tests below: counts extramural
+  // patches (suburb/satellite) whose centre falls within 45deg of `bearing`.
+  function sectorCount(model: ReturnType<typeof generateFromBurg>['model'], bearing: number): number {
+    return model.patches.filter(p => {
       if (p.zone !== 'suburb' && p.zone !== 'satellite') return false;
       const c = p.shape.center;
       const a = ((Math.atan2(c.x, -c.y) * 180 / Math.PI) + 360) % 360; // y-down compass
       const d = Math.abs(((a - bearing + 540) % 360) - 180);
       return d <= 45;
     }).length;
-    expect(sectorCount(0)).toBeGreaterThan(sectorCount(120));
-    expect(sectorCount(0)).toBeGreaterThan(sectorCount(240));
+  }
+
+  // Fixture with two swappable bearings (0 and 120) plus a fixed ridge anchor
+  // (240). `strongAt` says which of 0/120 carries the strong data (roads +
+  // through + flat); the other carries trail data instead.
+  function asymBurg(strongAt: 0 | 120): AzgaarBurgInput {
+    const strong = { group: 'roads', through: true, relief: 'flat' };
+    const weak = { group: 'trails' };
+    return {
+      name: 'Asym', population: 4000, port: false, citadel: false, walls: true,
+      plaza: true, temple: false, shanty: false, capital: false,
+      roadBearings: [
+        { bearing_deg: 0, ...(strongAt === 0 ? strong : weak) },
+        { bearing_deg: 120, ...(strongAt === 120 ? strong : weak) },
+        { bearing_deg: 240, group: 'roads', relief: 'ridge' },
+      ],
+    } as unknown as AzgaarBurgInput;
+  }
+
+  // SWAP-PINNED (Task 6 fix round 1, Medium finding): a test that only
+  // asserts an asymmetry exists (without tying it to *which* approach is
+  // weighted) can pass on incidental seeded asymmetry even with route
+  // weighting neutralized (rawRouteWeight forced to 1.0, rank decay
+  // removed) — that happened at the brief's original fixture/seed. This
+  // version generates the same burg twice with the strong route data on
+  // opposite bearings (0 vs 120) and asserts the dominant sector FOLLOWS
+  // the data both times, summed over three seeds for a comfortable margin
+  // (determinism makes the sum stable). This is weight-dependent by
+  // construction: it cannot pass by an accident of geometry alone, because
+  // the geometry (bearings, seeds) is identical between the two runs — only
+  // which bearing carries the strong data changes.
+  test('sprawl concentrates on high-weight approaches (swap-pinned)', () => {
+    const seeds = [1, 9, 20];
+    const sumSectors = (strongAt: 0 | 120) => {
+      const totals = { c0: 0, c120: 0, c240: 0 };
+      for (const seed of seeds) {
+        const { model } = generateFromBurg(asymBurg(strongAt), { seed });
+        totals.c0 += sectorCount(model, 0);
+        totals.c120 += sectorCount(model, 120);
+        totals.c240 += sectorCount(model, 240);
+      }
+      return totals;
+    };
+
+    const strongAt0 = sumSectors(0);
+    expect(strongAt0.c0).toBeGreaterThan(strongAt0.c120);
+    expect(strongAt0.c0).toBeGreaterThan(strongAt0.c240);
+
+    const strongAt120 = sumSectors(120);
+    expect(strongAt120.c120).toBeGreaterThan(strongAt120.c0);
+    expect(strongAt120.c120).toBeGreaterThan(strongAt120.c240);
+
+    // The winner must actually change bearings between the two runs.
+    expect(strongAt0.c0).not.toBe(strongAt120.c0);
   });
 
-  test('bare-number bearings still sprawl, asymmetrically (seeded fallback)', () => {
-    const { model } = generateFromBurg({
-      name: 'Bare', population: 4000, port: false, citadel: false, walls: true,
-      plaza: true, temple: false, shanty: false, capital: false, roadBearings: [0, 120, 240],
-    }, { seed: 3 });
-    const sprawl = model.patches.filter(p => p.zone === 'suburb' || p.zone === 'satellite');
-    expect(sprawl.length).toBeGreaterThan(0);
+  // Renamed from '... asymmetrically (seeded fallback)' (Task 6 fix round 1,
+  // Low finding): bare-number bearings carry no distinguishing route data at
+  // all (rawRouteWeight is 1.0 for all three), so any asymmetry here comes
+  // entirely from the seeded rank decay/jitter in routeWeights, not from
+  // which bearing is "chosen" — there's nothing to swap. A seed sweep found
+  // single-seed max/min sector ratios ranging from 1.0 (no asymmetry) to 4.0,
+  // too seed-marginal to pin a per-seed inequality robustly. Summed over
+  // three seeds it stabilizes (max/min = 2.75 at seeds 1/9/20), so the
+  // asymmetry claim is pinned here on the sum, while the weight-dependent,
+  // swap-falsifiable coverage lives in the test above.
+  test('bare-number bearings still sprawl, asymmetrically (seeded fallback, summed)', () => {
+    const seeds = [1, 9, 20];
+    const sums = [0, 0, 0];
+    for (const seed of seeds) {
+      const { model } = generateFromBurg({
+        name: 'Bare', population: 4000, port: false, citadel: false, walls: true,
+        plaza: true, temple: false, shanty: false, capital: false, roadBearings: [0, 120, 240],
+      }, { seed });
+      sums[0] += sectorCount(model, 0);
+      sums[1] += sectorCount(model, 120);
+      sums[2] += sectorCount(model, 240);
+    }
+    const max = Math.max(...sums);
+    const min = Math.min(...sums);
+    expect(min).toBeGreaterThan(0);
+    expect(max).toBeGreaterThanOrEqual(2 * min);
   });
 });
