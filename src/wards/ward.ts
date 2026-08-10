@@ -7,7 +7,7 @@ import { interpolate, scalar, distance2line } from '../geom/geom-utils.js';
 import { minBy } from '../utils/array-utils.js';
 import type { Model } from '../generator/model.js';
 import type { Patch } from '../generator/patch.js';
-import { edgeInsetScale } from '../generator/generation-params.js';
+import { edgeInsetScale, rowHousing, ROW_OUTSKIRTS_BITE } from '../generator/generation-params.js';
 
 export const MAIN_STREET = 2.0;
 export const REGULAR_STREET = 1.0;
@@ -71,6 +71,18 @@ export class Ward {
   }
 
   filterOutskirts(): void {
+    // How hard the outskirts thinning bites. 1.0 is the reference
+    // behaviour and stays for villages, where a ragged, thinning edge IS
+    // the look. A row-housed settlement is contiguous fabric by
+    // construction, and this filter runs on EVERY patch of an unwalled
+    // town (nothing is `isEnclosed` without a wall), so at full strength it
+    // shredded ~40% of a town's houses -- measured at the pop-1200 unwalled
+    // case `tests/density-target.test.ts` exercises: 103 core buildings
+    // against a 121 floor, with no budget trim involved at all. Softening
+    // it keeps the rows reading as rows at the edge and returns the census.
+    const bite = rowHousing(this.model.params.population)
+      ? ROW_OUTSKIRTS_BITE
+      : 1.0;
     const populatedEdges: Array<{
       x: number; y: number; dx: number; dy: number; d: number;
     }> = [];
@@ -137,7 +149,7 @@ export class Ward {
       }
       minDist /= p;
 
-      return this.rng.fuzzy(1) > minDist;
+      return this.rng.fuzzy(1) > minDist * bite;
     });
   }
 
@@ -278,7 +290,13 @@ function isDegenerate(p: Polygon): boolean {
   return p.compactness < 0.3;
 }
 
-/** Recursive alley-based building subdivision */
+/**
+ * Recursive alley-based building subdivision.
+ *
+ * `fillLots` selects the leaf policy — see `tryEmitBuilding`. Default
+ * `false` keeps the historical detached-rectangle leaf (villages, harbour
+ * warehouses); `true` is the watabou-faithful row-housing leaf.
+ */
 export function createAlleys(
   p: Polygon,
   rng: SeededRandom,
@@ -288,6 +306,8 @@ export function createAlleys(
   emptyProb: number = 0.04,
   split: boolean = true,
   alleyWidth: number = ALLEY,
+  fillLots: boolean = false,
+  maxLotSq: number = Infinity,
 ): Polygon[] {
   // Find longest edge
   let v: Point | null = null;
@@ -312,19 +332,19 @@ export function createAlleys(
   // Bisect returns a single polygon when it couldn't find two edge intersections —
   // recursing would loop on the same shape, so treat the input as a terminal leaf.
   if (halves.length === 1) {
-    tryEmitBuilding(p, rng, emptyProb, buildings);
+    tryEmitBuilding(p, rng, emptyProb, buildings, fillLots);
     return buildings;
   }
 
   for (const half of halves) {
-    if (half.square < minSq * Math.pow(2, 4 * sizeChaos * (rng.float() - 0.5))) {
-      tryEmitBuilding(half, rng, emptyProb, buildings);
+    if (half.square < Math.min(maxLotSq, minSq * Math.pow(2, 4 * sizeChaos * (rng.float() - 0.5)))) {
+      tryEmitBuilding(half, rng, emptyProb, buildings, fillLots);
     } else {
       buildings.push(
         ...createAlleys(
           half, rng, minSq, gridChaos, sizeChaos, emptyProb,
           half.square > minSq / (rng.float() * rng.float()),
-          alleyWidth,
+          alleyWidth, fillLots, maxLotSq,
         ),
       );
     }
@@ -333,14 +353,45 @@ export function createAlleys(
   return buildings;
 }
 
-/** Rectangularize, validate, and push a building if it survives the filter. */
+/**
+ * Emit one lot as a building, or drop it.
+ *
+ * Two leaf policies:
+ *
+ * - `fillLots === false` (villages, harbour warehouses): the historical
+ *   port behaviour — replace the lot with its largest inscribed rectangle.
+ *   That rectangle is centred on the lot's centroid, so the building pulls
+ *   away from every lot edge: measured over the walled core at pop
+ *   1200/4000/10000 it keeps only ~62% of the lot's area, and the ~11% of
+ *   lots whose rectangle comes back null or degenerate vanish entirely.
+ *   The result reads as detached units with random gaps — right for an airy
+ *   hamlet, wrong for a town.
+ *
+ * - `fillLots === true` (towns and cities): emit the lot itself, which is
+ *   what the Haxe reference's `Ward.createAlleys` leaf does — it pushes the
+ *   bisected half straight into `buildings`, with no rectangle step at all
+ *   (the reference tree is not vendored in this checkout, so this is stated
+ *   from the port's own divergence, measured above, not a file diff).
+ *   `bisect` already carved
+ *   `alleyWidth` out between siblings, so neighbouring lots share a lane of
+ *   precisely one alley — buildings line up into contiguous rows the way
+ *   watabou's do. `rectangularize` stays on as a SALVAGE for lots that are
+ *   genuinely unusable as footprints (thin wedges, near-collinear 4-gons),
+ *   so the shape filter this port added is kept where it earns its keep
+ *   instead of being paid on every lot.
+ */
 function tryEmitBuilding(
   poly: Polygon,
   rng: SeededRandom,
   emptyProb: number,
   out: Polygon[],
+  fillLots: boolean = false,
 ): void {
   if (rng.bool(emptyProb)) return;
+  if (fillLots && !isDegenerate(poly)) {
+    out.push(poly);
+    return;
+  }
   const rect = rectangularize(poly);
   if (rect === null || isDegenerate(rect)) return;
   out.push(rect);

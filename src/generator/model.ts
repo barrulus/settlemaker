@@ -11,7 +11,7 @@ import { CurtainWall } from './curtain-wall.js';
 import { Topology } from './topology.js';
 import { pointInPolygon } from '../geom/point-in-polygon.js';
 import type { GenerationParams, DegradedFlag } from './generation-params.js';
-import { densityCurve, perPatchDensity, baseScaleForYield, patchAreaForDemand } from './generation-params.js';
+import { densityCurve, perPatchDensity, baseScaleForYield, patchAreaForDemand, rowHousing, CITY_TEXTURE_SCALE } from './generation-params.js';
 import { WardType } from '../types/interfaces.js';
 import type { Street } from '../types/interfaces.js';
 
@@ -32,6 +32,11 @@ import { CraftsmenWard } from '../wards/craftsmen-ward.js';
 import { buildWardDistribution, type WardConstructor } from '../wards/ward-distribution.js';
 
 const MAX_ATTEMPTS = 20;
+/**
+ * `optimizeJunctions`' vertex-merge distance as a fraction of the mesh cell
+ * size, for row-housed settlements — see that method's doc comment.
+ */
+const JUNCTION_MERGE_FRACTION = 0.30;
 const MIN_POPULATION_FOR_WALLS = 150;
 
 /** Golden angle: consecutive seed points never align into spokes. */
@@ -166,6 +171,13 @@ export class Model {
    * corrective pass.
    */
   private readonly baseMinSqScale: number;
+
+  /**
+   * Target mesh cell edge (`sqrt(patchAreaForDemand)`) for this settlement,
+   * set by `buildPatches`. Read by `optimizeJunctions` so its merge
+   * threshold scales with the fabric instead of being a flat constant.
+   */
+  private cellSize = 0;
 
   /**
    * Ordinary-building count immediately before `applyBuildingBudget`'s trim
@@ -370,20 +382,19 @@ export class Model {
     // is derived FROM that area (inverting `s0 = coreR * sqrt(pi / nCore)`),
     // not the other way around.
     //
-    // Fix round 1 found `getCityBlock`'s per-edge street/alley inset
-    // (`ward.ts`: MAIN_STREET/REGULAR_STREET/ALLEY) was a FIXED absolute
-    // cost per patch edge, eating a growing fraction of a shrinking patch —
-    // capping achievable coverage regardless of `targetCoverage`. Fix round
-    // 2 (2026-08-09), owner decision: scaled those insets down with
-    // population instead (`edgeInsetScale`, `ward.ts`), which raised the
-    // ceiling enough for `targetCoverage` to rise past its old flat 0.46 —
-    // see `targetCoverage`'s doc comment for the measured sweep, the sharp
-    // test-floor cliff that bounded how far it could go (0.55, not the
-    // 0.8-1.0 that would be needed for a dramatic shrink), and the deeper
-    // `createAlleys`/`minSqScale` ceiling that replaced the insets as the
-    // binding constraint. See the fix-round-2 report for the full
-    // before/after coverage and wall-radius table.
+    // Fix round 2 scaled `ward.ts`'s per-edge insets with population
+    // (`edgeInsetScale`) so a fixed absolute street width stopped eating a
+    // growing share of a shrinking patch. Fix round 3 (2026-08-10) found
+    // the term that actually governs this radius: core area is roughly
+    // `buildingBudget * meanBuildingArea / targetCoverage`, so with the
+    // census fixed, only house size and coverage can move the wall. Both
+    // moved -- see `baseScaleForYield` (city texture is now finer than
+    // village texture, not coarser) and `tryEmitBuilding` in `ward.ts`
+    // (lots are emitted whole instead of shrunk to an inscribed rectangle).
+    // Measured, seeds 1-5, pop 1200/4000/10000: radius 39.60/55.33/78.87 ->
+    // 28.95/39.98/56.92, coverage 0.433/0.507/0.523 -> 0.578/0.695/0.689.
     const s0 = Math.sqrt(patchAreaForDemand(this.params.population));
+    this.cellSize = s0;
     const coreR = s0 * Math.sqrt(this.nCore / Math.PI);
     // Classify water against the estimated core radius before core
     // selection runs, so the core (and later the wall) never straddles the
@@ -610,6 +621,21 @@ export class Model {
 
   // Phase 2: Merge close junctions
   private optimizeJunctions(): void {
+    // Junction merge threshold. The Haxe reference's flat 8 units is a
+    // fraction of ITS mesh cell — with `patchAreaForDemand` now sizing
+    // cells from building demand, that fraction moves with population, and
+    // round-cores-faubourgs task 5 fix round 3 shrank the city cell far
+    // enough (s0 18.3 -> 12.2 at pop 1200) that a flat 8 collapsed roughly
+    // half of every patch edge, producing shapes the curtain wall could not
+    // enclose ("Bad walled area shape" -- measured 2 of 5 seeds losing
+    // their walls outright at pop 1200, against 0 of 5 before). Row-housed
+    // settlements therefore merge at a FRACTION of their own cell size,
+    // which is what the constant always meant; villages keep the literal 8
+    // (their cell size is unchanged, and their output must stay byte-
+    // stable).
+    const mergeDist = rowHousing(this.params.population)
+      ? JUNCTION_MERGE_FRACTION * this.cellSize
+      : 8;
     const patchesToOptimize = this.citadel === null
       ? this.inner
       : this.inner.concat([this.citadel]);
@@ -621,7 +647,7 @@ export class Model {
         const v0 = w.shape.vertices[index];
         const v1 = w.shape.vertices[(index + 1) % w.shape.length];
 
-        if (v0 !== v1 && Point.distance(v0, v1) < 8) {
+        if (v0 !== v1 && Point.distance(v0, v1) < mergeDist) {
           for (const w1 of this.patchByVertex(v1)) {
             if (w1 !== w) {
               const vIdx = w1.shape.indexOf(v1);
@@ -1353,7 +1379,22 @@ export class Model {
    */
   private densifyGroup(select: (p: Patch) => boolean, count: number, target: number): void {
     if (count === 0 || target <= 0 || count >= target * 0.65) return;
-    this.minSqScale = this.baseMinSqScale * Math.max(0.25, count / target);
+    // Floor: the relative `0.25 * baseMinSqScale` was calibrated when
+    // `baseScaleForYield` returned 9.0 at city texture, so a quarter of it
+    // was still a coarse block. Round-cores-faubourgs task 5 fix round 3
+    // re-fitted that anchor DOWN to `CITY_TEXTURE_SCALE` (house-sized lots),
+    // which turned the same quarter into 0.15 — measured at pop 70000, that
+    // shredded the core into 2.3-unit slivers at 0.18 coverage, because a
+    // cap-bound city's core can never reach the full household target
+    // however fine its texture gets (MAX_PATCHES governs, not block size),
+    // so this pass saturates at its floor by construction. Row-housed
+    // settlements therefore floor at the absolute city texture instead:
+    // never finer than the grain the fabric was fitted for. Villages keep
+    // the historical relative floor untouched.
+    const floor = rowHousing(this.params.population)
+      ? CITY_TEXTURE_SCALE
+      : this.baseMinSqScale * 0.25;
+    this.minSqScale = Math.max(floor, this.baseMinSqScale * (count / target));
     for (const patch of this.patches) {
       if (!select(patch)) continue;
       if (patch.ward instanceof CommonWard && !this.waterbody.includes(patch)) {

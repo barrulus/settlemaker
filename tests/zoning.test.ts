@@ -121,6 +121,14 @@ describe('zoning', () => {
     // minimum -- it still proves a genuine ring exists (assignSprawl's
     // coverage preference is exercised, not just a handful of patches
     // clustered at one bearing), just a thinner one than before.
+    // Round-cores-faubourgs task 5 fix round 3 (2026-08-10): the walled core
+    // is now ~27% tighter at this population, so the edge-relative band this
+    // measures (edge, 2.2 * edge] is correspondingly narrower in absolute
+    // terms and catches less of the same extramural material. Re-measured
+    // over the identical 12 seed/road combinations: 7-18 bins (median 14) --
+    // one combination ([0,120,240], seed 1) lands at 7, the rest at 8-18.
+    // Bar lowered to 6, again below the measured minimum, for the same
+    // reason as before: this asserts a ring exists, not how thick it is.
     for (const roadBearings of [[0, 120, 240], [0, 180], []]) {
       for (const seed of [1, 3, 5, 7]) {
         const burg: AzgaarBurgInput = {
@@ -128,7 +136,7 @@ describe('zoning', () => {
           plaza: true, temple: false, shanty: false, capital: false, roadBearings,
         };
         const { model } = generateFromBurg(burg, { seed });
-        expect(edgeBandCoverage(model)).toBeGreaterThanOrEqual(8);
+        expect(edgeBandCoverage(model)).toBeGreaterThanOrEqual(6);
       }
     }
   }, 20000);
