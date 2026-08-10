@@ -57,6 +57,14 @@ const GATE_CLUSTER_DEG = 20;
 
 export class CurtainWall {
   shape: Polygon;
+  /**
+   * Per-edge build flag, parallel to `shape.vertices` (segment `i` runs from
+   * vertex `i` to vertex `i+1`). A curtain wall is a CLOSED circuit — every
+   * segment is built, including the seaward run along the waterline
+   * (spec §6: Saint-Malo). The flag is kept because consumers read it (block
+   * insets, ward rating, polyline emission) and because a future feature may
+   * legitimately break a stretch; nothing in the generator clears it today.
+   */
   segments: boolean[];
   gates: Point[];
   towers: Point[];
@@ -296,22 +304,6 @@ export class CurtainWall {
         meta.matchDeltaDeg = primary.matchDeltaDeg;
       }
       this.gateMeta.set(gate, meta);
-    }
-  }
-
-  /** Mark wall segments adjacent to water patches as inactive (no wall on waterfront). */
-  markWaterfrontSegments(waterPatches: Patch[]): void {
-    const len = this.shape.length;
-    for (let i = 0; i < len; i++) {
-      const v0 = this.shape.vertices[i];
-      const v1 = this.shape.vertices[(i + 1) % len];
-      // The outer patch shares the reverse edge (v1→v0) with this wall segment
-      for (const wp of waterPatches) {
-        if (wp.shape.findEdge(v1, v0) !== -1) {
-          this.segments[i] = false;
-          break;
-        }
-      }
     }
   }
 

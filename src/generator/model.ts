@@ -343,6 +343,12 @@ export class Model {
     this.buildWalls();
     this.classifyWater();
     this.placeHarbour();
+    // `buildWalls` towered the circuit against the gate set as it stood then;
+    // `classifyWater` drops waterfront road gates and `placeHarbour` adds the
+    // sea gate, so a coastal wall's gate set is only final here. Re-tower so
+    // a demoted gate gets its tower back and the harbour gate doesn't get one.
+    // Deterministic and gate-driven — a no-op when nothing moved the gates.
+    if (this.wall !== null && this.waterbody.length > 0) this.wall.buildTowers();
     this.buildStreets();
     this.createWards();
     this.buildGeometry();
@@ -824,12 +830,10 @@ export class Model {
       if (isWater(patch)) this.waterbody.push(patch);
     }
 
-    // Mark wall segments facing water as inactive
-    if (this.wall !== null && this.waterbody.length > 0) {
-      this.wall.markWaterfrontSegments(this.waterbody);
-      // Rebuild towers since segments changed
-      this.wall.buildTowers();
-    }
+    // The wall is NOT opened where it faces water. A walled ocean settlement
+    // carries its curtain along the water's edge too (spec §6, Saint-Malo):
+    // the circuit stays closed, towers and all, and the only way through to
+    // the water is the harbour gate placed by `placeHarbour`.
 
     // Remove border gates on the waterfront so no streets/roads extend into water
     if (this.waterbody.length > 0) {
@@ -914,21 +918,29 @@ export class Model {
     if (this.border !== null) {
       const wallVerts = this.border.shape.vertices;
       const harbourGate = wallVerts.find(v => best.shape.contains(v));
-      if (harbourGate && !this.gates.includes(harbourGate)) {
-        this.gates.push(harbourGate);
+      if (harbourGate) {
+        if (!this.gates.includes(harbourGate)) this.gates.push(harbourGate);
         // Tag it so the GeoJSON output can render it as a harbour-kind gate.
+        // The vertex may ALREADY be a road gate (the landward approach and the
+        // quay can meet at the same corner of the circuit) — in that case the
+        // sea route is prepended to the existing routes rather than skipped,
+        // so the harbour is never left opening through an untagged road gate.
         const vertexIndex = wallVerts.indexOf(harbourGate);
         const bearingDeg = ((Math.atan2(harbourGate.x, -harbourGate.y) * 180 / Math.PI) % 360 + 360) % 360;
         const normalisedBearing = Math.round(bearingDeg * 10) / 10;
+        const existing = this.border.gateMeta.get(harbourGate);
+        const seaRoute = {
+          kind: 'sea' as const,
+          requestedBearingDeg: normalisedBearing,
+          matchDeltaDeg: 0,
+        };
         this.border.gateMeta.set(harbourGate, {
           wallVertexIndex: vertexIndex,
           bearingDeg: normalisedBearing,
           kind: 'sea',
-          routes: [{
-            kind: 'sea',
-            requestedBearingDeg: normalisedBearing,
-            matchDeltaDeg: 0,
-          }],
+          routes: [seaRoute, ...(existing?.routes ?? [])],
+          ...(existing?.routeId != null ? { routeId: existing.routeId } : {}),
+          matchDeltaDeg: 0,
         });
       }
     }

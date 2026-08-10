@@ -22,18 +22,26 @@ function burg(name: string, population: number, extra: Partial<AzgaarBurgInput> 
   };
 }
 
-const cells: [string, AzgaarBurgInput][] = [
-  ['pop300', burg('Threehundred', 300)],
-  ['pop1200', burg('Twelvehundred', 1200)],
-  ['pop4000', burg('Fourthousand', 4000)],
-  ['pop10000', burg('Tenthousand', 10000)],
-  ['pop50000', burg('Fiftythousand', 50000, { citadel: true })],
-  ['pop250000', burg('Quartermillion', 250000, { citadel: true, shanty: true })],
-  ['port20000', burg('Saltmouth', 20000, { port: true, oceanBearing: 90, harbourSize: 'large' })],
+const port = (name: string, pop: number, harbourSize: 'small' | 'large') =>
+  burg(name, pop, { port: true, oceanBearing: 90, harbourSize });
+
+// [label, input, seed] — the coastal cells repeat across seeds because the
+// wall's shoreline closure has to hold on every layout, not just seed 3.
+const cells: [string, AzgaarBurgInput, number][] = [
+  ['pop300', burg('Threehundred', 300), 3],
+  ['pop1200', burg('Twelvehundred', 1200), 3],
+  ['pop4000', burg('Fourthousand', 4000), 3],
+  ['pop10000', burg('Tenthousand', 10000), 3],
+  ['pop50000', burg('Fiftythousand', 50000, { citadel: true }), 3],
+  ['pop250000', burg('Quartermillion', 250000, { citadel: true, shanty: true }), 3],
+  ['port20000', port('Saltmouth', 20000, 'large'), 3],
+  ['port20000-seed5', port('Saltmouth', 20000, 'large'), 5],
+  ['port20000-seed8', port('Saltmouth', 20000, 'large'), 8],
+  ['port4000-small', port('Cockleshell', 4000, 'small'), 3],
 ];
 
-for (const [label, input] of cells) {
-  const params = mapToGenerationParams(input, 3);
+for (const [label, input, seed] of cells) {
+  const params = mapToGenerationParams(input, seed);
   const model = new Model(params).generate();
   const svg = generateSvg(model);
   writeFileSync(join(outdir, `${label}.svg`), svg);
