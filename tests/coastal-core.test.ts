@@ -102,6 +102,51 @@ describe('coastal wall is a closed shoreline circuit', () => {
 });
 
 /**
+ * Fix round 2: a pier must read as a pier — rooted on land by the quay,
+ * crossing the beach band that sits between the Voronoi patch edge and the
+ * painted waterline, and jutting a visible distance INTO the water. Pier
+ * length used to be one constant per harbour, while the beach run varies by
+ * an order of magnitude between anchors (measured 1.0–16.0 units on a single
+ * pop-20000 port), so stubs ended on the sand.
+ */
+describe('piers root on land and jut past the waterline', () => {
+  const midpoint = (a: Point, b: Point) => new Point((a.x + b.x) / 2, (a.y + b.y) / 2);
+
+  test('every pier has a dry root and a wet tip, all seeds, both harbour sizes', () => {
+    for (const seed of [1, 2, 3, 5, 8]) {
+      for (const [label, params] of [
+        ['large', portBurg(seed)],
+        ['small', smallPort(seed)],
+      ] as [string, ReturnType<typeof portBurg>][]) {
+        const m = new Model(params).generate();
+        const harbour = m.harbour;
+        expect(harbour, `${label} seed ${seed}: no harbour placed`).not.toBeNull();
+        const piers = (harbour!.ward as unknown as { piers: { vertices: Point[] }[] }).piers;
+        // A port with no pier at all is a placement failure, not a style.
+        expect(piers.length, `${label} seed ${seed}: no piers`).toBeGreaterThan(0);
+        for (const pier of piers) {
+          const v = pier.vertices;
+          const root = midpoint(v[0], v[1]);
+          const tip = midpoint(v[2], v[3]);
+          expect(m.isWaterAt(root), `${label} seed ${seed}: pier root in water`).toBe(false);
+          expect(m.isWaterAt(tip), `${label} seed ${seed}: pier tip on land`).toBe(true);
+          // "Jutting", not "touching": the tip clears the waterline by a
+          // visible margin, at least a couple of pier widths.
+          const width = Point.distance(v[0], v[1]);
+          const len = Point.distance(root, tip);
+          const dir = new Point((tip.x - root.x) / len, (tip.y - root.y) / len);
+          const backOff = new Point(tip.x - dir.x * width * 2, tip.y - dir.y * width * 2);
+          expect(
+            m.isWaterAt(backOff),
+            `${label} seed ${seed}: pier tip only grazes the water`,
+          ).toBe(true);
+        }
+      }
+    }
+  });
+});
+
+/**
  * Carried guard from Task 3's review: wall vertices are checked against the
  * waterline in `buildPatches`, but `optimizeJunctions` merges and moves
  * vertices afterwards and `buildWalls` reads them later still. Pin the whole
