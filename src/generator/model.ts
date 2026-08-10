@@ -4,7 +4,7 @@ import { Segment } from '../geom/segment.js';
 import { Voronoi } from '../geom/voronoi.js';
 import { SeededRandom } from '../utils/random.js';
 import { sign } from '../utils/math-utils.js';
-import { minBy, randomElement, last } from '../utils/array-utils.js';
+import { minBy, maxBy, randomElement, last } from '../utils/array-utils.js';
 
 import { Patch } from './patch.js';
 import { CurtainWall } from './curtain-wall.js';
@@ -203,6 +203,14 @@ export class Model {
   arteries: Street[] = [];
   streets: Street[] = [];
   roads: Street[] = [];
+  /**
+   * Plaza-perimeter segments built by `buildStreets` to join every approach's
+   * distinct plaza-vertex endpoint into one ring — spec §7: "the roads will
+   * always actually join." `tidyUpRoads`'s ordinary plaza-skip filter (which
+   * drops segments wholly inside the plaza, since a ward's own frontage
+   * shouldn't double as a street) exempts members of this set.
+   */
+  private plazaRingSegments: Set<Street> = new Set();
 
   constructor(params: GenerationParams) {
     this.params = params;
@@ -327,6 +335,7 @@ export class Model {
     this.streets = [];
     this.roads = [];
     this.arteries = [];
+    this.plazaRingSegments = new Set();
     this.topology = null;
     this.syntheticCoast = null;
     this.minSqScale = this.baseMinSqScale;
@@ -337,6 +346,7 @@ export class Model {
   private build(): void {
     this.streets = [];
     this.roads = [];
+    this.plazaRingSegments = new Set();
 
     this.buildPatches();
     this.optimizeJunctions();
@@ -969,6 +979,12 @@ export class Model {
 
     this.topology = new Topology(this);
 
+    // Distinct plaza vertices this loop actually lands a street on — each
+    // gate routes to whichever plaza corner is nearest IT, so different
+    // approaches end at different corners with nothing between them. Fed to
+    // the junction-ring builder below.
+    const plazaEnds = new Set<Point>();
+
     for (const gate of this.gates) {
       const end = this.plaza !== null
         ? minBy(this.plaza.shape.vertices, v => Point.distance(v, gate))
@@ -977,6 +993,7 @@ export class Model {
       const street = this.topology.buildPath(gate, end, this.topology.outer);
       if (street !== null) {
         this.streets.push(new Polygon(street));
+        if (this.plaza !== null) plazaEnds.add(end);
 
         if (this.border!.gates.includes(gate)) {
           const routes = this.border!.gateMeta.get(gate)?.routes ?? [];
@@ -1013,11 +1030,37 @@ export class Model {
       }
     }
 
+    this.buildPlazaJunctionRing(plazaEnds);
     this.clipRoadsAtWater();
     this.tidyUpRoads();
 
     for (const a of this.arteries) {
       smoothStreet(a);
+    }
+  }
+
+  /**
+   * Owner's ruling (spec §7): "the smaller places where routes terminate
+   * inside a burg, they should join... the roads will always actually
+   * join." Each gate's street lands on whichever plaza vertex is nearest
+   * THAT gate — two, three, more approaches can each end at a different
+   * corner with nothing drawn between them, reading as disconnected stubs
+   * around the square. Walk the plaza's own perimeter and add every edge as
+   * a street segment, so all the corners actually used as endpoints (and
+   * everything between them) are wired into one ring. A no-op below 2 used
+   * corners: one approach already needs no ring to "join" — it has nothing
+   * to join to.
+   */
+  private buildPlazaJunctionRing(plazaEnds: Set<Point>): void {
+    if (this.plaza === null || plazaEnds.size < 2) return;
+
+    const verts = this.plaza.shape.vertices;
+    for (let i = 0; i < verts.length; i++) {
+      const a = verts[i];
+      const b = verts[(i + 1) % verts.length];
+      const segment = new Polygon([a, b]);
+      this.streets.push(segment);
+      this.plazaRingSegments.add(segment);
     }
   }
 
@@ -1051,10 +1094,13 @@ export class Model {
         v0 = v1;
         v1 = street.vertices[i];
 
-        // Skip segments along the plaza
+        // Skip segments along the plaza — except the junction-ring segments
+        // `buildPlazaJunctionRing` built deliberately to run along the
+        // plaza edge and join the approaches; those must survive this cut.
         if (this.plaza !== null &&
             this.plaza.shape.contains(v0) &&
-            this.plaza.shape.contains(v1)) {
+            this.plaza.shape.contains(v1) &&
+            !this.plazaRingSegments.has(street)) {
           continue;
         }
 
@@ -1258,6 +1304,12 @@ export class Model {
 
     // Build farmland with sinusoidal boundary
     this.buildFarms();
+
+    // Faubourg back lanes — needs `patch.zone === 'suburb'` labels this
+    // method just assigned, so it cannot run inside buildStreets (phase 4,
+    // before zoning exists). Folds any new lane geometry back through
+    // tidyUpRoads so buildGeometry (phase 6, next) sees it in `this.arteries`.
+    this.buildFaubourgLanes();
   }
 
   /**
@@ -1310,6 +1362,71 @@ export class Model {
       } else {
         patch.ward = new Ward(this, patch);
       }
+    }
+  }
+
+  /**
+   * One lane per suburb cluster (a connected run of `zone === 'suburb'`
+   * patches — the craftsmen ribbon beyond the wall, NOT satellites and NOT
+   * farmland, which never get a lane): from the cluster's farthest-out
+   * patch, back to the gate nearest the cluster, so the ribbon reads as
+   * served by a road rather than backing onto nothing. Runs after zoning
+   * (createWards → buildFarms), reusing the topology `buildStreets` (phase
+   * 4) already built over the settled patch set — `this.patches` doesn't
+   * change count between phase 4 and here, only wards/zones get assigned,
+   * so that graph is still current.
+   */
+  private buildFaubourgLanes(): void {
+    if (this.topology === null || this.adjacency === null || this.gates.length === 0) return;
+
+    const adjacency = this.adjacency;
+    const visited = new Set<Patch>();
+    const clusters: Patch[][] = [];
+
+    for (const patch of this.patches) {
+      if (patch.zone !== 'suburb' || visited.has(patch)) continue;
+      const cluster: Patch[] = [];
+      const queue: Patch[] = [patch];
+      visited.add(patch);
+      while (queue.length > 0) {
+        const p = queue.shift()!;
+        cluster.push(p);
+        for (const n of adjacency.neighboursOf(p)) {
+          if (n.zone === 'suburb' && !visited.has(n)) {
+            visited.add(n);
+            queue.push(n);
+          }
+        }
+      }
+      clusters.push(cluster);
+    }
+
+    if (clusters.length === 0) return;
+
+    let addedLane = false;
+    for (const cluster of clusters) {
+      let cx = 0;
+      let cy = 0;
+      for (const p of cluster) {
+        cx += p.shape.center.x;
+        cy += p.shape.center.y;
+      }
+      const centroid = new Point(cx / cluster.length, cy / cluster.length);
+
+      const gate = minBy(this.gates, g => Point.distance(g, centroid));
+      const farPatch = maxBy(cluster, p => Point.distance(p.shape.center, gate));
+      const startVertex = minBy(farPatch.shape.vertices, v => Point.distance(v, gate));
+
+      const lane = this.topology.buildPath(startVertex, gate, this.topology.outer);
+      if (lane !== null) {
+        this.streets.push(new Polygon(lane));
+        addedLane = true;
+      }
+    }
+
+    if (addedLane) {
+      this.clipRoadsAtWater();
+      this.tidyUpRoads();
     }
   }
 
