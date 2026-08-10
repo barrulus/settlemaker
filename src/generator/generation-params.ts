@@ -142,15 +142,74 @@ export function perPatchDensity(population: number): number {
  *   `perPatchDensity(TEXTURE_SATURATION_POPULATION)` so that all three
  *   texture curves (this, `edgeInsetScale`, `targetCoverage`) saturate at
  *   the same population.
+ *
+ * Fix round 4 (2026-08-10) added the ROW-ONSET RAMP. `fillLots` switches on
+ * as a step at `ROW_HOUSING_MIN_POPULATION`, and a whole lot is ~1.6x the
+ * inscribed rectangle it replaced, so at pop 601 the curve above (still ~1.0
+ * there, a village texture) produced buildings ~44% LARGER than a pop-600
+ * village's -- measured mean ordinary building area 7.53 at pop 600 against
+ * 10.85 at pop 601 (unwalled, seeds 1-3). That is the very inversion fix
+ * round 3 set out to remove, relocated to the band bottom. The ramp cancels
+ * the leaf-policy step at the boundary and unwinds itself by
+ * `ROW_ONSET_BLEND_POPULATION`, so this curve returns fix round 3's exact
+ * value at and above pop 1200 (measured: pop 1200/20000/50000 output is
+ * byte-identical with only this change applied) and villages are untouched.
+ * Measured after the ramp, mean ordinary building area (unwalled, seeds
+ * 1-3): 7.53 at pop 600, 7.91 at 601, 8.20/8.57/8.07 at 625/650/700 -- the
+ * largest step across the boundary is +5%, against +44% before.
  */
 export const CITY_TEXTURE_SCALE = 0.6;
 export const CITY_TEXTURE_TARGET = 14.9;
+/**
+ * Multiplier applied to the city-texture curve immediately above
+ * `ROW_HOUSING_MIN_POPULATION`, unwinding linearly (in log yield) to 1.0 at
+ * `ROW_ONSET_BLEND_POPULATION`. Fitted so the mean building area at pop 601
+ * matches pop 600's: whole lots carry ~1.44x the area the rectangle leaf
+ * kept at the same grid, so the grid has to come in by the reciprocal.
+ */
+export const ROW_ONSET_TEXTURE_FACTOR = 0.60;
+/**
+ * Population at which the row-onset ramp is fully unwound. Chosen as the
+ * lowest population any pinned calibration anchor or test sits on (the
+ * `meanBuildingArea`/`density-target` pop-1200 case), so everything from
+ * there upward keeps fix round 3's shipped numbers exactly.
+ */
+export const ROW_ONSET_BLEND_POPULATION = 1200;
+const ROW_ONSET_BLEND_TARGET = perPatchDensity(ROW_ONSET_BLEND_POPULATION);
 export function baseScaleForYield(targetPerPatch: number): number {
   if (targetPerPatch <= 9) return 1.0;
-  if (targetPerPatch >= CITY_TEXTURE_TARGET) return CITY_TEXTURE_SCALE;
-  return 1.0 + (CITY_TEXTURE_SCALE - 1.0) *
-    Math.log10(targetPerPatch / 9) / Math.log10(CITY_TEXTURE_TARGET / 9);
+  const city = targetPerPatch >= CITY_TEXTURE_TARGET
+    ? CITY_TEXTURE_SCALE
+    : 1.0 + (CITY_TEXTURE_SCALE - 1.0) *
+      Math.log10(targetPerPatch / 9) / Math.log10(CITY_TEXTURE_TARGET / 9);
+  if (targetPerPatch >= ROW_ONSET_BLEND_TARGET) return city;
+  const u = Math.log10(targetPerPatch / 9) / Math.log10(ROW_ONSET_BLEND_TARGET / 9);
+  return city * (ROW_ONSET_TEXTURE_FACTOR + (1 - ROW_ONSET_TEXTURE_FACTOR) * u);
 }
+
+/**
+ * Absolute floor on the texture scale `Model.refineDensity`'s densify pass
+ * may drive the fabric to (see `densifyGroup`). The floor exists to stop
+ * that pass shrinking buildings into invisibility, so it is set from a
+ * LEGIBILITY bound, measured directly against the render's own dimensions:
+ * an ordinary building has to stay wider than the 0.6-unit alley beside it
+ * and the 0.15-unit stroke drawn around it. Measured mean core building
+ * area at pop 10000 (seeds 1-3), sweeping `textureScaleOverride`:
+ *
+ *   scale 0.15 -> 2.18 (1.5 per side, at/below alley width; the "slivers"
+ *                       fix round 3 saw and reacted to)
+ *   scale 0.25 -> 3.44 (1.9 per side)
+ *   scale 0.30 -> 4.25 (2.1 per side, ~3.5x alley width)
+ *   scale 0.60 -> 7.98 (2.8 per side)
+ *
+ * 0.30 -- half the city texture -- is the lowest scale still comfortably
+ * above the bound, so it is the floor. Fix round 3 set the floor at
+ * `CITY_TEXTURE_SCALE` itself, which equals `baseMinSqScale` at every
+ * population above ~1350: the densify pass had exactly zero headroom there
+ * and could never answer a yield shortfall, which is why the census landed
+ * at 85-94% instead of ~100%.
+ */
+export const DENSIFY_MIN_TEXTURE_SCALE = 0.30;
 
 /**
  * Piecewise log-linear interpolation over a sorted `[population, value]`

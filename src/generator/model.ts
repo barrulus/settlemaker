@@ -11,7 +11,7 @@ import { CurtainWall } from './curtain-wall.js';
 import { Topology } from './topology.js';
 import { pointInPolygon } from '../geom/point-in-polygon.js';
 import type { GenerationParams, DegradedFlag } from './generation-params.js';
-import { densityCurve, perPatchDensity, baseScaleForYield, patchAreaForDemand, rowHousing, CITY_TEXTURE_SCALE } from './generation-params.js';
+import { densityCurve, perPatchDensity, baseScaleForYield, patchAreaForDemand, rowHousing, DENSIFY_MIN_TEXTURE_SCALE } from './generation-params.js';
 import { WardType } from '../types/interfaces.js';
 import type { Street } from '../types/interfaces.js';
 
@@ -1319,6 +1319,27 @@ export class Model {
    */
   private refineDensity(): void {
     const target = buildingBudget(this.params.population, this.params.urbanDensity);
+    // The pass exists to make a settlement house its people, and
+    // `applyBuildingBudget` trims everything above the budget away moments
+    // later. So the SETTLEMENT's own shortfall bounds what any group pass
+    // can usefully buy: refining past it produces buildings that are
+    // trimmed, at the price of shrinking the ones that survive. Two
+    // consequences, both new in fix round 4 (until the texture floor was
+    // lifted off `baseMinSqScale` this pass was a no-op above pop ~1350, so
+    // neither could bite):
+    //  - a mesh already at budget skips the pass entirely, and
+    //  - `shrinkBound` clamps how fine a group may go.
+    // Measured at pop 50000: the cap-bound core's own ratio is 0.23 against
+    // the full budget (a cap-bound core can never reach it, whatever the
+    // texture), so unbounded it saturated at the floor and took the core
+    // from mean building area 7.62 to 4.03 and coverage 0.70 to 0.40 —
+    // buying +2 points of a census that was already at 98%.
+    // Row-housed settlements only: a village's densify path is reference
+    // behaviour and its output is pinned byte-for-byte.
+    const rows = rowHousing(this.params.population);
+    const totalYield = this.countOrdinaryBuildings();
+    if (rows && totalYield >= target) return;
+    const shrinkBound = rows ? totalYield / target : 0;
     // Sprawl (suburb/satellite) patches now also carry ordinary buildings
     // (CraftsmenWard/Slum) and countryside farmsteads reach much further
     // now that buildWalls keeps radius*12 instead of radius*3. Both would
@@ -1335,7 +1356,19 @@ export class Model {
     const hasSprawl = this.patches.some(p => p.zone === 'suburb' || p.zone === 'satellite');
     const isSprawl = (p: Patch): boolean => p.zone === 'suburb' || p.zone === 'satellite';
     const count = hasSprawl ? this.countCoreOrdinaryBuildings() : this.countOrdinaryBuildings();
-    this.densifyGroup(p => !hasSprawl || !isSprawl(p), count, target);
+    // ...but the core is only ever asked for ITS share of the budget when
+    // sprawl exists, mirroring the sprawl pass below and the trim's own
+    // split. Fix round 4: with a live floor, measuring the core's yield
+    // against the WHOLE budget made it chase houses that belong outside the
+    // walls — at pop 20000 (core 902 buildings against a 917 core share, so
+    // not short at all) it refined the walled fabric to 40 buildings per
+    // patch against a 30 target, 33% of which the budget trim then stripped
+    // back out. That is exactly the sculpted-cluster defect
+    // `tests/fidelity-round4.test.ts` pins. Row-housed only, like the
+    // guard above: a village's pass is reference behaviour, pinned.
+    const coreShareOfMesh = this.patches.filter(p => p.zone === 'core').length / this.nPatches;
+    const coreTarget = hasSprawl && rows ? target * coreShareOfMesh : target;
+    this.densifyGroup(p => !hasSprawl || !isSprawl(p), count, coreTarget, shrinkBound);
 
     // Sprawl gets the same corrective pass against its OWN share of the
     // target, for the same reason the trim in `applyBuildingBudget` splits
@@ -1365,10 +1398,10 @@ export class Model {
     // regenerating ~180 sprawl wards at a finer texture took pop 250000 from
     // 1.9 s to 5.8 s per generation, past the ~4.9 s worst case MAX_PATCHES
     // was calibrated against.
-    const coreShare = this.patches.filter(p => p.zone === 'core').length / this.nPatches;
+    const coreShare = coreShareOfMesh;
     if (hasSprawl && coreShare >= 0.5) {
       const sprawlTarget = target * Math.max(0, 1 - coreShare);
-      this.densifyGroup(isSprawl, this.countBudgetedBuildings(this.patches.filter(isSprawl)), sprawlTarget);
+      this.densifyGroup(isSprawl, this.countBudgetedBuildings(this.patches.filter(isSprawl)), sprawlTarget, shrinkBound);
     }
   }
 
@@ -1377,7 +1410,7 @@ export class Model {
    * ordinary yield `count` falls short of `target`, rebuild their common
    * wards at a proportionally smaller texture scale. See `refineDensity`.
    */
-  private densifyGroup(select: (p: Patch) => boolean, count: number, target: number): void {
+  private densifyGroup(select: (p: Patch) => boolean, count: number, target: number, shrinkBound: number = 0): void {
     if (count === 0 || target <= 0 || count >= target * 0.65) return;
     // Floor: the relative `0.25 * baseMinSqScale` was calibrated when
     // `baseScaleForYield` returned 9.0 at city texture, so a quarter of it
@@ -1387,14 +1420,24 @@ export class Model {
     // shredded the core into 2.3-unit slivers at 0.18 coverage, because a
     // cap-bound city's core can never reach the full household target
     // however fine its texture gets (MAX_PATCHES governs, not block size),
-    // so this pass saturates at its floor by construction. Row-housed
-    // settlements therefore floor at the absolute city texture instead:
-    // never finer than the grain the fabric was fitted for. Villages keep
-    // the historical relative floor untouched.
+    // so this pass saturates at its floor by construction.
+    //
+    // Fix round 4: that reaction over-corrected. `CITY_TEXTURE_SCALE` IS
+    // `baseMinSqScale` at every population above ~1350, so the floor left
+    // this pass exactly zero headroom (measured base/floor = 1.000 at pops
+    // 1400/2500/4000/10000/50000) — a shortfall could not be answered at
+    // all, which is what put the census at 85-94% of households instead of
+    // ~100%. The floor's job is legibility, not fabric grain, so it is now
+    // the measured legibility bound `DENSIFY_MIN_TEXTURE_SCALE` (see its
+    // doc comment for the sweep it was read off), clamped never to exceed
+    // the settlement's own base scale — a floor above the base would let
+    // this pass COARSEN the fabric, which it did with a
+    // `textureScaleOverride` below 0.6. Villages keep the historical
+    // relative floor untouched.
     const floor = rowHousing(this.params.population)
-      ? CITY_TEXTURE_SCALE
+      ? Math.min(this.baseMinSqScale, DENSIFY_MIN_TEXTURE_SCALE)
       : this.baseMinSqScale * 0.25;
-    this.minSqScale = Math.max(floor, this.baseMinSqScale * (count / target));
+    this.minSqScale = Math.max(floor, this.baseMinSqScale * Math.max(count / target, shrinkBound));
     for (const patch of this.patches) {
       if (!select(patch)) continue;
       if (patch.ward instanceof CommonWard && !this.waterbody.includes(patch)) {

@@ -332,7 +332,13 @@ export function createAlleys(
   // Bisect returns a single polygon when it couldn't find two edge intersections —
   // recursing would loop on the same shape, so treat the input as a terminal leaf.
   if (halves.length === 1) {
-    tryEmitBuilding(p, rng, emptyProb, buildings, fillLots);
+    // Copy: with `fillLots` the leaf pushes the polygon it was handed
+    // straight into `buildings`, and on this path that polygon is the
+    // CALLER's (at the top of the recursion, `CommonWard`'s own block), so
+    // emitting it directly would alias ward geometry onto ward shape. The
+    // vertices are shared, only the polygon wrapper is fresh — enough to
+    // keep the two objects independent, and numerically identical output.
+    tryEmitBuilding(new Polygon(p.copy()), rng, emptyProb, buildings, fillLots);
     return buildings;
   }
 

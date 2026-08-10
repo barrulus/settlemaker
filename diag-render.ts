@@ -28,6 +28,7 @@ const cells: [string, AzgaarBurgInput][] = [
   ['pop4000', burg('Fourthousand', 4000)],
   ['pop10000', burg('Tenthousand', 10000)],
   ['pop50000', burg('Fiftythousand', 50000, { citadel: true })],
+  ['pop250000', burg('Quartermillion', 250000, { citadel: true, shanty: true })],
   ['port20000', burg('Saltmouth', 20000, { port: true, oceanBearing: 90, harbourSize: 'large' })],
 ];
 
