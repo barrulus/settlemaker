@@ -337,4 +337,40 @@ describe('zoning', () => {
     expect(min).toBeGreaterThan(0);
     expect(max).toBeGreaterThanOrEqual(2 * min);
   });
+
+  // Owner's finding (Kingsmoor doc fixture: pop 60000, coreCapacity 5000, two
+  // roads + one trail at bearing 250): a route-weighted corridor SCORE only
+  // biases assignSprawl's greedy claim ORDER, so at metropolis budgets the
+  // leftover budget floods the trail's low-weight corridor anyway once the
+  // strong roads saturate — the trail grows a full-sized sprawl arm, "not
+  // quiet". Measured before the reach-scaling fix (this exact fixture,
+  // summed over seeds 1/9/20): c0=152, c140=146, c250=94 — the trail sector
+  // (94) is comparable to the strongest road sector (152), ratio 0.62. After
+  // scaling a road's corridor REACH by its data-driven rawWeight (not the
+  // decayed `weight`; see route-weight.ts / urbanisation.ts), the same sweep
+  // gives c0=168, c140=165, c250=58, ratio 0.35. Bound at 0.5, comfortably
+  // between the two, so this is red on the old score-order-only mechanism
+  // and green once reach also scales.
+  test('trail corridor stays quiet at metropolis budget (Kingsmoor fixture)', () => {
+    const seeds = [1, 9, 20];
+    const totals = { c0: 0, c140: 0, c250: 0 };
+    for (const seed of seeds) {
+      const burg: AzgaarBurgInput = {
+        name: 'Kingsmoor', population: 60000, port: false, citadel: true, walls: true,
+        plaza: true, temple: true, shanty: true, capital: true,
+        coreCapacity: 5000,
+        roadBearings: [
+          { bearing_deg: 0, group: 'roads', through: true, relief: 'flat' },
+          { bearing_deg: 140, group: 'roads', relief: 'valley', followsRiver: true },
+          { bearing_deg: 250, group: 'trails' },
+        ],
+      } as unknown as AzgaarBurgInput;
+      const { model } = generateFromBurg(burg, { seed });
+      totals.c0 += sectorCount(model, 0);
+      totals.c140 += sectorCount(model, 140);
+      totals.c250 += sectorCount(model, 250);
+    }
+    const strongest = Math.max(totals.c0, totals.c140);
+    expect(totals.c250).toBeLessThan(0.5 * strongest);
+  }, 20000);
 });

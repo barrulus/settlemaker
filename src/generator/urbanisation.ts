@@ -44,6 +44,37 @@ const MIN_TAPER = 0.3;
  */
 const SATELLITE_WEIGHT = 1;
 
+/**
+ * Floor on the reach-scaling fraction (see `reachFraction` below) — even a
+ * pure foot trail (rawWeight 0.15) still gets a short stub, not zero.
+ * f(1.0) = 1 (full reach, unchanged), f(0.15) = MIN_REACH_FRACTION (~0.3, a
+ * trail arm reaching roughly a third as far as a strong road).
+ */
+const MIN_REACH_FRACTION = 0.3;
+/**
+ * Below this raw weight, a road is too "quiet" (a trail, a foot path) to
+ * throw a detached satellite hamlet — those read as deliberate settlements
+ * in their own right, which a bare trail's worth of data does not support.
+ * Chosen so plain trails/foot routes (0.15) are suppressed while anything
+ * carrying at least normal road weight (1.0) or better still can.
+ */
+const SATELLITE_MIN_RAW_WEIGHT = 0.5;
+
+/**
+ * Data-driven reach scaling. Identity clamped to [MIN_REACH_FRACTION, 1]:
+ * boosts above 1.0 (through-routes, river-followers) are clamped back to 1
+ * so they extend a corridor's SCORE but never its REACH — reach extension
+ * was never approved for those. Deliberately keyed on `rawWeight` (the
+ * pre-decay, data-only component from route-weight.ts) rather than the final
+ * `weight`, which folds in the seeded rank decay: bare-bearing burgs (no
+ * route data at all) have rawWeight === 1 for every approach, so this always
+ * returns 1 for them and their reach — and therefore their rendered SVG —
+ * is untouched.
+ */
+function reachFraction(rawWeight: number): number {
+  return Math.min(1, Math.max(MIN_REACH_FRACTION, rawWeight));
+}
+
 export interface UrbanisationOptions {
   /**
    * Approaching roads, weighted by how much extramural growth each pulls
@@ -141,8 +172,8 @@ export function createUrbanisationField(opts: UrbanisationOptions): Urbanisation
   const haloReach = opts.haloReach ?? reach;
   const coreRadiusAt = opts.coreRadiusAt ?? (() => coreRadius);
   // When reach <= coreRadius, the ribbon branch can never fire, because the outer
-  // `along > coreRadius` guard already makes `along < reach` impossible.
-  const span = Math.max(1, reach - coreRadius);
+  // `along > coreRadius` guard already makes `along < roadReach` impossible
+  // (roadReach is always <= reach; see `reachFraction`, computed per-road below).
 
   function scoreAt(p: Point): number {
     let score = 0;
@@ -157,9 +188,18 @@ export function createUrbanisationField(opts: UrbanisationOptions): Urbanisation
       if (d > 0 && r < haloReach) score += HALO_WEIGHT * Math.exp(-d / haloDepth);
     }
 
-    for (const { direction: d, weight } of roads) {
+    for (const { direction: d, weight, rawWeight } of roads) {
       const along = p.x * d.x + p.y * d.y;
       if (along <= coreRadius) continue;
+
+      // Per-road reach: a road's corridor ribbon (and, by extension, its
+      // satellites) extends only as far as its DATA-DRIVEN weight earns —
+      // a trail stays short and stubby even when the sprawl budget is huge,
+      // rather than growing a full-sized arm once the strong roads saturate.
+      // See `reachFraction` for why this uses `rawWeight`, not `weight`.
+      const frac = reachFraction(rawWeight);
+      const roadReach = coreRadius + (reach - coreRadius) * frac;
+      const roadSpan = Math.max(1, roadReach - coreRadius);
 
       const perpX = p.x - along * d.x;
       const perpY = p.y - along * d.y;
@@ -167,7 +207,7 @@ export function createUrbanisationField(opts: UrbanisationOptions): Urbanisation
 
       // Taper: the ribbon narrows as it runs out, so an arm reads as an arm
       // rather than a constant-width stripe whose paint merely fades.
-      const t = Math.min(1, (along - coreRadius) / span);
+      const t = Math.min(1, (along - coreRadius) / roadSpan);
       const width = corridorHalfWidth * Math.max(MIN_TAPER, 1 - CORRIDOR_TAPER * t);
 
       // Guard against NaN when corridorHalfWidth === 0: return 1 only if exactly
@@ -179,18 +219,20 @@ export function createUrbanisationField(opts: UrbanisationOptions): Urbanisation
         lateral = Math.exp(-(perp * perp) / (width * width));
       }
 
-      // Continuous ribbon: linear decay from the core out to `reach`.
-      if (along < reach) {
-        score += weight * SPOKE_WEIGHT * lateral * (1 - (along - coreRadius) / span);
+      // Continuous ribbon: linear decay from the core out to this road's
+      // own reach.
+      if (along < roadReach) {
+        score += weight * SPOKE_WEIGHT * lateral * (1 - (along - coreRadius) / roadSpan);
       }
 
       // Satellites: gaussian bumps on the SAME ray, so outlying hamlets are on-road
       // by construction. The satellite loop runs at every `along` value when satellites
       // is true; separation from the ribbon comes purely from gaussian decay around
-      // each bump centre at reach + k*satelliteSpacing.
-      if (satellites) {
+      // each bump centre at roadReach + k*satelliteSpacing. Quiet approaches
+      // (trails, foot paths) are suppressed entirely — see SATELLITE_MIN_RAW_WEIGHT.
+      if (satellites && rawWeight >= SATELLITE_MIN_RAW_WEIGHT) {
         for (let k = 1; k <= SATELLITE_COUNT; k++) {
-          const centre = reach + k * satelliteSpacing;
+          const centre = roadReach + k * satelliteSpacing;
           const u = (along - centre) / (satelliteSpacing * 0.5);
           score += weight * SATELLITE_WEIGHT * lateral * Math.exp(-u * u) * Math.pow(SATELLITE_FALLOFF, k);
         }

@@ -2,7 +2,20 @@ import { Point } from '../types/point.js';
 import type { RoadEntry } from './generation-params.js';
 import type { SeededRandom } from '../utils/random.js';
 
-export interface WeightedRoad { direction: Point; weight: number }
+export interface WeightedRoad {
+  direction: Point;
+  weight: number;
+  /**
+   * The data-driven component of `weight`, BEFORE the seeded rank decay
+   * (`rawRouteWeight(entry)`). Used by urbanisation.ts to scale a road's
+   * corridor reach: bare-bearing burgs (no route data) must scale by 1.0 so
+   * their reach is untouched and their SVG stays byte-identical — only the
+   * decay-driven score-order tilt, not a reach change, produces their
+   * asymmetry. Only burgs sending genuine route character (trails, ridges,
+   * through-routes) should have their reach reshaped.
+   */
+  rawWeight: number;
+}
 
 const RANK_DECAY = 0.55; // TUNE: weight multiplier per rank step down
 
@@ -27,5 +40,6 @@ export function routeWeights(entries: RoadEntry[], rng: SeededRandom): WeightedR
   return entries.map(e => ({
     direction: e.point,
     weight: rawRouteWeight(e) * Math.pow(RANK_DECAY, rankOf.get(e)!),
+    rawWeight: rawRouteWeight(e),
   }));
 }
