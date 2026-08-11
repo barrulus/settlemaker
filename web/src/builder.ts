@@ -2,17 +2,9 @@
 // constructs the flat-parameter URL (the same contract documented in
 // docs/url-api.md), previews it in an iframe, and hands out the direct link.
 import { PALETTES } from '../../src/output/palette.js';
+import { trackEvent } from './umami.js';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
-
-// Umami tracker (loaded in index.html). Optional throughout: it is absent on
-// localhost (data-domains) and whenever a blocker eats the script, so every
-// call site must tolerate it being undefined.
-declare global {
-  interface Window {
-    umami?: { track: (name: string, data?: Record<string, string | number | boolean>) => void };
-  }
-}
 
 const form = $<HTMLFormElement>('form');
 const frame = $<HTMLIFrameElement>('frame');
@@ -34,7 +26,7 @@ const text = (id: string): string => $<HTMLInputElement>(id).value.trim();
 
 /** What people actually build — the parameters, never the settlement name. */
 function trackGenerate(source: 'submit' | 'dice'): void {
-  window.umami?.track('generate', {
+  trackEvent('generate', {
     source,
     pop: Math.max(10, Number(text('pop')) || 300),
     theme: themeSelect.value,
@@ -82,7 +74,7 @@ form.addEventListener('submit', (e) => {
 $<HTMLButtonElement>('copy').addEventListener('click', () => {
   const absolute = new URL(buildImageUrl(), location.origin).toString();
   // The real conversion: someone taking the URL away to embed it.
-  window.umami?.track('copy-link');
+  trackEvent('copy-link');
   void navigator.clipboard.writeText(absolute).then(
     () => { copied.textContent = `Copied: ${absolute}`; },
     () => { copied.textContent = absolute; }, // clipboard blocked → show it instead
@@ -97,6 +89,18 @@ $<HTMLInputElement>('port').addEventListener('change', () => {
 // walk through variants of the same settlement.
 $<HTMLButtonElement>('reseed').addEventListener('click', () => {
   $<HTMLInputElement>('seed').value = String(Math.floor(Math.random() * 1_000_000));
+  generate();
+  trackGenerate('dice');
+});
+
+// Log-uniform over 50–20,000 rather than flat over the field's full 10–200,000:
+// a flat roll would return a city nine times in ten, and settlements of this era
+// skew heavily small. Rounded to a readable figure for its magnitude.
+$<HTMLButtonElement>('repop').addEventListener('click', () => {
+  const raw = Math.exp(Math.log(50) + Math.random() * (Math.log(20000) - Math.log(50)));
+  const step = raw < 500 ? 10 : raw < 5000 ? 50 : 500;
+  $<HTMLInputElement>('pop').value = String(Math.round(raw / step) * step);
+  $<HTMLInputElement>('pop').dispatchEvent(new Event('input')); // refresh the >50k warning
   generate();
   trackGenerate('dice');
 });

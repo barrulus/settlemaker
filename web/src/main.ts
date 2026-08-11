@@ -1,4 +1,6 @@
 import { generateFromBurg, PALETTES, parseSettlementUrl, UrlCodecError } from '../../src/index.js';
+import { initAnalytics, trackInteractionOnce, viewContext } from './analytics.js';
+import { attachPanZoom } from './pan-zoom.js';
 
 function showError(title: string, detail: string): void {
   const app = document.getElementById('app')!;
@@ -15,6 +17,11 @@ function showError(title: string, detail: string): void {
 }
 
 async function main(): Promise<void> {
+  // Report the view before rendering, so a settlement that fails to generate
+  // still counts as a visit — those are the ones worth knowing about.
+  const context = viewContext();
+  initAnalytics(context);
+
   try {
     const parsed = await parseSettlementUrl(new URLSearchParams(location.search));
     const palette = parsed.paletteName !== undefined && Object.hasOwn(PALETTES, parsed.paletteName)
@@ -34,8 +41,16 @@ async function main(): Promise<void> {
     const app = document.getElementById('app')!;
     // Safe: the assembler embeds no input-derived strings (names are never rendered; theme values are sanitized). Re-audit before ever rendering burg names into the SVG.
     app.innerHTML = svg;
-    app.querySelector('svg')?.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    const root = app.querySelector('svg');
+    root?.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     document.title = `${parsed.burg.name} — settlemaker`;
+
+    // Chrome only for a visitor who actually landed here. Inside an iframe this
+    // is the machine endpoint and must stay bare — an embedder asked for a map,
+    // not for our buttons intercepting their scroll.
+    if (context === 'top' && root !== null) {
+      attachPanZoom(root, trackInteractionOnce());
+    }
   } catch (e) {
     if (e instanceof UrlCodecError) {
       showError(`Broken settlement link (${e.reason})`, e.message);

@@ -3,6 +3,8 @@
 // from symbols.json, so a new batch drops in without touching this file.
 // The village specimen is the exception: its composition is hand-placed.
 
+import { trackEvent } from './umami.js';
+
 const BASE = '/symbols/batch001';
 const SVGNS = 'http://www.w3.org/2000/svg';
 
@@ -32,12 +34,6 @@ interface Catalog {
   license?: string;
   attribution?: string;
   symbols: Record<string, SymbolMeta>;
-}
-
-declare global {
-  interface Window {
-    umami?: { track: (name: string, data?: Record<string, string | number | boolean>) => void };
-  }
 }
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -103,7 +99,7 @@ function buildGrid(catalog: Catalog): void {
 
   grid.addEventListener('click', (e) => {
     const tile = (e.target as HTMLElement).closest<HTMLAnchorElement>('.tile');
-    if (tile) window.umami?.track('symbol-download', { symbol: tile.href.split('/').pop() ?? '' });
+    if (tile) trackEvent('symbol-download', { symbol: tile.href.split('/').pop() ?? '' });
   });
 }
 
@@ -148,7 +144,7 @@ function buildFilters(catalog: Catalog): void {
     b.addEventListener('click', () => {
       active = cls;
       render();
-      window.umami?.track('symbol-filter', { cls });
+      trackEvent('symbol-filter', { cls });
     });
     chips.appendChild(b);
   }
@@ -288,7 +284,3 @@ async function main(): Promise<void> {
 }
 
 void main();
-
-// No imports in this file, so mark it a module explicitly — `declare global`
-// above is only legal inside one.
-export {};
