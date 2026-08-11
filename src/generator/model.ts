@@ -495,6 +495,14 @@ export class Model {
         // could fall behind land patches in the tiers and get excluded from
         // `inner` entirely while still being `this.plaza` — leaving the
         // plaza pointing at a patch outside the core.
+        //
+        // This bypass is also why a caller-supplied `coastlineGeometry` that
+        // happens to cover the origin doesn't throw here: `coreRank` would
+        // otherwise rank this patch last (or exclude it) as water, but
+        // because it's the origin patch it's forced into `inner`/plaza
+        // regardless. The plaza patch can end up water in that case — the
+        // core degrades gracefully (a wet plaza/ward, handled downstream by
+        // the water-exclusion checks) rather than throwing here.
         patch.withinCity = true;
         patch.withinWalls = this.wallsNeeded;
         this.inner.push(patch);
@@ -970,6 +978,14 @@ export class Model {
   private buildStreets(): void {
     const routeAware = this.params.roadEntryPoints != null;
 
+    // HAZARD (known, deferred): `.set(...)` mutates the SHARED Point object
+    // in place — the same identity is also a patch-shape vertex — rather
+    // than replacing it, so smoothing an artery can nudge a patch centroid
+    // after `classifyWater` already ran, silently drifting a patch's
+    // wet/dry classification out of sync with its (now-smoothed) geometry.
+    // Also: `buildFaubourgLanes` runs after this pass (phase 5, zoning),
+    // so faubourg lanes are built on unsmoothed topology and render with
+    // sharper corners than the gate streets smoothed here.
     const smoothStreet = (street: Polygon) => {
       const smoothed = street.smoothVertexEq(3);
       for (let i = 1; i < street.length - 1; i++) {

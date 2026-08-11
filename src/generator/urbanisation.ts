@@ -9,16 +9,23 @@ const SATELLITE_COUNT = 3;
 const SATELLITE_FALLOFF = 0.6;
 
 /**
- * Weight of the isotropic halo — the skirt of building that wraps the wall.
- * This term carries the MAJORITY of extramural growth: a settlement must read
- * as a dense band around the core with thinner arms, not as arms alone.
+ * Weight of the isotropic halo — the thin gate apron that wraps the wall.
+ * Task 6 (round-cores-faubourgs, spec 2026-08-09 §5) deleted the
+ * ring-completion bonus that used to force an even band around the whole
+ * core; the halo's remaining job is to give a roadless burg (and the ground
+ * right against the wall on every burg) something to grow into. It no
+ * longer carries the majority of extramural growth — the weighted road
+ * corridors below do (see HALO_REACH_MULTIPLIER / HALO_DEPTH_FRACTION in
+ * zoning.ts, which shrink the halo's reach and decay length specifically so
+ * it stops competing with the corridors for outer candidates).
  */
 const HALO_WEIGHT = 1;
 /**
- * Weight of the road corridors, relative to the halo. Deliberately below it:
- * on-road points still outrank off-road points at the same distance (the arms
- * are legible), but the whole first ring outranks anything further out along a
- * road, so the ring fills before the arms extend.
+ * Weight of the road corridors, relative to the halo. Despite the name this
+ * is now where most extramural growth is carried: corridors extend well
+ * past the halo's (now-thin) apron, so on-road ground at distance dominates
+ * the built-patch budget while the halo only seeds growth close to the
+ * wall.
  */
 const SPOKE_WEIGHT = 0.5;
 /**
