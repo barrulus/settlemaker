@@ -1,7 +1,7 @@
 # Test URLs
 
 Manual verification links for the deployed renderer. Regenerate with
-`npx tsx generate-test-urls.ts` after codec or generator changes — the
+`npx tsx scripts/generate-test-urls.ts` after codec or generator changes — the
 `i=` payloads below are version-bound (`v: 1`).
 
 Builder (human landing page): https://settlemaker.com/

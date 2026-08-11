@@ -9,11 +9,11 @@
  * measurement table Task 2's constants (a population-scaled point multiplier
  * and/or patch cap) get chosen from.
  *
- * Run: nix develop --command bash -c "npx tsx calibrate-density.ts"
+ * Run: nix develop --command bash -c "npx tsx scripts/calibrate-density.ts"
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { generateFromBurg, mapToGenerationParams, type AzgaarBurgInput } from './src/index.js';
-import { CommonWard } from './src/wards/common-ward.js';
+import { generateFromBurg, mapToGenerationParams, type AzgaarBurgInput } from '../src/index.js';
+import { CommonWard } from '../src/wards/common-ward.js';
 
 const BUDGET_EXEMPT = new Set(['castle', 'cathedral', 'market', 'harbour', 'park']);
 

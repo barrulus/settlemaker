@@ -3,8 +3,8 @@
 // Dev script, excluded from tsconfig (like generate-all.ts).
 //
 // Usage:
-//   npx tsx tile-settlements.ts --burg-id 42 --viewer
-//   npx tsx tile-settlements.ts --all --quiet
+//   npx tsx scripts/tile-settlements.ts --burg-id 42 --viewer
+//   npx tsx scripts/tile-settlements.ts --all --quiet
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -22,7 +22,7 @@ import {
   computeSettlementScale,
   type AzgaarBurgInput,
   type TileInfo,
-} from './src/index.js';
+} from '../src/index.js';
 
 // --- Arg parsing (hand-rolled, consistent with existing scripts) ---
 
@@ -47,8 +47,8 @@ const VIEWER = argFlag('viewer');
 const QUIET = argFlag('quiet');
 
 if (!BURG_ID && !ALL) {
-  console.error('Usage: npx tsx tile-settlements.ts --burg-id <N> [--viewer]');
-  console.error('       npx tsx tile-settlements.ts --all [--quiet]');
+  console.error('Usage: npx tsx scripts/tile-settlements.ts --burg-id <N> [--viewer]');
+  console.error('       npx tsx scripts/tile-settlements.ts --all [--quiet]');
   console.error('');
   console.error('Options:');
   console.error('  --burg-id <N>      Generate tiles for a specific burg');

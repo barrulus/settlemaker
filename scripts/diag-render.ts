@@ -1,11 +1,11 @@
 /**
  * Diagnostic: render the ladder to standalone SVG files for visual inspection.
- *   nix develop --command bash -c "npx tsx diag-render.ts <outdir>"
+ *   nix develop --command bash -c "npx tsx scripts/diag-render.ts <outdir>"
  */
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { Model, mapToGenerationParams, generateSvg } from './src/index.js';
-import type { AzgaarBurgInput } from './src/index.js';
+import { Model, mapToGenerationParams, generateSvg } from '../src/index.js';
+import type { AzgaarBurgInput } from '../src/index.js';
 
 const outdir = process.argv[2] ?? 'diag-out';
 mkdirSync(outdir, { recursive: true });

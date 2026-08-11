@@ -3,10 +3,10 @@
  * built settlement occupies. Evidence-gathering for the "mesh patches are
  * far larger than city patches" hypothesis. Throwaway; not part of the build.
  *
- *   nix develop --command bash -c "npx tsx diag-patch-sizes.ts"
+ *   nix develop --command bash -c "npx tsx scripts/diag-patch-sizes.ts"
  */
-import { Model, mapToGenerationParams, computeLocalBounds } from './src/index.js';
-import type { AzgaarBurgInput } from './src/index.js';
+import { Model, mapToGenerationParams, computeLocalBounds } from '../src/index.js';
+import type { AzgaarBurgInput } from '../src/index.js';
 
 const CROSSROADS = [0, 120, 240];
 

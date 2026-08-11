@@ -24,11 +24,11 @@
  * compromise across BOTH curves (documented in its own doc comment and in
  * task-2-report.md's "Fix round 2" section), not a perfect match to either.
  *
- * Run: nix develop --command bash -c "npx tsx calibrate-yield.ts"
+ * Run: nix develop --command bash -c "npx tsx scripts/calibrate-yield.ts"
  */
-import { mapToGenerationParams, Model, type AzgaarBurgInput } from './src/index.js';
-import { perPatchDensity } from './src/generator/generation-params.js';
-import { CommonWard } from './src/wards/common-ward.js';
+import { mapToGenerationParams, Model, type AzgaarBurgInput } from '../src/index.js';
+import { perPatchDensity } from '../src/generator/generation-params.js';
+import { CommonWard } from '../src/wards/common-ward.js';
 
 const aldford = (population: number): AzgaarBurgInput => ({
   name: 'Aldford', population, port: false, citadel: false, walls: true,

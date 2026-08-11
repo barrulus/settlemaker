@@ -3,10 +3,10 @@
 // Dev script, excluded from tsconfig (like tile-settlements.ts).
 //
 // Usage:
-//   npx tsx ingest-burg-entrances.ts --burg-id 42
-//   npx tsx ingest-burg-entrances.ts --all
-//   npx tsx ingest-burg-entrances.ts --all --force
-//   npx tsx ingest-burg-entrances.ts --burg-id 42 --dry-run
+//   npx tsx scripts/ingest-burg-entrances.ts --burg-id 42
+//   npx tsx scripts/ingest-burg-entrances.ts --all
+//   npx tsx scripts/ingest-burg-entrances.ts --all --force
+//   npx tsx scripts/ingest-burg-entrances.ts --burg-id 42 --dry-run
 //
 // Prereqs:
 //   1. psql questables -f migrations/001_burg_entrances.sql
@@ -18,7 +18,7 @@ import {
   generateFromBurg,
   type AzgaarBurgInput,
   type RoadBearingInput,
-} from './src/index.js';
+} from '../src/index.js';
 import type { Feature, FeatureCollection } from 'geojson';
 
 // --- Arg parsing ---
@@ -38,8 +38,8 @@ const DRY_RUN = argFlag('dry-run');
 
 if (!BURG_ID && !ALL) {
   console.error('Usage:');
-  console.error('  npx tsx ingest-burg-entrances.ts --burg-id <N> [--world-id <UUID>] [--force] [--dry-run]');
-  console.error('  npx tsx ingest-burg-entrances.ts --all [--world-id <UUID>] [--force] [--dry-run]');
+  console.error('  npx tsx scripts/ingest-burg-entrances.ts --burg-id <N> [--world-id <UUID>] [--force] [--dry-run]');
+  console.error('  npx tsx scripts/ingest-burg-entrances.ts --all [--world-id <UUID>] [--force] [--dry-run]');
   console.error('');
   console.error('  --world-id  Restrict to a single world (default: all worlds)');
   console.error('  --force     Bypass settlement_generation_version skip');

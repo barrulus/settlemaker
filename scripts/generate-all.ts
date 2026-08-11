@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { mkdirSync, writeFileSync } from 'fs';
-import { generateFromBurg, type AzgaarBurgInput } from './src/index.js';
+import { generateFromBurg, type AzgaarBurgInput } from '../src/index.js';
 
 const pool = new pg.Pool({
   host: 'localhost',

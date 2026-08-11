@@ -3,10 +3,10 @@
  * deployed site. Run after any change to the URL codec, param parsing, or
  * generator defaults:
  *
- *   nix develop --command bash -c "npx tsx generate-test-urls.ts"
+ *   nix develop --command bash -c "npx tsx scripts/generate-test-urls.ts"
  */
 import { writeFileSync } from 'node:fs';
-import { encodeBurgParam, type AzgaarBurgInput } from './src/index.js';
+import { encodeBurgParam, type AzgaarBurgInput } from '../src/index.js';
 
 const BASE = 'https://settlemaker.com';
 /** The machine endpoint; the bare site root serves the human builder. */
@@ -57,7 +57,7 @@ async function main(): Promise<void> {
   const md = `# Test URLs
 
 Manual verification links for the deployed renderer. Regenerate with
-\`npx tsx generate-test-urls.ts\` after codec or generator changes — the
+\`npx tsx scripts/generate-test-urls.ts\` after codec or generator changes — the
 \`i=\` payloads below are version-bound (\`v: 1\`).
 
 Builder (human landing page): ${BASE}/

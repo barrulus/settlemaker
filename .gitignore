@@ -14,3 +14,8 @@ repomix-output.xml
 
 # Generated contact sheet from make-review-page.ts (throwaway review aid).
 web/public/review.html
+
+superpowers/
+.superpowers/
+.claude/
+.envrc

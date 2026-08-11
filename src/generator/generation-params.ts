@@ -477,7 +477,7 @@ export interface GenerationParams {
    * `Model.baseMinSqScale` to this value instead of deriving it from
    * `perPatchDensity(population)`. Not part of the public Azgaar input
    * surface — `mapToGenerationParams` never sets it. Exists so calibration
-   * scripts (see `calibrate-yield.ts`) can sweep texture scale against a
+   * scripts (see `scripts/calibrate-yield.ts`) can sweep texture scale against a
    * fixed population/seed to measure the pre-trim yield curve that
    * `baseScaleForYield` was fitted from, without needing a second code path.
    * Do not wire this to any external input.

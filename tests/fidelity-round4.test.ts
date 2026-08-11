@@ -332,7 +332,7 @@ describe('fidelity round 4: footprint and texture scale with population', () => 
     // applyBuildingBudget's keep-nearest-patch-centre trim had to strip
     // 60-90% of each patch's buildings, sculpting a small cluster at each
     // patch's centre with a bare rim instead of contiguous urban fabric.
-    // baseScaleForYield (fitted from calibrate-yield.ts's measured curve)
+    // baseScaleForYield (fitted from scripts/calibrate-yield.ts's measured curve)
     // fixes this at the source: natural yield should already land near
     // target, so the trim barely engages.
     const BUDGET_EXEMPT = new Set([

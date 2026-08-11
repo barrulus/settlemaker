@@ -3,10 +3,10 @@
  * population ladder, so shape/sprawl decisions can be judged visually rather
  * than from patch-count tables. Throwaway review aid; not part of the build.
  *
- *   nix develop --command bash -c "npx tsx make-review-page.ts"
+ *   nix develop --command bash -c "npx tsx scripts/make-review-page.ts"
  */
 import { writeFileSync } from 'node:fs';
-import { encodeBurgParam, type AzgaarBurgInput } from './src/index.js';
+import { encodeBurgParam, type AzgaarBurgInput } from '../src/index.js';
 
 const BASE = 'http://localhost:5199/fmg';
 
