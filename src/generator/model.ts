@@ -1066,21 +1066,29 @@ export class Model {
 
   /**
    * Truncate external roads at the waterline: keep only the contiguous dry
-   * tail ending at the gate, dropping the road entirely if fewer than two
-   * dry vertices remain. Cheap placeholder for shore-aware routing — a road
-   * simply stops at the coast instead of walking on the sea. Runs before
-   * tidyUpRoads so arteries inherit the clipped geometry.
+   * HEAD starting at the gate, dropping the road entirely if fewer than two
+   * dry vertices remain. `Graph.aStar`'s buildPath (graph.ts) reconstructs
+   * goal-backward, and roads are built as `buildPath(start, gate)` above, so
+   * `road.vertices[0]` IS the gate and the tail runs out to the far
+   * countryside end — the dry ground worth keeping is therefore the prefix
+   * up to (not including) the first wet vertex, not a suffix. Cheap
+   * placeholder for shore-aware routing — a road simply stops at the coast
+   * instead of walking on the sea. Runs before tidyUpRoads so arteries
+   * inherit the clipped geometry.
    */
   private clipRoadsAtWater(): void {
     if (this.getWaterRings().length === 0) return;
     this.roads = this.roads.flatMap(road => {
-      let lastWet = -1;
-      road.vertices.forEach((v, i) => {
-        if (this.isWaterAt(v)) lastWet = i;
-      });
-      if (lastWet === -1) return [road];
-      const dryTail = road.vertices.slice(lastWet + 1);
-      return dryTail.length >= 2 ? [new Polygon(dryTail)] : [];
+      let firstWet = -1;
+      for (let i = 0; i < road.vertices.length; i++) {
+        if (this.isWaterAt(road.vertices[i])) {
+          firstWet = i;
+          break;
+        }
+      }
+      if (firstWet === -1) return [road];
+      const dryHead = road.vertices.slice(0, firstWet);
+      return dryHead.length >= 2 ? [new Polygon(dryHead)] : [];
     });
   }
 
@@ -1425,7 +1433,9 @@ export class Model {
     }
 
     if (addedLane) {
-      this.clipRoadsAtWater();
+      // Note: lanes land in `this.streets`, not `this.roads` —
+      // `clipRoadsAtWater` only reads/writes `this.roads`, so calling it
+      // here is a no-op against faubourg lanes. Deliberately not called.
       this.tidyUpRoads();
     }
   }
