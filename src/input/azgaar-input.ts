@@ -226,11 +226,17 @@ export function mapToGenerationParams(
     capitalNeeded: burg.capital,
     seed,
     ...(roadEntryPoints != null ? { roadEntryPoints } : {}),
-    ...(burg.oceanBearing != null ? { oceanBearing: burg.oceanBearing } : {}),
-    ...(burg.harbourSize != null ? { harbourSize: burg.harbourSize } : {}),
+    // Ocean data (oceanBearing/coastlineGeometry/harbourSize) is honoured
+    // only for burgs the source data marks as ports. FMG always sends
+    // `port` explicitly and may attach ocean data to any coastal burg
+    // whether or not it has a harbour — a coastal-but-portless burg must
+    // render as a plain inland town, never with coastline/water/shoreline
+    // walls. See docs/url-api.md §3/§6.
+    ...(burg.port === true && burg.oceanBearing != null ? { oceanBearing: burg.oceanBearing } : {}),
+    ...(burg.port === true && burg.harbourSize != null ? { harbourSize: burg.harbourSize } : {}),
     ...(burg.urbanDensity != null ? { urbanDensity: burg.urbanDensity } : {}),
     ...(burg.biome != null ? { biome: burg.biome } : {}),
-    ...(burg.coastlineGeometry != null
+    ...(burg.port === true && burg.coastlineGeometry != null
       ? { coastlineGeometry: burg.coastlineGeometry.map(ring => ring.map(p => new Point(p.x, p.y))) }
       : {}),
   };

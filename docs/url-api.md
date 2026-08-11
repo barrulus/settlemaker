@@ -222,6 +222,13 @@ Rules an adapter can rely on:
   `coastlineGeometry`) is
   genuinely optional and can be omitted (not set to `null`) when unknown.
 
+**Ocean data is gated on `port`.** `oceanBearing`, `coastlineGeometry`, and
+`harbourSize` are honoured only when `port: true`. FMG sends `port` explicitly
+and may attach ocean data to any coastal burg whether or not it has a
+harbour — settlemaker deliberately drops all three at the mapping layer when
+`port` is `false`, so a coastal-but-portless burg renders as a plain inland
+town, never with coastline, water, or shoreline walls.
+
 **Fields accepted but not yet consumed.** `culture`, `elevation` and
 `temperature` are part of the interface and decode fine, but nothing in the
 current generator reads them — sending them changes no pixel today. They are
@@ -408,7 +415,9 @@ apply and the palette default shows through instead.
   than Voronoi patch shapes — open sea/rivers reach the frame edge, matching
   the world map's orientation, and nothing is built or routed over water.
   `oceanBearing` remains a fallback heuristic when vector coastlines aren't
-  available.
+  available. Both are honoured only for `port: true` burgs — a coastal
+  burg with `port: false` renders as an inland town regardless of what
+  ocean data arrived; see §3.
 - **Population budget.** Ordinary building count is derived from
   `population` divided by `urbanDensity` (people per household), then
   capped — so a population of 13 renders a handful of buildings, not a

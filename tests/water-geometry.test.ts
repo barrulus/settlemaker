@@ -16,7 +16,7 @@ const seaEast = [[
 const coastalBurg: AzgaarBurgInput = {
   name: 'Watertest',
   population: 300,
-  port: false,
+  port: true,
   citadel: false,
   walls: false,
   plaza: true,

@@ -12,7 +12,12 @@ import type { AzgaarBurgInput } from '../../src/index.js';
 export const toprak: AzgaarBurgInput = {
   name: 'Toprak',
   population: 13,
-  port: false,
+  // Port kept true: this fixture exists to pin water-rendering fidelity
+  // (closed-pond/overhang regressions), not the port-gating rule — a
+  // portless burg no longer renders coastline at all (see
+  // mapToGenerationParams), so a fixture exercising water mechanics must
+  // be a port.
+  port: true,
   citadel: false,
   walls: false,
   plaza: false,
