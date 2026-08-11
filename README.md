@@ -3,11 +3,17 @@
 A medieval fantasy settlement map generator for Node.js. TypeScript reimplementation of [watabou's Medieval Fantasy City Generator](https://watabou.itch.io/medieval-fantasy-city-generator).
 
 <p align="center">
-  <img src="docs/examples/hamlet.svg" width="200" alt="Hamlet"/>
-  <img src="docs/examples/town.svg" width="200" alt="Walled town"/>
-  <img src="docs/examples/city.svg" width="200" alt="Large city"/>
-  <img src="docs/examples/port.svg" width="200" alt="Port city"/>
+  <img src="docs/examples/hamlet.png" width="200" alt="Hamlet"/>
+  <img src="docs/examples/town.png" width="200" alt="Walled town"/>
+  <img src="docs/examples/city.png" width="200" alt="Large city"/>
+  <img src="docs/examples/port.png" width="200" alt="Port city"/>
 </p>
+<p align="center">
+  <img src="docs/examples/route-character.png" width="266" alt="Route character — growth follows the through road, the trail stays bare"/>
+  <img src="docs/examples/core-capacity.png" width="266" alt="coreCapacity — compact walled old town inside a sprawling metropolis"/>
+  <img src="docs/examples/coastal-full.png" width="266" alt="Coastal — wall along the water's edge, harbour gate, piers"/>
+</p>
+<p align="center"><sub>Hamlet · walled town · city · port — and the contract showcases: route-driven growth, walled-core capacity, full coastal. Every image regenerates from <a href="docs/test-urls.md">documented example URLs</a> via <code>scripts/generate-examples.ts</code>.</sub></p>
 
 ## Features
 
@@ -26,7 +32,7 @@ A medieval fantasy settlement map generator for Node.js. TypeScript reimplementa
 - Road networks connecting gates to the city center
 - **Farmlands** with strip fields, furrows, and farmstead buildings
 - **Harbour/dock wards** with warehouses and piers for port cities
-- Sinusoidal farm/wilderness boundary for organic countryside
+- Farm belts hug the built edge; growth outside the walls follows route quality and terrain
 
 ## Installation
 

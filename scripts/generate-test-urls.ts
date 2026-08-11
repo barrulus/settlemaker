@@ -27,7 +27,7 @@ function organicCoast(bearingDeg: number, shoreDist: number, seed: number): Arra
   return pts;
 }
 
-const grimhaven: AzgaarBurgInput = {
+export const grimhaven: AzgaarBurgInput = {
   name: 'Grimhaven', population: 1400, port: true, citadel: false, walls: true,
   plaza: true, temple: true, shanty: false, capital: false,
   roadBearings: [{ bearing_deg: 200, kind: 'road' }, { bearing_deg: 300, kind: 'road' }, { bearing_deg: 350, kind: 'foot' }],
@@ -35,13 +35,13 @@ const grimhaven: AzgaarBurgInput = {
   harbourSize: 'large',
 };
 
-const highbury: AzgaarBurgInput = {
+export const highbury: AzgaarBurgInput = {
   name: 'Highbury', population: 2600, port: false, citadel: true, walls: true,
   plaza: true, temple: true, shanty: false, capital: true,
   roadBearings: [45, 135, 225, 315],
 };
 
-const fenwick: AzgaarBurgInput = {
+export const fenwick: AzgaarBurgInput = {
   name: 'Fenwick', population: 90, port: false, citadel: false, walls: false,
   plaza: false, temple: false, shanty: false, capital: false,
   roadBearings: [], // authoritative: genuinely routeless → zero external roads
@@ -52,7 +52,7 @@ const fenwick: AzgaarBurgInput = {
  * footpath trail south-east, a ridge road south-west. Growth must visibly
  * favour the northern approach; the trail stays bare.
  */
-const thornbury: AzgaarBurgInput = {
+export const thornbury: AzgaarBurgInput = {
   name: 'Thornbury', population: 4000, port: false, citadel: false, walls: true,
   plaza: true, temple: false, shanty: false, capital: false,
   roadBearings: [
@@ -66,7 +66,7 @@ const thornbury: AzgaarBurgInput = {
  * River-valley pull: two otherwise-equal roads, one following a river through
  * a valley (favoured), one climbing away. Growth clusters on the river road.
  */
-const riverwatch: AzgaarBurgInput = {
+export const riverwatch: AzgaarBurgInput = {
   name: 'Riverwatch', population: 2200, port: false, citadel: false, walls: true,
   plaza: true, temple: true, shanty: false, capital: false,
   roadBearings: [
@@ -80,7 +80,7 @@ const riverwatch: AzgaarBurgInput = {
  * 5 000-person core. The walled old town stays compact; the overflow lives
  * outside as faubourgs and roadside sprawl along the three routes.
  */
-const kingsmoor: AzgaarBurgInput = {
+export const kingsmoor: AzgaarBurgInput = {
   name: 'Kingsmoor', population: 60000, port: false, citadel: true, walls: true,
   plaza: true, temple: true, shanty: true, capital: true,
   coreCapacity: 5000,
@@ -95,7 +95,7 @@ const kingsmoor: AzgaarBurgInput = {
  * Everything at once: walled port on a vector coastline with rich route
  * character — the most comprehensive single payload an FMG adapter sends.
  */
-const saltmarsh: AzgaarBurgInput = {
+export const saltmarsh: AzgaarBurgInput = {
   name: 'Saltmarsh', population: 20000, port: true, citadel: false, walls: true,
   plaza: true, temple: true, shanty: false, capital: false,
   harbourSize: 'large',
@@ -221,4 +221,8 @@ piers that reach the water.
   console.log('wrote docs/test-urls.md');
 }
 
-void main();
+// Only regenerate the doc when run directly — generate-examples.ts imports
+// the fixtures above and must not rewrite docs/test-urls.md as a side effect.
+if (process.argv[1]?.endsWith('generate-test-urls.ts')) {
+  void main();
+}
