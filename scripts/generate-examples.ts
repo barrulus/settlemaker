@@ -8,7 +8,7 @@
  * the documented example URLs.
  */
 import { writeFileSync } from 'node:fs';
-import { generateFromBurg, type AzgaarBurgInput } from '../src/index.js';
+import { generateFromBurg, PALETTES, type AzgaarBurgInput } from '../src/index.js';
 import { thornbury, kingsmoor, saltmarsh } from './generate-test-urls.js';
 
 const gallery: Array<[string, AzgaarBurgInput, number]> = [
@@ -38,4 +38,16 @@ for (const [label, input, seed] of gallery) {
   const { svg } = generateFromBurg(input, { seed });
   writeFileSync(`docs/examples/${label}.svg`, svg);
   console.log(`${label}: ${Math.round(svg.length / 1024)}KB`);
+}
+
+// Themed variants: the SAME town (identical layout, seed 3) across palettes —
+// the canonical demonstration that theme= never affects geometry.
+const themedTown = gallery.find(([label]) => label === 'town')!;
+for (const paletteName of ['blueprint', 'night', 'colour'] as const) {
+  const { svg } = generateFromBurg(themedTown[1], {
+    seed: themedTown[2],
+    svg: { palette: PALETTES[paletteName] },
+  });
+  writeFileSync(`docs/examples/town-${paletteName}.svg`, svg);
+  console.log(`town-${paletteName}: ${Math.round(svg.length / 1024)}KB`);
 }

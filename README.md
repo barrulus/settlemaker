@@ -13,7 +13,12 @@ A medieval fantasy settlement map generator for Node.js. TypeScript reimplementa
   <img src="docs/examples/core-capacity.png" width="266" alt="coreCapacity — compact walled old town inside a sprawling metropolis"/>
   <img src="docs/examples/coastal-full.png" width="266" alt="Coastal — wall along the water's edge, harbour gate, piers"/>
 </p>
-<p align="center"><sub>Hamlet · walled town · city · port — and the contract showcases: route-driven growth, walled-core capacity, full coastal. Every image regenerates from <a href="docs/test-urls.md">documented example URLs</a> via <code>scripts/generate-examples.ts</code>.</sub></p>
+<p align="center">
+  <img src="docs/examples/town-blueprint.png" width="266" alt="Same town, blueprint theme"/>
+  <img src="docs/examples/town-night.png" width="266" alt="Same town, night theme"/>
+  <img src="docs/examples/town-colour.png" width="266" alt="Same town, colour theme"/>
+</p>
+<p align="center"><sub>Hamlet · walled town · city · port — the contract showcases (route-driven growth, walled-core capacity, full coastal) — and the same walled town in <code>blueprint</code>, <code>night</code>, and <code>colour</code> themes: identical layout, only colors change. Every image regenerates from <a href="docs/test-urls.md">documented example URLs</a> via <code>scripts/generate-examples.ts</code>.</sub></p>
 
 ## Features
 
