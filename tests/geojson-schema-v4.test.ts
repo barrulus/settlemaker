@@ -25,9 +25,9 @@ describe('GeoJSON schema v4 — metadata', () => {
   it('emits schema_version 4 and version 0.9.0', () => {
     const { geojson } = generateFromBurg(makeBurg(), { seed: 1 });
     expect(GEOJSON_SCHEMA_VERSION).toBe(4);
-    expect(SETTLEMAKER_VERSION).toBe('0.9.0');
+    expect(SETTLEMAKER_VERSION).toBe('1.0.0');
     expect(metadata(geojson).schema_version).toBe(4);
-    expect(metadata(geojson).settlemaker_version).toBe('0.9.0');
+    expect(metadata(geojson).settlemaker_version).toBe('1.0.0');
   });
 
   it('emits stable_ids.prefixes with exactly four entries', () => {
