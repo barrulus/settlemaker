@@ -105,6 +105,10 @@ export type RoadBearingInput =
       bearing_deg: number;
       route_id?: string;
       kind?: RouteKind;
+      group?: 'roads' | 'trails';
+      through?: boolean;
+      relief?: RouteRelief;
+      followsRiver?: boolean;
     };
 
 /**
@@ -135,6 +139,12 @@ export interface AzgaarBurgInput {
   harbourSize?: 'large' | 'small';
   /** People per household — FMG's urbanDensityInput. Drives the building budget. */
   urbanDensity?: number;
+  /**
+   * People the walled core may hold. Population beyond this grows outside
+   * the walls along roads. Default DEFAULT_CORE_CAPACITY (10 000) — walls
+   * historically enclosed a core, not an entire metropolis.
+   */
+  coreCapacity?: number;
   /** Azgaar biome name (e.g. "desert", "temperate") — selects default asset set + palette. */
   biome?: string;
   /** Trade-center burg — guarantees a market/plaza ward (Azgaar wishlist). */
@@ -154,10 +164,43 @@ export interface AzgaarBurgInput {
 }
 ```
 
-`RouteKind` is re-exported from the package root; treat it as an opaque
-string tag round-tripped from your own route data if you use `roadBearings`
-objects — settlemaker does not interpret its value beyond echoing it back on
-the matching gate output feature.
+`RouteKind` (`'road' | 'foot' | 'sea'`) and `RouteRelief`
+(`'descent' | 'ascent' | 'valley' | 'ridge' | 'flat'`) are both exported from
+the package root. `route_id` is still round-tripped untouched onto the
+matching gate output feature. `kind` is echoed back the same way, but it is
+no longer purely opaque: `kind: 'foot'` marks the approach as a footpath,
+which (like `group: 'trails'`) strongly suppresses settlement growth along
+it — see the next section.
+
+### Route character — how the optional road fields shape growth
+
+Settlement growth outside the walls (faubourgs, roadside development,
+outlying hamlets) is **asymmetric by design**: it concentrates on the one or
+two most attractive approaches instead of ringing the walls evenly. The four
+optional per-road fields below decide which approaches win. They map
+directly onto data FMG already extracts per approach (route group, whether
+the route continues past the burg, corridor relief, whether the road follows
+a river):
+
+| Field | Values | Effect on growth along that road |
+|---|---|---|
+| `group` | `'roads'` \| `'trails'` | Trails attract almost none (weight ×0.15). Absent = treated as a road. |
+| `through` | boolean | A route that continues past the burg attracts more (×1.5) than one that dead-ends there. |
+| `relief` | `'flat'`/`'valley'`/`'descent'`/`'ascent'`/`'ridge'` | Easy ground is neutral; `ascent` halves growth (×0.5); `ridge` quarters it (×0.25). |
+| `followsRiver` | boolean | A valley road along a river attracts slightly more (×1.2). |
+
+Rules an adapter can rely on:
+
+- **Absent fields never disqualify a road.** Every field is optional and an
+  omitted field is neutral ("unknown"), so bare-number bearings keep working
+  exactly as before.
+- **Ties are broken deterministically per settlement.** When several
+  approaches score equally (e.g. all bare numbers), a seeded tilt makes one
+  or two dominate anyway — real towns don't grow evenly — and the same URL
+  always picks the same winners.
+- Sending richer data doesn't change the roads themselves (count, bearings,
+  and `route_id` echo are governed by the Route fidelity guarantee in §6);
+  it only steers where houses cluster.
 
 **Which fields are actually required, precisely:**
 
@@ -175,7 +218,8 @@ the matching gate output feature.
 - **Recommendation:** always set all seven booleans explicitly in the
   payload you send, even when `false`. Every other field
   (`culture`, `elevation`, `temperature`, `roadBearings`, `oceanBearing`,
-  `harbourSize`, `urbanDensity`, `biome`, `trade`, `coastlineGeometry`) is
+  `harbourSize`, `urbanDensity`, `coreCapacity`, `biome`, `trade`,
+  `coastlineGeometry`) is
   genuinely optional and can be omitted (not set to `null`) when unknown.
 
 **Fields accepted but not yet consumed.** `culture`, `elevation` and
@@ -247,8 +291,9 @@ below — it has no equivalent for `roadBearings` or `coastlineGeometry`.
 | `harbourSize` | `large` \| `small` | (unset) | any other value is dropped, not passed through |
 | `biome` | string | (unset) | |
 | `urbanDensity` | number | (unset) | only kept if `> 0`; when unset, the generator falls back to a population-scaled default curve — see §6 |
+| `coreCapacity` | number | `10000` | only kept if `> 0`; people the walled core may hold — see §6 |
 
-That's all 15 flat data params (`src/url/params.ts`'s `FLAT_DATA_PARAMS`).
+That's all 16 flat data params (`src/url/params.ts`'s `FLAT_DATA_PARAMS`).
 
 **Boolean convention:** a boolean param is `true` only for the literal
 values `1` or `true`; anything else (including absence) is `false`.
@@ -353,7 +398,11 @@ apply and the palette default shows through instead.
 
   Send `[]` when you know the burg has no roads; omit the field only when
   you have no route data at all. (Internal lanes within the settlement are
-  a separate, unrelated concern and are not counted here.)
+  a separate, unrelated concern and are not counted here.) The optional
+  route-character fields (`group`/`through`/`relief`/`followsRiver`, §3)
+  never change the rendered roads themselves — only where extramural
+  buildings cluster along them. All approach roads join the internal street
+  network; none stop short of the settlement.
 - **Water fidelity.** When `coastlineGeometry` is supplied, the rendered
   water outline follows that geometry (clipped to the local frame) rather
   than Voronoi patch shapes — open sea/rivers reach the frame edge, matching
@@ -374,18 +423,24 @@ apply and the palette default shows through instead.
   curve outright. This only changes the *default* value fed into the same
   population/density division above — same-URL determinism (identical
   `i=`/flat params + seed → byte-identical output) is unaffected, since the
-  curve is a pure function of `population` alone. The number of Voronoi
-  patches (and so the physical size of the walled area and the count of
-  distinct building footprints) also scales with population, up to a hard cap
-  of 220 patches (`MAX_PATCHES` in `src/input/azgaar-input.ts`, chosen so
-  generation stays inside an 8-second budget at the top of the range). Per-patch
-  texture scales alongside it — from ~9 airy detached houses per patch for
-  villages to ~30 tight blocks per patch for cities (`perPatchDensity`,
-  log-scaled between population 1 000 and 20 000). The cap binds at roughly
-  population 79 000; past that, footprint count and per-patch layout stop
-  growing and the extra population is absorbed as denser texture inside
-  existing patches rather than as more distinct footprints. Wall size keeps
-  scaling with population either way.
+  curve is a pure function of `population` alone. The built footprint
+  (walled core plus extramural growth) also scales with population, up to a
+  hard cap of 220 built patches (`MAX_PATCHES` in
+  `src/input/azgaar-input.ts`). Per-patch texture scales alongside it — from
+  ~9 airy detached houses per patch for villages to ~30 tight row-house
+  blocks per patch, reaching full city texture around population 10 000
+  (`perPatchDensity`, log-scaled from population 600).
+- **Walled-core capacity.** The walled core holds at most `coreCapacity`
+  people (default 10 000). Below the cap, roughly 10–20% of the population
+  still lives outside the walls — faubourgs at the gates and development
+  along the most attractive approach roads (see "Route character" in §3),
+  rising with settlement size. Above the cap the walled core stops growing
+  and all overflow lives outside it, so a metropolis renders as a compact
+  walled old town inside a much larger unwalled sprawl. Pass a custom
+  `coreCapacity` to move that boundary. Walled settlements read as dense,
+  compact circuits (ordered row housing, party walls); coastal walled
+  settlements carry their wall along the water's edge, with the harbour
+  gate opening onto the quay and piers.
 
 ## 7. Evolution policy
 

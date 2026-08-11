@@ -24,22 +24,19 @@ Image endpoint (URL contract): https://settlemaker.com/fmg
 | Walled town, classic theme | https://settlemaker.com/fmg?name=Aldford&pop=1400&seed=9&walls=1&plaza=1&temple=1&theme=classic |
 | Same town, night theme | https://settlemaker.com/fmg?name=Aldford&pop=1400&seed=9&walls=1&plaza=1&temple=1&theme=night |
 | Same town, ink theme | https://settlemaker.com/fmg?name=Aldford&pop=1400&seed=9&walls=1&plaza=1&temple=1&theme=ink |
+| Small core, big town (coreCapacity knob) | https://settlemaker.com/fmg?name=Aldford&pop=20000&seed=9&walls=1&plaza=1&coreCapacity=4000 |
 
 Same name + seed across the theme variants must produce the identical
 layout — only colors change.
 
-## Scaling series (round 4: footprint and texture vs population)
+## Scaling series (footprint, texture, and the walled-core cap)
 
-Same name/seed/flags, population only varies. This is the canonical
-demonstration that wall size, footprint count, and texture density all
-grow with population instead of flattening out at a fixed patch count.
-Expected patch counts at seed 9: 20k → 56, 30k → 84, 70k → 195,
-200k → 220 (the cap — see known issues below).
-
-Caution: the 200,000-population URL is expensive — measured 2923ms
-generation, a 3832 KB SVG, and a 5739 KB GeoJSON — and generation is
-synchronous on the main thread, so the page blocks (no spinner) while it
-runs. Expect a multi-second freeze before it renders.
+Same name/seed/flags, population only varies. Walls enclose a core capped
+at `coreCapacity` people (default 10 000): below the cap most people live
+inside a compact, densely row-housed circuit; above it the walled old town
+stops growing and the overflow renders as unwalled faubourgs and roadside
+sprawl around it. Generation is fast across the whole range (measured at
+seed 9: ~0.1 s at pop 20 000 to ~0.5 s and a ~530 KB SVG at pop 200 000).
 
 | pop | URL |
 |---|---|
@@ -65,26 +62,34 @@ external roads.
 
     https://settlemaker.com/fmg?i=RcwxEoIwEEbhu_x1CrFzSwsvwVisZMUMS5JJgowy3N3YhPIr3tvwBnUGjyWNoA2eZwHhJn51wwSDGOKiXFzwoMvp71RAT9YsBoMrbEWbV1bNTVH5y01F5qjSmF_sy-c4cayv45QC26twcn6sw_6-10LEgs7d_gM
 
-## Known issues to NOT report twice (fidelity round 2-4 backlog)
+**Thornbury** — route-character showcase: through flat road N (grows a
+faubourg), foot trail SE (stays bare), ridge road SW (little growth).
+Extramural development must visibly favour the north.
 
-- Settlement outlines are still quite circular.
-- When no patch straddles the painted shoreline (mesh-dependent, e.g. some
-  seeds in oceanBearing mode), harbour placement falls back to patch
-  adjacency and the district can sit inland of the visible waterline; piers
-  are rescued to the shore, warehouses are not.
-- A thin single-patch gap can still show between the outermost building row
-  and the wall on some seeds — the proportional trim leaves a small empty
-  band inside walls (measured ≈10.7% of wall radius on the Salt Harbour
-  reference fixture as of round 4, down from ≈16% at round 3 and ≈9%
-  pre-curve; test ceiling 25%. Round 4 did not touch the trim policy, so
-  this is a re-measurement, not a fix).
-- Piers on obliquely-crossing shores can occasionally sit fully on land (they
-  extend along the patch edge normal, not toward the water).
-- Megacities beyond ~pop 79,000 (round 4): households (pop / 30) exceed the
-  220-patch cap, so the footprint count and per-patch layout stop growing
-  and the remaining population is absorbed by denser in-patch texture
-  instead of more distinct footprints. Wall size keeps scaling with
-  population; only the fine-grained building texture compresses past the
-  boundary. The Aldford scaling series above brackets this — 20k and 30k
-  sit below the boundary with distinct individual footprints, 70k is close
-  to it, 200k is well past it and shows compressed texture.
+    https://settlemaker.com/fmg?i=jZDBTgMxDET_xeettKXlkiPfwA2hyiXeJCJNIsdbVFb77zii3aVw4fgm4_HEE5zBbDs4juzATJDwRGDg2WdOql2gg5LLGFFCTmD2fd83hQXMgLFSB29B0FJc-ANjrGCER4US8RNvIHQqkRZj9ZjksuZg0aQ1hzPaJ0IOyWncywTHbzhY0qbbvjlGoUOw2ve9uTZtRAsrNO1KTm3lilVZvArO30oxxUCDvg_6R5i733t294uqp-KJbd0UFL8uG3KWH8uEMegV_sQ97B_v4nxw_n-1l54crCOYX2e9IJFO7OYv
+
+**Riverwatch** — river-valley pull: growth clusters on the road that
+follows the river through the valley, not the one climbing away.
+
+    https://settlemaker.com/fmg?i=dY_dasMwDIXfRdcpZC2F4cs9Qm_HKGqixAbVNraS0IW8e5WGJGzQy--g86MRejAfBdy61IIZweOdwMDF9ZQGlMpCATHEjlFc8GCOx7KclSRgGuRMBVROsCbeeEDmDEZSpxAZf3EFoXtkWilb9PLYYzBq0B6TAtZfhMn5VtO-R7gtcK1Jl36W80UndHW17u2R6TA7dG6relRtxqwsVoXWrrWJ2FGzeJgeetAE5jDk18_L1VT8qzuVf_usY37XtxVgrsgLTD-TPkukvvP0BA
+
+**Kingsmoor** — `coreCapacity: 5000` against 60 000 people: a compact
+walled old town (citadel inside) surrounded by much larger unwalled sprawl
+along the two real roads; the trail approach stays quiet.
+
+    https://settlemaker.com/fmg?i=bZBBb8IwDIX_i889DAQcchzH3biiCZnWbSO5deSkrVjV_z53KAjBcnv2y5f3MsMIblPAddAG3Aw9dgQOvnzfxE5EoYAgYWBMXnpwhw8760gTuBo5UgGlT1gRg0s6mJyQOWYRGH8wi0RdYMoqttinW1YlBsM8IKUoHTGgsc2y_3tUBatPQl2jgTvPcL2LS0UW3QyNyhAs_GqMFjy1NmjazFRiT7Xta2sDS_EC2Oz-QTzujNaKbjaphVmmePIj6Z38Rtrun0hJ0dt_LN-LVSaqbL38Ag
+
+**Saltmarsh** — the most comprehensive single payload: walled port, vector
+coastline, large harbour, and rich route character on all three approaches.
+Wall must close along the water's edge with the harbour gate opening onto
+piers that reach the water.
+
+    https://settlemaker.com/fmg?i=jVfBctw2DP0XnR0OCRIg4GMvvTfHTCajxLK9U3l3R7tOmmb8731ckaLcXro3iRD5CLz3gP01fB_uw93w9XV5Gu5_DcfxZRruh4_jfH0Zl8vzcDecT-fXebweTsfhnjx-5dVyHe6vy-t0N3w7XMeHaR7uH8f5gucf4zxf2uJ5Hv8e28N1ejnPU3u6PI_H68_ts2_jGRv1bZ7H5evpdfl4-LvgmcflaQKWb6fxcp0Px-n36fQyXRd8_-nTr-Ev3EGcT158DEFzTBblbsDqhyDev93dQoicapSYOFDgaJJqCMsWoi6oJiEWNQvBt12YdiFGKQXK7INaylxDkraQlLBL8Fkk5syq2iJSi2BzKgQoZESauSFJG1jxLpiIxixmmi3WiLhhleRiZKFyQ1OlFrAhzeRYTCkqK1Ij7S60ARV22DoJjs3IW9gi9kBxBYtBIvCGDSh1oEiZGJIuyTwy3_YIG9AcADQZUhiIKVkLoF0AYfOSCMPb0O7qN6AqLgSk2iuCvFHLqN-AmrqcLLPkIMK8ld9vQE1cFsrmQ0I5Y6h72IbTUBQKGRgjkFCoGbUNZ_DRxYRcIOOqXtoW2nGak4D3CQUDjBxqwAYzZ4ckJokhR1JtNdENZRaXIplQRBiuV3fIvezZqWUNCAgBhanrG0hWJ-Yj7phTishnLZm8q7oYswZTgKn1kI7RO08iOYJswQduAb3k5IxzkRp7SMEqBt5TkzhkzpBAYUXNUxcRArA_1JpVQLsKcacgdckX5iqHJMFawIYxQu5BAd6wThnsqxEbyBhRTajDSq4TarEGdP0UO8g4gxKki3pz3aILKCQHDwCnE8gQPY5aI7qAKDkoNGVchlEOrV7Q9RODAwZGoTyqQhZahN9FxEgRtSYzxuFNyBvQRC7hFFZwz2IU3jTYSg79MKdiaahZ1NhI1TaIzhQS9QCK73NuueoHQGqWCUBQ10QNpONc9JQ8sobteYIRtm8ySKKebyblcbPbJ31Lj8QYsTHunblyaEMUzcFbE3sugkOl18zuroTqiYcLK-qTmHIN6BSLrmA1nF3MPq3rO1vKDkpHMhgUTs1he2EUDISO0AnAnmjV6HtljZ3h7viSA4Mca846N8xDA6BnDhkkAtvX9W4mxdO8Jvgg8oqImp9tPTq0IeQGBgWHTWvNOsEVxBHNOYDEnLmaUVdITvA7OGFIRey57t8Vhu-RHZgum4H-qwK7QrFcgKE9IEVg9nq9LvFcXARoUzGhcv91vcMzF9E4WNlHIquk7R5jsAiCvGFQReKypqe7lBLOh6bwBVyAqyy6y-H8YtFJDRRDC4yVP9s6nBiURkMBM6HQ9fzus-CPoefARz1yq9WIu1Gn4IC9tKVUeN_Ghe71CFAmdF784C41_71ZxOSYPcoLheAYXhO8azdkEB2oi_0tMWJyjXinEVg0BS39xCqFdl0PcwTGCFSQSsuD_laQu84ZFS0eFhYpw4-lGumu9-IakstUVEgKJw1NZ_t7RtQ3WsHZxojdBEDoN6ChwGcFKY9WA7oHwkcjskxwSUG-41rL3SCCkckn2A6KhX1wlxrQrRhGi-3R1DjBULTSdTcOFRQCd8KuaFxE9R5dL0lACFAxwgR9KWoN2GCyOCuzFLKIvmd5ZdRusCsTV4anlXJjopIWIDvOwQtxpqHDKxk3S9pAchmObx9hlrDdT_8dcZtLnd_96O3z57thOY0Pv03jcjg-YYjGaPt1ffjyMD3d7K2EvF6nL4cHjMW3cfhD-Qaz8Z-HY3lXn54Qdq6PFzxfn_Hi6blN38s0H6ZHrD9itB8KuvcHlU62O-hwnMfjw_87adv6O_4JTD_x5vE0z6cflz8O36dlBfCfA9H_3t9sPjw-fjiP1-d-3uPpdN2dd13Gw_zuwOXwgH8Jb5_f8O9imvBJfvsH
+
+## Known issues to NOT report twice (deferred-defects ledger)
+
+- Park and Cathedral wards are currently very rare at city scale (the ward
+  deck is sized against more patches than are actually dealt — tracked as a
+  known defect with a pinned test, `tests/known-defects.test.ts`).
+- Tiny hamlets (pop 40-100) render thin (well under their building target)
+  on some seeds — thinning, not emptiness.

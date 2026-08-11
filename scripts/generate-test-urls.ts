@@ -47,11 +47,75 @@ const fenwick: AzgaarBurgInput = {
   roadBearings: [], // authoritative: genuinely routeless → zero external roads
 };
 
+/**
+ * Full route-character showcase: a through road on flat ground north, a
+ * footpath trail south-east, a ridge road south-west. Growth must visibly
+ * favour the northern approach; the trail stays bare.
+ */
+const thornbury: AzgaarBurgInput = {
+  name: 'Thornbury', population: 4000, port: false, citadel: false, walls: true,
+  plaza: true, temple: false, shanty: false, capital: false,
+  roadBearings: [
+    { bearing_deg: 10, route_id: 'kings-road', kind: 'road', group: 'roads', through: true, relief: 'flat' },
+    { bearing_deg: 130, route_id: 'shepherds-path', kind: 'foot', group: 'trails' },
+    { bearing_deg: 245, route_id: 'high-road', kind: 'road', group: 'roads', relief: 'ridge' },
+  ],
+};
+
+/**
+ * River-valley pull: two otherwise-equal roads, one following a river through
+ * a valley (favoured), one climbing away. Growth clusters on the river road.
+ */
+const riverwatch: AzgaarBurgInput = {
+  name: 'Riverwatch', population: 2200, port: false, citadel: false, walls: true,
+  plaza: true, temple: true, shanty: false, capital: false,
+  roadBearings: [
+    { bearing_deg: 80, route_id: 'vale-road', group: 'roads', through: true, relief: 'valley', followsRiver: true },
+    { bearing_deg: 300, route_id: 'hill-road', group: 'roads', relief: 'ascent' },
+  ],
+};
+
+/**
+ * coreCapacity demonstration: 60 000 people against a deliberately small
+ * 5 000-person core. The walled old town stays compact; the overflow lives
+ * outside as faubourgs and roadside sprawl along the three routes.
+ */
+const kingsmoor: AzgaarBurgInput = {
+  name: 'Kingsmoor', population: 60000, port: false, citadel: true, walls: true,
+  plaza: true, temple: true, shanty: true, capital: true,
+  coreCapacity: 5000,
+  roadBearings: [
+    { bearing_deg: 0, group: 'roads', through: true, relief: 'flat' },
+    { bearing_deg: 140, group: 'roads', relief: 'valley', followsRiver: true },
+    { bearing_deg: 250, group: 'trails' },
+  ],
+};
+
+/**
+ * Everything at once: walled port on a vector coastline with rich route
+ * character — the most comprehensive single payload an FMG adapter sends.
+ */
+const saltmarsh: AzgaarBurgInput = {
+  name: 'Saltmarsh', population: 20000, port: true, citadel: false, walls: true,
+  plaza: true, temple: true, shanty: false, capital: false,
+  harbourSize: 'large',
+  coastlineGeometry: [organicCoast(90, 60, 7)],
+  roadBearings: [
+    { bearing_deg: 200, route_id: 'coast-road', kind: 'road', group: 'roads', through: true, relief: 'flat' },
+    { bearing_deg: 285, route_id: 'inland-road', kind: 'road', group: 'roads', relief: 'valley', followsRiver: true },
+    { bearing_deg: 340, route_id: 'cliff-path', kind: 'foot', group: 'trails', relief: 'ridge' },
+  ],
+};
+
 async function main(): Promise<void> {
-  const [gri, hig, fen] = await Promise.all([
+  const [gri, hig, fen, tho, riv, kin, sal] = await Promise.all([
     encodeBurgParam(grimhaven, 11),
     encodeBurgParam(highbury, 4),
     encodeBurgParam(fenwick, 21),
+    encodeBurgParam(thornbury, 3),
+    encodeBurgParam(riverwatch, 5),
+    encodeBurgParam(kingsmoor, 2),
+    encodeBurgParam(saltmarsh, 7),
   ]);
 
   const md = `# Test URLs
@@ -80,22 +144,19 @@ Image endpoint (URL contract): ${IMG}
 | Walled town, classic theme | ${IMG}?name=Aldford&pop=1400&seed=9&walls=1&plaza=1&temple=1&theme=classic |
 | Same town, night theme | ${IMG}?name=Aldford&pop=1400&seed=9&walls=1&plaza=1&temple=1&theme=night |
 | Same town, ink theme | ${IMG}?name=Aldford&pop=1400&seed=9&walls=1&plaza=1&temple=1&theme=ink |
+| Small core, big town (coreCapacity knob) | ${IMG}?name=Aldford&pop=20000&seed=9&walls=1&plaza=1&coreCapacity=4000 |
 
 Same name + seed across the theme variants must produce the identical
 layout — only colors change.
 
-## Scaling series (round 4: footprint and texture vs population)
+## Scaling series (footprint, texture, and the walled-core cap)
 
-Same name/seed/flags, population only varies. This is the canonical
-demonstration that wall size, footprint count, and texture density all
-grow with population instead of flattening out at a fixed patch count.
-Expected patch counts at seed 9: 20k → 56, 30k → 84, 70k → 195,
-200k → 220 (the cap — see known issues below).
-
-Caution: the 200,000-population URL is expensive — measured 2923ms
-generation, a 3832 KB SVG, and a 5739 KB GeoJSON — and generation is
-synchronous on the main thread, so the page blocks (no spinner) while it
-runs. Expect a multi-second freeze before it renders.
+Same name/seed/flags, population only varies. Walls enclose a core capped
+at \`coreCapacity\` people (default 10 000): below the cap most people live
+inside a compact, densely row-housed circuit; above it the walled old town
+stops growing and the overflow renders as unwalled faubourgs and roadside
+sprawl around it. Generation is fast across the whole range (measured at
+seed 9: ~0.1 s at pop 20 000 to ~0.5 s and a ~530 KB SVG at pop 200 000).
 
 | pop | URL |
 |---|---|
@@ -121,29 +182,37 @@ external roads.
 
     ${IMG}?i=${fen}
 
-## Known issues to NOT report twice (fidelity round 2-4 backlog)
+**Thornbury** — route-character showcase: through flat road N (grows a
+faubourg), foot trail SE (stays bare), ridge road SW (little growth).
+Extramural development must visibly favour the north.
 
-- Settlement outlines are still quite circular.
-- When no patch straddles the painted shoreline (mesh-dependent, e.g. some
-  seeds in oceanBearing mode), harbour placement falls back to patch
-  adjacency and the district can sit inland of the visible waterline; piers
-  are rescued to the shore, warehouses are not.
-- A thin single-patch gap can still show between the outermost building row
-  and the wall on some seeds — the proportional trim leaves a small empty
-  band inside walls (measured ≈10.7% of wall radius on the Salt Harbour
-  reference fixture as of round 4, down from ≈16% at round 3 and ≈9%
-  pre-curve; test ceiling 25%. Round 4 did not touch the trim policy, so
-  this is a re-measurement, not a fix).
-- Piers on obliquely-crossing shores can occasionally sit fully on land (they
-  extend along the patch edge normal, not toward the water).
-- Megacities beyond ~pop 79,000 (round 4): households (pop / 30) exceed the
-  220-patch cap, so the footprint count and per-patch layout stop growing
-  and the remaining population is absorbed by denser in-patch texture
-  instead of more distinct footprints. Wall size keeps scaling with
-  population; only the fine-grained building texture compresses past the
-  boundary. The Aldford scaling series above brackets this — 20k and 30k
-  sit below the boundary with distinct individual footprints, 70k is close
-  to it, 200k is well past it and shows compressed texture.
+    ${IMG}?i=${tho}
+
+**Riverwatch** — river-valley pull: growth clusters on the road that
+follows the river through the valley, not the one climbing away.
+
+    ${IMG}?i=${riv}
+
+**Kingsmoor** — \`coreCapacity: 5000\` against 60 000 people: a compact
+walled old town (citadel inside) surrounded by much larger unwalled sprawl
+along the two real roads; the trail approach stays quiet.
+
+    ${IMG}?i=${kin}
+
+**Saltmarsh** — the most comprehensive single payload: walled port, vector
+coastline, large harbour, and rich route character on all three approaches.
+Wall must close along the water's edge with the harbour gate opening onto
+piers that reach the water.
+
+    ${IMG}?i=${sal}
+
+## Known issues to NOT report twice (deferred-defects ledger)
+
+- Park and Cathedral wards are currently very rare at city scale (the ward
+  deck is sized against more patches than are actually dealt — tracked as a
+  known defect with a pinned test, \`tests/known-defects.test.ts\`).
+- Tiny hamlets (pop 40-100) render thin (well under their building target)
+  on some seeds — thinning, not emptiness.
 `;
 
   writeFileSync('docs/test-urls.md', md);
