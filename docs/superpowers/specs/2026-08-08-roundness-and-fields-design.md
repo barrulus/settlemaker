@@ -47,6 +47,57 @@ the *settlement* reads as elongated, because the sprawl follows the roads.
 The cap applies whether or not the burg has walls. Walls *draw* the core
 boundary; they do not define it.
 
+### `coreCapacity` is a ceiling, not a target
+
+A settlement below the cap must NOT put its whole population inside the
+walls. Faubourgs outside the gates, ribbon development along the approach
+roads, and clusters at a bridge or mill were normal at every size — not a
+big-city phenomenon.
+
+So the core has its own share rule, independent of the cap. The extramural
+share scales with population:
+
+```
+extramuralShare(pop) = clamp(0.20 + 0.1642·(log₁₀(pop) − log₁₀(300)), 0.20, 0.45)
+```
+
+| population | outside the walls |
+|---|---|
+| 300 | ~20% |
+| 1 200 | ~30% |
+| 4 000 | ~38.5% |
+| 10 000 | ~45% |
+| 50 000 | ~80% (cap binds) |
+| 250 000 | ~96% (cap binds) |
+
+**Why the low end is this high.** The first curve (8% at 300 rising to 25% at
+10 000) was set from historical intuition and proved far too low to *render*
+as anything. A town of 4 000 has roughly 26 patches in total, so a 20% share
+bought 5 patches of extramural growth — which cannot physically ring a core,
+and measured only 11–17 of 24 angular sectors covered. Cities, whose share is
+driven by the cap rather than the curve, reached 24/24. The share is
+therefore set by what reads correctly at the smallest walled settlements, not
+by a demographic estimate.
+
+**Budget alone is not sufficient.** The greedy placement rewards adjacency to
+already-built patches (this is what fuses crowded ribbons into a belt), which
+directly fights ring *completion* — extra budget otherwise piles onto one
+side. Placement must prefer filling an empty angular sector over thickening
+an existing cluster, so that a raised share turns into coverage rather than a
+fatter lobe.
+
+The core therefore holds `min(pop × (1 − extramuralShare(pop)), coreCapacity)`
+people, and the sprawl budget is whatever the total budget has left. The
+curve is continuous, so nothing changes abruptly at the cap boundary: below
+it the share rule governs, above it the cap does.
+
+**This was a real defect in the first implementation.** Because
+`nCore = corePatchCount(min(pop, coreCapacity))` and
+`nPatches = populationToPatches(pop)` are identical expressions for any
+population at or below the cap, the sprawl budget `nPatches − nCore`
+evaluated to exactly zero, and every burg under 10 000 put 100% of its
+people inside the walls.
+
 ## Architecture
 
 The change introduces two pure functions and lets existing phases read them.
@@ -81,8 +132,29 @@ wall inherits the lobed shape for free. The Voronoi mesh itself is unchanged.
 A function of position:
 
 ```
-built(p) = Σ over roads corridor(alongDist, perpDist) + neighbourBonus(p)
+built(p) = halo(distanceFromCoreEdge) + Σ over roads corridor(alongDist, perpDist) + neighbourBonus(p)
 ```
+
+**The halo term is what makes extramural growth read as a settlement rather
+than as spokes.** Real towns wrap their walls in a continuous skirt of
+building; the roads then carry thinner ribbons out of that skirt. Without a
+halo the field can only score points that lie along a road ray, and the
+render shows bare spikes radiating from a wall with empty ground between
+them — which is what the first implementation produced.
+
+Required behaviour, from review of the rendered output:
+
+1. **The halo fully encompasses the core.** It is a function of distance
+   from the core edge in EVERY direction, not of any road, so an
+   extramural ring exists even for a burg with no roads at all. It decays
+   with distance so the skirt is dense against the wall and thins outward.
+2. **The halo carries the majority of extramural population**; spokes carry
+   the minority. At metropolis scale the settlement must read as "largely
+   focussed around the city, with smaller arms following the routes".
+3. **Spokes taper.** A ribbon narrows as it runs out — its corridor
+   half-width shrinks with distance along the ray, not just its score.
+4. Above the core cap, the halo grows outward (a thicker skirt) rather than
+   the core growing.
 
 `corridor` decays with distance along the road ray and with perpendicular
 offset from it. Patches are ranked by `built(p)`; the top `nSprawl` become

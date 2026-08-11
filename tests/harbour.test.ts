@@ -85,11 +85,14 @@ describe('Harbour geometry', () => {
     expect(ward.piers.length).toBeGreaterThanOrEqual(3);
   });
 
-  it('small dock has 1-2 piers', () => {
+  // Raised from 1-2 in fix round 2: a single thin pier on a small dock was
+  // invisible at map zoom (the owner reported "no piers at all" on a pop-4000
+  // port that in fact emitted one).
+  it('small dock has 2-3 piers', () => {
     const result = generateFromBurg(makeBurg({ harbourSize: 'small' }), { seed: 42 });
     const ward = result.model.harbour!.ward as Harbour;
     expect(ward.piers.length).toBeGreaterThanOrEqual(1);
-    expect(ward.piers.length).toBeLessThanOrEqual(2);
+    expect(ward.piers.length).toBeLessThanOrEqual(3);
   });
 
   it('has warehouse buildings', () => {

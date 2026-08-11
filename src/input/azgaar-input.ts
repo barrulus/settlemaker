@@ -1,5 +1,5 @@
 import { Point } from '../types/point.js';
-import type { GenerationParams, RoadEntry, RouteKind } from '../generator/generation-params.js';
+import type { GenerationParams, RoadEntry, RouteKind, RouteRelief } from '../generator/generation-params.js';
 import { densityCurve, perPatchDensity } from '../generator/generation-params.js';
 
 /**
@@ -13,6 +13,10 @@ export type RoadBearingInput =
       bearing_deg: number;
       route_id?: string;
       kind?: RouteKind;
+      group?: 'roads' | 'trails';
+      through?: boolean;
+      relief?: RouteRelief;
+      followsRiver?: boolean;
     };
 
 /**
@@ -43,6 +47,12 @@ export interface AzgaarBurgInput {
   harbourSize?: 'large' | 'small';
   /** People per household — FMG's urbanDensityInput. Drives the building budget. */
   urbanDensity?: number;
+  /**
+   * People the walled core may hold. Population beyond this grows outside
+   * the walls along roads. Default DEFAULT_CORE_CAPACITY (10 000) — walls
+   * historically enclosed a core, not an entire metropolis.
+   */
+  coreCapacity?: number;
   /** Azgaar biome name (e.g. "desert", "temperate") — selects default asset set + palette. */
   biome?: string;
   /** Trade-center burg — guarantees a market/plaza ward (Azgaar wishlist). */
@@ -84,6 +94,9 @@ export interface AzgaarBurgInput {
  * footprints all the way to the top of the calibrated population range. */
 export const MAX_PATCHES = 220;
 
+/** People a walled core holds unless the caller says otherwise. */
+export const DEFAULT_CORE_CAPACITY = 10000;
+
 /**
  * Patch count derives from the household target (pop / urbanDensity) so the
  * settlement's footprint scales with how many buildings it must hold —
@@ -94,6 +107,81 @@ export const MAX_PATCHES = 220;
 function populationToPatches(population: number, urbanDensity?: number): number {
   const households = Math.max(2, Math.round(population / (urbanDensity ?? densityCurve(population))));
   return Math.max(3, Math.min(MAX_PATCHES, Math.ceil(households / perPatchDensity(population))));
+}
+
+/**
+ * Fraction of `population` that lives outside the walls even when the
+ * settlement is nowhere near `coreCapacity`. Faubourgs outside the gates
+ * and ribbon development along the approach roads were normal at every
+ * size, not just above the cap — `min(population, coreCapacity)` and
+ * `population` are the SAME expression for any burg at or below the cap,
+ * so without this a naive core sizing makes the sprawl budget
+ * (`nPatches - nCore`) evaluate to exactly zero and every settlement under
+ * `coreCapacity` becomes 100% intramural (a real defect in the first
+ * implementation — 84 measured runs across pop 400-10000 x seeds 1-12
+ * produced zero suburb/satellite patches).
+ *
+ * `~10%` outside at population 300, rising log-linearly to `20%` at
+ * population 10000 (`DEFAULT_CORE_CAPACITY`), where the cap itself takes
+ * over as the binding constraint — continuous across that boundary, so
+ * nothing changes abruptly there.
+ *
+ * Owner decision 2026-08-09 (replaces the 20-45% curve from round 4 task 6):
+ * most people stay INSIDE the walls at below-cap sizes, and the walled
+ * interior packs tight (Saint-Malo-style), rather than a large share
+ * draining out to a suburb ring. Growth outside the walls is sparse and
+ * asymmetric, not a uniform skirt. See
+ * docs/superpowers/sdd/2026-08-09-round-cores-faubourgs/ for the full spec.
+ */
+export function extramuralShare(population: number): number {
+  // 10% at pop 300 rising log-linearly to 20% at DEFAULT_CORE_CAPACITY
+  // (10 000), where the capacity ceiling takes over as the binding
+  // constraint. Owner decision 2026-08-09 (replaces the 20-45% curve):
+  // most people stay inside; growth outside is sparse and asymmetric.
+  const raw = 0.10 + 0.0657 * (Math.log10(population) - Math.log10(300));
+  return Math.min(0.20, Math.max(0.10, raw));
+}
+
+/**
+ * Patches in the walled core. `coreCapacity` is a ceiling, not a target.
+ *
+ * Fix round 3: the first version computed this as
+ * `populationToPatches(min(population * (1 - extramuralShare(population)),
+ * coreCapacity))` — a SECOND, independently-rounded call to
+ * `populationToPatches` against a scaled-down population. Because
+ * `nPatches` (the caller's own `populationToPatches(population)`) and this
+ * value round `households / perPatchDensity` at different granularities,
+ * their difference (the sprawl budget, `nPatches - nCore`) could land on
+ * exactly zero even when `extramuralShare` was clearly non-zero — measured:
+ * 11 of 140 populations swept 100-14000 in steps of 100 hit `nCore >=
+ * nPatches`, and every walled burg in those bands produced gate-ward
+ * outskirts only, no real corridor sprawl, at ANY seed.
+ *
+ * Fixed at the root: derive the sprawl patch count directly from `nPatches
+ * * extramuralShare(population)`, floored at 1, and subtract that from
+ * `nPatches` — a single rounding step that can never land on zero while
+ * the share is non-zero. `coreCapacity`'s ceiling is then a SEPARATE,
+ * population-independent cap (`populationToPatches(coreCapacity)` — patches
+ * for a settlement whose population IS the capacity, not further scaled by
+ * `extramuralShare`): the smaller of the two governs, so the ceiling still
+ * binds once `population` runs far enough past `coreCapacity` that the
+ * share-based core would otherwise keep growing (a 250000-person city's
+ * core does not grow past what `coreCapacity` alone allows).
+ */
+export function corePatchCount(
+  population: number,
+  coreCapacity: number,
+  urbanDensity?: number,
+): number {
+  const nPatches = populationToPatches(population, urbanDensity);
+  const sprawlPatches = Math.max(1, Math.round(nPatches * extramuralShare(population)));
+  const shareBasedCore = nPatches - sprawlPatches;
+  const capacityCeiling = populationToPatches(coreCapacity, urbanDensity);
+  // Clamped to nPatches too (belt-and-braces, per the existing
+  // non-monotonicity guard in mapToGenerationParams) — shareBasedCore is
+  // already <= nPatches - 1 by construction, but capacityCeiling alone
+  // (populationToPatches on a different population) is not.
+  return Math.min(shareBasedCore, capacityCeiling, nPatches);
 }
 
 /**
@@ -111,11 +199,24 @@ export function mapToGenerationParams(
     const rad = bearingDeg * Math.PI / 180;
     const point = new Point(Math.sin(rad), -Math.cos(rad));
     if (typeof b === 'number') return { point, bearingDeg };
-    return { point, bearingDeg, routeId: b.route_id, kind: b.kind };
+    return { point, bearingDeg, routeId: b.route_id, kind: b.kind, group: b.group, through: b.through, relief: b.relief, followsRiver: b.followsRiver };
   });
 
+  const nPatches = populationToPatches(burg.population, burg.urbanDensity);
+  const nCoreUnclamped = corePatchCount(
+    burg.population,
+    burg.coreCapacity ?? DEFAULT_CORE_CAPACITY,
+    burg.urbanDensity,
+  );
+  // Clamp nCore to not exceed nPatches. populationToPatches is not monotonic
+  // in population: households = round(p / density) and perPatchDensity(p) step
+  // at different granularities, so a clamped (smaller) population can land on
+  // a local peak and yield more patches than the unclamped version.
+  const nCore = Math.min(nCoreUnclamped, nPatches);
+
   return {
-    nPatches: populationToPatches(burg.population, burg.urbanDensity),
+    nPatches,
+    nCore,
     population: burg.population,
     plazaNeeded: burg.plaza || burg.trade === true,
     citadelNeeded: burg.citadel,

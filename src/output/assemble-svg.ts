@@ -130,7 +130,11 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   }
 
   if (L.roads.length > 0) {
-    parts.push('<g id="roads">');
+    // Roads/arteries/streets no longer expand computeLocalBounds (they're
+    // allowed to run off the settlement's frame), so they need an explicit
+    // clip — don't rely on the outermost <svg>'s UA-default overflow:hidden,
+    // which a consumer's CSS reset can override.
+    parts.push(`<g id="roads" clip-path="url(#${clipId})">`);
     const lanes = L.roads.map(r => ({
       path: linePath(r.path),
       width: r.kind === 'artery' ? theme.arteryWidth : theme.roadWidth,

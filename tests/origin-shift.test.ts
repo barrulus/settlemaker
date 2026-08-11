@@ -167,29 +167,47 @@ describe('generateFromBurg two-pass shift', () => {
 
 describe('SVG output reflects shift', () => {
   it('SVG viewBox shifts with the origin', () => {
-    const inland = generateFromBurg(coastalBurg({
-      coastlineGeometry: undefined,
-      harbourSize: undefined,
-    }));
-    const coastal = generateFromBurg(coastalBurg());
+    // Measured against the model's own unshifted frame, not against a
+    // second generation.
+    //
+    // This used to compare the viewBox of a coastal run with that of an
+    // inland one and assert the difference carried the shift's sign and at
+    // least its magnitude. That only ever worked while the frame was
+    // dominated by the farm ring, which is near-symmetric and so cancelled
+    // between the two runs; every comment above the old assertion records
+    // the residual growing under it (0.2 -> 2.2 -> 5 -> 312 units). Once
+    // `computeLocalBounds` was narrowed to features that actually draw ink,
+    // the frame closed onto the built content and the two runs' content is
+    // genuinely different: the coastal run has half its map under water, so
+    // it grows no fields to the west and its frame is ~80 units narrower.
+    // Measured at pop 20000: shift dx -73.0, inland viewBox minX -171.5,
+    // coastal -132.0 — the proxy now reports the opposite sign from an
+    // intact shift. Nothing about the shift moved; the proxy stopped
+    // proxying, so it is replaced with the property it was standing in for.
+    //
+    // `computeLocalBounds(model, padding, shift)` is the single source of
+    // both the SVG viewBox and the GeoJSON `local_bounds`, so the frame
+    // tracking the origin is exactly: frame == unshifted frame + shift.
+    //
+    // Note: both sides of the assertion below go through this same
+    // `computeLocalBounds` function (once unshifted here, once internally
+    // via the real pipeline with the shift applied). That proves the shift
+    // PLUMBING — that `originShift` actually reaches the viewBox/geojson —
+    // but it cannot catch an arithmetic error inside `computeLocalBounds`'
+    // own shift-handling branch, since the same (possibly wrong) arithmetic
+    // would run on both sides and still agree.
+    const coastal = generateFromBurg(coastalBurg({ population: 20000 }));
+    expect(coastal.originShift.source).toBe('coast_pull');
+    expect(coastal.originShift.dx).toBeLessThan(0);
 
-    // viewBox="minX minY width height" — extract minX from each.
-    const extract = (svg: string): number => {
-      const m = svg.match(/viewBox="([\-0-9.eE]+) /);
-      return m ? parseFloat(m[1]) : NaN;
-    };
-    const inlandMin = extract(inland.svg);
-    const coastalMin = extract(coastal.svg);
-    // Same pop, same seed (name hash), same nPatches — dominant difference is
-    // the shift, but the coastal run also renders a harbour ward (piers,
-    // warehouses) the inland run doesn't, which nudges the raw content bbox
-    // independent of the shift. Round 4 Task 2's denser city texture
-    // (perPatchDensity's bigger CommonWard blocks) widened that residual
-    // from ~0.2 to ~2.2 units — re-measured and re-verified by eyeball
-    // (harbour geometry only, no shift-math change) rather than tightened
-    // back down. Precision -1 (within 5) keeps this a real shift-tracks-svg
-    // check without being a golden-pixel assertion.
-    expect(coastalMin - inlandMin).toBeCloseTo(coastal.originShift.dx, -1);
+    // assemble-svg writes the viewBox with toFixed(1), hence 1 dp here.
+    const vb = parseSvgViewBox(coastal.svg)!;
+    const unshifted = computeLocalBounds(coastal.model, 20);
+    expect(vb.x).toBeCloseTo(unshifted.min_x + coastal.originShift.dx, 1);
+    expect(vb.y).toBeCloseTo(unshifted.min_y + coastal.originShift.dy, 1);
+    // ...and the shift moves the frame without resizing it.
+    expect(vb.width).toBeCloseTo(unshifted.max_x - unshifted.min_x, 1);
+    expect(vb.height).toBeCloseTo(unshifted.max_y - unshifted.min_y, 1);
   });
 
   it('SVG wall path coordinates are shifted', () => {
@@ -199,17 +217,15 @@ describe('SVG output reflects shift', () => {
     // the path string should contain at least one explicitly negative
     // x value matching the wall's westernmost vertex + shift.dx.
     //
-    // Only vertices adjacent to an active segment are actually drawn
-    // (getActiveWallPolylines skips waterfront-inactive stretches, and
-    // density-targeting Task 1's larger nPatches now puts the raw
-    // westernmost vertex on an inactive stretch for this fixture) — so
-    // restrict the search to vertices with at least one active neighbour.
+    // This used to restrict the search to vertices adjacent to an active
+    // segment, because `getActiveWallPolylines` skipped waterfront-inactive
+    // stretches and the westernmost vertex had landed on one. Task 7 closed
+    // the wall circuit along the shoreline, so this fixture's wall now has
+    // no inactive segment at all (measured: 32 vertices, 0 inactive) and the
+    // filter was selecting every vertex. Dropped along with its comment;
+    // every wall vertex is drawn.
     const wallModel = result.model.wall!;
-    const verts = wallModel.shape.vertices;
-    const segments = wallModel.segments;
-    const len = verts.length;
-    const drawnVerts = verts.filter((_, i) => segments[i] || segments[(i - 1 + len) % len]);
-    const minModelX = Math.min(...drawnVerts.map(v => v.x));
+    const minModelX = Math.min(...wallModel.shape.vertices.map(v => v.x));
     const expectedMinOutputX = minModelX + result.originShift.dx;
     // Parse all number pairs from the SVG; at least one x should be within
     // 1 unit of expectedMinOutputX.

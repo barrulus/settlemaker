@@ -96,7 +96,11 @@ describe('Water classification', () => {
 });
 
 describe('Wall segments with water', () => {
-  it('marks some wall segments as false on waterfront', () => {
+  // Superseded rule: the wall used to be opened where it faced water, which
+  // left the seaward side of a port unwalled. Spec §6 (Saint-Malo) says the
+  // curtain runs along the water's edge too, so the circuit stays closed and
+  // the waterfront is entered through the harbour gate instead.
+  it('keeps every wall segment active on the waterfront too', () => {
     const result = generateFromBurg(
       makeBurg({ oceanBearing: 90 }),
       { seed: 42 },
@@ -104,11 +108,8 @@ describe('Wall segments with water', () => {
     const wall = result.model.wall!;
     expect(wall).not.toBeNull();
 
-    // Some segments should be active, some inactive
-    const activeCount = wall.segments.filter(s => s).length;
-    const inactiveCount = wall.segments.filter(s => !s).length;
-    expect(activeCount).toBeGreaterThan(0);
-    expect(inactiveCount).toBeGreaterThan(0);
+    expect(wall.segments.every(s => s)).toBe(true);
+    expect(wall.segments.length).toBeGreaterThan(0);
   });
 
   it('all wall segments active without oceanBearing', () => {

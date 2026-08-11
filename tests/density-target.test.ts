@@ -39,6 +39,29 @@ describe('density targeting: buildings ≈ households', () => {
     expect(countOrdinaryBuildings(dense.model)).toBeGreaterThan(countOrdinaryBuildings(sparse.model));
   });
 
+  // Regression: `Ward.filterOutskirts` thins RELATIVE to a patch's populated
+  // vertices, and a settlement only a few patches across has none — the
+  // filter used to delete every house in the settlement, which then rendered
+  // as bare fields. Separately, `applyBuildingBudget` handed the core its
+  // patch-count share of the budget even when the core was landmarks only,
+  // stranding it. Seeds chosen because each was measured empty before those
+  // two fixes: pop 60 default seed (both wards annihilated), pop 60 seed 20
+  // (a weak gradient, not an absent one), pop 140 seeds 1 and 6 (four city
+  // patches). A hamlet may be sparse; it may not be uninhabited.
+  it.each([
+    [60, undefined], [60, 20], [140, 1], [140, 6], [100, 3],
+  ] as const)('pop %i seed %s houses somebody', (pop, seed) => {
+    const { model } = generateFromBurg(inland(pop), seed === undefined ? undefined : { seed });
+    // Built-up patches only — farmsteads sit outside the settlement and
+    // would mask an empty village.
+    let n = 0;
+    for (const patch of model.patches) {
+      if (!patch.withinCity || !patch.ward || EXEMPT.has(patch.ward.type)) continue;
+      n += patch.ward.geometry.length;
+    }
+    expect(n).toBeGreaterThan(0);
+  });
+
   it('tiny burgs keep the patch floor (no degenerate meshes)', () => {
     const { model } = generateFromBurg(inland(13));
     expect(model.patches.length).toBeGreaterThanOrEqual(3);

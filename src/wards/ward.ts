@@ -7,6 +7,31 @@ import { interpolate, scalar, distance2line } from '../geom/geom-utils.js';
 import { minBy } from '../utils/array-utils.js';
 import type { Model } from '../generator/model.js';
 import type { Patch } from '../generator/patch.js';
+import { edgeInsetScale, rowHousing, ROW_OUTSKIRTS_BITE } from '../generator/generation-params.js';
+
+/**
+ * Largest built-up area, in city patches, that `filterOutskirts` treats as
+ * having no interior to thin toward — see the guards in that method.
+ *
+ * This is NOT a tight boundary of "no interior" — it's a conservative
+ * subset, chosen to cover the entire measured zero-building failure set
+ * with margin while leaving approved renders untouched. The actual failure
+ * mode (the density-field overshoot described where this constant is used)
+ * was observed only at ≤4 city patches in the 175-case sweep that found it
+ * (6 hamlets with no house at all, all at pop ~60 or below, all ≤4 patches).
+ * A finer measurement shows "no interior" itself extends further up than
+ * this bound suggests — e.g. some pop-250, 7-patch settlements also lack an
+ * interior patch — so 6 deliberately overshoots the known failures rather
+ * than tracking the interior/no-interior line exactly. City-patch count is a
+ * step function of population and barely varies with seed: 3 up to pop 100,
+ * 4 at 140, 5 at 150, 6 at 200, 9 at 300, 12 at 400, ~20 by 1000. The bound
+ * stops at 6 (not higher) deliberately: the two pop-300 seeds that lack an
+ * interior patch still render 71-100% of their households, so extending the
+ * guard there would buy nothing and would move a render gated and approved
+ * as it stands. Expressed as a patch count, not a population, because patch
+ * count is what the mechanism it guards actually depends on.
+ */
+export const INTERIORLESS_CITY_PATCHES = 6;
 
 export const MAIN_STREET = 2.0;
 export const REGULAR_STREET = 1.0;
@@ -27,6 +52,16 @@ export class Ward {
     return this.model.rng;
   }
 
+  /**
+   * Multiplier on `MAIN_STREET`/`REGULAR_STREET`/`ALLEY` for this ward's
+   * settlement population -- see `edgeInsetScale`'s doc comment. 1.0 for
+   * villages (today's widths, unchanged); shrinks toward the legibility
+   * floor as population climbs toward the core-capacity default.
+   */
+  get insetScale(): number {
+    return edgeInsetScale(this.model.params.population);
+  }
+
   createGeometry(): void {
     this.geometry = [];
   }
@@ -34,10 +69,11 @@ export class Ward {
   getCityBlock(): Polygon {
     const insetDist: number[] = [];
     const innerPatch = this.model.wall === null || this.patch.withinWalls;
+    const scale = this.insetScale;
 
     this.patch.shape.forEdge((v0, v1) => {
       if (this.model.wall !== null && this.model.wall.bordersBy(this.patch, v0, v1)) {
-        insetDist.push(MAIN_STREET / 2);
+        insetDist.push(MAIN_STREET * scale / 2);
       } else {
         let onStreet = innerPatch && (this.model.plaza !== null &&
           this.model.plaza.shape.findEdge(v1, v0) !== -1);
@@ -49,7 +85,7 @@ export class Ward {
             }
           }
         }
-        insetDist.push((onStreet ? MAIN_STREET : (innerPatch ? REGULAR_STREET : ALLEY)) / 2);
+        insetDist.push((onStreet ? MAIN_STREET : (innerPatch ? REGULAR_STREET : ALLEY)) * scale / 2);
       }
     });
 
@@ -59,6 +95,18 @@ export class Ward {
   }
 
   filterOutskirts(): void {
+    // How hard the outskirts thinning bites. 1.0 is the reference
+    // behaviour and stays for villages, where a ragged, thinning edge IS
+    // the look. A row-housed settlement is contiguous fabric by
+    // construction, and this filter runs on EVERY patch of an unwalled
+    // town (nothing is `isEnclosed` without a wall), so at full strength it
+    // shredded ~40% of a town's houses -- measured at the pop-1200 unwalled
+    // case `tests/density-target.test.ts` exercises: 103 core buildings
+    // against a 121 floor, with no budget trim involved at all. Softening
+    // it keeps the rows reading as rows at the edge and returns the census.
+    const bite = rowHousing(this.model.params.population)
+      ? ROW_OUTSKIRTS_BITE
+      : 1.0;
     const populatedEdges: Array<{
       x: number; y: number; dx: number; dy: number; d: number;
     }> = [];
@@ -107,6 +155,36 @@ export class Ward {
         : 0;
     });
 
+    // The thinning is RELATIVE: `minDist` is divided by the interpolated
+    // vertex density `p` below. A vertex reads 0 unless every patch meeting
+    // it is a city patch, so on a settlement only a few patches across `p`
+    // is near zero everywhere and `minDist / p` overshoots the roll for the
+    // WHOLE ward — the filter stops thinning an outskirt and demolishes the
+    // settlement. Measured at pop 60: the gate ward subdivided into 13
+    // buildings and the craftsmen ward into 15, and this filter deleted all
+    // 28; the hamlet rendered as bare fields. Below pop ~100 that was every
+    // seed (a 175-case sweep found 6 settlements with no house at all).
+    //
+    // Scoped to settlements with no interior to thin toward — see
+    // `INTERIORLESS_CITY_PATCHES` for the two sweeps that bound sets. Larger
+    // settlements keep the reference behaviour byte-for-byte: their ragged,
+    // thinning edge IS the look, and it is the look approved at five render
+    // gates.
+    const noInterior = this.model.patches.filter(p => p.withinCity).length
+      <= INTERIORLESS_CITY_PATCHES;
+
+    // With no populated vertex at all there is no gradient to thin along, so
+    // the filter has nothing to say and keeps what subdivision produced; the
+    // household budget in `applyBuildingBudget` still caps the count. The
+    // rng draw below is taken either way, so wards that DO thin are
+    // bit-identical to before.
+    const noGradient = noInterior && density.every(d => d <= 0);
+
+    // Drop scores, kept so the floor below can name the most interior
+    // building without re-deriving (or re-drawing) anything.
+    const scores = new Map<Polygon, number>();
+    const before = this.geometry;
+
     this.geometry = this.geometry.filter(building => {
       let minDist = 1.0;
       for (const edge of populatedEdges) {
@@ -125,8 +203,32 @@ export class Ward {
       }
       minDist /= p;
 
-      return this.rng.fuzzy(1) > minDist;
+      scores.set(building, minDist * bite);
+      const roll = this.rng.fuzzy(1);
+      return noGradient || roll > minDist * bite;
     });
+
+    // Floor: this filter THINS the outskirts, it does not unbuild a ward the
+    // model decided to populate. A weak gradient can still take every
+    // building — a hamlet's interior is one or two shared vertices, so `p`
+    // is small everywhere and `minDist / p` overshoots the roll for the whole
+    // ward (measured at pop 60 seed 20: two craftsmen wards subdivided into
+    // 2 and 5 buildings and kept none, so the settlement had no houses at
+    // all). Keep the single most interior building in that case. Scoped like
+    // `noGradient` above, and it only fires where the ward would otherwise
+    // render empty, so no ward that keeps anything today moves and no rng
+    // draw is added.
+    if (noInterior && this.geometry.length === 0 && before.length > 0) {
+      let best = before[0];
+      for (const b of before) {
+        const s = scores.get(b)!;
+        const bs = scores.get(best)!;
+        if (s < bs || (s === bs && (b.center.x - best.center.x || b.center.y - best.center.y) < 0)) {
+          best = b;
+        }
+      }
+      this.geometry = [best];
+    }
   }
 
   getLabel(): string | null {
@@ -266,7 +368,13 @@ function isDegenerate(p: Polygon): boolean {
   return p.compactness < 0.3;
 }
 
-/** Recursive alley-based building subdivision */
+/**
+ * Recursive alley-based building subdivision.
+ *
+ * `fillLots` selects the leaf policy — see `tryEmitBuilding`. Default
+ * `false` keeps the historical detached-rectangle leaf (villages, harbour
+ * warehouses); `true` is the watabou-faithful row-housing leaf.
+ */
 export function createAlleys(
   p: Polygon,
   rng: SeededRandom,
@@ -275,6 +383,9 @@ export function createAlleys(
   sizeChaos: number,
   emptyProb: number = 0.04,
   split: boolean = true,
+  alleyWidth: number = ALLEY,
+  fillLots: boolean = false,
+  maxLotSq: number = Infinity,
 ): Polygon[] {
   // Find longest edge
   let v: Point | null = null;
@@ -293,24 +404,31 @@ export function createAlleys(
   const angleSpread = (Math.PI / 6) * gridChaos * (p.square < minSq * 4 ? 0 : 1);
   const b = (rng.float() - 0.5) * angleSpread;
 
-  const halves = bisect(p, v!, ratio, b, split ? ALLEY : 0);
+  const halves = bisect(p, v!, ratio, b, split ? alleyWidth : 0);
   const buildings: Polygon[] = [];
 
   // Bisect returns a single polygon when it couldn't find two edge intersections —
   // recursing would loop on the same shape, so treat the input as a terminal leaf.
   if (halves.length === 1) {
-    tryEmitBuilding(p, rng, emptyProb, buildings);
+    // Copy: with `fillLots` the leaf pushes the polygon it was handed
+    // straight into `buildings`, and on this path that polygon is the
+    // CALLER's (at the top of the recursion, `CommonWard`'s own block), so
+    // emitting it directly would alias ward geometry onto ward shape. The
+    // vertices are shared, only the polygon wrapper is fresh — enough to
+    // keep the two objects independent, and numerically identical output.
+    tryEmitBuilding(new Polygon(p.copy()), rng, emptyProb, buildings, fillLots);
     return buildings;
   }
 
   for (const half of halves) {
-    if (half.square < minSq * Math.pow(2, 4 * sizeChaos * (rng.float() - 0.5))) {
-      tryEmitBuilding(half, rng, emptyProb, buildings);
+    if (half.square < Math.min(maxLotSq, minSq * Math.pow(2, 4 * sizeChaos * (rng.float() - 0.5)))) {
+      tryEmitBuilding(half, rng, emptyProb, buildings, fillLots);
     } else {
       buildings.push(
         ...createAlleys(
           half, rng, minSq, gridChaos, sizeChaos, emptyProb,
           half.square > minSq / (rng.float() * rng.float()),
+          alleyWidth, fillLots, maxLotSq,
         ),
       );
     }
@@ -319,14 +437,45 @@ export function createAlleys(
   return buildings;
 }
 
-/** Rectangularize, validate, and push a building if it survives the filter. */
+/**
+ * Emit one lot as a building, or drop it.
+ *
+ * Two leaf policies:
+ *
+ * - `fillLots === false` (villages, harbour warehouses): the historical
+ *   port behaviour — replace the lot with its largest inscribed rectangle.
+ *   That rectangle is centred on the lot's centroid, so the building pulls
+ *   away from every lot edge: measured over the walled core at pop
+ *   1200/4000/10000 it keeps only ~62% of the lot's area, and the ~11% of
+ *   lots whose rectangle comes back null or degenerate vanish entirely.
+ *   The result reads as detached units with random gaps — right for an airy
+ *   hamlet, wrong for a town.
+ *
+ * - `fillLots === true` (towns and cities): emit the lot itself, which is
+ *   what the Haxe reference's `Ward.createAlleys` leaf does — it pushes the
+ *   bisected half straight into `buildings`, with no rectangle step at all
+ *   (the reference tree is not vendored in this checkout, so this is stated
+ *   from the port's own divergence, measured above, not a file diff).
+ *   `bisect` already carved
+ *   `alleyWidth` out between siblings, so neighbouring lots share a lane of
+ *   precisely one alley — buildings line up into contiguous rows the way
+ *   watabou's do. `rectangularize` stays on as a SALVAGE for lots that are
+ *   genuinely unusable as footprints (thin wedges, near-collinear 4-gons),
+ *   so the shape filter this port added is kept where it earns its keep
+ *   instead of being paid on every lot.
+ */
 function tryEmitBuilding(
   poly: Polygon,
   rng: SeededRandom,
   emptyProb: number,
   out: Polygon[],
+  fillLots: boolean = false,
 ): void {
   if (rng.bool(emptyProb)) return;
+  if (fillLots && !isDegenerate(poly)) {
+    out.push(poly);
+    return;
+  }
   const rect = rectangularize(poly);
   if (rect === null || isDegenerate(rect)) return;
   out.push(rect);

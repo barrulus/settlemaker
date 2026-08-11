@@ -1,6 +1,6 @@
 // Public API
 export { Model } from './generator/model.js';
-export type { GenerationParams, RoadEntry, RouteKind, DegradedFlag } from './generator/generation-params.js';
+export type { GenerationParams, RoadEntry, RouteKind, RouteRelief, DegradedFlag } from './generator/generation-params.js';
 export { Patch } from './generator/patch.js';
 export { CurtainWall } from './generator/curtain-wall.js';
 export type { GateMeta, GateRouteAssignment } from './generator/curtain-wall.js';

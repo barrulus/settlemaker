@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Model, mapToGenerationParams, generateFromBurg, SETTLEMAKER_VERSION, type AzgaarBurgInput } from '../src/index.js';
+import { Model, mapToGenerationParams, generateFromBurg, SETTLEMAKER_VERSION, WardType, type AzgaarBurgInput } from '../src/index.js';
 import type { FeatureCollection } from 'geojson';
 
 function meta(fc: FeatureCollection): Record<string, unknown> {
@@ -53,31 +53,73 @@ describe('up-front walls threshold', () => {
 });
 
 describe('citadel fallback via staged retries', () => {
-  // Yarwick: pop=170, citadel=true. With its hashString("Yarwick") seed,
-  // every retry in the 20-attempt loop produces compactness < 0.75 — the
-  // default retry loop exhausts and the citadel-drop fallback must kick in.
-  // (Density-targeting Task 1 changed nPatches at pop=199, which now
-  // succeeds without the fallback; pop=170 still exercises it.)
-  it('drops citadel for the Yarwick case via fallback instead of throwing', () => {
+  // Round-4 Task 4 warps core selection by a direction-dependent shape
+  // field, which also moves which patch is picked as citadel and its
+  // resulting compactness. The named-burg cases below ("Yarwick" pop=170,
+  // "Undraladrynn" pop=181) used to exhaust the retry loop on compactness <
+  // 0.75 and fall back to dropping citadel; with the warped selection they
+  // now find an acceptable citadel shape on their first attempt instead
+  // (verified: citadel present, compactness ~0.79-0.80). That's a legitimate
+  // side effect of the shape change (see task-4-report.md), not a
+  // regression, so those two cases moved to the "five named failing burgs"
+  // acceptance block below with degradedFlags = [].
+  //
+  // To keep this fallback code path under coverage, seed 180 at pop=170
+  // still exhausts the retry loop under the new shape field.
+  // Round 4 Task 6 fix round 3: corePatchCount's rewrite (direct
+  // share-based sprawl budget) shifts nCore for essentially every
+  // population, moving which seeds exhaust the citadel-compactness retry
+  // loop yet again — seed 180 no longer drops citadel at pop 170. Swept
+  // seeds 1-500 and re-pinned to seed 43, which still exhausts the loop.
+  // Task 9: seed 43 stopped exhausting it. The MECHANISM was verified first,
+  // not just the pin — swept seeds 1-500 at pop 170 with citadel: 101 seeds
+  // still take the fallback, 0 throw, 500 generate. Re-pinned to seed 44.
+  it('drops citadel via fallback instead of throwing (seed 44, pop=170)', () => {
     const result = generateFromBurg(burg({
-      name: 'Yarwick',
+      name: 'S44',
       population: 170,
       citadel: true,
       walls: false,
-    }));
+    }), { seed: 44 });
     expect(result.model.degradedFlags.has('citadel')).toBe(true);
     expect(result.model.citadel).toBeNull();
   });
+});
 
-  it('drops citadel for the Undraladrynn case via fallback instead of throwing', () => {
-    const result = generateFromBurg(burg({
-      name: 'Undraladrynn',
-      population: 181,
+describe('enforceCoreConnectivity does not absorb the citadel', () => {
+  // Regression for a code-review finding on Round 4 Task 4: the
+  // connectivity top-up (Model.enforceCoreConnectivity, called at the end
+  // of buildPatches) grows `this.inner` back toward nCore via nearest-centre
+  // adjacency. The citadel sits at sorted index nCore — the single
+  // nearest unselected patch — so a naive top-up readily absorbs it into
+  // `inner`. createWards then overwrites the citadel's later-assigned
+  // Castle ward with an ordinary ward from `unassigned`, while buildWalls's
+  // castle gates and `this.citadel` both still point at the same patch —
+  // silently producing "citadel present, degradedFlags empty, but no Castle
+  // ward and no castle walls rendered." pop=170 seed=22 citadel=true WITH
+  // roadBearings [0,90,180,270] is a known-reproducing case (found by a
+  // 280-run sweep of pops 170/400/1200/4000/12000/40000/90000 x seeds 1-40:
+  // connectivity fired 25 times, the top-up chose the citadel 9 times, and
+  // this specific case landed the citadel inside `inner`). The road
+  // bearings are load-bearing for the repro, not incidental: without them
+  // the shape field is nearly isotropic, connectivity rarely breaks, and
+  // this exact case's top-up loop never runs at all — a version of this
+  // test without roadBearings was independently confirmed to PASS against
+  // the pre-fix code (vacuous), which is why it's included here explicitly
+  // rather than relying on burg()'s roadless default. Verified (see
+  // task-4-report.md's fix report) that reverting the two guard lines in
+  // enforceCoreConnectivity makes this test fail.
+  it('keeps the citadel out of inner and its ward a Castle (pop=170, seed=22)', () => {
+    const { model } = generateFromBurg(burg({
+      name: 'CitadelConnectivity',
+      population: 170,
       citadel: true,
       walls: false,
-    }));
-    expect(result.model.degradedFlags.has('citadel')).toBe(true);
-    expect(result.model.citadel).toBeNull();
+      roadBearings: [0, 90, 180, 270],
+    }), { seed: 22 });
+    expect(model.citadel).not.toBeNull();
+    expect(model.inner.includes(model.citadel!)).toBe(false);
+    expect(model.citadel!.ward?.type).toBe(WardType.Castle);
   });
 });
 
@@ -186,11 +228,14 @@ describe('acceptance: the five named failing burgs', () => {
       input: burg({ name: 'Skipton',      population: 50,  walls: true,  citadel: false }),
       expectDegraded: ['walls'],
     },
-    // Undraladrynn: every retry produces compactness < 0.75, so the
-    // citadel fallback drops it.
+    // Undraladrynn: previously every retry produced compactness < 0.75 so
+    // the citadel fallback dropped it. Round-4 Task 4's warped core
+    // selection moves the citadel candidate and its shape; it now finds an
+    // acceptable citadel on the first attempt (see the "citadel fallback
+    // via staged retries" block above for the still-exercised fallback path).
     {
       input: burg({ name: 'Undraladrynn', population: 181, walls: false, citadel: true }),
-      expectDegraded: ['citadel'],
+      expectDegraded: [],
     },
   ];
 

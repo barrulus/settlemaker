@@ -20,6 +20,15 @@
 - **Output will change for every settlement, including villages.** Pinned hashes in `tests/fidelity-round4.test.ts` and `tests/toprak-regression.test.ts` must be regenerated — deliberately, in the task that causes the change, never pre-emptively.
 - **`SETTLEMAKER_VERSION` bumps to `0.10.0`** in the final task (invalidates downstream tile caches).
 - Angles: model space uses `atan2(y, x)` math angles. Compass bearings appear only at the input boundary. **Fields consume unit direction vectors (`RoadEntry.point`), never degrees.**
+- **`coreCapacity` is a CEILING, not a target.** A settlement below the cap must not put its whole population inside the walls — faubourgs outside the gates and ribbon development along the approach roads were normal at every size. The core holds `min(population × (1 − extramuralShare(population)), coreCapacity)` people, where
+
+  ```
+  extramuralShare(pop) = clamp(0.20 + 0.1642 × (log10(pop) − log10(300)), 0.20, 0.45)
+  ```
+
+  giving ~20% outside at population 300, ~30% at 1 200, ~38.5% at 4 000, ~45% at 10 000, after which the cap binds instead. The curve is continuous, so nothing changes abruptly at the cap boundary. **These values are set by what renders as a visible skirt at small walled settlements, not by a demographic estimate** — the original curve (8% → 25%) bought a 4 000-person town only 5 patches of extramural growth, too few to ring a core, and measured 11–17 of 24 angular sectors covered against 24/24 for cities.
+
+  **Why this is called out:** `min(population, coreCapacity)` and `population` are the SAME expression for any burg at or below the cap, so a naive `nCore` makes the sprawl budget `nPatches − nCore` evaluate to exactly zero and every settlement under 10 000 becomes 100% intramural. This was a real defect in the first implementation.
 
 ---
 
@@ -552,8 +561,10 @@ describe('core outline is not a disc', () => {
   it.each([1, 2, 3, 4, 5])('seed %i: walled core is measurably non-circular', (seed) => {
     const { model } = generateFromBurg(crossroads(4000, seed), { seed });
     const outline = new Polygon(model.border!.shape.vertices);
-    // 1.0 is a perfect circle. The pre-change baseline sits ~0.90+.
-    expect(outline.compactness).toBeLessThan(0.86);
+    // 1.0 is a perfect circle. Measured pre-change baseline over these seeds:
+    // min 0.858, median 0.889, max 0.951. The bar sits well below the old
+    // minimum so passing it proves the shape field did real work.
+    expect(outline.compactness).toBeLessThan(0.75);
   });
 
   it('elongates along the road axis when roads are opposed', () => {
@@ -912,7 +923,7 @@ git commit -m "Urbanisation field: road corridors, overlap belts and on-ray sate
 
 **Interfaces:**
 - Consumes: `createUrbanisationField`, `SATELLITE_POP_THRESHOLD` (Task 5); `PatchAdjacency` (Task 2); `Model.inner`, `Model.adjacency`.
-- Produces: `Zone` type (`'core' | 'suburb' | 'satellite' | 'farm' | 'wilderness'`), `assignSprawl(args: SprawlArgs): void`, and `Patch.zone: Zone`. Tasks 8 and 9 consume `Patch.zone`.
+- Produces: `Zone` type (`'core' | 'suburb' | 'satellite' | 'farm' | 'wilderness'`), `assignSprawl(args: SprawlArgs): UrbanisationField` (it returns the field it built), `Patch.zone: Zone`, and `Model.urbanisationField: UrbanisationField | null`. Tasks 7, 8 and 9 consume these.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1007,7 +1018,7 @@ import type { Zone } from './zoning.js';
 import type { Patch } from './patch.js';
 import type { PatchAdjacency } from './adjacency.js';
 import { Point } from '../types/point.js';
-import { createUrbanisationField, SATELLITE_POP_THRESHOLD } from './urbanisation.js';
+import { createUrbanisationField, SATELLITE_POP_THRESHOLD, type UrbanisationField } from './urbanisation.js';
 
 export type Zone = 'core' | 'suburb' | 'satellite' | 'farm' | 'wilderness';
 
@@ -1037,14 +1048,16 @@ export interface SprawlArgs {
  * Label every patch. The core is already chosen; this grows extramural
  * fabric outward along road corridors, greedily and one patch at a time so
  * that the neighbour bonus can fuse crowded ribbons into a continuous belt.
+ *
+ * Returns the field it built so callers (and tests) can score patches
+ * against the very field that produced the zoning, rather than rebuilding
+ * it from constants that may later be tuned.
  */
-export function assignSprawl(args: SprawlArgs): void {
+export function assignSprawl(args: SprawlArgs): UrbanisationField {
   const { patches, inner, adjacency, roadDirections, coreRadius, population, isBuildable, budget } = args;
 
   for (const p of patches) p.zone = 'wilderness';
   for (const p of inner) p.zone = 'core';
-
-  if (budget <= 0) return;
 
   const satellites = population >= SATELLITE_POP_THRESHOLD;
   const reach = coreRadius * REACH_MULTIPLIER;
@@ -1067,6 +1080,10 @@ export function assignSprawl(args: SprawlArgs): void {
     satellites,
     satelliteSpacing: coreRadius,
   });
+
+  // Nothing to claim (core already fills the budget) — the field is still
+  // returned so callers can score against it.
+  if (budget <= 0) return field;
 
   const candidates = patches.filter(p => p.zone === 'wilderness' && isBuildable(p));
   const base = new Map<Patch, number>();
@@ -1095,6 +1112,8 @@ export function assignSprawl(args: SprawlArgs): void {
       : 'suburb';
     chosen.withinCity = true;
   }
+
+  return field;
 }
 ```
 
@@ -1104,6 +1123,14 @@ In `src/generator/model.ts`, import:
 
 ```typescript
 import { assignSprawl } from './zoning.js';
+import type { UrbanisationField } from './urbanisation.js';
+```
+
+Add the field to the class next to `adjacency`:
+
+```typescript
+  /** The field zoning used to place sprawl. Null before createWards runs. */
+  urbanisationField: UrbanisationField | null = null;
 ```
 
 `buildWalls` culls patches beyond `radius * 3` (`:451`). With a small core that radius collapses and would delete the countryside the sprawl needs. Replace that filter with one keyed off sprawl reach:
@@ -1125,7 +1152,7 @@ In `createWards`, the outskirts probability `1 / (this.nPatches - 5)` (`:835`) a
 Then call zoning at the start of `createWards`, before wards are assigned, so ward selection can see the zones:
 
 ```typescript
-    assignSprawl({
+    this.urbanisationField = assignSprawl({
       patches: this.patches,
       inner: this.inner,
       adjacency: this.adjacency!,
@@ -1221,11 +1248,18 @@ describe('field placement', () => {
   it('does not put fields inside road corridors', () => {
     const { model } = generateFromBurg(farmtown([90, 270], 120000), { seed: 6 });
     const farms = model.patches.filter(p => p.ward?.type === WardType.Farm);
-    const built = model.patches.filter(p => p.zone === 'suburb' || p.zone === 'satellite');
-    expect(built.length).toBeGreaterThan(0);
-    expect(farms.some(p => p.zone === 'farm')).toBe(true);
-    // No patch is both.
-    expect(farms.every(p => p.zone === 'farm')).toBe(true);
+    const suburbs = model.patches.filter(p => p.zone === 'suburb');
+    expect(farms.length).toBeGreaterThan(0);
+    expect(suburbs.length).toBeGreaterThan(0);
+
+    // The design promise: subtracting built(p) pushes fields OUT of the
+    // corridors and into the wedges between ribbons. Compare the two
+    // populations against the very field the model used, so tuning the
+    // zoning constants cannot silently invalidate this test.
+    const field = model.urbanisationField!;
+    const mean = (ps: typeof farms) =>
+      ps.reduce((sum, p) => sum + field.scoreAt(p.shape.center), 0) / ps.length;
+    expect(mean(farms)).toBeLessThan(mean(suburbs) * 0.5);
   });
 
   it('never places fields on water', () => {
