@@ -188,8 +188,10 @@ Extramural development must visibly favour the north.
 
     ${IMG}?i=${tho}
 
-**Riverwatch** — river-valley pull: growth clusters on the road that
-follows the river through the valley, not the one climbing away.
+**Riverwatch** — river-valley pull: growth clusters on the road marked
+\`followsRiver\`/\`valley\`, not the one marked \`ascent\`. Note: no river is
+drawn — \`followsRiver\` only weights growth; river geometry is not part of
+the contract yet.
 
     ${IMG}?i=${riv}
 

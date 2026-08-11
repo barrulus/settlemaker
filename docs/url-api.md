@@ -187,7 +187,7 @@ a river):
 | `group` | `'roads'` \| `'trails'` | Trails attract almost none (weight ×0.15). Absent = treated as a road. |
 | `through` | boolean | A route that continues past the burg attracts more (×1.5) than one that dead-ends there. |
 | `relief` | `'flat'`/`'valley'`/`'descent'`/`'ascent'`/`'ridge'` | Easy ground is neutral; `ascent` halves growth (×0.5); `ridge` quarters it (×0.25). |
-| `followsRiver` | boolean | A valley road along a river attracts slightly more (×1.2). |
+| `followsRiver` | boolean | A valley road along a river attracts slightly more (×1.2). **No river is rendered** — this is a weighting hint only; river geometry is not part of the contract yet. |
 
 Rules an adapter can rely on:
 

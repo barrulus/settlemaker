@@ -68,8 +68,10 @@ Extramural development must visibly favour the north.
 
     https://settlemaker.com/fmg?i=jZDBTgMxDET_xeettKXlkiPfwA2hyiXeJCJNIsdbVFb77zii3aVw4fgm4_HEE5zBbDs4juzATJDwRGDg2WdOql2gg5LLGFFCTmD2fd83hQXMgLFSB29B0FJc-ANjrGCER4US8RNvIHQqkRZj9ZjksuZg0aQ1hzPaJ0IOyWncywTHbzhY0qbbvjlGoUOw2ve9uTZtRAsrNO1KTm3lilVZvArO30oxxUCDvg_6R5i733t294uqp-KJbd0UFL8uG3KWH8uEMegV_sQ97B_v4nxw_n-1l54crCOYX2e9IJFO7OYv
 
-**Riverwatch** — river-valley pull: growth clusters on the road that
-follows the river through the valley, not the one climbing away.
+**Riverwatch** — river-valley pull: growth clusters on the road marked
+`followsRiver`/`valley`, not the one marked `ascent`. Note: no river is
+drawn — `followsRiver` only weights growth; river geometry is not part of
+the contract yet.
 
     https://settlemaker.com/fmg?i=dY_dasMwDIXfRdcpZC2F4cs9Qm_HKGqixAbVNraS0IW8e5WGJGzQy--g86MRejAfBdy61IIZweOdwMDF9ZQGlMpCATHEjlFc8GCOx7KclSRgGuRMBVROsCbeeEDmDEZSpxAZf3EFoXtkWilb9PLYYzBq0B6TAtZfhMn5VtO-R7gtcK1Jl36W80UndHW17u2R6TA7dG6relRtxqwsVoXWrrWJ2FGzeJgeetAE5jDk18_L1VT8qzuVf_usY37XtxVgrsgLTD-TPkukvvP0BA
 
