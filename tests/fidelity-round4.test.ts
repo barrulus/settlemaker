@@ -258,13 +258,21 @@ describe('fidelity round 4: footprint and texture scale with population', () => 
     // enough — a 200k city's walled core can be physically smaller than a
     // 20k city's — that it needs its own coverage rather than silently
     // dropping the check.
-    // Round 4 Task 6 (share raise): the plateau now starts LATER in this
-    // series. The share-based core (nPatches - round(nPatches * 0.45)) only
-    // reaches the capacity ceiling (populationToPatches(10000) = 38 patches)
-    // once nPatches passes ~69, which happens around population 25000 — so
-    // pop 20000 is share-bound, not cap-bound (measured nCore: 31, 38, 38,
-    // 38). The contract is unchanged in substance: nCore never falls with
-    // population, and plateaus once the cap binds.
+    // Round 4 Task 6 (share raise, historical): at the time, the share curve
+    // topped out at a flat 45% and the share-based core
+    // (nPatches - round(nPatches * 0.45)) only reached the capacity ceiling
+    // (populationToPatches(10000) = 38 patches) once nPatches passed ~69,
+    // around population 25000 — so pop 20000 was share-bound, not cap-bound
+    // (measured nCore then: 31, 38, 38, 38).
+    //
+    // Current mechanism (azgaar-input.ts, owner decision 2026-08-09):
+    // extramuralShare(population) = clamp(0.10 + 0.0657*(log10(pop) -
+    // log10(300)), 0.10, 0.20) — log-linear from 10% at pop 300 up to a 20%
+    // ceiling. Under this curve nCore is already fully cap-bound by pop
+    // 20000 (measured nCore: 32, 32, 32, 32 across this series) — plateauing
+    // even earlier than under the historical 45% curve. The contract is
+    // unchanged in substance: nCore never falls with population, and
+    // plateaus once the cap binds.
     const nCores = pops.map(p => mapToGenerationParams(aldford(p), 9).nCore);
     for (let i = 1; i < nCores.length; i++) {
       expect(nCores[i]).toBeGreaterThanOrEqual(nCores[i - 1]);

@@ -24,14 +24,24 @@ describe('zoning', () => {
     // Round 4 Task 6 fix round: coreCapacity is a ceiling, not a target —
     // extramuralShare(population) keeps rising right up to its ceiling at
     // population 10000, so 10000 itself is where the cap *starts* to bind,
-    // not where it's already fully binding. The share-based core
-    // (nPatches - round(nPatches * 0.45)) only reaches the capacity ceiling
-    // (populationToPatches(10000) = 38 patches) once nPatches passes ~69,
-    // which happens at population 25000. Raising the share curve to 45%
-    // pushed that boundary out from 20000, where this test used to sample
-    // (measured nCore: 21 at pop 10000, 31 at 20000, 38 from 25000 up). Use
-    // 30000, comfortably past it, so both runs are fully cap-bound and their
-    // core sizes are actually comparable.
+    // not where it's already fully binding. At the time this test was
+    // written, the share curve topped out at 45% (historical — since
+    // replaced by the owner's 2026-08-09 decision; see below), and the
+    // share-based core (nPatches - round(nPatches * 0.45)) only reached the
+    // capacity ceiling (populationToPatches(10000) = 38 patches) once
+    // nPatches passed ~69, which happened at population 25000, pushing the
+    // fully-cap-bound boundary out from 20000, where this test used to
+    // sample (measured nCore: 21 at pop 10000, 31 at 20000, 38 from 25000
+    // up). Use 30000, comfortably past it, so both runs are fully cap-bound
+    // and their core sizes are actually comparable.
+    //
+    // Current mechanism (azgaar-input.ts): extramuralShare(population) =
+    // clamp(0.10 + 0.0657*(log10(pop) - log10(300)), 0.10, 0.20) — a
+    // log-linear curve from 10% at pop 300 up to a 20% ceiling, reached
+    // around pop 10000-ish and flat above it. The measured nCore values and
+    // the choice of 30000 above predate this curve but still hold: nCore is
+    // still cap-bound (not share-bound) well before 30000, so the assertion
+    // remains valid under the current mechanism.
     const small = generateFromBurg({ ...metropolis([0, 120, 240]), population: 30000 }, { seed: 5 });
     // A 250k city's core is no bigger than a fully cap-bound 20k city's core.
     expect(model.inner.length).toBeLessThanOrEqual(small.model.inner.length + 2);

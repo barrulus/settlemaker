@@ -188,6 +188,14 @@ describe('SVG output reflects shift', () => {
     // `computeLocalBounds(model, padding, shift)` is the single source of
     // both the SVG viewBox and the GeoJSON `local_bounds`, so the frame
     // tracking the origin is exactly: frame == unshifted frame + shift.
+    //
+    // Note: both sides of the assertion below go through this same
+    // `computeLocalBounds` function (once unshifted here, once internally
+    // via the real pipeline with the shift applied). That proves the shift
+    // PLUMBING — that `originShift` actually reaches the viewBox/geojson —
+    // but it cannot catch an arithmetic error inside `computeLocalBounds`'
+    // own shift-handling branch, since the same (possibly wrong) arithmetic
+    // would run on both sides and still agree.
     const coastal = generateFromBurg(coastalBurg({ population: 20000 }));
     expect(coastal.originShift.source).toBe('coast_pull');
     expect(coastal.originShift.dx).toBeLessThan(0);

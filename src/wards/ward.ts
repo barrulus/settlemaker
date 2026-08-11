@@ -13,18 +13,23 @@ import { edgeInsetScale, rowHousing, ROW_OUTSKIRTS_BITE } from '../generator/gen
  * Largest built-up area, in city patches, that `filterOutskirts` treats as
  * having no interior to thin toward — see the guards in that method.
  *
- * Read off two sweeps. City-patch count is a step function of population and
- * barely varies with seed: 3 up to pop 100, 4 at 140, 5 at 150, 6 at 200, 9
- * at 300, 12 at 400, ~20 by 1000. Independently, "does this settlement
- * contain an INTERIOR patch" (one whose every vertex is shared only with
- * other city patches — exactly the vertices `filterOutskirts`' density field
- * counts as populated) is NO at every seed up to pop 200, mixed at 300, and
- * YES at every seed from 400 up. The two agree that a settlement of six
- * patches or fewer has no interior, which is why the bound is a patch count
- * and not a population. It stops short of pop 300 deliberately: the two
- * pop-300 seeds that lack an interior patch still render 71-100% of their
- * households, so the guards would buy nothing there and would move a render
- * gated and approved as it stands.
+ * This is NOT a tight boundary of "no interior" — it's a conservative
+ * subset, chosen to cover the entire measured zero-building failure set
+ * with margin while leaving approved renders untouched. The actual failure
+ * mode (the density-field overshoot described where this constant is used)
+ * was observed only at ≤4 city patches in the 175-case sweep that found it
+ * (6 hamlets with no house at all, all at pop ~60 or below, all ≤4 patches).
+ * A finer measurement shows "no interior" itself extends further up than
+ * this bound suggests — e.g. some pop-250, 7-patch settlements also lack an
+ * interior patch — so 6 deliberately overshoots the known failures rather
+ * than tracking the interior/no-interior line exactly. City-patch count is a
+ * step function of population and barely varies with seed: 3 up to pop 100,
+ * 4 at 140, 5 at 150, 6 at 200, 9 at 300, 12 at 400, ~20 by 1000. The bound
+ * stops at 6 (not higher) deliberately: the two pop-300 seeds that lack an
+ * interior patch still render 71-100% of their households, so extending the
+ * guard there would buy nothing and would move a render gated and approved
+ * as it stands. Expressed as a patch count, not a population, because patch
+ * count is what the mechanism it guards actually depends on.
  */
 export const INTERIORLESS_CITY_PATCHES = 6;
 
