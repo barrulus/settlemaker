@@ -58,15 +58,11 @@ describe('selectPois — town regime (P >= 300)', () => {
     // moved which seeds roll a Cathedral; seed=42 stopped rolling one, and
     // Task 9 found seed=231 had too.
     //
-    // Cathedrals are now RARE by construction, not merely seed-sensitive:
-    // `buildWardDistribution` sizes its deck off nCore, but `createWards`
-    // deals it to nCore minus the plaza and minus every gate ward (~9
-    // patches at this scale), and Cathedral is second-to-last in the deck
-    // (Park last). Measured at pop 20000: 29 deck entries, 23 patches, so
-    // neither is ever reached; a Cathedral only lands when few gate wards
-    // roll — 2 seeds of 200 swept at this fixture. Retargeted rather than
-    // fixed: unstarving the deck would move every ward assignment in every
-    // approved render. Logged as a defect for Barry.
+    // That rarity was the ward-deck starvation (deck sized off nCore,
+    // dealt to fewer slots), now FIXED: buildWardDistribution is sized to
+    // the exact slots createWards deals, so a temple'd burg rolls its
+    // Cathedral every run (see tests/ward-reachability.test.ts) — this
+    // seed is no longer a lucky config.
     const { model } = generateFromBurg(
       makeBurg({ population: 90000, temple: true, capital: true }),
       { seed: 46 },

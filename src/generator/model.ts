@@ -1243,8 +1243,11 @@ export class Model {
       }
     }
 
-    // Build ward distribution
-    const wards = buildWardDistribution(this.params);
+    // Build ward distribution, sized to the slots the loop below actually
+    // deals to (plaza and gate wards are already spliced out of
+    // `unassigned`) — a longer deck starves its tail, a shorter one pads
+    // with the Slum fallback.
+    const wards = buildWardDistribution(this.params, unassigned.length);
     // Shuffle ~10% of elements
     for (let i = 0; i < Math.floor(wards.length / 10); i++) {
       const index = rng.int(0, wards.length - 1);

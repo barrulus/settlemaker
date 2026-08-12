@@ -25,54 +25,76 @@ export type WardConstructor = new (model: Model, patch: Patch) => Ward;
  *   Military ×1 (~3%), Cathedral ×1 (~3%), Park ×1 (~3%)
  *   + remaining Craftsmen fill
  */
-export function buildWardDistribution(params: GenerationParams): WardConstructor[] {
-  // Round-4 Task 4 split nPatches (the total built budget, including the
-  // countryside ring) from nCore (the inner-city/core budget). This list is
-  // consumed front-to-back by createWards' assignment loop over `unassigned`
-  // (this.inner, sized nCore) — sizing proportions off the much larger
-  // nPatches starves low-priority entries pushed near the end (Cathedral,
-  // Park) for any settlement with real countryside surplus, since Craftsmen
-  // alone (~46% of nPatches) can exceed nCore before the loop ever reaches
-  // them. nCore is the correct budget here.
-  const n = params.nCore;
-  const wards: WardConstructor[] = [];
+export function buildWardDistribution(params: GenerationParams, slots: number): WardConstructor[] {
+  // `slots` is the exact number of patches createWards' assignment loop will
+  // deal to (this.inner minus the plaza minus the gate wards, both assigned
+  // before the deck is drawn). Earlier revisions sized the deck off nPatches
+  // and then nCore — both larger than the slots actually dealt — which
+  // starved the entries near the end of the list: the distinctive singletons
+  // (Administration, Military, Cathedral, Park) sat past the last slot and
+  // were effectively extinct (measured pop 20000, seeds 1-20: deck 29 vs
+  // 23-28 slots — Park 1/20, Cathedral 3/20, Military 6/20). Sizing the deck
+  // to exactly `slots` means every entry is dealt, every run.
+  const n = slots;
+  if (n <= 0) return [];
 
-  // Base Craftsmen fill: ~46%
-  const craftsmenCount = Math.max(3, Math.round(n * 0.46));
-  for (let i = 0; i < craftsmenCount; i++) wards.push(CraftsmenWard);
-
-  // Slum: ~14%, more if shanty
-  const slumCount = Math.max(1, Math.round(n * (params.shantyNeeded ? 0.22 : 0.14)));
-  for (let i = 0; i < slumCount; i++) wards.push(Slum);
-
-  // Merchant: ~6%
-  const merchantCount = Math.max(1, Math.round(n * 0.06));
-  for (let i = 0; i < merchantCount; i++) wards.push(MerchantWard);
-
-  // Patriciate: ~6%
-  const patriciateCount = Math.max(0, Math.round(n * 0.06));
-  for (let i = 0; i < patriciateCount; i++) wards.push(PatriciateWard);
-
-  // Market: ~6%
-  const marketCount = Math.max(0, Math.round(n * 0.06));
-  for (let i = 0; i < marketCount; i++) wards.push(Market);
+  // Singletons first (in deal order): they must all fit inside the deck.
+  const specials: WardConstructor[] = [];
 
   // Administration: ~3%, more if capital
   const adminCount = Math.max(0, Math.round(n * (params.capitalNeeded ? 0.08 : 0.03)));
-  for (let i = 0; i < adminCount; i++) wards.push(AdministrationWard);
+  for (let i = 0; i < adminCount; i++) specials.push(AdministrationWard);
 
   // Military: 1
-  wards.push(MilitaryWard);
+  specials.push(MilitaryWard);
 
   // Cathedral/Temple: add if templeNeeded
   if (params.templeNeeded) {
-    wards.push(Cathedral);
+    specials.push(Cathedral);
   }
 
   // Park: 1 if city is large enough
   if (n >= 10) {
-    wards.push(Park);
+    specials.push(Park);
   }
 
+  // Tiny settlements may not have room for every special; drop the least
+  // distinctive first (Administration, then Military — Cathedral answers an
+  // explicit input flag and Park is already gated on n >= 10, so in practice
+  // the trim never reaches them).
+  while (specials.length > n) specials.shift();
+
+  // Commons fill the remaining slots. Proportions are of the whole deck,
+  // with Craftsmen as the flexible filler absorbing the remainder.
+  const commonsBudget = n - specials.length;
+
+  const commons: WardConstructor[] = [];
+
+  // Slum: ~14%, more if shanty
+  const slumCount = Math.max(1, Math.round(n * (params.shantyNeeded ? 0.22 : 0.14)));
+  for (let i = 0; i < slumCount; i++) commons.push(Slum);
+
+  // Merchant: ~6%
+  const merchantCount = Math.max(1, Math.round(n * 0.06));
+  for (let i = 0; i < merchantCount; i++) commons.push(MerchantWard);
+
+  // Patriciate: ~6%
+  const patriciateCount = Math.max(0, Math.round(n * 0.06));
+  for (let i = 0; i < patriciateCount; i++) commons.push(PatriciateWard);
+
+  // Market: ~6%
+  const marketCount = Math.max(0, Math.round(n * 0.06));
+  for (let i = 0; i < marketCount; i++) commons.push(Market);
+
+  // Trim from the end (Market first) if the fixed commons alone overflow
+  // the budget — only possible at very small n.
+  while (commons.length > commonsBudget) commons.pop();
+
+  // Base Craftsmen fill: the remainder (~46% at typical proportions)
+  const craftsmenCount = commonsBudget - commons.length;
+  const wards: WardConstructor[] = [];
+  for (let i = 0; i < craftsmenCount; i++) wards.push(CraftsmenWard);
+
+  wards.push(...commons, ...specials);
   return wards;
 }

@@ -130,9 +130,18 @@ describe('fidelity round 4: probe path', () => {
     // 151.0", svg.length 43501, 323 patches, 20 wards with geometry, 13 core
     // patches, 6 suburb patches of which 2 are non-GateWard (measured
     // locally).
+    // Re-pinned for the ward-deck starvation fix (buildWardDistribution now
+    // sized to the slots createWards actually deals, so the singleton wards
+    // — Administration, Military, Cathedral, Park — are dealt every run
+    // instead of starving past the last slot; deck length changes the rng
+    // stream for every later draw). Verified non-degenerate and
+    // deterministic (two runs byte-identical): viewBox "-64.3 -76.2 131.9
+    // 157.1", svg.length 42860, 323 patches, 23 wards with geometry, 13
+    // core patches, 8 suburb patches of which 2 are non-GateWard (measured
+    // locally).
     const { svg } = generateFromBurg(aldford(1400), { seed: 9 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('8646969169209ed9133f2d0b6fbdbbdcd3bd5e2964cd1578fc4781ffb93c30b6');
+    expect(sha256(svg)).toBe('7a05bf83dcce06005726d12405c05ad6e380dd72f332c7f90fd263f092cad071');
   });
 
   it('pins current village output at pop 800 (not a base-equality guarantee)', () => {
@@ -197,9 +206,14 @@ describe('fidelity round 4: probe path', () => {
     // 144.8", svg.length 35428, 327 patches, 21 wards with geometry, 13 core
     // patches, 7 suburb patches of which 1 is non-GateWard (measured
     // locally).
+    // Re-pinned for the ward-deck starvation fix (same cause as the
+    // pop-1400 hash above). Verified non-degenerate and deterministic (two
+    // runs byte-identical): viewBox "-71.4 -71.8 137.6 143.7", svg.length
+    // 38359, 327 patches, 22 wards with geometry, 13 core patches, 7 suburb
+    // patches of which 1 is non-GateWard (measured locally).
     const { svg } = generateFromBurg(aldford(800), { seed: 1 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('5163acc4d6ace47b5d919ca2e1b77ec23f770614c25f594d8a1060e46b3d10fc');
+    expect(sha256(svg)).toBe('b20aa1c5e52cf4fa40b9700cb8add173f4533527efd1ef8523534e3fe33b5523');
   });
 });
 
