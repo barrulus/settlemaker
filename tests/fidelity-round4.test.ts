@@ -139,9 +139,12 @@ describe('fidelity round 4: probe path', () => {
     // 157.1", svg.length 42860, 323 patches, 23 wards with geometry, 13
     // core patches, 8 suburb patches of which 2 are non-GateWard (measured
     // locally).
+    // Re-pinned for glyph-wiring Task 2 (sm* material tokens + themeToCss
+    // rules for .sm-stone/.sm-timber/etc. and #shadows color): the CSS text
+    // embedded in every SVG grew, changing the hash with no geometry change.
     const { svg } = generateFromBurg(aldford(1400), { seed: 9 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('7a05bf83dcce06005726d12405c05ad6e380dd72f332c7f90fd263f092cad071');
+    expect(sha256(svg)).toBe('b460f7e7a066a22f093a25dfe512d4d7cc3b8d48c399d4ad208bd042f015f23f');
   });
 
   it('pins current village output at pop 800 (not a base-equality guarantee)', () => {
@@ -211,9 +214,11 @@ describe('fidelity round 4: probe path', () => {
     // runs byte-identical): viewBox "-71.4 -71.8 137.6 143.7", svg.length
     // 38359, 327 patches, 22 wards with geometry, 13 core patches, 7 suburb
     // patches of which 1 is non-GateWard (measured locally).
+    // Re-pinned for glyph-wiring Task 2 (same cause as the pop-1400 hash
+    // above): CSS text grew, no geometry change.
     const { svg } = generateFromBurg(aldford(800), { seed: 1 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('b20aa1c5e52cf4fa40b9700cb8add173f4533527efd1ef8523534e3fe33b5523');
+    expect(sha256(svg)).toBe('d508cd4d683a023d8980f038982335f37d063417cf96da4a8c6773baa9edeb6b');
   });
 });
 

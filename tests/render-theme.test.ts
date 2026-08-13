@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { cssHex, blend, darken, themeFrom } from '../src/output/render-theme.js';
 import { PALETTE_DEFAULT, PALETTES, PALETTE_PARCHMENT } from '../src/output/palette.js';
+import { themeToCss } from '../src/output/assemble-svg.js';
+import { sanitizeThemeOverrides } from '../src/url/params.js';
 import type { Palette } from '../src/types/interfaces.js';
 
 describe('color helpers', () => {
@@ -77,5 +79,27 @@ describe('parchment palette', () => {
     expect(PALETTES.parchment).toBe(PALETTE_PARCHMENT);
     expect(PALETTE_PARCHMENT.paper).toBe(0xfff2c8);
     expect(PALETTE_PARCHMENT.water).toBe(0x85bcb2);
+  });
+});
+
+describe('symbol material tokens', () => {
+  it('every palette derives all six sm tokens as hex', () => {
+    const t = themeFrom(PALETTES.parchment);
+    for (const k of ['smInk', 'smStone', 'smTimber', 'smVoid', 'smCanopy1', 'smCanopy2'] as const) {
+      expect(t[k]).toMatch(/^#[0-9a-f]{6}$/);
+    }
+  });
+
+  it('themeToCss emits the authored material classes and shadow color', () => {
+    const css = themeToCss(themeFrom(PALETTES.parchment));
+    for (const cls of ['.sm-stone', '.sm-timber', '.sm-void', '.sm-mark', '.sm-canopy-a', '.sm-canopy-b', '.sm-ridge', '.sm-hatch', '.sm-sil']) {
+      expect(css).toContain(cls);
+    }
+    expect(css).toMatch(/#shadows\{[^}]*color:#/);
+  });
+
+  it('sanitizeThemeOverrides accepts sm tokens, rejects non-hex', () => {
+    expect(sanitizeThemeOverrides({ smInk: '#112233' })).toEqual({ smInk: '#112233' });
+    expect(sanitizeThemeOverrides({ smInk: 'url(evil)' })).toEqual({});
   });
 });

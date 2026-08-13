@@ -50,6 +50,13 @@ export interface RenderTheme {
   casingDelta: number;       // casing extends this much per side beyond core
   seamStroke: number;        // same-color stroke on water patches
   shoreWidth: number;
+  /** Symbol-library material tokens (batch001 authoring classes). */
+  smInk: string;
+  smStone: string;
+  smTimber: string;
+  smVoid: string;
+  smCanopy1: string;
+  smCanopy2: string;
 }
 
 export function themeFrom(palette: Palette): RenderTheme {
@@ -80,5 +87,11 @@ export function themeFrom(palette: Palette): RenderTheme {
     casingDelta: 0.3,
     seamStroke: 0.5,
     shoreWidth: 0.6,
+    smInk: cssHex(palette.dark),
+    smStone: cssHex(palette.light),
+    smTimber: cssHex(blend(palette.light, palette.medium, 0.35)),
+    smVoid: cssHex(blend(palette.dark, palette.medium, 0.5)),
+    smCanopy1: cssHex(darken(green, 0.15)),
+    smCanopy2: cssHex(green),
   };
 }

@@ -20,6 +20,7 @@ const THEME_COLOR_KEYS = [
   'paper', 'fieldFill', 'fieldFurrow', 'greenFill', 'treeFill',
   'roadCasing', 'roadCore', 'buildingFill', 'buildingStroke',
   'landmarkFill', 'shadowColor',
+  'smInk', 'smStone', 'smTimber', 'smVoid', 'smCanopy1', 'smCanopy2',
 ] as const;
 
 /** Nullable color-string slots on RenderTheme (also accept `null`). */
