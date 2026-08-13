@@ -10,6 +10,7 @@ import { Castle } from '../wards/castle.js';
 import { SeededRandom } from '../utils/random.js';
 import { pointInPolygon } from '../geom/point-in-polygon.js';
 import { Polygon } from '../geom/polygon.js';
+import { CANOPY_KINDS } from '../assets/asset-sets.js';
 import {
   SCENE_VERSION,
   type Scene, type ScenePoint, type RoadFeature, type BuildingFeature,
@@ -45,7 +46,7 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
         rings: model.getWaterRings().map(r => ring(r)),
         synthetic: model.syntheticCoast !== null,
       },
-      fields: [], furrows: [], greens: [], vegetation: [],
+      fields: [], furrows: [], greens: [], vegetation: [], symbols: [],
       roads: [], buildings: [], piers: [], walls: [],
     },
   };
@@ -187,7 +188,7 @@ function scatterVegetation(
         if (!pointInPolygon(p, grove.vertices)) continue;
         scene.layers.vegetation.push({
           at: sc(p),
-          kind: 'tree',
+          kind: CANOPY_KINDS[Math.floor(rng.float() * CANOPY_KINDS.length)],
           scale: 1.6 + rng.float() * 1.2,
           rotationDeg: Math.round(rng.float() * 360),
         });

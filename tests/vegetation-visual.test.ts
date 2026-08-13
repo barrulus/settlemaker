@@ -33,26 +33,26 @@ describe('vegetation visual output', () => {
     };
     const { svg } = generateFromBurg(burg);
 
-    // Verify tree symbol is defined in defs
-    expect(svg).toContain('<symbol id="asset-tree"');
-    expect(svg).toContain('viewBox="-1 -1 2 2"');
-    expect(svg).toContain('<circle cx="0" cy="0.12" r="0.44"/>');
+    // Task 3 (canopy glyphs): trees now render as batch001 canopy glyphs in
+    // #canopy, not the schematic <use href="#asset-tree"> symbol in #greens.
+    // Verify a canopy glyph symbol is defined in defs
+    expect(svg).toMatch(/<symbol id="glyph-sm-tree-[a-z-]+" viewBox="0 0 64 64"/);
 
     // Verify tree instances are rendered as use elements
-    const useMatches = svg.match(/<use href="#asset-tree"/g);
+    const useMatches = svg.match(/<use href="#glyph-sm-tree-/g);
     expect(useMatches).not.toBeNull();
     expect(useMatches!.length).toBeGreaterThan(0);
 
-    // Verify CSS rule for tree fill exists
+    // Verify CSS rule for legacy tree fill still exists (schematic set retained)
     expect(svg).toContain('#greens use{fill:');
 
     // Verify use elements have proper transform attributes
-    expect(svg).toMatch(/<use href="#asset-tree"[^>]*transform="translate/);
+    expect(svg).toMatch(/<use href="#glyph-sm-tree-[a-z-]+"[^>]*transform="translate/);
     expect(svg).toMatch(/scale\(/);
     expect(svg).toMatch(/rotate\(/);
   });
 
-  it('trees are positioned inside greens group', () => {
+  it('trees are positioned inside canopy group', () => {
     const burg = {
       name: 'Parkville',
       // Round 4 Task 2: perPatchDensity shrank this fixture's footprint at
@@ -83,11 +83,12 @@ describe('vegetation visual output', () => {
     };
     const { svg } = generateFromBurg(burg);
 
-    // Extract greens group content
-    const greensStart = svg.indexOf('<g id="greens">');
-    const greensEnd = svg.indexOf('</g>', greensStart);
-    const greensContent = svg.substring(greensStart, greensEnd);
+    // Task 3 (canopy glyphs): trees now render in #canopy (painted above
+    // #walls), not #greens — see canopy-glyphs.test.ts for the ordering pin.
+    const canopyStart = svg.indexOf('<g id="canopy">');
+    const canopyEnd = svg.indexOf('</g>', canopyStart);
+    const canopyContent = svg.substring(canopyStart, canopyEnd);
 
-    expect(greensContent).toContain('<use href="#asset-tree"');
+    expect(canopyContent).toContain('<use href="#glyph-sm-tree-');
   });
 });

@@ -34,11 +34,14 @@ const parky: AzgaarBurgInput = {
 describe('asset sets', () => {
   it('starter set has a tree symbol and is the default for any biome', () => {
     expect(SCHEMATIC_SET.symbols.tree).toContain('circle');
-    expect(assetSetFor(undefined).name).toBe('schematic');
-    expect(assetSetFor('desert').name).toBe('schematic');
+    // Task 3 (canopy glyphs): assetSetFor() now returns BATCH001_SET (the
+    // schematic tree symbol lives on but park groves render batch001 glyphs
+    // instead — see tests/canopy-glyphs.test.ts).
+    expect(assetSetFor(undefined).name).toBe('batch001');
+    expect(assetSetFor('desert').name).toBe('batch001');
   });
 
-  it('park groves gain deterministic tree instances rendered as <use>', () => {
+  it('park groves gain deterministic canopy glyph instances rendered as <use>', () => {
     // Pop 2500 with temple+walls reliably rolls Park wards across seeds is
     // NOT guaranteed — find greens first, assert conditionally but strictly.
     const { svg, model } = generateFromBurg(parky);
@@ -48,8 +51,10 @@ describe('asset sets', () => {
       // so the implementer picks a different name/seed rather than skipping.
       throw new Error('Fixture produced no park ward; adjust the fixture name (new seed) until one exists.');
     }
-    expect(svg).toContain('<symbol id="asset-tree"');
-    expect(svg.match(/<use href="#asset-tree"/g)!.length).toBeGreaterThan(0);
+    // Task 3 (canopy glyphs): trees now render as batch001 canopy glyphs in
+    // #canopy, not schematic <use href="#asset-tree"> in #greens.
+    expect(svg).toContain('<symbol id="glyph-sm-tree-');
+    expect(svg.match(/<use href="#glyph-sm-tree-/g)!.length).toBeGreaterThan(0);
     expect(svg).toContain('#greens use{fill:');
   });
 

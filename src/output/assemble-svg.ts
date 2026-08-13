@@ -16,6 +16,16 @@ export interface AssembleOptions {
 }
 
 function fmt(n: number): string { return n.toFixed(2); }
+function fmt4(n: number): string { return n.toFixed(4); }
+
+function glyphTransform(
+  at: ScenePoint, scale: number, rotationDeg: number,
+  viewBox: [number, number, number, number],
+): string {
+  const n = viewBox[2];        // glyph grid size (64, or 32 for marks)
+  const c = n / 2;
+  return `translate(${fmt(at.x)},${fmt(at.y)}) scale(${fmt4(scale / n)}) rotate(${rotationDeg}) translate(${-c},${-c})`;
+}
 
 function ringPath(ring: ScenePoint[]): string {
   if (ring.length === 0) return '';
@@ -90,6 +100,16 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     .map(k => `<symbol id="asset-${k}" viewBox="-1 -1 2 2">${assets.symbols[k]}</symbol>`)
     .join('');
 
+  const glyphIds = new Set<string>();
+  for (const v of L.vegetation) if (assets.glyphs?.[v.kind]) glyphIds.add(v.kind);
+  for (const s of L.symbols) if (assets.glyphs?.[s.id]) glyphIds.add(s.id);
+  const glyphDefs = [...glyphIds].map(id => {
+    const g = assets.glyphs![id];
+    const vb = g.viewBox.join(' ');
+    return `<symbol id="glyph-${id}" viewBox="${vb}" overflow="visible">${g.body}</symbol>`
+      + `<symbol id="glyph-${id}-sil" viewBox="${vb}" overflow="visible">${g.sil}</symbol>`;
+  }).join('');
+
   // 15°-quantized angle buckets actually used by field plots, so we only
   // emit the pattern defs the document needs.
   const bucketOf = (a: number): number => ((Math.round(a / 15) * 15) % 180 + 180) % 180;
@@ -103,7 +123,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
 
   const parts: string[] = [];
   parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${b.min_x.toFixed(1)} ${b.min_y.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}">`);
-  parts.push(`<defs><clipPath id="${clipId}"><rect x="${b.min_x.toFixed(1)}" y="${b.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"/></clipPath>${patternDefs}${symbolDefs}</defs>`);
+  parts.push(`<defs><clipPath id="${clipId}"><rect x="${b.min_x.toFixed(1)}" y="${b.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"/></clipPath>${patternDefs}${symbolDefs}${glyphDefs}</defs>`);
   parts.push(`<style>\n${themeToCss(theme)}\n</style>`);
   // data-bg contract with cropSvgToTile: attribute markup + inline fill.
   parts.push(`<rect data-bg="paper" x="${b.min_x.toFixed(1)}" y="${b.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="${theme.paper}"/>`);
@@ -124,6 +144,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     parts.push('<g id="greens">');
     for (const g of L.greens) parts.push(`<path d="${ringPath(g.ring)}"/>`);
     for (const v of L.vegetation) {
+      if (assets.glyphs?.[v.kind]) continue; // drawn in #canopy above walls
       const s = v.scale;
       parts.push(`<use href="#asset-${v.kind}" x="${fmt(-1)}" y="${fmt(-1)}" width="2" height="2" transform="translate(${fmt(v.at.x)},${fmt(v.at.y)}) scale(${fmt(s / 2)}) rotate(${v.rotationDeg})"/>`);
     }
@@ -191,6 +212,15 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
       for (const t of wallF.towers) {
         parts.push(`<circle cx="${fmt(t.x)}" cy="${fmt(t.y)}" r="${fmt(r)}"/>`);
       }
+    }
+    parts.push('</g>');
+  }
+
+  const canopy = L.vegetation.filter(v => assets.glyphs?.[v.kind] !== undefined);
+  if (canopy.length > 0) {
+    parts.push('<g id="canopy">');
+    for (const v of [...canopy].sort((a, b) => a.at.y - b.at.y)) {
+      parts.push(`<use href="#glyph-${v.kind}" transform="${glyphTransform(v.at, v.scale, v.rotationDeg, assets.glyphs![v.kind].viewBox)}"/>`);
     }
     parts.push('</g>');
   }

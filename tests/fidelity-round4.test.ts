@@ -216,9 +216,14 @@ describe('fidelity round 4: probe path', () => {
     // patches of which 1 is non-GateWard (measured locally).
     // Re-pinned for glyph-wiring Task 2 (same cause as the pop-1400 hash
     // above): CSS text grew, no geometry change.
+    // Re-pinned for glyph-wiring Task 3 (canopy glyphs): park trees now
+    // render as batch001 canopy glyphs (defs + #canopy group) instead of the
+    // schematic unit-box tree symbol — a geometry-payload change, not a
+    // regression. Verified non-degenerate and deterministic: svg.length
+    // 45585, 327 patches, 22 wards with geometry (measured locally).
     const { svg } = generateFromBurg(aldford(800), { seed: 1 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('d508cd4d683a023d8980f038982335f37d063417cf96da4a8c6773baa9edeb6b');
+    expect(sha256(svg)).toBe('95ba94e752210a218403addbda190cdd11f7d6ea27c1559431ccd90e82d5fbfc');
   });
 });
 

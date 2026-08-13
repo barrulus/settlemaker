@@ -6,7 +6,7 @@ import type { LocalBounds } from '../generator/bounds.js';
  * consumes this same shape. Additive evolution only; bump SCENE_VERSION on
  * breaking change.
  */
-export const SCENE_VERSION = 1 as const;
+export const SCENE_VERSION = 2 as const;
 
 export interface ScenePoint { x: number; y: number }
 
@@ -21,6 +21,8 @@ export interface FieldPlot {
   ring: ScenePoint[];
   /** Furrow-hatch direction in degrees, from the plot's OBB. */
   angleDeg: number;
+  /** false → plot ground draws but furrow hatch is suppressed (windmill plot). */
+  hatch?: boolean;
 }
 /** @deprecated Always empty since settlemaker 0.8.0 — fields carry angleDeg instead of furrow segments. */
 export interface Furrow { start: ScenePoint; end: ScenePoint }
@@ -28,10 +30,17 @@ export interface GreenFeature { ring: ScenePoint[] }
 
 export interface VegetationInstance {
   at: ScenePoint;
-  kind: 'tree';
-  /** Uniform scale in local units (symbol is authored in a unit box). */
-  scale: number;
+  /** Glyph id (batch001 canopy) or legacy unit-box kind ('tree'). */
+  kind: string;
+  scale: number;       // world-unit size of the whole glyph box
   rotationDeg: number;
+}
+export interface SymbolInstance {
+  id: string;          // batch001 id, e.g. 'sm-well'
+  at: ScenePoint;
+  scale: number;       // world-unit size of the glyph box (fixed: max footprint axis)
+  rotationDeg: number;
+  zBand: 'structure' | 'overlay';
 }
 
 export interface RoadFeature {
@@ -78,6 +87,7 @@ export interface Scene {
     furrows: Furrow[];
     greens: GreenFeature[];
     vegetation: VegetationInstance[];
+    symbols: SymbolInstance[];
     roads: RoadFeature[];
     buildings: BuildingFeature[];
     piers: PierFeature[];

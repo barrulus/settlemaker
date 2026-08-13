@@ -4,13 +4,26 @@
  * authored in a unit box (viewBox -1 -1 2 2), unstyled: color comes from
  * the theme via CSS on the consuming group.
  */
+import { BATCH001_GLYPHS } from './batch001.js';
+import { SYMBOL_MANIFEST } from './symbol-manifest.js';
+
 export interface AssetSet {
   name: string;
   /** semantic kind → inner markup of a <symbol viewBox="-1 -1 2 2"> */
   symbols: Record<string, string>;
   /** semantic kind → tileable <pattern> content, unrotated (assembler applies patternTransform). */
   patterns?: Record<string, { width: number; height: number; content: string }>;
+  /** batch001 glyph id → viewBox + body/silhouette markup. */
+  glyphs?: Record<string, GlyphAsset>;
 }
+
+export interface GlyphAsset {
+  viewBox: [number, number, number, number];
+  body: string;
+  sil: string;
+}
+
+export const CANOPY_KINDS = ['sm-tree-deciduous', 'sm-tree-deciduous-round', 'sm-tree-conifer'] as const;
 
 /** Starter set: deliberately simple, proves symbol resolution end-to-end. */
 export const SCHEMATIC_SET: AssetSet = {
@@ -23,11 +36,26 @@ export const SCHEMATIC_SET: AssetSet = {
   },
 };
 
+function batchGlyphs(): Record<string, GlyphAsset> {
+  const out: Record<string, GlyphAsset> = {};
+  for (const [id, g] of Object.entries(BATCH001_GLYPHS)) {
+    out[id] = { viewBox: SYMBOL_MANIFEST[id].viewBox, body: g.body, sil: g.sil };
+  }
+  return out;
+}
+
+export const BATCH001_SET: AssetSet = {
+  name: 'batch001',
+  symbols: SCHEMATIC_SET.symbols,
+  patterns: SCHEMATIC_SET.patterns,
+  glyphs: batchGlyphs(),
+};
+
 /**
  * Biome → asset set. One set exists today; the lookup is the contract —
  * per-biome sets (desert dunes/palms, temperate oaks) plug in here without
  * code changes elsewhere.
  */
 export function assetSetFor(_biome?: string): AssetSet {
-  return SCHEMATIC_SET;
+  return BATCH001_SET;
 }
