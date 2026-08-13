@@ -15,7 +15,7 @@
 - The public repo's master receives **zero** split-related commits until Task 6 (domains commit) and Task 7 (cleanup commit). Tasks 1–5 touch only the new private repo.
 - The submodule URL must be `https://github.com/barrulus/settlemaker.git` (not ssh) so Netlify can clone it without deploy keys.
 - Private repo local path: `/home/barrulus/dev/settlemaker-web`. GitHub: `barrulus/settlemaker-web`, private.
-- Netlify site name: `settlemaker-web` → hostname `settlemaker-web.netlify.app`. If the name is taken, pick another and substitute the hostname everywhere it appears in Tasks 4–6.
+- Netlify: the EXISTING site (currently serving settlemaker.com, hostname `settlemaker.netlify.app`) is relinked to the private repo — no second site is created (Barry's call, 2026-08-13, revising the original two-site design). Site name, hostname, custom domain, and Umami config are all unchanged throughout; there are no domains edits anywhere in this plan.
 - Node 22 everywhere: `NODE_VERSION = "22"` on Netlify; locally run npm via the submodule's flake: `nix develop /home/barrulus/dev/settlemaker-web/settlemaker --command bash -c "<cmd>"`.
 - Site output must be identical before and after cutover: same pages (`/`, `/fmg`, `/symbols`), same redirects, same `/symbols/batch001/*` assets, same GPL footers.
 - Umami website id `162c6727-fc89-4425-9962-7ad4d65e71ba` and script `https://stats.barrulus.com/script.js` are unchanged throughout.
@@ -345,31 +345,29 @@ git push -u origin master
 
 ---
 
-### Task 4: Create the Netlify site — HUMAN CHECKPOINT (Barry, Netlify UI)
+### Task 4: Relink the existing Netlify site — HUMAN CHECKPOINT (Barry, Netlify UI)
 
 **Files:** none (Netlify account state).
 
 **Interfaces:**
-- Consumes: `barrulus/settlemaker-web` on GitHub (pushed in Task 3), root `netlify.toml`.
-- Produces: `https://settlemaker-web.netlify.app` serving the full site; deploy previews enabled on PRs. Task 5 verifies against this hostname; Task 6 moves the domain to this site.
+- Consumes: `barrulus/settlemaker-web` on GitHub (pushed in Task 3), root `netlify.toml`; the existing Netlify site currently serving settlemaker.com from the public repo.
+- Produces: a **built but unpublished** deploy of the private repo on the existing site, with the current production deploy locked in place. Task 5 verifies the unpublished deploy's permalink; Task 6 publishes it.
+
+Relinking is the cutover trigger: the moment the repo link changes, pushes and PR previews from the PUBLIC repo stop building on this site (the glyphs draft-PR preview flow ends here — generator previews switch to submodule-bump PRs per the private repo's README). Production keeps serving the locked deploy until Task 6 publishes.
 
 No agent can do this — no Netlify CLI is installed and these are account actions. Present Barry this exact checklist and wait:
 
-- [ ] **Step 1 (Barry): Import the repo**
+- [ ] **Step 1 (Barry): Lock the current deploy**
 
-Netlify app → **Add new site → Import an existing project → GitHub**. If `settlemaker-web` is not listed, follow the "Configure the Netlify app on GitHub" link and grant it access to the `settlemaker-web` repository (repo is private — access must be granted explicitly). Select the repo.
+Netlify app → the existing settlemaker site → **Deploys** → on the currently published deploy: **Lock to stop auto publishing** (padlock option). Production is now frozen on today's build no matter what deploys next.
 
-- [ ] **Step 2 (Barry): Accept build settings**
+- [ ] **Step 2 (Barry): Grant repo access and relink**
 
-Build command and publish directory auto-fill from `netlify.toml` (`npm run build`, `dist`). Branch: `master`. Deploy. Netlify clones the public https submodule automatically — no deploy key needed.
+Site configuration → **Build & deploy → Continuous deployment → Manage repository → Link to a different repository** → GitHub → `barrulus/settlemaker-web` (if not listed, use "Configure the Netlify app on GitHub" to grant it access to the private repo). Branch to deploy: `master`. Build command `npm run build` and publish dir `dist` come from the new repo's root `netlify.toml` — clear any leftover UI-level overrides from the old setup (old base `web` must NOT survive as a UI override; the base is now the repo root).
 
-- [ ] **Step 3 (Barry): Name the site**
+- [ ] **Step 3 (Barry): Confirm the new deploy builds green (unpublished)**
 
-Site configuration → Site details → Change site name → `settlemaker-web`, giving `settlemaker-web.netlify.app`. If taken, choose another and report the actual hostname back (it substitutes into Tasks 5–6).
-
-- [ ] **Step 4 (Barry): Confirm the first deploy is green**
-
-Deploys tab → latest deploy → **Published**. If the build fails, paste the deploy log back into the session for diagnosis before proceeding.
+Deploys tab → a new deploy from `settlemaker-web@master` builds. Because of the lock it does NOT publish. Expected: build succeeds (Netlify clones the public https submodule automatically — no deploy key needed). Open the deploy's detail page and copy its **deploy permalink URL** (the `https://<deploy-id>--settlemaker.netlify.app` link) back into the session for Task 5. If the build fails, paste the deploy log instead.
 
 ---
 
@@ -378,14 +376,16 @@ Deploys tab → latest deploy → **Published**. If the build fails, paste the d
 **Files:** none (HTTP checks; run from any shell).
 
 **Interfaces:**
-- Consumes: `https://settlemaker-web.netlify.app` (Task 4) and `https://settlemaker.com` (current production) as the reference.
-- Produces: go/no-go evidence for the Task 6 cutover.
+- Consumes: the unpublished deploy's permalink from Task 4 (`https://<deploy-id>--settlemaker.netlify.app`, below `$DEPLOY`) and `https://settlemaker.com` (production, still serving the locked old build) as the reference.
+- Produces: go/no-go evidence for the Task 6 publish.
+
+Set `DEPLOY=https://<deploy-id>--settlemaker.netlify.app` (the permalink Barry reported in Task 4) before running the steps.
 
 - [ ] **Step 1: Page and redirect checks**
 
 ```bash
 for p in / /fmg /symbols /symbols/batch001/symbols.json /symbols/batch001/symbols.svg; do
-  printf '%-40s %s\n' "$p" "$(curl -s -o /dev/null -w '%{http_code}' "https://settlemaker-web.netlify.app$p")"
+  printf '%-40s %s\n' "$p" "$(curl -s -o /dev/null -w '%{http_code}' "$DEPLOY$p")"
 done
 ```
 Expected: five `200`s (the `/fmg` and `/symbols` extensionless rewrites prove netlify.toml is live).
@@ -393,18 +393,18 @@ Expected: five `200`s (the `/fmg` and `/symbols` extensionless rewrites prove ne
 - [ ] **Step 2: /fmg renders a settlement**
 
 ```bash
-curl -s "https://settlemaker-web.netlify.app/fmg" | grep -o '<script type="module"[^>]*>' | head -1
+curl -s "$DEPLOY/fmg" | grep -o '<script type="module"[^>]*>' | head -1
 ```
 Expected: one module script tag (the page shell is served; actual SVG generation is client-side — full render check is Step 5's eyeball).
 
 - [ ] **Step 3: Licensing and analytics markers match production**
 
 ```bash
-for h in settlemaker.com settlemaker-web.netlify.app; do
+for h in "https://settlemaker.com" "$DEPLOY"; do
   echo "== $h"
-  curl -s "https://$h/" | grep -c 'github.com/barrulus/settlemaker'
-  curl -s "https://$h/" | grep -c 'stats.barrulus.com'
-  curl -s "https://$h/symbols/batch001/symbols.json" | grep -o '"licenseUrl": *"[^"]*"'
+  curl -s "$h/" | grep -c 'github.com/barrulus/settlemaker'
+  curl -s "$h/" | grep -c 'stats.barrulus.com'
+  curl -s "$h/symbols/batch001/symbols.json" | grep -o '"licenseUrl": *"[^"]*"'
 done
 ```
 Expected: identical counts per host (GPL footer links, umami tag) and the same `licenseUrl` value on both.
@@ -412,14 +412,14 @@ Expected: identical counts per host (GPL footer links, umami tag) and the same `
 - [ ] **Step 4: Content parity spot-check**
 
 ```bash
-diff <(curl -s https://settlemaker.com/symbols) <(curl -s https://settlemaker-web.netlify.app/symbols) && echo SYMBOLS-IDENTICAL
-diff <(curl -s https://settlemaker.com/) <(curl -s https://settlemaker-web.netlify.app/) && echo INDEX-IDENTICAL
+diff <(curl -s https://settlemaker.com/symbols) <(curl -s "$DEPLOY/symbols") && echo SYMBOLS-IDENTICAL
+diff <(curl -s https://settlemaker.com/) <(curl -s "$DEPLOY/") && echo INDEX-IDENTICAL
 ```
 Expected: both `IDENTICAL` markers, **provided** the submodule pin equals the commit production last deployed. If master moved since, diffs show real content drift — bump the pin to current master (README flow) and re-run rather than explaining diffs away.
 
 - [ ] **Step 5 (Barry): Eyeball it**
 
-Visual work needs eyes: open `https://settlemaker-web.netlify.app/`, generate a settlement, open `/symbols`, confirm both look right. Report OK or what's off.
+Visual work needs eyes: open `$DEPLOY/`, generate a settlement, open `$DEPLOY/symbols`, confirm both look right. Report OK or what's off.
 
 - [ ] **Step 6: Record the evidence**
 
@@ -427,60 +427,22 @@ Paste the outputs of Steps 1–4 into the session log / task notes. No commit (n
 
 ---
 
-### Task 6: Cutover — HUMAN-GATED (Barry picks the moment)
+### Task 6: Publish the cutover deploy — HUMAN-GATED (Barry picks the moment)
 
 **Files:**
-- Modify: `settlemaker` (public repo) `web/src/analytics.ts:10` (`DOMAINS`), `web/index.html:20` (`data-domains`)
-- Modify: `settlemaker-web` (private repo) `site/symbols.html:14` (`data-domains`), submodule pin
+- Modify: `settlemaker-web` (private repo) `README.md` (rollback wording only)
+
+No domains edits anywhere: the site keeps its name and `settlemaker.netlify.app` hostname, so the Umami `data-domains` lists in the public repo and the private symbols.html are already correct.
 
 **Interfaces:**
-- Consumes: verified site (Task 5); Barry's explicit go signal — do not start this task without it.
-- Produces: settlemaker.com served by the new Netlify site; the domains commit on public master that Task 7 builds on.
+- Consumes: verified unpublished deploy (Task 5); Barry's explicit go signal — do not start this task without it.
+- Produces: settlemaker.com served from the private repo. End of the transition window.
 
-- [ ] **Step 1: Domains commit in the public repo (master)**
+- [ ] **Step 1 (Barry): Publish**
 
-In `/home/barrulus/dev/settlemaker` on master (branch is glyphs today — use a fresh checkout/worktree of master, don't disturb glyph work):
+Netlify UI → Deploys → the verified deploy from Task 5 → **Publish deploy** (this also lifts the lock; if a separate "Unlock" toggle is shown, unlock so future master pushes auto-publish again).
 
-`web/src/analytics.ts` line 10:
-```ts
-// before
-const DOMAINS = 'settlemaker.com,www.settlemaker.com,settlemaker.netlify.app';
-// after
-const DOMAINS = 'settlemaker.com,www.settlemaker.com,settlemaker-web.netlify.app';
-```
-
-`web/index.html` line 20 — same substitution inside `data-domains="..."`.
-
-```bash
-git add web/src/analytics.ts web/index.html
-git commit -m "Umami domains: settlemaker-web.netlify.app replaces the old Netlify hostname"
-git push origin master
-```
-(This deploys through the OLD Netlify site too — harmless there, the old hostname simply stops being listed.)
-
-Note: `web/symbols.html` also carries a `data-domains` attribute but is deliberately NOT edited — the served /symbols page is the private copy (Task 3 merge order), and the public file is deleted in Task 7.
-
-- [ ] **Step 2: Mirror in the private repo and bump the pin**
-
-In `/home/barrulus/dev/settlemaker-web`: apply the same `settlemaker.netlify.app` → `settlemaker-web.netlify.app` substitution to `site/symbols.html` line 14, then:
-
-```bash
-cd settlemaker && git fetch origin && git checkout origin/master && cd ..
-git add site/symbols.html settlemaker
-git commit -m "Cutover prep: umami domains updated, settlemaker bumped to domains commit"
-git push
-```
-
-- [ ] **Step 3: Verify the deploy picked both up**
-
-Run: `curl -s https://settlemaker-web.netlify.app/ | grep -o 'data-domains="[^"]*"'` and the same for `/symbols`.
-Expected: both show `settlemaker-web.netlify.app` in the list (wait for the Netlify deploy to publish first).
-
-- [ ] **Step 4 (Barry): Move the domain**
-
-Netlify UI, new site → Domain management → Add custom domain → `settlemaker.com` (and `www.settlemaker.com`). Netlify will flag the domain as registered to another site in the same account and offer to reassign — confirm. If DNS is external rather than Netlify DNS, no DNS records change: both sites are Netlify, the reassignment is internal routing.
-
-- [ ] **Step 5: Verify production**
+- [ ] **Step 2: Verify production**
 
 ```bash
 for p in / /fmg /symbols /symbols/batch001/symbols.json; do
@@ -488,11 +450,27 @@ for p in / /fmg /symbols /symbols/batch001/symbols.json; do
 done
 curl -s https://settlemaker.com/ | grep -o 'data-domains="[^"]*"'
 ```
-Expected: four `200`s; `data-domains` shows the new hostname list. Then (Barry) load settlemaker.com in a browser, generate a settlement, and check the Umami dashboard registers the pageview.
+Expected: four `200`s; `data-domains` unchanged (`settlemaker.com,www.settlemaker.com,settlemaker.netlify.app`). Then (Barry) load settlemaker.com in a browser, generate a settlement, and check the Umami dashboard registers the pageview.
 
-- [ ] **Step 6: Hold the rollback line**
+- [ ] **Step 3: Correct the README's rollback note**
 
-Rollback at any point = Netlify UI, old site → Domain management → re-add `settlemaker.com` (reassigns back). Nothing else needs undoing; leave the old site alive until Task 7.
+The private repo's README (written in Task 3 for the two-site design) says domain-level rollback is "move the custom domain back to the previous Netlify site" — there is no second site. In `/home/barrulus/dev/settlemaker-web/README.md`, replace the Rollback section's second sentence:
+
+```markdown
+Site-level: revert the offending commit and push. Deploy-level: Netlify
+Deploys → pick the last good deploy → Publish deploy (instant, no build).
+```
+
+```bash
+cd /home/barrulus/dev/settlemaker-web
+git add README.md
+git commit -m "README: rollback is republishing a previous deploy (single-site relink, not two sites)"
+git push
+```
+
+- [ ] **Step 4: Hold the rollback line**
+
+Rollback at any point = Netlify UI → Deploys → previous production deploy → **Publish deploy**. The pre-cutover build stays in deploy history indefinitely; nothing else needs undoing.
 
 ---
 
@@ -538,7 +516,7 @@ git add -A
 git commit -m "Site split cleanup: netlify.toml and the /symbols page move to settlemaker-web"
 git push origin master
 ```
-(Pushing master no longer deploys anything — the old Netlify site is about to be retired and the new one only moves on submodule bumps.)
+(Pushing master no longer deploys anything — the Netlify site watches the private repo now and only moves on submodule bumps.)
 
 - [ ] **Step 5: Bump the private pin past the cleanup**
 
@@ -551,9 +529,9 @@ git push
 ```
 Then verify the deploy: `curl -s -o /dev/null -w '%{http_code}\n' https://settlemaker.com/symbols` → `200` (now served solely from `site/`), and `curl -s https://settlemaker.com/ | grep -c stats.barrulus.com` → ≥ 1.
 
-- [ ] **Step 6 (Barry): Retire the old Netlify site**
+- [ ] **Step 6: Nothing to retire**
 
-Netlify UI, old site → Site configuration → Danger zone → Delete site (or leave it unlinked if you prefer a cold spare — but note its `master`-push deploys are already inert since `netlify.toml` left the repo, and its custom domain is gone).
+The relink design reuses the one Netlify site — there is no old site to delete. (This step existed in the two-site design; kept as a placeholder so step numbering in session logs stays stable.)
 
 - [ ] **Step 7: Close the loop**
 

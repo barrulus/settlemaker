@@ -91,6 +91,15 @@ an explicit ref bump or site change.
 
 ## Cutover
 
+> **Revised 2026-08-13 (Barry, during execution):** no second Netlify site.
+> The EXISTING site is relinked to the private repo instead: lock the
+> published deploy, relink, verify the new unpublished deploy on its
+> permalink, then publish. Hostname `settlemaker.netlify.app`, the custom
+> domain, and all Umami domains config stay untouched — steps 2–3 below
+> (domains edit, domain move) are superseded, and rollback becomes
+> "publish the previous deploy". The plan file carries the authoritative
+> revised steps.
+
 The only disruptive step, executed once, at a moment Barry chooses:
 
 1. Create a **new** Netlify site linked to the private repo; verify the
