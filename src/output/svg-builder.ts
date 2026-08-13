@@ -25,6 +25,12 @@ export interface SvgOptions {
    * outside `[A-Za-z0-9_-]` are replaced with '-' before use.
    */
   clipId?: string;
+  /**
+   * Draw the placed symbol layer (#symbols) and identity marks (#marks).
+   * Default true. Canopy vegetation is unaffected — trees predate this
+   * feature. CSS alternative for URL consumers: #symbols,#marks{display:none}.
+   */
+  symbols?: boolean;
 }
 
 /**
@@ -41,5 +47,6 @@ export function generateSvg(model: Model, options: SvgOptions = {}): string {
     palette: options.palette,
     theme: options.theme,
     clipId: options.clipId,
+    symbols: options.symbols,
   });
 }

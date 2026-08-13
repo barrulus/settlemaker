@@ -4,6 +4,7 @@ import type { AssetSet } from '../assets/asset-sets.js';
 import { assetSetFor } from '../assets/asset-sets.js';
 import { paletteForBiome } from './palette.js';
 import { themeFrom, type RenderTheme } from './render-theme.js';
+import { SYMBOL_MANIFEST } from '../assets/symbol-manifest.js';
 
 const NORMAL_STROKE = 0.15;
 const THICK_STROKE = 1.8;
@@ -13,6 +14,7 @@ export interface AssembleOptions {
   theme?: Partial<RenderTheme>;
   assetSet?: AssetSet;
   clipId?: string;
+  symbols?: boolean;
 }
 
 function fmt(n: number): string { return n.toFixed(2); }
@@ -90,9 +92,19 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   const theme: RenderTheme = { ...themeFrom(palette), ...overrides };
   const assets = options.assetSet ?? assetSetFor(scene.biome);
   const clipId = (options.clipId ?? 'frame-clip').replace(/[^A-Za-z0-9_-]/g, '-');
+  const showSymbols = options.symbols !== false;
   const b = scene.bounds;
   const w = b.max_x - b.min_x, h = b.max_y - b.min_y;
   const L = scene.layers;
+
+  const visibleSymbols = (showSymbols ? L.symbols : []).filter(s => {
+    const meta = SYMBOL_MANIFEST[s.id];
+    if (!meta) return false;
+    if (meta.footprint === null) return true;           // marks: no footprint floor
+    return s.scale / Math.max(...meta.footprint) >= meta.minScale;
+  });
+  const structureSymbols = visibleSymbols.filter(s => s.zBand === 'structure');
+  const markSymbols = visibleSymbols.filter(s => s.zBand === 'overlay');
 
   const usedKinds = [...new Set(L.vegetation.map(v => v.kind))];
   const symbolDefs = usedKinds
@@ -102,7 +114,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
 
   const glyphIds = new Set<string>();
   for (const v of L.vegetation) if (assets.glyphs?.[v.kind]) glyphIds.add(v.kind);
-  for (const s of L.symbols) if (assets.glyphs?.[s.id]) glyphIds.add(s.id);
+  for (const s of visibleSymbols) if (assets.glyphs?.[s.id]) glyphIds.add(s.id);
   const glyphDefs = [...glyphIds].map(id => {
     const g = assets.glyphs![id];
     const vb = g.viewBox.join(' ');
@@ -179,10 +191,13 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   }
 
   const shadowable = [...L.buildings];
-  if (shadowable.length > 0) {
+  if (shadowable.length > 0 || structureSymbols.length > 0) {
     const { dx, dy } = theme.shadowOffset;
     parts.push(`<g id="shadows" transform="translate(${fmt(dx)},${fmt(dy)})">`);
     for (const bld of shadowable) parts.push(`<path d="${ringPath(bld.ring)}"/>`);
+    for (const s of structureSymbols) {
+      parts.push(`<use href="#glyph-${s.id}-sil" transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox)}"/>`);
+    }
     parts.push('</g>');
   }
 
@@ -198,6 +213,14 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   if (landmarks.length > 0) {
     parts.push('<g id="landmarks">');
     for (const bld of landmarks) parts.push(`<path class="${bld.kind}" d="${ringPath(bld.ring)}"/>`);
+    parts.push('</g>');
+  }
+
+  if (structureSymbols.length > 0) {
+    parts.push('<g id="symbols">');
+    for (const s of [...structureSymbols].sort((a, b) => a.at.y - b.at.y)) {
+      parts.push(`<use href="#glyph-${s.id}" transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox)}"/>`);
+    }
     parts.push('</g>');
   }
 
@@ -221,6 +244,14 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     parts.push('<g id="canopy">');
     for (const v of [...canopy].sort((a, b) => a.at.y - b.at.y)) {
       parts.push(`<use href="#glyph-${v.kind}" transform="${glyphTransform(v.at, v.scale, v.rotationDeg, assets.glyphs![v.kind].viewBox)}"/>`);
+    }
+    parts.push('</g>');
+  }
+
+  if (markSymbols.length > 0) {
+    parts.push('<g id="marks">');
+    for (const s of [...markSymbols].sort((a, b) => a.at.y - b.at.y)) {
+      parts.push(`<use href="#glyph-${s.id}" transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox)}"/>`);
     }
     parts.push('</g>');
   }

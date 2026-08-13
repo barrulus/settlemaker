@@ -46,7 +46,10 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
         rings: model.getWaterRings().map(r => ring(r)),
         synthetic: model.syntheticCoast !== null,
       },
-      fields: [], furrows: [], greens: [], vegetation: [], symbols: [],
+      fields: [], furrows: [], greens: [], vegetation: [],
+      symbols: model.symbols.map(s => ({
+        id: s.id, at: sc(s.at), scale: s.scale, rotationDeg: s.rotationDeg, zBand: s.zBand,
+      })),
       roads: [], buildings: [], piers: [], walls: [],
     },
   };
