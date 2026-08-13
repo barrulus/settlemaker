@@ -31,6 +31,7 @@ import { Harbour } from '../wards/harbour.js';
 import { CommonWard } from '../wards/common-ward.js';
 import { CraftsmenWard } from '../wards/craftsmen-ward.js';
 import { buildWardDistribution, type WardConstructor } from '../wards/ward-distribution.js';
+import type { PlacedSymbol, ClaimedSite } from './symbols.js';
 
 const MAX_ATTEMPTS = 20;
 /**
@@ -131,6 +132,12 @@ export class Model {
   plaza: Patch | null = null;
   harbour: Patch | null = null;
   center: Point = new Point();
+
+  symbols: PlacedSymbol[] = [];
+  claimedSites: ClaimedSite[] = [];
+  prevailingWindDeg = 0;
+  wellBudget = 0;
+  millBudget = 0;
 
   border: CurtainWall | null = null;
   wall: CurtainWall | null = null;
@@ -329,6 +336,11 @@ export class Model {
     this.citadel = null;
     this.plaza = null;
     this.harbour = null;
+    this.symbols = [];
+    this.claimedSites = [];
+    this.prevailingWindDeg = 0;
+    this.wellBudget = 0;
+    this.millBudget = 0;
     this.border = null;
     this.wall = null;
     this.gates = [];
@@ -1223,6 +1235,13 @@ export class Model {
     if (this.citadel !== null) this.citadel.zone = 'core';
 
     const rng = this.rng;
+
+    // One prevailing wind per town: every windmill's sails agree. Drawn
+    // unconditionally so the rng draw count stays deterministic per seed.
+    this.prevailingWindDeg = Math.round(rng.float() * 360) % 360;
+    this.wellBudget = Math.max(1, Math.round(this.inner.length / 5));
+    this.millBudget = this.params.population >= 2000 ? 2 : 1;
+
     const unassigned = this.inner.slice();
 
     if (this.plaza !== null) {
