@@ -18,7 +18,7 @@
 - Fixed/canopy glyphs are authored on a 0–64 grid, marks on 0–32. Manifest `footprint` is metres ≙ world units.
 - The generator never touches glyph markup; the assembler never touches `Model` (existing hard rule).
 - `sm-castle`, `sm-cathedral`, `sm-docks` etc. are NOT placed — no glyph ever replaces a generated footprint.
-- Full suite must be green at the end of every task: `nix develop --command bash -c "npx vitest run 2>&1 | tail -5"`.
+- Full suite check at the end of every task: `nix develop --command bash -c "npx vitest run 2>&1 | tail -5"`. From Task 4 through Task 10 the pinned-hash tests (fidelity canaries, determinism snapshots, version-pin sweeps) are EXPECTED to fail — the prevailing-wind rng draw legitimately re-rolls layouts, and Task 11 re-pins them exactly once. Every NON-pin test must be green at the end of every task; new failures outside the known pin set are defects.
 
 ## File Structure
 
