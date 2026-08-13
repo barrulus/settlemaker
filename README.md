@@ -197,8 +197,10 @@ settlemaker is a derivative work of [watabou's TownGeneratorOS](https://github.c
 which is GPL-3.0. Upstream grants no "or any later version" option, so settlemaker is
 GPL-3.0-**only**, not `-or-later`.
 
-The hosted build at [settlemaker.com](https://settlemaker.com) ships this program's compiled
-code to your browser; the corresponding source is this repository.
+settlemaker.com is built from the private settlemaker-web repo, which pins
+this repo as a submodule and serves the library to browsers as a standalone
+GPL artifact (`/lib/settlemaker.js`, built by `npm run build:lib`). This
+repository is the library: generation core, symbols, tests, and tooling.
 
 Two things are *not* covered by that license:
 

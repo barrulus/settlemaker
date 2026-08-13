@@ -1,5 +1,5 @@
 /**
- * Generates web/public/review.html — a contact sheet of settlements across the
+ * Generates settlemaker-web/site/public/review.html (override with argv[2]) — a contact sheet of settlements across the
  * population ladder, so shape/sprawl decisions can be judged visually rather
  * than from patch-count tables. Throwaway review aid; not part of the build.
  *
@@ -111,8 +111,10 @@ ${items.map(i => `  <div class="cell">
 </script>
 `;
 
-writeFileSync('web/public/review.html', html);
-console.log(`wrote web/public/review.html with ${items.length} settlements`);
+// the dev server that serves /fmg lives in settlemaker-web now
+const OUT = process.argv[2] ?? '../settlemaker-web/site/public/review.html';
+writeFileSync(OUT, html);
+console.log(`wrote ${OUT} with ${items.length} settlements`);
 for (const i of items) console.log(`  ${i.label}: ${i.url.length} chars`);
 }
 
