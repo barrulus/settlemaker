@@ -4,6 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>settlemaker — builder</title>
+    <!-- Icon files ship from the private site repo's static layer at deploy
+         time; they 404 under local `npm run dev`. -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/svg+xml" href="/settlemaker-icon.svg" />
     <link rel="stylesheet" href="/src/builder.css" />
     <!-- Self-hosted Umami (rucio). stats.barrulus.com publicly proxies only
          /script.js and /api/send; the dashboard stays on the tailnet. Cookieless,
