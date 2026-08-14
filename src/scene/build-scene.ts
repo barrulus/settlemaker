@@ -11,6 +11,7 @@ import { SeededRandom } from '../utils/random.js';
 import { pointInPolygon } from '../geom/point-in-polygon.js';
 import { Polygon } from '../geom/polygon.js';
 import { CANOPY_KINDS } from '../assets/asset-sets.js';
+import { scoreBuildings, scoringReference } from '../poi/poi-selector.js';
 import {
   SCENE_VERSION,
   type Scene, type ScenePoint, type RoadFeature, type BuildingFeature,
@@ -103,6 +104,30 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
   }
   if (model.citadel !== null && model.citadel.ward instanceof Castle) {
     scene.layers.walls.push(wallFeature(model.citadel.ward.wall, true, sc, model));
+  }
+
+  // Church mark: identifies the cathedral's principal building. Anchored to
+  // the SAME building the cathedral POI adopts (tier-1-first ⇒ usedBuildings
+  // empty ⇒ scoreBuildings[0]); scaled to the building's short axis per the
+  // manifest scaleTo contract; locked upright.
+  const cathedralWard = model.patches.find(p => p.ward?.type === WardType.Cathedral)?.ward;
+  if (cathedralWard !== undefined && cathedralWard.geometry.length > 0) {
+    const building = scoreBuildings(cathedralWard.geometry, scoringReference(model))[0];
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const v of building.vertices) {
+      if (v.x < minX) minX = v.x;
+      if (v.y < minY) minY = v.y;
+      if (v.x > maxX) maxX = v.x;
+      if (v.y > maxY) maxY = v.y;
+    }
+    const shortSide = Math.min(maxX - minX, maxY - minY);
+    scene.layers.symbols.push({
+      id: 'sm-mark-church',
+      at: sc(building.centroid),
+      scale: Math.max(2, shortSide * 0.55), // lot-short-axis*0.55 per manifest, floored for legibility
+      rotationDeg: 0,                        // rotation: locked
+      zBand: 'overlay',
+    });
   }
 
   scatterVegetation(model, scene, sc);

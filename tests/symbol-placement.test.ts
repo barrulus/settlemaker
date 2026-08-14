@@ -7,6 +7,8 @@ import { CommonWard } from '../src/wards/common-ward.js';
 import { Farm } from '../src/wards/farm.js';
 import { buildScene } from '../src/scene/build-scene.js';
 import { Model, mapToGenerationParams, type AzgaarBurgInput } from '../src/index.js';
+import { WardType } from '../src/types/interfaces.js';
+import { scoreBuildings, scoringReference } from '../src/poi/poi-selector.js';
 
 // Canonical test-model helper (pattern from tests/degraded-generation.test.ts).
 function mk(population: number, seed: number, overrides: Partial<AzgaarBurgInput> = {}): Model {
@@ -167,5 +169,29 @@ describe('windmill', () => {
     const m = modelWithMill();
     const scene = buildScene(m);
     expect(scene.layers.fields.some(f => f.hatch === false)).toBe(true);
+  });
+});
+
+function modelWithCathedral(): Model {
+  for (let seed = 1; seed <= 40; seed++) {
+    const m = mk(8000, seed, { temple: true });
+    const ward = m.patches.find(p => p.ward?.type === WardType.Cathedral)?.ward;
+    if (ward && ward.geometry.length > 0) return m;
+  }
+  throw new Error('no seed in 1..40 produced a cathedral with geometry');
+}
+
+describe('church mark', () => {
+  it('lands on the same building the cathedral POI adoption logic picks, upright, overlay band', () => {
+    const m = modelWithCathedral();
+    const ward = m.patches.find(p => p.ward?.type === WardType.Cathedral)!.ward!;
+    const expected = scoreBuildings(ward.geometry, scoringReference(m))[0].centroid;
+    const scene = buildScene(m);
+    const marks = scene.layers.symbols.filter(s => s.id === 'sm-mark-church');
+    expect(marks).toHaveLength(1);
+    expect(marks[0].zBand).toBe('overlay');
+    expect(marks[0].rotationDeg).toBe(0);
+    expect(marks[0].at.x).toBeCloseTo(expected.x, 5); // NO_SHIFT default
+    expect(marks[0].at.y).toBeCloseTo(expected.y, 5);
   });
 });
