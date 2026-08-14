@@ -81,6 +81,8 @@ export interface BuildingFeature {
   /** Ward type string (WardType value) — semantic, drives styling/symbols. */
   kind: string;
   landmark: boolean;
+  /** true when this building is rendered as a glyph, with the rect as a footprint fallback. */
+  glyphBacked?: true;
 }
 
 export interface PierFeature { ring: ScenePoint[] }
@@ -151,6 +153,11 @@ downstream consumer.
   ground still fills and outlines normally but the furrow pattern is
   suppressed — used for the subplot converted to a windmill's sail clearing,
   which shouldn't show plow lines under the mill.
+- **`BuildingFeature.glyphBacked?: true`** — new optional field, additive.
+  When present in villages (population ≤ 600), this building rect is rendered
+  as a house glyph along a road frontage (village rows) rather than as a filled
+  footprint. The rect remains in the scene as a fallback for renderers that
+  omit symbols or lack the glyph asset.
 
 `LocalBounds` (from `src/generator/bounds.ts`) is a plain AABB:
 

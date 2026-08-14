@@ -395,10 +395,16 @@ contract (`docs/scene-schema.md` §3), not an internal implementation detail,
 so this rule is safe to depend on. It applies to any consumer that gets hold
 of the SVG markup directly — e.g. a library caller reading `svg` off
 `generateFromBurg`'s result and post-processing or wrapping it before
-display. No `i=`/flat/presentation param exists or is planned for this; the
-off-switch is deliberately a plain-CSS consumer concern, consistent with
-every other appearance override in this document (§5), rather than a new
-query-string knob.
+display. **Note:** in villages (population ≤ 600), dwellings along roads
+arrive as glyphs backed by building rects (`BuildingFeature.glyphBacked`);
+when symbols are hidden via CSS, those rects remain visible as footprints.
+The library-level `symbols: false` option in `GenerateOptions` suppresses
+glyph placement entirely, restoring the footprint rects (behaviour, not
+appearance), but has no scope in pre-rendered SVG; CSS hiding is appearance
+only and does not restore footprints from a rendered document. No
+`i=`/flat/presentation param exists or is planned for this; the off-switch
+is deliberately a plain-CSS consumer concern, consistent with every other
+appearance override in this document (§5), rather than a new query-string knob.
 
 ## 6. Guarantees
 
