@@ -83,6 +83,30 @@ describe('assembler symbol path', () => {
     expect(svg).not.toContain('<g id="symbols">');
   });
 
+  it('every glyph symbol def carries width/height equal to its own viewBox dimensions', () => {
+    // Root cause: use->symbol with auto width/height on both renders the
+    // symbol at 100% of the nearest viewport (the whole map), not its
+    // viewBox size, before glyphTransform's scale shrinks it. Explicit
+    // width/height on the <symbol> fixes sizing for every <use> of it
+    // (shadows, #symbols, #marks, #canopy) in one place.
+    const svg = assembleSvg(sceneWith([WELL, MARK], [TREE]));
+    const defRe = /<symbol id="glyph-[^"]*"([^>]*)>/g;
+    const matches = [...svg.matchAll(defRe)];
+    expect(matches.length).toBeGreaterThan(0);
+    for (const m of matches) {
+      const attrs = m[1];
+      const vbMatch = attrs.match(/viewBox="([\d.\-]+) ([\d.\-]+) ([\d.\-]+) ([\d.\-]+)"/);
+      expect(vbMatch).not.toBeNull();
+      const [, , , vbW, vbH] = vbMatch!;
+      const wMatch = attrs.match(/width="([\d.\-]+)"/);
+      const hMatch = attrs.match(/height="([\d.\-]+)"/);
+      expect(wMatch, `missing width in: ${m[0]}`).not.toBeNull();
+      expect(hMatch, `missing height in: ${m[0]}`).not.toBeNull();
+      expect(wMatch![1]).toBe(vbW);
+      expect(hMatch![1]).toBe(vbH);
+    }
+  });
+
   it('buildScene applies the origin shift to model.symbols instances, unchanged otherwise', () => {
     const model = mk(1200, 11);
     const placed = {

@@ -124,8 +124,13 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   const glyphDefs = [...glyphIds].map(id => {
     const g = assets.glyphs![id];
     const vb = g.viewBox.join(' ');
-    return `<symbol id="glyph-${id}" viewBox="${vb}" overflow="visible">${g.body}</symbol>`
-      + `<symbol id="glyph-${id}-sil" viewBox="${vb}" overflow="visible">${g.sil}</symbol>`;
+    const [, , vbW, vbH] = g.viewBox;
+    // use->symbol with auto width/height on both renders the symbol at 100%
+    // of the nearest viewport (the map), not its viewBox — explicit
+    // width/height matching the viewBox fixes sizing for every <use> of
+    // this def (shadows, #symbols, #marks, #canopy) in one place.
+    return `<symbol id="glyph-${id}" viewBox="${vb}" width="${vbW}" height="${vbH}" overflow="visible">${g.body}</symbol>`
+      + `<symbol id="glyph-${id}-sil" viewBox="${vb}" width="${vbW}" height="${vbH}" overflow="visible">${g.sil}</symbol>`;
   }).join('');
 
   // 15°-quantized angle buckets actually used by field plots, so we only

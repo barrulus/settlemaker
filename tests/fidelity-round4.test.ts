@@ -151,9 +151,18 @@ describe('fidelity round 4: probe path', () => {
     // Verified non-degenerate and deterministic (two runs byte-identical):
     // viewBox "-69.0 -76.2 136.6 157.1", svg.length 45648, 323 patches, 19
     // wards with geometry (measured locally).
+    // Re-pinned for the render-fix-1 task (glyph symbol defs gained explicit
+    // width/height — fixes 100%-viewport sizing; geometry unchanged): glyphs
+    // were rendering at the map's viewport size instead of their viewBox
+    // size before glyphTransform's scale shrank them, so this scene's glyph
+    // <use> elements now paint far less ink and the SVG text shrinks.
+    // viewBox and patch/ward counts are unchanged (-69.0 -76.2 136.6 157.1,
+    // 323 patches, 19 wards with geometry), confirming no geometry moved.
+    // Verified non-degenerate and deterministic: svg.length 45832 (measured
+    // locally).
     const { svg } = generateFromBurg(aldford(1400), { seed: 9 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('435189d8f21a4f01b3a77217f0e386925de8d404f0a2c43b450e957fcd8ebe27');
+    expect(sha256(svg)).toBe('f2fd95600e0f1ab49ea931af01ce711821a34eb76e0e01b4ba759e22287672be');
   });
 
   it('pins current village output at pop 800 (not a base-equality guarantee)', () => {
@@ -236,9 +245,16 @@ describe('fidelity round 4: probe path', () => {
     // non-degenerate and deterministic (two runs byte-identical): viewBox
     // "-71.4 -71.8 146.3 143.7", svg.length 40659, 327 patches, 18 wards
     // with geometry (measured locally).
+    // Re-pinned for the render-fix-1 task (glyph symbol defs gained explicit
+    // width/height — fixes 100%-viewport sizing; geometry unchanged): same
+    // cause as the pop-1400 hash above — glyphs were painting at the map's
+    // viewport size instead of their viewBox size. viewBox and patch/ward
+    // counts are unchanged (-71.4 -71.8 146.3 143.7, 327 patches, 18 wards
+    // with geometry). Verified non-degenerate and deterministic: svg.length
+    // 40843 (measured locally).
     const { svg } = generateFromBurg(aldford(800), { seed: 1 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('51367a82e58afbda3339059e777cac0405a667c9ec00c6e45766ace0586fd4dc');
+    expect(sha256(svg)).toBe('9ab1e3e87a0a17f3172e1947b5213da9b8037c0e6987c62e6a80866bb9bc51fb');
   });
 });
 
