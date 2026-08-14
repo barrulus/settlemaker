@@ -12,34 +12,37 @@ const HOUSE = { width: 6, depth: 6 };
 const straight = [new Point(0, 0), new Point(100, 0)];
 
 describe('slotsAlongPolyline', () => {
-  it('spaces slots at width+gap with gap in [0.8, 1.2]', () => {
+  // Gate-tune round 1 (2026-08-14): "too spread out" — gap, setback, and
+  // rotation jitter all tightened. Bounds below re-pinned to the new
+  // constants (mechanical; see village-rows.ts for the rationale).
+  it('spaces slots at width+gap with gap in [0.3, 0.6]', () => {
     const slots = slotsAlongPolyline(straight, 1, 1.0, HOUSE, new SeededRandom(1));
     expect(slots.length).toBeGreaterThan(10);
     for (let i = 1; i < slots.length; i++) {
       const d = slots[i].center.x - slots[i - 1].center.x;
-      expect(d).toBeGreaterThanOrEqual(HOUSE.width + 0.8 - 1e-9);
-      expect(d).toBeLessThanOrEqual(HOUSE.width + 1.2 + 1e-9);
+      expect(d).toBeGreaterThanOrEqual(HOUSE.width + 0.3 - 1e-9);
+      expect(d).toBeLessThanOrEqual(HOUSE.width + 0.6 + 1e-9);
     }
   });
 
-  it('offsets perpendicular by roadHalfWidth + depth/2 ± 0.3, per side', () => {
+  it('offsets perpendicular by roadHalfWidth + depth/2 ± 0.15, per side', () => {
     for (const side of [1, -1] as const) {
       const slots = slotsAlongPolyline(straight, side, 1.0, HOUSE, new SeededRandom(2));
       for (const s of slots) {
         const off = s.center.y * side;
-        expect(off).toBeGreaterThanOrEqual(1.0 + 3 - 0.3 - 1e-9);
-        expect(off).toBeLessThanOrEqual(1.0 + 3 + 0.3 + 1e-9);
+        expect(off).toBeGreaterThanOrEqual(1.0 + 3 - 0.15 - 1e-9);
+        expect(off).toBeLessThanOrEqual(1.0 + 3 + 0.15 + 1e-9);
       }
     }
   });
 
-  it('rotation tracks the tangent within ±4°', () => {
+  it('rotation tracks the tangent within ±2°', () => {
     const bent = [new Point(0, 0), new Point(50, 0), new Point(50, 50)];
     const slots = slotsAlongPolyline(bent, 1, 1.0, HOUSE, new SeededRandom(3));
     for (const s of slots) {
       const t = s.center.x < 50 - HOUSE.width ? 0 : 90; // tangent of containing segment
       const diff = Math.abs(((s.rotationDeg - t + 180) % 360) - 180);
-      if (s.center.x < 44 || s.center.y > 6) expect(diff).toBeLessThanOrEqual(4 + 1e-9);
+      if (s.center.x < 44 || s.center.y > 6) expect(diff).toBeLessThanOrEqual(2 + 1e-9);
     }
   });
 
@@ -233,6 +236,37 @@ describe('stampVillageRows integration', () => {
   });
 });
 
+describe('run coherence', () => {
+  // Gate-tune round 1 (2026-08-14): "too mixed" — glyphs are now picked per
+  // run of slots, not per house (see stampVillageRows). Simplest honest
+  // proxy on a real village: the number of distinct glyph ids among all
+  // stamped residential symbols should be well below the house count (huts
+  // and house-tiled variants repeat across many runs); a stronger secondary
+  // check confirms consecutive same-id stretches actually exist in
+  // placement order (the model.symbols push order tracks the road/side/row
+  // walk, so consecutive entries are consecutive slots along the same
+  // road+side+row until the walk moves on).
+  it('mk(300,3): distinct glyph ids are well below the house count, with real consecutive runs; deterministic', () => {
+    const m1 = mk(300, 3);
+    const houses1 = m1.symbols.filter(s => RESIDENTIAL.includes(s.id));
+    expect(houses1.length).toBeGreaterThan(10);
+
+    const idSet = new Set(houses1.map(h => h.id));
+    expect(idSet.size).toBeLessThanOrEqual(Math.ceil(houses1.length / 2));
+
+    let maxRun = 1, curRun = 1;
+    for (let i = 1; i < houses1.length; i++) {
+      if (houses1[i].id === houses1[i - 1].id) { curRun++; maxRun = Math.max(maxRun, curRun); }
+      else curRun = 1;
+    }
+    expect(maxRun).toBeGreaterThanOrEqual(3); // matches the 3-7 run-length contract
+
+    const m2 = mk(300, 3);
+    const houses2 = m2.symbols.filter(s => RESIDENTIAL.includes(s.id));
+    expect(JSON.stringify(houses1)).toBe(JSON.stringify(houses2));
+  });
+});
+
 describe('variety picker', () => {
   it('roof bias skews the house/house-tiled mix', () => {
     const count = (bias: 'thatch' | 'tile') => {
@@ -288,9 +322,15 @@ describe('fallback chain', () => {
     // footprint (10x5) already fails to fit naturally (mesh/subplot edge),
     // while the plain house (6x6) and hut (4.5x4.5) footprints both fit —
     // found by probing every farm-attributed stamp in this seeded model.
+    // Gate-tune round 1 (2026-08-14): coordinates re-pinned — tighter
+    // packing (gap/setback/rotation/claim-radius) shifted every slot in
+    // this seeded model, so the old fixture's real Farm-attributed dwelling
+    // site no longer exists at those coordinates. Re-probed for a fresh
+    // site meeting the same preconditions (longhouse fails naturally;
+    // plain house and hut both still fit).
     const sym = m.symbols.find(s =>
       s.wardType === WardType.Farm && s.id === 'sm-hut-straw' &&
-      Math.abs(s.at.x - -38.41) < 0.1 && Math.abs(s.at.y - 48.79) < 0.1);
+      Math.abs(s.at.x - 8.523094317216966) < 0.1 && Math.abs(s.at.y - -37.530264625907385) < 0.1);
     expect(sym).toBeDefined();
     const rect = [...m.glyphBackedBuildings].find(r =>
       Math.abs(r.centroid.x - sym!.at.x) < 1e-6 && Math.abs(r.centroid.y - sym!.at.y) < 1e-6);

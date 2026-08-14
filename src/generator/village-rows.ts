@@ -56,9 +56,12 @@ export function slotsAlongPolyline(
   let s = phase;
   while (s + house.width <= total) {
     // Fixed draw order per slot: gap, setback, rotation.
-    const gap = 0.8 + rng.float() * 0.4;
-    const setback = (rng.float() - 0.5) * 0.6;
-    const rotJitter = (rng.float() - 0.5) * 8;
+    // Gate-tune round 1 (2026-08-14): "too spread out" — tighten gap,
+    // setback jitter, and rotation jitter so rows pack denser and align
+    // more neatly.
+    const gap = 0.3 + rng.float() * 0.3;
+    const setback = (rng.float() - 0.5) * 0.3;
+    const rotJitter = (rng.float() - 0.5) * 4;
 
     const mid = at(s + house.width / 2);
     const off = roadHalfWidth + house.depth / 2 + rowOffset + setback;
@@ -252,28 +255,46 @@ function materialiseSlot(
     zBand: 'structure',
     wardType: patch.ward!.type,
   });
-  model.claimedSites.push({ at: centre, radius: scale * 0.55 });
+  // Gate-tune round 1 (2026-08-14): shrunk from 0.55 so stamps block less of
+  // their neighbourhood's slots — overlap safety is still covered by
+  // acceptSlot's rect re-check on the resized footprint.
+  model.claimedSites.push({ at: centre, radius: scale * 0.45 });
   return true;
 }
 
 /**
- * Pick a glyph (exactly one rng draw) and materialise it. On acceptance
- * failure — typically a wider resized footprint (longhouse, house-large-
- * tiled) colliding with a neighbouring claim the original BASE-pitch probe
- * didn't — fall back, deterministically and with NO further rng draws, to
- * the plain house for this settlement's roof bias, then to a mud hut.
- * Drop the slot only if the hut also fails.
+ * Materialise a pre-chosen glyph id. On acceptance failure — typically a
+ * wider resized footprint (longhouse, house-large-tiled) colliding with a
+ * neighbouring claim the original BASE-pitch probe didn't — fall back,
+ * deterministically and with NO rng draws, to the plain house for this
+ * settlement's roof bias, then to a mud hut. Drop the slot only if the hut
+ * also fails. A fallback here never changes what the caller's run/stretch
+ * glyph is for subsequent slots — it's purely a per-slot materialisation
+ * substitute.
+ */
+export function materialiseWithFallback(
+  model: Model, patch: Patch, slot: FrontageSlot, id: string, bias: RoofBias,
+  ribbon?: RibbonContext,
+): boolean {
+  if (materialiseSlot(model, patch, slot, id, ribbon)) return true;
+  const plainHouse = bias === 'thatch' ? 'sm-house' : 'sm-house-tiled';
+  if (materialiseSlot(model, patch, slot, plainHouse, ribbon)) return true;
+  if (materialiseSlot(model, patch, slot, 'sm-hut-mud', ribbon)) return true;
+  return false;
+}
+
+/**
+ * Pick a glyph (exactly one rng draw) and materialise it, with the same
+ * fallback chain as materialiseWithFallback. Used by the packing pass,
+ * which draws its hut id once per contiguous accepted stretch rather than
+ * per slot (see stampVillageRows).
  */
 export function pickAndMaterialise(
   model: Model, patch: Patch, slot: FrontageSlot, bias: RoofBias, isRowEnd: boolean,
   ribbon?: RibbonContext,
 ): boolean {
   const id = pickHouseGlyph(patch.ward!.type, bias, isRowEnd, model.rng);
-  if (materialiseSlot(model, patch, slot, id, ribbon)) return true;
-  const plainHouse = bias === 'thatch' ? 'sm-house' : 'sm-house-tiled';
-  if (materialiseSlot(model, patch, slot, plainHouse, ribbon)) return true;
-  if (materialiseSlot(model, patch, slot, 'sm-hut-mud', ribbon)) return true;
-  return false;
+  return materialiseWithFallback(model, patch, slot, id, bias, ribbon);
 }
 
 /** Stamp dwelling rows for a !rowHousing settlement. No-op otherwise. */
@@ -323,7 +344,9 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
       if (d2 < bestD2) { bestD2 = d2; best = v; }
     }
     if (best) {
-      model.claimedSites.push({ at: best, radius: 3.2 });
+      // Gate-tune round 1 (2026-08-14): shrunk from 3.2 — the well was
+      // blocking too much of its neighbourhood's frontage slots.
+      model.claimedSites.push({ at: best, radius: 2.5 });
       model.symbols.push({
         id: 'sm-well',
         at: best,
@@ -363,11 +386,29 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
           accepted.push({ slot, patch });
         }
 
+        // Run coherence (gate-tune round 1, 2026-08-14): "too mixed" — pick
+        // one glyph per run of slots instead of per house, so stretches of
+        // a street share a house type. A run ends (and a new one starts,
+        // with exactly two rng draws: glyph then length) when it runs out
+        // or the attributed ward type changes. isRowEnd is always false
+        // now — the old row-end hut rule was itself a mixing source; slum
+        // and farm wards still get huts/vernacular via pickHouseGlyph's own
+        // ward branches. A per-slot fallback (materialiseWithFallback)
+        // never changes the run's glyph for subsequent slots.
+        let runGlyph: string | null = null;
+        let runRemaining = 0;
+        let runWardType: WardType | null = null;
         for (let i = 0; i < accepted.length && allowance > 0; i++) {
           const { slot, patch } = accepted[i];
           const wardPatch = resolveWardPatch(patch, builtPatches);
-          const isRowEnd = i === 0 || i === accepted.length - 1;
-          if (pickAndMaterialise(model, wardPatch, slot, bias, isRowEnd, ribbon)) allowance--;
+          const wardType = wardPatch.ward!.type;
+          if (runRemaining === 0 || wardType !== runWardType) {
+            runGlyph = pickHouseGlyph(wardType, bias, false, model.rng);
+            runRemaining = 3 + Math.floor(model.rng.float() * 5);
+            runWardType = wardType;
+          }
+          if (materialiseWithFallback(model, wardPatch, slot, runGlyph!, bias, ribbon)) allowance--;
+          runRemaining--;
         }
       }
     }
@@ -379,6 +420,12 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
   // outward `roads`, matching the well-site scan's asymmetry), forcing
   // huts via isRowEnd=true so it never re-triggers the oversized-footprint
   // failures the fallback chain above exists for.
+  //
+  // Hut-RUN coherence (gate-tune round 1, 2026-08-14): draw once per
+  // contiguous accepted stretch (no gap in acceptance along the walk) and
+  // reuse that hut id for the whole stretch; a gap in acceptance starts a
+  // new stretch with a new draw. This is the packing pass's analogue of the
+  // main loop's run coherence above.
   if (allowance > 0) {
     const packingRoads: Array<{ v: ReadonlyArray<Point>; hw: number }> = [
       ...model.arteries.map(a => ({ v: a.vertices, hw: MAIN_STREET / 2 })),
@@ -390,19 +437,24 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
         if (allowance <= 0) break;
         const slots = slotsAlongPolyline(road.v, side, road.hw, HUT_HOUSE, model.rng, 0, 0);
 
-        const accepted: Array<{ slot: FrontageSlot; patch: Patch }> = [];
-        for (const slot of slots) {
+        const accepted: Array<{ slot: FrontageSlot; patch: Patch; idx: number }> = [];
+        for (let j = 0; j < slots.length; j++) {
           if (allowance <= 0) break;
-          const patch = acceptSlot(model, slot, ribbon);
+          const patch = acceptSlot(model, slots[j], ribbon);
           if (!patch) continue;
-          accepted.push({ slot, patch });
+          accepted.push({ slot: slots[j], patch, idx: j });
         }
 
+        let stretchHutId: string | null = null;
+        let prevIdx = -2;
         for (let i = 0; i < accepted.length && allowance > 0; i++) {
-          const { slot, patch } = accepted[i];
+          const { slot, patch, idx } = accepted[i];
           const wardPatch = resolveWardPatch(patch, builtPatches);
-          const id = pickHouseGlyph(wardPatch.ward!.type, bias, true, model.rng);
-          if (materialiseSlot(model, wardPatch, slot, id, ribbon)) allowance--;
+          if (stretchHutId === null || idx !== prevIdx + 1) {
+            stretchHutId = pickHouseGlyph(wardPatch.ward!.type, bias, true, model.rng);
+          }
+          prevIdx = idx;
+          if (materialiseSlot(model, wardPatch, slot, stretchHutId, ribbon)) allowance--;
         }
       }
     }
