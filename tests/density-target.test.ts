@@ -24,41 +24,31 @@ function inland(population: number): AzgaarBurgInput {
   };
 }
 
-// Village rows (Task 4, stampVillageRows): populations below
-// ROW_HOUSING_MIN_POPULATION (600) no longer subdivide CommonWard lots —
-// dwellings are stamped along road frontage instead, and the design
-// explicitly accepts falling short of the census target when road
-// frontage adjacent to residential/farm wards runs out before the
-// allowance does ("frontage-capped below" — see
-// docs/superpowers/specs/2026-08-14-village-rows-design.md and
-// task-4-brief.md's own integration test, which asserts only an upper
-// bound for stamped counts).
-//
-// Post fix-review (deterministic fallback chain on resized-rect rejection
-// + a HUT-pitch packing pass over arteries+streets, both landed after the
-// initial Task 4 review): re-measured honestly rather than re-guessed.
-// This test's own scenario (name-derived seed "Densitown350") now yields
-// 25/88 = 28.4% (was 24/88 = 27.3% before the fix); a wider explicit-seed
-// sample (seeds 1-5, same population/overrides) moved from 33-42% to
-// 34-45%. The fixes close real gaps (undersized huts inside the BASE
-// 6-unit pitch; resized longhouse/large-tiled rects that failed the
-// neighbour-claim re-check) but pop 350's shortfall is structural, not a
-// packing artifact: only 19 of 220 patches carry a ROW_WARDS type in this
-// settlement, so most road length runs past undeveloped countryside no
-// stamping pass can put a house on. It stays well under the ~70% mark the
-// fix review asked to flag plainly if unmet — stated here rather than
-// hidden behind a raised floor. The floor below is left at the pre-fix
-// value (25/88 clears it with the same ~3-point margin the old
-// measurement had).
-const FLOOR_OVERRIDE: Partial<Record<number, number>> = { 350: 0.25 };
+// Village rows (Task 4, stampVillageRows; fix rounds 1-2): populations
+// below ROW_HOUSING_MIN_POPULATION (600) no longer subdivide CommonWard
+// lots — dwellings are stamped along road frontage instead. Pop 350
+// briefly needed a lowered floor here: the original road-major walk only
+// accepted slots on already-built ROW_WARDS patches, and most road length
+// in a village runs past open countryside (in this scenario, 19 of ~220
+// patches carried a ROW_WARDS type), so yield bottomed out around 27-45%
+// of target. Fix round 2 made villages true street villages — acceptSlot
+// now also accepts probes on open countryside (patches with `ward ===
+// null` or the base Ward's default `WardType.Empty`, within
+// maxBuiltRadius * 1.3 of the settlement centre; see RibbonContext in
+// village-rows.ts) and attributes the resulting ribbon houses to the
+// nearest built ward for census/POI/GeoJSON purposes. Re-measured after
+// that fix: this test's own scenario (name-derived seed "Densitown350")
+// now yields 88/88 = 100%; a wider explicit-seed sample (seeds 1-5, same
+// population/overrides) yields 88, 78, 88, 81, 88 out of 88
+// (88.6%-100%). The shared 60% floor below now holds with a large margin,
+// so the pop-350 special case is gone.
 
 describe('density targeting: buildings ≈ households', () => {
   it.each([60, 350, 1200, 4500])('pop %i lands within [60%, 100%] of target', (pop) => {
     const { model } = generateFromBurg(inland(pop));
     const target = buildingBudget(pop);
     const n = countOrdinaryBuildings(model);
-    const floor = FLOOR_OVERRIDE[pop] ?? 0.6;
-    expect(n).toBeGreaterThanOrEqual(Math.floor(target * floor));
+    expect(n).toBeGreaterThanOrEqual(Math.floor(target * 0.6));
     expect(n).toBeLessThanOrEqual(target); // Plan A cap still binds from above
   });
 

@@ -94,7 +94,36 @@ export function slotRect(slot: FrontageSlot): Polygon {
   ]);
 }
 
-export function acceptSlot(model: Model, slot: FrontageSlot): Patch | null {
+/**
+ * Ribbon-development bound for stampVillageRows: villages are true street
+ * villages — rows may ribbon along roads through open (wardless)
+ * countryside, not just across already-built ROW_WARDS patches, bounded so
+ * ribbons don't sprawl arbitrarily far from the settlement. Passed
+ * explicitly (no module-scoped/global state) by callers that want ribbon
+ * acceptance; omit it to keep the original built-patches-only behaviour
+ * (e.g. every Task 3 unit test still calls `acceptSlot(model, slot)` with
+ * no ribbon argument).
+ */
+export interface RibbonContext {
+  /** model.center-relative radius beyond which ribbon probes are rejected. */
+  maxBuiltRadius: number;
+}
+
+const RIBBON_FACTOR = 1.3;
+
+/**
+ * "Open countryside" in this model is not `ward === null` — countryside
+ * patches outside the farm belt get `patch.ward = new Ward(this, patch)`
+ * (Model.createWards' fallback branch), and the base `Ward` class's `type`
+ * field defaults to `WardType.Empty` (see ward.ts). A genuinely null ward
+ * (e.g. before wards are assigned at all) is treated the same way, so this
+ * covers both.
+ */
+function isOpenCountryside(patch: Patch): boolean {
+  return patch.ward === null || patch.ward.type === WardType.Empty;
+}
+
+export function acceptSlot(model: Model, slot: FrontageSlot, ribbon?: RibbonContext): Patch | null {
   const rect = slotRect(slot);
   const probes = [...rect.vertices, slot.center];
 
@@ -102,16 +131,31 @@ export function acceptSlot(model: Model, slot: FrontageSlot): Patch | null {
   for (const probe of probes) {
     if (model.isWaterAt(probe)) return null;
     const patch = model.patches.find(p =>
-      p.ward !== null && !model.waterbody.includes(p) && pointInPolygon(probe, p.shape.vertices));
-    if (!patch || !ROW_WARDS.has(patch.ward!.type)) return null;
-    if (probe === slot.center) centerPatch = patch;
-    // Fields and groves stay clear.
-    if (patch.ward instanceof Farm) {
-      for (const plot of patch.ward.subPlots) {
-        if (pointInPolygon(probe, plot)) return null;
+      !model.waterbody.includes(p) && pointInPolygon(probe, p.shape.vertices));
+    if (!patch) return null; // outside the mesh entirely
+
+    if (!isOpenCountryside(patch)) {
+      const ward = patch.ward!;
+      if (!ROW_WARDS.has(ward.type)) return null;
+      // Fields and groves stay clear.
+      if (ward instanceof Farm) {
+        for (const plot of ward.subPlots) {
+          if (pointInPolygon(probe, plot)) return null;
+        }
       }
+      if (ward.type === WardType.Park) return null;
+    } else {
+      // Open countryside (ward === null, or the base Ward's default
+      // WardType.Empty). Only acceptable for ribbon development, and only
+      // within the settlement's built radius * 1.3 — see RibbonContext.
+      // The centre probe's patch may end up here; callers that materialise
+      // a stamp must attribute it to a real ward (see resolveWardPatch).
+      if (!ribbon) return null;
+      const dx = probe.x - model.center.x, dy = probe.y - model.center.y;
+      const limit = ribbon.maxBuiltRadius * RIBBON_FACTOR;
+      if (dx * dx + dy * dy > limit * limit) return null;
     }
-    if (patch.ward!.type === WardType.Park) return null;
+    if (probe === slot.center) centerPatch = patch;
   }
   if (intersectsSite(rect, model.claimedSites)) return null;
   return centerPatch;
@@ -162,14 +206,40 @@ const BASE_HOUSE = { width: 6, depth: 6 };
 const HUT_HOUSE = { width: 4.5, depth: 4.5 };
 
 /**
+ * Nearest ROW_WARDS patch to `patch`, by patch-shape centroid distance.
+ * Ribbon houses stand on open (wardless) countryside patches, but they
+ * still need a real ward to join for census counting, POI adoption, and
+ * GeoJSON to keep working — administratively they belong to the village's
+ * built wards, so attribute each ribbon stamp to whichever one is nearest.
+ * `builtPatches` is always non-empty when this is called (stampVillageRows
+ * only enables ribbon mode when at least one ROW_WARDS patch exists).
+ */
+function resolveWardPatch(patch: Patch, builtPatches: readonly Patch[]): Patch {
+  if (!isOpenCountryside(patch)) return patch;
+  const c = patch.shape.centroid;
+  let best = builtPatches[0];
+  let bestD2 = Infinity;
+  for (const bp of builtPatches) {
+    const bc = bp.shape.centroid;
+    const dx = bc.x - c.x, dy = bc.y - c.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < bestD2) { bestD2 = d2; best = bp; }
+  }
+  return best;
+}
+
+/**
  * Build the resized rect for `id`, re-check acceptance, and materialise
  * (ward geometry + glyph-backed marker + PlacedSymbol + claimed site) on
- * success. No rng draws here — id is already chosen.
+ * success. No rng draws here — id is already chosen. `patch` must already
+ * be ward-resolved (see resolveWardPatch) — its `.ward` is never null here.
  */
-function materialiseSlot(model: Model, patch: Patch, slot: FrontageSlot, id: string): boolean {
+function materialiseSlot(
+  model: Model, patch: Patch, slot: FrontageSlot, id: string, ribbon?: RibbonContext,
+): boolean {
   const fp = houseFootprint(id);
   const resized: FrontageSlot = { ...slot, width: fp.width, depth: fp.depth };
-  if (!acceptSlot(model, resized)) return false;
+  if (!acceptSlot(model, resized, ribbon)) return false;
   const rect = slotRect(resized);
   patch.ward!.geometry.push(rect);
   model.glyphBackedBuildings.add(rect);
@@ -197,12 +267,13 @@ function materialiseSlot(model: Model, patch: Patch, slot: FrontageSlot, id: str
  */
 function pickAndMaterialise(
   model: Model, patch: Patch, slot: FrontageSlot, bias: RoofBias, isRowEnd: boolean,
+  ribbon?: RibbonContext,
 ): boolean {
   const id = pickHouseGlyph(patch.ward!.type, bias, isRowEnd, model.rng);
-  if (materialiseSlot(model, patch, slot, id)) return true;
+  if (materialiseSlot(model, patch, slot, id, ribbon)) return true;
   const plainHouse = bias === 'thatch' ? 'sm-house' : 'sm-house-tiled';
-  if (materialiseSlot(model, patch, slot, plainHouse)) return true;
-  if (materialiseSlot(model, patch, slot, 'sm-hut-mud')) return true;
+  if (materialiseSlot(model, patch, slot, plainHouse, ribbon)) return true;
+  if (materialiseSlot(model, patch, slot, 'sm-hut-mud', ribbon)) return true;
   return false;
 }
 
@@ -213,6 +284,29 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
   let allowance = allowanceBase - model.countOrdinaryBuildingsPublic();
 
   const bias = drawRoofBias(model.rng);
+
+  // Ribbon-development bound: villages are true street villages, so rows
+  // may ribbon along roads through open countryside past the last built
+  // ROW_WARDS patch, not just across built patches. maxBuiltRadius is the
+  // farthest any built ROW_WARDS patch reaches from the settlement centre;
+  // ribbon probes are allowed out to maxBuiltRadius * 1.3 (see
+  // RibbonContext/acceptSlot). Ribbon mode only activates when at least
+  // one built ROW_WARDS patch exists — with none, there is no ward to
+  // attribute a ribbon stamp to (see resolveWardPatch), so ribbon stays
+  // off and acceptSlot falls back to its original built-patches-only rule.
+  const builtPatches = model.patches.filter(p =>
+    p.ward !== null && !model.waterbody.includes(p) && ROW_WARDS.has(p.ward.type));
+  let maxBuiltR2 = 0;
+  for (const p of builtPatches) {
+    for (const v of p.shape.vertices) {
+      const dx = v.x - model.center.x, dy = v.y - model.center.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 > maxBuiltR2) maxBuiltR2 = d2;
+    }
+  }
+  const maxBuiltRadius = builtPatches.length > 0 ? Math.sqrt(maxBuiltR2) : 40; // defensive fallback only
+  const ribbon: RibbonContext | undefined =
+    builtPatches.length > 0 ? { maxBuiltRadius } : undefined;
 
   // Well reservation: unconditional draw order when wellBudget > 0.
   if (model.wellBudget > 0) {
@@ -265,15 +359,16 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
         const accepted: Array<{ slot: FrontageSlot; patch: Patch }> = [];
         for (const slot of slots) {
           if (allowance <= 0) break;
-          const patch = acceptSlot(model, slot);
+          const patch = acceptSlot(model, slot, ribbon);
           if (!patch) continue;
           accepted.push({ slot, patch });
         }
 
         for (let i = 0; i < accepted.length && allowance > 0; i++) {
           const { slot, patch } = accepted[i];
+          const wardPatch = resolveWardPatch(patch, builtPatches);
           const isRowEnd = i === 0 || i === accepted.length - 1;
-          if (pickAndMaterialise(model, patch, slot, bias, isRowEnd)) allowance--;
+          if (pickAndMaterialise(model, wardPatch, slot, bias, isRowEnd, ribbon)) allowance--;
         }
       }
     }
@@ -299,15 +394,16 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
         const accepted: Array<{ slot: FrontageSlot; patch: Patch }> = [];
         for (const slot of slots) {
           if (allowance <= 0) break;
-          const patch = acceptSlot(model, slot);
+          const patch = acceptSlot(model, slot, ribbon);
           if (!patch) continue;
           accepted.push({ slot, patch });
         }
 
         for (let i = 0; i < accepted.length && allowance > 0; i++) {
           const { slot, patch } = accepted[i];
-          const id = pickHouseGlyph(patch.ward!.type, bias, true, model.rng);
-          if (materialiseSlot(model, patch, slot, id)) allowance--;
+          const wardPatch = resolveWardPatch(patch, builtPatches);
+          const id = pickHouseGlyph(wardPatch.ward!.type, bias, true, model.rng);
+          if (materialiseSlot(model, wardPatch, slot, id, ribbon)) allowance--;
         }
       }
     }
