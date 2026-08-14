@@ -90,6 +90,7 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
         ring: ring(poly.vertices),
         kind: String(ward.type),
         landmark: LANDMARK_TYPES.has(ward.type),
+        ...(model.glyphBackedBuildings.has(poly) ? { glyphBacked: true as const } : {}),
       } as BuildingFeature);
     }
     if (ward instanceof Harbour) {

@@ -132,3 +132,32 @@ describe('assembler symbol path', () => {
     });
   });
 });
+
+describe('glyph-backed buildings', () => {
+  const HOUSE_RECT = { ring: [{x:0,y:0},{x:6,y:0},{x:6,y:6},{x:0,y:6}], kind: 'craftsmen', landmark: false, glyphBacked: true as const };
+  const HOUSE_SYM = { id: 'sm-house', at: { x: 3, y: 3 }, scale: 6, rotationDeg: 0, zBand: 'structure' as const };
+
+  it('suppresses path and rect shadow when symbols render', () => {
+    const scene = sceneWith([HOUSE_SYM]);
+    scene.layers.buildings.push(HOUSE_RECT);
+    const svg = assembleSvg(scene);
+    expect(svg).toContain('href="#glyph-sm-house"');
+    expect(svg).not.toMatch(/<g id="buildings">[\s\S]*M0\.00,0\.00/);
+    expect(svg).not.toMatch(/<g id="shadows"[^>]*>[\s\S]*M0\.00,0\.00/);
+  });
+
+  it('symbols:false restores the footprint painting', () => {
+    const scene = sceneWith([HOUSE_SYM]);
+    scene.layers.buildings.push(HOUSE_RECT);
+    const svg = assembleSvg(scene, { symbols: false });
+    expect(svg).not.toContain('glyph-sm-house');
+    expect(svg).toMatch(/<g id="buildings">[\s\S]*M0\.00,0\.00/);
+  });
+
+  it('non-glyphBacked buildings are unaffected either way', () => {
+    const scene = sceneWith([]);
+    scene.layers.buildings.push({ ...HOUSE_RECT, glyphBacked: undefined });
+    const svg = assembleSvg(scene);
+    expect(svg).toMatch(/<g id="buildings">[\s\S]*M0\.00,0\.00/);
+  });
+});

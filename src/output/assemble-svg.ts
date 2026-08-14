@@ -202,7 +202,9 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     parts.push('</g>');
   }
 
-  const shadowable = [...L.buildings];
+  const hideBacked = (b: typeof L.buildings[0]): boolean => b.glyphBacked === true && showSymbols;
+
+  const shadowable = L.buildings.filter(b => !hideBacked(b));
   if (shadowable.length > 0 || structureSymbols.length > 0) {
     const { dx, dy } = theme.shadowOffset;
     parts.push(`<g id="shadows" transform="translate(${fmt(dx)},${fmt(dy)})">`);
@@ -213,7 +215,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     parts.push('</g>');
   }
 
-  const ordinary = L.buildings.filter(x => !x.landmark);
+  const ordinary = L.buildings.filter(x => !x.landmark && !hideBacked(x));
   if (ordinary.length > 0 || L.piers.length > 0) {
     parts.push('<g id="buildings">');
     for (const bld of ordinary) parts.push(`<path class="${bld.kind}" d="${ringPath(bld.ring)}"/>`);
@@ -221,7 +223,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     parts.push('</g>');
   }
 
-  const landmarks = L.buildings.filter(x => x.landmark);
+  const landmarks = L.buildings.filter(x => x.landmark && !hideBacked(x));
   if (landmarks.length > 0) {
     parts.push('<g id="landmarks">');
     for (const bld of landmarks) parts.push(`<path class="${bld.kind}" d="${ringPath(bld.ring)}"/>`);

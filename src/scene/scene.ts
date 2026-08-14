@@ -54,6 +54,7 @@ export interface BuildingFeature {
   /** Ward type string (WardType value) — semantic, drives styling/symbols. */
   kind: string;
   landmark: boolean;
+  glyphBacked?: true;
 }
 
 export interface PierFeature { ring: ScenePoint[] }
