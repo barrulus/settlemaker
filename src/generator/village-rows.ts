@@ -81,7 +81,16 @@ export function frontageSlotAt(
   // Gate-tune round 1 (2026-08-14): "too spread out" — tighten gap,
   // setback jitter, and rotation jitter so rows pack denser and align
   // more neatly.
-  const gap = 0.3 + rng.float() * 0.3;
+  // Gate-tune round 4 (2026-08-14): "still too far apart" — gap floor now
+  // matches OVERLAP_CLEARANCE (0.15) exactly, so the SAT overlap check
+  // never fights the walk for the tightest-allowed gap (near-terraced
+  // rows). Setback jitter kept at round 1's ±0.15 — audited the
+  // perpendicular offset formula below for residual slack beyond
+  // `roadHalfWidth + depth/2 + rowOffset + setback` and found none: for
+  // the front row (rowOffset 0) this places the house's near edge exactly
+  // at `roadHalfWidth + setback`, i.e. already hugging the frontage line
+  // with no hidden constant margin to remove.
+  const gap = 0.15 + rng.float() * 0.2;
   const setback = (rng.float() - 0.5) * 0.3;
   const rotJitter = (rng.float() - 0.5) * 4;
 
@@ -509,7 +518,9 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
   // per-stamp (wardPatch is still resolved per slot for census/POI/ward
   // geometry) — only the GLYPH stops churning. isRowEnd is still always
   // false (unchanged since round 1 — the row-end hut rule stays dropped).
-  const REJECT_PROBE_STEP = 1.5;
+  // Gate-tune round 4 (2026-08-14): "still too far apart" — halved from
+  // 1.5 so rejected stretches rescan twice as finely, halving void sizes.
+  const REJECT_PROBE_STEP = 0.75;
   for (let row = 0; row < 3 && allowance > 0; row++) {
     for (const road of roads) {
       if (allowance <= 0) break;

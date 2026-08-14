@@ -15,13 +15,16 @@ describe('slotsAlongPolyline', () => {
   // Gate-tune round 1 (2026-08-14): "too spread out" — gap, setback, and
   // rotation jitter all tightened. Bounds below re-pinned to the new
   // constants (mechanical; see village-rows.ts for the rationale).
-  it('spaces slots at width+gap with gap in [0.3, 0.6]', () => {
+  // Gate-tune round 4 (2026-08-14): "still too far apart" — gap floor now
+  // matches OVERLAP_CLEARANCE (0.15); bound re-pinned mechanically to
+  // [0.15, 0.35].
+  it('spaces slots at width+gap with gap in [0.15, 0.35]', () => {
     const slots = slotsAlongPolyline(straight, 1, 1.0, HOUSE, new SeededRandom(1));
     expect(slots.length).toBeGreaterThan(10);
     for (let i = 1; i < slots.length; i++) {
       const d = slots[i].center.x - slots[i - 1].center.x;
-      expect(d).toBeGreaterThanOrEqual(HOUSE.width + 0.3 - 1e-9);
-      expect(d).toBeLessThanOrEqual(HOUSE.width + 0.6 + 1e-9);
+      expect(d).toBeGreaterThanOrEqual(HOUSE.width + 0.15 - 1e-9);
+      expect(d).toBeLessThanOrEqual(HOUSE.width + 0.35 + 1e-9);
     }
   });
 
@@ -339,9 +342,15 @@ describe('fallback chain', () => {
     // Gate-tune round 3 (2026-08-14): coordinates re-pinned again — the
     // primary row walk is now footprint-aware/incremental (see
     // frontageSlotAt), which moves every slot in the model again.
+    // Gate-tune round 4 (2026-08-14): coordinates re-pinned again — gap and
+    // rejection-probe-step constants tightened, shifting every slot again.
+    // This round's fixture happens to be a real `sm-hut-mud` stamp (not
+    // `sm-hut-straw`) — irrelevant to the test, which only needs a Farm
+    // site where the resized longhouse naturally fails and both the plain
+    // house and hut fit.
     const sym = m.symbols.find(s =>
-      s.wardType === WardType.Farm && s.id === 'sm-hut-straw' &&
-      Math.abs(s.at.x - -44.68660139549952) < 0.1 && Math.abs(s.at.y - 35.73086009253545) < 0.1);
+      s.wardType === WardType.Farm && s.id === 'sm-hut-mud' &&
+      Math.abs(s.at.x - -43.9050055036387) < 0.1 && Math.abs(s.at.y - 44.62978809174039) < 0.1);
     expect(sym).toBeDefined();
     const rect = [...m.glyphBackedBuildings].find(r =>
       Math.abs(r.centroid.x - sym!.at.x) < 1e-6 && Math.abs(r.centroid.y - sym!.at.y) < 1e-6);
