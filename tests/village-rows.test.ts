@@ -128,4 +128,21 @@ describe('variety picker', () => {
     expect(houseFootprint('sm-longhouse')).toEqual({ width: 10, depth: 5 });
     expect(houseFootprint('sm-house')).toEqual({ width: 6, depth: 6 });
   });
+
+  it('consumes exactly one rng draw per call in every branch', () => {
+    const rng = new SeededRandom(13);
+    let draws = 0;
+    const counting = { float: () => { draws++; return rng.float(); }, bool: (p: number) => { draws++; return rng.bool(p); } } as unknown as SeededRandom;
+    const cases: Array<[WardType, 'thatch' | 'tile', boolean]> = [
+      [WardType.Slum, 'tile', false], [WardType.Craftsmen, 'tile', true],
+      [WardType.Farm, 'thatch', false], [WardType.Merchant, 'tile', false],
+      [WardType.Patriciate, 'thatch', false], [WardType.Craftsmen, 'thatch', false],
+      [WardType.GateWard, 'tile', false],
+    ];
+    for (const [ward, bias, end] of cases) {
+      const before = draws;
+      pickHouseGlyph(ward, bias, end, counting);
+      expect(draws - before).toBe(1);
+    }
+  });
 });
