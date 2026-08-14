@@ -111,7 +111,7 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
   // empty ⇒ scoreBuildings[0]); scaled to the building's short axis per the
   // manifest scaleTo contract; locked upright.
   const cathedralWard = model.patches.find(p => p.ward?.type === WardType.Cathedral)?.ward;
-  if (cathedralWard !== undefined && cathedralWard.geometry.length > 0) {
+  if (cathedralWard != null && cathedralWard.geometry.length > 0) {
     const building = scoreBuildings(cathedralWard.geometry, scoringReference(model))[0];
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const v of building.vertices) {
