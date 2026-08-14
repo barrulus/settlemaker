@@ -1,5 +1,5 @@
 import type { Palette } from '../types/interfaces.js';
-import type { Scene, ScenePoint } from '../scene/scene.js';
+import type { BuildingFeature, Scene, ScenePoint } from '../scene/scene.js';
 import type { AssetSet } from '../assets/asset-sets.js';
 import { assetSetFor } from '../assets/asset-sets.js';
 import { paletteForBiome } from './palette.js';
@@ -202,7 +202,8 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     parts.push('</g>');
   }
 
-  const hideBacked = (b: typeof L.buildings[0]): boolean => b.glyphBacked === true && showSymbols;
+  const hideBacked = (b: BuildingFeature): boolean =>
+    b.glyphBacked === true && showSymbols && assets.glyphs !== undefined;
 
   const shadowable = L.buildings.filter(b => !hideBacked(b));
   if (shadowable.length > 0 || structureSymbols.length > 0) {

@@ -53,6 +53,10 @@ Since `1.1.0`, `FLOATING_POI_KINDS` (`src/poi/poi-kinds.ts`) grew from `{'pier',
 - **`ward_type` rule:** as above — placed `well`/`mill`/`market` symbols now carry the consuming ward's type (the ward that placed the symbol knows it at placement time: a `CommonWard` subclass for wells, `Farm` for mills, `Market` for market crosses), not a hardcoded value. Only the plaza-less hamlet well fallback stays null.
 - **Deprecation caveat:** `POI_TIER` (`src/poi/poi-kinds.ts`) still assigns tiers to `market`/`mill`/`well` for type-completeness, but tiers only govern drop-off order when building supply runs out during adoption. Since these three kinds are symbol-sourced and never adopt a building, `POI_TIER` does not apply to them in practice — they always emit (or don't, per generator placement) independent of building-supply pressure.
 
+## Ribbon dwellings and ward attribution (1.2.0)
+
+Since `1.2.0`, village rows (`!rowHousing` settlements) can ribbon dwelling glyphs along roads through open countryside past the last built ward patch, not just across already-built residential wards. Those ribbon dwellings are attributed to the nearest built ward for census/POI/ward-labelling purposes (`resolveWardPatch` in `src/generator/village-rows.ts`), but the building's rect itself stands on the open-countryside patch where it was actually stamped — so a `building`/`poi` feature's `wardType`/`ward_type` may name a ward whose polygon does not spatially contain it. Consumers doing point-in-ward joins should use the feature's own coordinates against ward polygons, not trust the `wardType`/`ward_type` label as a spatial-containment guarantee.
+
 ## POI regimes
 
 The selector splits at `P < 300`. The emitted `poi_density` metadata field reflects which regime ran.

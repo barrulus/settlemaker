@@ -100,9 +100,78 @@ describe('slot acceptance', () => {
     const cy = plot.reduce((s, p) => s + p.y, 0) / plot.length;
     expect(acceptSlot(m, { center: new Point(cx, cy), rotationDeg: 0, width: 4.5, depth: 4.5 })).toBeNull();
   });
+
+  it('ribbon bound: accepts open countryside inside maxBuiltRadius*1.3, rejects clearly beyond it', () => {
+    const m = mk(300, 3);
+    const builtPatches = m.patches.filter(p =>
+      p.ward !== null && !m.waterbody.includes(p) && ROW_WARDS.has(p.ward.type));
+    let maxR2 = 0;
+    for (const p of builtPatches) {
+      for (const v of p.shape.vertices) {
+        const dx = v.x - m.center.x, dy = v.y - m.center.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 > maxR2) maxR2 = d2;
+      }
+    }
+    const maxBuiltRadius = Math.sqrt(maxR2);
+    const limit = maxBuiltRadius * 1.3;
+    const ribbon = { maxBuiltRadius };
+
+    // A countryside (Empty-warded, non-water) patch centroid inside the bound.
+    const inside = m.patches.find(p =>
+      !m.waterbody.includes(p) &&
+      (p.ward === null || p.ward.type === WardType.Empty) &&
+      Point.distance(p.shape.centroid, m.center) < limit &&
+      (() => {
+        m.claimedSites = [];
+        return acceptSlot(m, { center: p.shape.centroid, rotationDeg: 0, width: 4.5, depth: 4.5 }, ribbon) !== null;
+      })());
+    expect(inside).toBeDefined();
+    m.claimedSites = [];
+    const insideSlot = { center: inside!.shape.centroid, rotationDeg: 0, width: 4.5, depth: 4.5 };
+    expect(acceptSlot(m, insideSlot, ribbon)).not.toBeNull();
+
+    // Scale the same direction vector well past the bound.
+    const dx = inside!.shape.centroid.x - m.center.x, dy = inside!.shape.centroid.y - m.center.y;
+    const d = Math.hypot(dx, dy);
+    const scale = (limit * 1.5) / d;
+    const far = new Point(m.center.x + dx * scale, m.center.y + dy * scale);
+    m.claimedSites = [];
+    expect(acceptSlot(m, { center: far, rotationDeg: 0, width: 4.5, depth: 4.5 }, ribbon)).toBeNull();
+  });
+
+  it('ribbon houses attribute to the nearest built ward, not the countryside patch they stand on', () => {
+    const m = mk(300, 3);
+    const builtPatches = m.patches.filter(p =>
+      p.ward !== null && !m.waterbody.includes(p) && ROW_WARDS.has(p.ward.type));
+    let checked = 0;
+    for (const rect of m.glyphBackedBuildings) {
+      const c = rect.centroid;
+      const geoPatch = m.patches.find(p => !m.waterbody.includes(p) && pointInPolygon(c, p.shape.vertices));
+      if (!geoPatch || !(geoPatch.ward === null || geoPatch.ward.type === WardType.Empty)) continue;
+      // This rect is a ribbon stamp standing on open countryside — find
+      // which built ward it's actually filed under.
+      const owningPatch = m.patches.find(p => p.ward?.geometry.includes(rect));
+      expect(owningPatch).toBeDefined();
+      expect(builtPatches).toContain(owningPatch);
+
+      // It must be the nearest built patch by centroid distance to the
+      // countryside patch the rect geographically stands on.
+      const gc = geoPatch.shape.centroid;
+      let nearest = builtPatches[0];
+      let bestD2 = Infinity;
+      for (const bp of builtPatches) {
+        const d2 = Point.distance(bp.shape.centroid, gc) ** 2;
+        if (d2 < bestD2) { bestD2 = d2; nearest = bp; }
+      }
+      expect(owningPatch).toBe(nearest);
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
 });
 
-import { drawRoofBias, pickHouseGlyph, houseFootprint } from '../src/generator/village-rows.js';
+import { drawRoofBias, pickHouseGlyph, houseFootprint, pickAndMaterialise } from '../src/generator/village-rows.js';
 import { rowHousing } from '../src/generator/generation-params.js';
 import { buildingBudget } from '../src/generator/model.js';
 
@@ -209,5 +278,53 @@ describe('variety picker', () => {
       pickHouseGlyph(ward, bias, end, counting);
       expect(draws - before).toBe(1);
     }
+  });
+});
+
+describe('fallback chain', () => {
+  it('a longhouse collision falls through the biased house to sm-hut-mud, with exactly one rng draw', () => {
+    const m = mk(300, 3);
+    // A real Farm-ward-attributed dwelling site where the resized longhouse
+    // footprint (10x5) already fails to fit naturally (mesh/subplot edge),
+    // while the plain house (6x6) and hut (4.5x4.5) footprints both fit —
+    // found by probing every farm-attributed stamp in this seeded model.
+    const sym = m.symbols.find(s =>
+      s.wardType === WardType.Farm && s.id === 'sm-hut-straw' &&
+      Math.abs(s.at.x - -38.41) < 0.1 && Math.abs(s.at.y - 48.79) < 0.1);
+    expect(sym).toBeDefined();
+    const rect = [...m.glyphBackedBuildings].find(r =>
+      Math.abs(r.centroid.x - sym!.at.x) < 1e-6 && Math.abs(r.centroid.y - sym!.at.y) < 1e-6);
+    expect(rect).toBeDefined();
+    const patch = m.patches.find(p => p.ward instanceof Farm && p.ward.geometry.includes(rect!));
+    expect(patch).toBeDefined();
+
+    const c = sym!.at, rot = sym!.rotationDeg;
+    const ribbon = { maxBuiltRadius: 1000 };
+
+    // Force plain-house (6x6) rejection with a claim placed exactly on one
+    // of its resized-rect corners, far enough from the hut (4.5x4.5)
+    // corners at the same center/rotation to leave the hut footprint clear.
+    const plainRect = slotRect({ center: c, rotationDeg: rot, width: 6, depth: 6 });
+    const claimVertex = plainRect.vertices[0];
+    m.claimedSites = [{ at: claimVertex, radius: 0.1 }];
+
+    // Sanity: longhouse already fails naturally at this spot; plain house
+    // now fails too (our claim); hut still fits.
+    expect(acceptSlot(m, { center: c, rotationDeg: rot, width: 10, depth: 5 }, ribbon)).toBeNull();
+    expect(acceptSlot(m, { center: c, rotationDeg: rot, width: 6, depth: 6 }, ribbon)).toBeNull();
+    expect(acceptSlot(m, { center: c, rotationDeg: rot, width: 4.5, depth: 4.5 }, ribbon)).not.toBeNull();
+
+    let draws = 0;
+    const countingRng = { float: () => { draws++; return 0.05; } } as unknown as SeededRandom; // r<0.15 → Farm picks sm-longhouse
+    m.rng = countingRng;
+
+    const before = m.symbols.length;
+    const ok = pickAndMaterialise(m, patch!, { center: c, rotationDeg: rot, width: 6, depth: 6 }, 'thatch', false, ribbon);
+
+    expect(ok).toBe(true);
+    expect(draws).toBe(1); // exactly the pickHouseGlyph draw — no rng draws in the fallback materialisation attempts
+    expect(m.symbols.length).toBe(before + 1);
+    const placed = m.symbols[m.symbols.length - 1];
+    expect(placed.id).toBe('sm-hut-mud'); // longhouse (chosen) and sm-house (bias fallback) both rejected in turn
   });
 });

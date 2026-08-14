@@ -143,7 +143,6 @@ export function acceptSlot(model: Model, slot: FrontageSlot, ribbon?: RibbonCont
           if (pointInPolygon(probe, plot)) return null;
         }
       }
-      if (ward.type === WardType.Park) return null;
     } else {
       // Open countryside (ward === null, or the base Ward's default
       // WardType.Empty). Only acceptable for ribbon development, and only
@@ -265,7 +264,7 @@ function materialiseSlot(
  * the plain house for this settlement's roof bias, then to a mud hut.
  * Drop the slot only if the hut also fails.
  */
-function pickAndMaterialise(
+export function pickAndMaterialise(
   model: Model, patch: Patch, slot: FrontageSlot, bias: RoofBias, isRowEnd: boolean,
   ribbon?: RibbonContext,
 ): boolean {

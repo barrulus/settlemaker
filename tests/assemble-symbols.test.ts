@@ -4,7 +4,7 @@ import { buildScene } from '../src/scene/build-scene.js';
 import { SCENE_VERSION, type Scene } from '../src/scene/scene.js';
 import { Point } from '../src/types/point.js';
 import type { OriginShift } from '../src/generator/origin-shift.js';
-import { Model, mapToGenerationParams, type AzgaarBurgInput } from '../src/index.js';
+import { Model, mapToGenerationParams, type AzgaarBurgInput, SCHEMATIC_SET } from '../src/index.js';
 
 // Canonical test-model helper (pattern from tests/degraded-generation.test.ts).
 function mk(population: number, seed: number, overrides: Partial<AzgaarBurgInput> = {}): Model {
@@ -159,5 +159,19 @@ describe('glyph-backed buildings', () => {
     scene.layers.buildings.push({ ...HOUSE_RECT, glyphBacked: undefined });
     const svg = assembleSvg(scene);
     expect(svg).toMatch(/<g id="buildings">[\s\S]*M0\.00,0\.00/);
+  });
+
+  // Finding 2: hideBacked used to suppress rects whenever showSymbols was
+  // true, even for an asset set with no glyphs at all (assets.glyphs
+  // undefined, e.g. the public SCHEMATIC_SET) — leaving glyphBacked
+  // dwellings with nothing painted, contradicting scene-schema.md's
+  // rect-fallback promise. It must fall back to the rect whenever the
+  // active asset set can't paint a glyph, independent of `symbols`.
+  it('a glyph-less asset set (SCHEMATIC_SET) paints the footprint rect and emits no glyph-sm-house def', () => {
+    const scene = sceneWith([HOUSE_SYM]);
+    scene.layers.buildings.push(HOUSE_RECT);
+    const svg = assembleSvg(scene, { assetSet: SCHEMATIC_SET });
+    expect(svg).toMatch(/<g id="buildings">[\s\S]*M0\.00,0\.00/);
+    expect(svg).not.toContain('glyph-sm-house');
   });
 });
