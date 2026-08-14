@@ -2,7 +2,7 @@
 // Regenerate: npx tsx scripts/extract-glyphs.ts
 //
 // Symbol artwork © Barry Gill, licensed CC-BY-4.0 with the Rendered Output
-// Exception — see web/public/symbols/LICENSE. Attribution is required when
+// Exception — see symbols/LICENSE. Attribution is required when
 // redistributing this library, waived for rendered map output.
 
 export interface GlyphMarkup { body: string; sil: string }

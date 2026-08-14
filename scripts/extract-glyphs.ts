@@ -1,5 +1,5 @@
 /**
- * Codegen: web/public/symbols/batch001/{symbols.json,symbols.svg}
+ * Codegen: symbols/batch001/{symbols.json,symbols.svg}
  *   → src/assets/symbol-manifest.ts  (metadata — consumed by the generator)
  *   → src/assets/batch001.ts         (markup   — consumed by the renderer)
  *
@@ -92,7 +92,7 @@ export function renderGlyphModule(
   }
   return `${GEN_HEADER}//
 // Symbol artwork © Barry Gill, licensed CC-BY-4.0 with the Rendered Output
-// Exception — see web/public/symbols/LICENSE. Attribution is required when
+// Exception — see symbols/LICENSE. Attribution is required when
 // redistributing this library, waived for rendered map output.
 
 export interface GlyphMarkup { body: string; sil: string }
@@ -103,7 +103,7 @@ export const BATCH001_GLYPHS: Record<string, GlyphMarkup> = ${JSON.stringify(ent
 
 function main(): void {
   const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-  const batch = join(root, 'web', 'public', 'symbols', 'batch001');
+  const batch = join(root, 'symbols', 'batch001');
   const json = JSON.parse(readFileSync(join(batch, 'symbols.json'), 'utf8'));
   const sprite = parseSprite(readFileSync(join(batch, 'symbols.svg'), 'utf8'));
   const manifest = buildManifest(json);

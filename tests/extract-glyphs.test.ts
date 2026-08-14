@@ -5,9 +5,9 @@ import {
 } from '../scripts/extract-glyphs.js';
 
 const ROOT = new URL('..', import.meta.url).pathname;
-const spriteSvg = readFileSync(`${ROOT}web/public/symbols/batch001/symbols.svg`, 'utf8');
+const spriteSvg = readFileSync(`${ROOT}symbols/batch001/symbols.svg`, 'utf8');
 const manifestJson = JSON.parse(
-  readFileSync(`${ROOT}web/public/symbols/batch001/symbols.json`, 'utf8'),
+  readFileSync(`${ROOT}symbols/batch001/symbols.json`, 'utf8'),
 );
 
 describe('glyph extraction', () => {
