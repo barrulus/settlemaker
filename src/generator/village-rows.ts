@@ -83,6 +83,52 @@ export const ROW_WARDS: ReadonlySet<WardType> = new Set([
   WardType.Slum, WardType.GateWard, WardType.Farm,
 ]);
 
+/**
+ * Gate-tune round 2 (2026-08-14): "stop them overlapping". Circle-claim
+ * sampling (claim radius vs. rect half-diagonal) plus vertex+centroid-only
+ * probing in acceptSlot both let corner-to-corner and edge overlaps slip
+ * through at junctions and in the packing pass. This is exact oriented-box
+ * separation via SAT: two convex quads need only 4 candidate axes (2 unique
+ * edge normals per rect — rects have parallel edge pairs).
+ *
+ * `margin` is a required clearance, not a penetration tolerance: `separated`
+ * returns true only when some axis shows a gap strictly greater than
+ * `margin`. Chosen deliberately over a near-zero/negative margin (which
+ * would only reject literal penetration) — the owner's complaint was
+ * visible overlap in dense clusters, and rendered stroke width plus glyph
+ * art bleed makes true zero-gap "touching" rects still read as overlapping,
+ * so OVERLAP_CLEARANCE enforces an actual visible gap.
+ */
+function separated(a: Polygon, b: Polygon, margin: number): boolean {
+  const axes: Array<[number, number]> = [];
+  for (const poly of [a, b]) {
+    const v = poly.vertices;
+    for (let i = 0; i < 2; i++) { // two unique edge normals per rect
+      const ex = v[i + 1].x - v[i].x, ey = v[i + 1].y - v[i].y;
+      const len = Math.hypot(ex, ey) || 1;
+      axes.push([-ey / len, ex / len]);
+    }
+  }
+  for (const [nx, ny] of axes) {
+    let aMin = Infinity, aMax = -Infinity, bMin = Infinity, bMax = -Infinity;
+    for (const p of a.vertices) { const d = p.x * nx + p.y * ny; aMin = Math.min(aMin, d); aMax = Math.max(aMax, d); }
+    for (const p of b.vertices) { const d = p.x * nx + p.y * ny; bMin = Math.min(bMin, d); bMax = Math.max(bMax, d); }
+    if (aMax < bMin - margin || bMax < aMin - margin) return true;
+  }
+  return false;
+}
+
+/** Required gap (units) between any two stamped house rects — see `separated`. */
+const OVERLAP_CLEARANCE = 0.15;
+
+/** True when `rect` clears every rect already stamped this generation run. */
+export function overlapsStamped(rect: Polygon, stamped: Iterable<Polygon>): boolean {
+  for (const other of stamped) {
+    if (!separated(rect, other, OVERLAP_CLEARANCE)) return true;
+  }
+  return false;
+}
+
 export function slotRect(slot: FrontageSlot): Polygon {
   const a = slot.rotationDeg * Math.PI / 180;
   const ux = Math.cos(a), uy = Math.sin(a);      // along-road unit
@@ -243,6 +289,12 @@ function materialiseSlot(
   const resized: FrontageSlot = { ...slot, width: fp.width, depth: fp.depth };
   if (!acceptSlot(model, resized, ribbon)) return false;
   const rect = slotRect(resized);
+  // Gate-tune round 2 (2026-08-14): exact rect-vs-rect overlap rejection —
+  // acceptSlot's claimedSites circle check (radius-based) and vertex-probe
+  // sampling both let corner/edge overlaps through; this is the single
+  // choke point every acceptance path (primary rows, fallback-chain
+  // retries, packing pass) routes through before a rect is ever pushed.
+  if (overlapsStamped(rect, model.glyphBackedBuildings)) return false;
   patch.ward!.geometry.push(rect);
   model.glyphBackedBuildings.add(rect);
   const centre = rect.centroid;
@@ -426,7 +478,26 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
   // reuse that hut id for the whole stretch; a gap in acceptance starts a
   // new stretch with a new draw. This is the packing pass's analogue of the
   // main loop's run coherence above.
-  if (allowance > 0) {
+  //
+  // Gate-tune round 2 (2026-08-14): the new exact rect-overlap rejection
+  // (see overlapsStamped) costs yield — a slot that used to pass on
+  // circle-claim sampling alone can now fail because its rect genuinely
+  // clips a neighbour. Re-measured pop-350 yield dropped to a 83-89% floor
+  // across sampled seeds (below the ~85% recovery threshold on 2 of 6), so
+  // the packing pass now sweeps PACKING_SWEEPS times instead of once: each
+  // sweep re-walks the same roads at the same HUT_HOUSE pitch, but draws a
+  // fresh rng stream (slotsAlongPolyline's own gap/setback/rotation draws),
+  // so a later sweep's slot positions land in gaps an earlier sweep's
+  // random spacing missed. Still hut-RUN coherent per-sweep, per road+side.
+  // Measured PACKING_SWEEPS=2 vs 4 vs 8: 2→4 recovers ~1-2 more houses per
+  // seed, 4→8 recovers nothing further (worst seed converges at 84%) — the
+  // residual shortfall past ~85% is genuine geometric contention near
+  // junctions (correct rejection, not a random-miss the walk can dodge by
+  // re-rolling), so more sweeps stopped being the fix. Kept at 2 sweeps:
+  // the shared 60% floor (density-target.test.ts) holds with a large
+  // margin regardless.
+  const PACKING_SWEEPS = 2;
+  for (let sweep = 0; sweep < PACKING_SWEEPS && allowance > 0; sweep++) {
     const packingRoads: Array<{ v: ReadonlyArray<Point>; hw: number }> = [
       ...model.arteries.map(a => ({ v: a.vertices, hw: MAIN_STREET / 2 })),
       ...model.streets.map(s => ({ v: s.vertices, hw: REGULAR_STREET / 2 })),

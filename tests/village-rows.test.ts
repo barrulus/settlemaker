@@ -328,15 +328,28 @@ describe('fallback chain', () => {
     // site no longer exists at those coordinates. Re-probed for a fresh
     // site meeting the same preconditions (longhouse fails naturally;
     // plain house and hut both still fit).
+    // Gate-tune round 2 (2026-08-14): coordinates re-pinned again — packing
+    // shifted again. Also: materialiseSlot now rejects on exact rect
+    // overlap against every already-stamped rect (see overlapsStamped),
+    // and this fixture reuses a REAL stamped site's location to probe a
+    // synthetic retry — so the site's own existing rect must be removed
+    // first, or the synthetic hut placement at the same spot would
+    // "overlap" itself and the test's premise (hut still fits here) would
+    // no longer hold.
     const sym = m.symbols.find(s =>
       s.wardType === WardType.Farm && s.id === 'sm-hut-straw' &&
-      Math.abs(s.at.x - 8.523094317216966) < 0.1 && Math.abs(s.at.y - -37.530264625907385) < 0.1);
+      Math.abs(s.at.x - -39.14009826991925) < 0.1 && Math.abs(s.at.y - 49.988532674546114) < 0.1);
     expect(sym).toBeDefined();
     const rect = [...m.glyphBackedBuildings].find(r =>
       Math.abs(r.centroid.x - sym!.at.x) < 1e-6 && Math.abs(r.centroid.y - sym!.at.y) < 1e-6);
     expect(rect).toBeDefined();
     const patch = m.patches.find(p => p.ward instanceof Farm && p.ward.geometry.includes(rect!));
     expect(patch).toBeDefined();
+
+    m.glyphBackedBuildings.delete(rect!);
+    const geomIdx = patch!.ward!.geometry.indexOf(rect!);
+    expect(geomIdx).toBeGreaterThanOrEqual(0);
+    patch!.ward!.geometry.splice(geomIdx, 1);
 
     const c = sym!.at, rot = sym!.rotationDeg;
     const ribbon = { maxBuiltRadius: 1000 };
@@ -366,5 +379,53 @@ describe('fallback chain', () => {
     expect(m.symbols.length).toBe(before + 1);
     const placed = m.symbols[m.symbols.length - 1];
     expect(placed.id).toBe('sm-hut-mud'); // longhouse (chosen) and sm-house (bias fallback) both rejected in turn
+  });
+});
+
+describe('overlap rejection (gate-tune round 2)', () => {
+  // Owner render feedback round 2: "much better — we just need to stop
+  // them overlapping." Circle-claim sampling (radius smaller than the rect
+  // half-diagonal) plus vertex+centroid-only probing in acceptSlot let
+  // corner-to-corner and edge overlaps slip through at road junctions and
+  // in the packing pass. village-rows.ts now runs exact SAT rect-vs-rect
+  // rejection in materialiseSlot against every previously stamped rect.
+  //
+  // Independent reimplementation of the SAT check here (rather than
+  // importing `overlapsStamped`/`separated`) — a bug shared between the
+  // production check and this test's check would pass silently if the
+  // test just called the same code under test.
+  function satSeparated(a: { x: number; y: number }[], b: { x: number; y: number }[]): number {
+    // Returns the maximum, over all 4 candidate axes, of the *signed* gap
+    // between the two intervals' projections (positive = real gap,
+    // negative = penetration depth on that axis). The true separation
+    // is at least this value only when it's the axis with the largest gap.
+    let bestGap = -Infinity;
+    for (const poly of [a, b]) {
+      for (let i = 0; i < 2; i++) {
+        const ex = poly[i + 1].x - poly[i].x, ey = poly[i + 1].y - poly[i].y;
+        const len = Math.hypot(ex, ey) || 1;
+        const nx = -ey / len, ny = ex / len;
+        let aMin = Infinity, aMax = -Infinity, bMin = Infinity, bMax = -Infinity;
+        for (const p of a) { const d = p.x * nx + p.y * ny; aMin = Math.min(aMin, d); aMax = Math.max(aMax, d); }
+        for (const p of b) { const d = p.x * nx + p.y * ny; bMin = Math.min(bMin, d); bMax = Math.max(bMax, d); }
+        const gap = Math.max(aMin - bMax, bMin - aMax);
+        bestGap = Math.max(bestGap, gap);
+      }
+    }
+    return bestGap; // > 0 means genuinely separated by this much
+  }
+
+  it.each([300, 600])('pop %i: no two glyphBackedBuildings rects overlap, seeds 3/5/7/11', (pop) => {
+    for (const seed of [3, 5, 7, 11]) {
+      const m = mk(pop, seed);
+      const rects = [...m.glyphBackedBuildings].map(r => r.vertices);
+      for (let i = 0; i < rects.length; i++) {
+        for (let j = i + 1; j < rects.length; j++) {
+          const gap = satSeparated(rects[i], rects[j]);
+          // Real penetration (not just brushing at ~0) must not occur.
+          expect(gap).toBeGreaterThan(-1e-6);
+        }
+      }
+    }
   });
 });
