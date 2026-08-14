@@ -197,17 +197,19 @@ settlemaker is a derivative work of [watabou's TownGeneratorOS](https://github.c
 which is GPL-3.0. Upstream grants no "or any later version" option, so settlemaker is
 GPL-3.0-**only**, not `-or-later`.
 
-The hosted build at [settlemaker.com](https://settlemaker.com) ships this program's compiled
-code to your browser; the corresponding source is this repository.
+settlemaker.com is built from the private settlemaker-web repo, which pins
+this repo as a submodule and serves the library to browsers as a standalone
+GPL artifact (`/lib/settlemaker.js`, built by `npm run build:lib`). This
+repository is the library: generation core, symbols, tests, and tooling.
 
 Two things are *not* covered by that license:
 
-- **The SVG symbol library** (`web/public/symbols/`) is original artwork under
-  [**CC BY 4.0 with a rendered-output exception**](web/public/symbols/LICENSE). **Maps you
+- **The SVG symbol library** (`symbols/`) is original artwork under
+  [**CC BY 4.0 with a rendered-output exception**](symbols/LICENSE). **Maps you
   render with the symbols are yours and owe nothing** — no credit, no notice. Attribution
   applies only if you redistribute the *library itself* (the SVGs, the sprite, or a set
   derived from them), in which case credit the authors in
-  [CREDITS](web/public/symbols/CREDITS). Contributions are accepted on those terms.
+  [CREDITS](symbols/CREDITS). Contributions are accepted on those terms.
 - **[Azgaar's Fantasy Map Generator](https://github.com/Azgaar/Fantasy-Map-Generator)** (MIT)
   consumes settlemaker at arm's length over the [URL API](docs/url-api.md). Separate programs
   exchanging data, not a combined work — neither license reaches into the other.

@@ -6,6 +6,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
+    "build:lib": "esbuild src/index.ts --bundle --format=esm --target=es2022 --minify --outfile=dist/settlemaker.browser.js --banner:js=\"/* settlemaker — GPL-3.0-only. Corresponding source: https://github.com/barrulus/settlemaker */\"",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -19,6 +20,7 @@
   "devDependencies": {
     "@types/geojson": "^7946.0.14",
     "@types/pg": "^8.11.0",
+    "esbuild": "^0.25.0",
     "p-limit": "^6.0.0",
     "pg": "^8.13.0",
     "sharp": "^0.33.0",

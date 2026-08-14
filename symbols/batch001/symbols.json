@@ -1,7 +1,7 @@
 {
   "batch": "001",
   "license": "CC-BY-4.0",
-  "licenseUrl": "https://github.com/barrulus/settlemaker/blob/master/web/public/symbols/LICENSE",
+  "licenseUrl": "https://github.com/barrulus/settlemaker/blob/master/symbols/LICENSE",
   "licenseNote": "Rendered output is exempt from attribution — see the Rendered Output Exception in LICENSE. Attribution applies when redistributing the symbol library itself.",
   "attribution": "SettleMaker Symbol Library by Barry Gill and contributors, CC BY 4.0",
   "grid": 64,
