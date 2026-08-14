@@ -32,3 +32,33 @@ describe('placement primitives', () => {
     expect(JSON.stringify(a.symbols)).toBe(JSON.stringify(b.symbols));
   });
 });
+
+function modelWithPlaza(): Model {
+  for (let seed = 1; seed <= 30; seed++) {
+    const m = mk(4000, seed, { plaza: true });
+    if (m.plaza !== null) return m;
+  }
+  throw new Error('no seed in 1..30 produced a plaza');
+}
+
+describe('market cross', () => {
+  it('plaza ward emits exactly one cross and no landmark building', () => {
+    const m = modelWithPlaza();
+    const crosses = m.symbols.filter(s => s.id === 'sm-market-cross');
+    expect(crosses).toHaveLength(1);
+    expect(m.plaza!.ward!.geometry).toHaveLength(0);
+    expect(crosses[0].zBand).toBe('structure');
+    expect(crosses[0].rotationDeg % 90).toBe(0); // snap-cardinal (manifest confirms)
+  });
+
+  it('cross sits inside the plaza patch bounding box', () => {
+    const m = modelWithPlaza();
+    const at = m.symbols.find(s => s.id === 'sm-market-cross')!.at;
+    const xs = m.plaza!.shape.vertices.map(v => v.x);
+    const ys = m.plaza!.shape.vertices.map(v => v.y);
+    expect(at.x).toBeGreaterThanOrEqual(Math.min(...xs));
+    expect(at.x).toBeLessThanOrEqual(Math.max(...xs));
+    expect(at.y).toBeGreaterThanOrEqual(Math.min(...ys));
+    expect(at.y).toBeLessThanOrEqual(Math.max(...ys));
+  });
+});

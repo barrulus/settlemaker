@@ -3,6 +3,7 @@ import { Polygon } from '../geom/polygon.js';
 import { WardType } from '../types/interfaces.js';
 import { interpolate } from '../geom/geom-utils.js';
 import { Ward } from './ward.js';
+import { SYMBOL_MANIFEST } from '../assets/symbol-manifest.js';
 import type { Model } from '../generator/model.js';
 import type { Patch } from '../generator/patch.js';
 
@@ -13,6 +14,33 @@ export class Market extends Ward {
   }
 
   override createGeometry(): void {
+    // Only the plaza becomes a true plaza with the cross; secondary Market
+    // wards keep the legacy statue/fountain object.
+    if (this.model.plaza !== this.patch) {
+      this.createLegacyGeometry();
+      return;
+    }
+    const rng = this.rng;
+    let at = this.patch.shape.centroid;
+    if (rng.bool(0.3)) {
+      let v0: Point | null = null, v1: Point | null = null, maxLength = -1;
+      this.patch.shape.forEdge((p0, p1) => {
+        const len = Point.distance(p0, p1);
+        if (len > maxLength) { maxLength = len; v0 = p0; v1 = p1; }
+      });
+      at = interpolate(this.patch.shape.centroid, interpolate(v0!, v1!), 0.2 + rng.float() * 0.4);
+    }
+    const meta = SYMBOL_MANIFEST['sm-market-cross'];
+    const size = Math.max(...(meta.footprint ?? [3, 3]));
+    const rotationDeg = meta.rotation === 'snap-cardinal'
+      ? Math.floor(rng.float() * 4) * 90
+      : meta.rotation === 'invariant' ? Math.round(rng.float() * 360) : 0;
+    this.model.symbols.push({ id: 'sm-market-cross', at, scale: size, rotationDeg, zBand: 'structure' });
+    this.model.claimedSites.push({ at, radius: size });
+    this.geometry = []; // open ground — the plaza is the point
+  }
+
+  private createLegacyGeometry(): void {
     const rng = this.rng;
     const statue = rng.bool(0.6);
     const offset = statue || rng.bool(0.3);
