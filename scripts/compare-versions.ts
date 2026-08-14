@@ -7,13 +7,13 @@
  *
  * Run:    nix develop --command bash -c "npx tsx scripts/compare-versions.ts"
  * Setup:  the baseline worktree must exist:
- *         git worktree add .claude/worktrees/baseline-pre-fidelity 4faa53a --detach
- * Remove: git worktree remove .claude/worktrees/baseline-pre-fidelity
+ *         git worktree add .worktrees/baseline-pre-fidelity 4faa53a --detach
+ * Remove: git worktree remove .worktrees/baseline-pre-fidelity
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { generateFromBurg as generateNew, type AzgaarBurgInput } from '../src/index.js';
 // eslint-disable-next-line import/no-relative-packages
-import { generateFromBurg as generateOld } from './.claude/worktrees/baseline-pre-fidelity/src/index.js';
+import { generateFromBurg as generateOld } from './.worktrees/baseline-pre-fidelity/src/index.js';
 import { toprak } from './tests/fixtures/toprak.js';
 
 const BUDGET_EXEMPT = new Set(['castle', 'cathedral', 'market', 'harbour', 'park']);
