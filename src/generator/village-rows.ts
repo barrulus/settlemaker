@@ -5,6 +5,13 @@
  */
 import { Point } from '../types/point.js';
 import type { SeededRandom } from '../utils/random.js';
+import { Polygon } from '../geom/polygon.js';
+import { pointInPolygon } from '../geom/point-in-polygon.js';
+import { intersectsSite } from './symbols.js';
+import { WardType } from '../types/interfaces.js';
+import { Farm } from '../wards/farm.js';
+import type { Model } from './model.js';
+import type { Patch } from './patch.js';
 
 export interface FrontageSlot {
   center: Point;
@@ -63,4 +70,46 @@ export function slotsAlongPolyline(
     s += house.width + gap;
   }
   return slots;
+}
+
+export const ROW_WARDS: ReadonlySet<WardType> = new Set([
+  WardType.Craftsmen, WardType.Merchant, WardType.Patriciate,
+  WardType.Slum, WardType.GateWard, WardType.Farm,
+]);
+
+export function slotRect(slot: FrontageSlot): Polygon {
+  const a = slot.rotationDeg * Math.PI / 180;
+  const ux = Math.cos(a), uy = Math.sin(a);      // along-road unit
+  const vx = -uy, vy = ux;                        // perpendicular unit
+  const hw = slot.width / 2, hd = slot.depth / 2;
+  const c = slot.center;
+  return new Polygon([
+    new Point(c.x - ux * hw - vx * hd, c.y - uy * hw - vy * hd),
+    new Point(c.x + ux * hw - vx * hd, c.y + uy * hw - vy * hd),
+    new Point(c.x + ux * hw + vx * hd, c.y + uy * hw + vy * hd),
+    new Point(c.x - ux * hw + vx * hd, c.y - uy * hw + vy * hd),
+  ]);
+}
+
+export function acceptSlot(model: Model, slot: FrontageSlot): Patch | null {
+  const rect = slotRect(slot);
+  const probes = [...rect.vertices, slot.center];
+
+  let centerPatch: Patch | null = null;
+  for (const probe of probes) {
+    if (model.isWaterAt(probe)) return null;
+    const patch = model.patches.find(p =>
+      p.ward !== null && !model.waterbody.includes(p) && pointInPolygon(probe, p.shape.vertices));
+    if (!patch || !ROW_WARDS.has(patch.ward!.type)) return null;
+    if (probe === slot.center) centerPatch = patch;
+    // Fields and groves stay clear.
+    if (patch.ward instanceof Farm) {
+      for (const plot of patch.ward.subPlots) {
+        if (pointInPolygon(probe, plot)) return null;
+      }
+    }
+    if (patch.ward!.type === WardType.Park) return null;
+  }
+  if (intersectsSite(rect, model.claimedSites)) return null;
+  return centerPatch;
 }
