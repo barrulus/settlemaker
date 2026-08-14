@@ -15,13 +15,6 @@ import type { Patch } from './patch.js';
 import { SYMBOL_MANIFEST } from '../assets/symbol-manifest.js';
 import { rowHousing } from './generation-params.js';
 import { MAIN_STREET, REGULAR_STREET } from '../wards/ward.js';
-// `buildingBudget` actually lives in model.ts (not generation-params.js, as
-// the brief assumed) — runtime import from here closes a cycle with
-// model.ts's `import { stampVillageRows } from './village-rows.js'`. Safe
-// under Node ESM because `buildingBudget` is a hoisted function declaration
-// used only inside `stampVillageRows`'s body, never at module-init time; see
-// task-4-report.md for the verification.
-import { buildingBudget } from './model.js';
 
 export interface FrontageSlot {
   center: Point;
@@ -156,14 +149,68 @@ export function houseFootprint(id: string): { width: number; depth: number } {
   return { width: fp[0], depth: fp[1] };
 }
 
+// The row walk's pitch (front/back/third row) is fixed at the largest
+// ordinary footprint (6x6) so slotsAlongPolyline's spacing accommodates
+// house-large-tiled/longhouse without the walk itself needing to know
+// which glyph a slot will get — but that leaves gaps wherever the variety
+// picker actually lands on a smaller hut (4.5x4.5), since the pitch never
+// shrinks to fit. The packing pass below (HUT_HOUSE, after rows 0-2)
+// backfills those gaps at the smaller pitch, forcing huts so it never
+// re-opens the oversized-footprint failure mode the pitch was sized to
+// avoid.
 const BASE_HOUSE = { width: 6, depth: 6 };
+const HUT_HOUSE = { width: 4.5, depth: 4.5 };
+
+/**
+ * Build the resized rect for `id`, re-check acceptance, and materialise
+ * (ward geometry + glyph-backed marker + PlacedSymbol + claimed site) on
+ * success. No rng draws here — id is already chosen.
+ */
+function materialiseSlot(model: Model, patch: Patch, slot: FrontageSlot, id: string): boolean {
+  const fp = houseFootprint(id);
+  const resized: FrontageSlot = { ...slot, width: fp.width, depth: fp.depth };
+  if (!acceptSlot(model, resized)) return false;
+  const rect = slotRect(resized);
+  patch.ward!.geometry.push(rect);
+  model.glyphBackedBuildings.add(rect);
+  const centre = rect.centroid;
+  const scale = Math.max(fp.width, fp.depth);
+  model.symbols.push({
+    id,
+    at: centre,
+    scale,
+    rotationDeg: slot.rotationDeg,
+    zBand: 'structure',
+    wardType: patch.ward!.type,
+  });
+  model.claimedSites.push({ at: centre, radius: scale * 0.55 });
+  return true;
+}
+
+/**
+ * Pick a glyph (exactly one rng draw) and materialise it. On acceptance
+ * failure — typically a wider resized footprint (longhouse, house-large-
+ * tiled) colliding with a neighbouring claim the original BASE-pitch probe
+ * didn't — fall back, deterministically and with NO further rng draws, to
+ * the plain house for this settlement's roof bias, then to a mud hut.
+ * Drop the slot only if the hut also fails.
+ */
+function pickAndMaterialise(
+  model: Model, patch: Patch, slot: FrontageSlot, bias: RoofBias, isRowEnd: boolean,
+): boolean {
+  const id = pickHouseGlyph(patch.ward!.type, bias, isRowEnd, model.rng);
+  if (materialiseSlot(model, patch, slot, id)) return true;
+  const plainHouse = bias === 'thatch' ? 'sm-house' : 'sm-house-tiled';
+  if (materialiseSlot(model, patch, slot, plainHouse)) return true;
+  if (materialiseSlot(model, patch, slot, 'sm-hut-mud')) return true;
+  return false;
+}
 
 /** Stamp dwelling rows for a !rowHousing settlement. No-op otherwise. */
-export function stampVillageRows(model: Model): void {
+export function stampVillageRows(model: Model, allowanceBase: number): void {
   if (rowHousing(model.params.population)) return;
 
-  let allowance = buildingBudget(model.params.population, model.params.urbanDensity)
-    - model.countOrdinaryBuildingsPublic();
+  let allowance = allowanceBase - model.countOrdinaryBuildingsPublic();
 
   const bias = drawRoofBias(model.rng);
 
@@ -226,26 +273,41 @@ export function stampVillageRows(model: Model): void {
         for (let i = 0; i < accepted.length && allowance > 0; i++) {
           const { slot, patch } = accepted[i];
           const isRowEnd = i === 0 || i === accepted.length - 1;
-          const id = pickHouseGlyph(patch.ward!.type, bias, isRowEnd, model.rng);
-          const fp = houseFootprint(id);
-          const resized: FrontageSlot = { ...slot, width: fp.width, depth: fp.depth };
-          const rect = slotRect(resized);
-          if (!acceptSlot(model, resized)) continue;
+          if (pickAndMaterialise(model, patch, slot, bias, isRowEnd)) allowance--;
+        }
+      }
+    }
+  }
 
-          patch.ward!.geometry.push(rect);
-          model.glyphBackedBuildings.add(rect);
-          const centre = rect.centroid;
-          const scale = Math.max(fp.width, fp.depth);
-          model.symbols.push({
-            id,
-            at: centre,
-            scale,
-            rotationDeg: slot.rotationDeg,
-            zBand: 'structure',
-            wardType: patch.ward!.type,
-          });
-          model.claimedSites.push({ at: centre, radius: scale * 0.55 });
-          allowance--;
+  // Packing pass: rows 0-2 walk at BASE_HOUSE (6x6) pitch, which leaves
+  // gaps wherever the picked glyph came out smaller (huts, 4.5x4.5) — this
+  // pass backfills those gaps at hut pitch over arteries+streets (not the
+  // outward `roads`, matching the well-site scan's asymmetry), forcing
+  // huts via isRowEnd=true so it never re-triggers the oversized-footprint
+  // failures the fallback chain above exists for.
+  if (allowance > 0) {
+    const packingRoads: Array<{ v: ReadonlyArray<Point>; hw: number }> = [
+      ...model.arteries.map(a => ({ v: a.vertices, hw: MAIN_STREET / 2 })),
+      ...model.streets.map(s => ({ v: s.vertices, hw: REGULAR_STREET / 2 })),
+    ];
+    for (const road of packingRoads) {
+      if (allowance <= 0) break;
+      for (const side of [1, -1] as const) {
+        if (allowance <= 0) break;
+        const slots = slotsAlongPolyline(road.v, side, road.hw, HUT_HOUSE, model.rng, 0, 0);
+
+        const accepted: Array<{ slot: FrontageSlot; patch: Patch }> = [];
+        for (const slot of slots) {
+          if (allowance <= 0) break;
+          const patch = acceptSlot(model, slot);
+          if (!patch) continue;
+          accepted.push({ slot, patch });
+        }
+
+        for (let i = 0; i < accepted.length && allowance > 0; i++) {
+          const { slot, patch } = accepted[i];
+          const id = pickHouseGlyph(patch.ward!.type, bias, true, model.rng);
+          if (materialiseSlot(model, patch, slot, id)) allowance--;
         }
       }
     }

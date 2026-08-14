@@ -32,7 +32,10 @@ describe('selectPois — hamlet regime (P < 300)', () => {
     // in Model.createWards) — no population floor. A well POI is now
     // authoritative from that placed symbol at every village population,
     // including below the old P>=30 tavern threshold. This test's tavern
-    // assertion (the emitHamlet adoption gate) still holds unchanged.
+    // assertion (the emitHamlet adoption gate) still holds unchanged; pin
+    // the new well contract explicitly rather than just dropping the old
+    // assertion.
+    expect(pois.filter(p => p.kind === 'well')).toHaveLength(1);
   });
 
   it('emits tavern and well at P=30', () => {

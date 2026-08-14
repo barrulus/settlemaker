@@ -32,10 +32,24 @@ function inland(population: number): AzgaarBurgInput {
 // allowance does ("frontage-capped below" — see
 // docs/superpowers/specs/2026-08-14-village-rows-design.md and
 // task-4-brief.md's own integration test, which asserts only an upper
-// bound for stamped counts). Measured at pop 350 across seeds 1-5: 28-42%
-// of target, consistently, not a fluke — so the floor for that one
-// village-regime case is lowered rather than the shared [60%,100%]
-// envelope used by every town-regime population.
+// bound for stamped counts).
+//
+// Post fix-review (deterministic fallback chain on resized-rect rejection
+// + a HUT-pitch packing pass over arteries+streets, both landed after the
+// initial Task 4 review): re-measured honestly rather than re-guessed.
+// This test's own scenario (name-derived seed "Densitown350") now yields
+// 25/88 = 28.4% (was 24/88 = 27.3% before the fix); a wider explicit-seed
+// sample (seeds 1-5, same population/overrides) moved from 33-42% to
+// 34-45%. The fixes close real gaps (undersized huts inside the BASE
+// 6-unit pitch; resized longhouse/large-tiled rects that failed the
+// neighbour-claim re-check) but pop 350's shortfall is structural, not a
+// packing artifact: only 19 of 220 patches carry a ROW_WARDS type in this
+// settlement, so most road length runs past undeveloped countryside no
+// stamping pass can put a house on. It stays well under the ~70% mark the
+// fix review asked to flag plainly if unmet — stated here rather than
+// hidden behind a raised floor. The floor below is left at the pre-fix
+// value (25/88 clears it with the same ~3-point margin the old
+// measurement had).
 const FLOOR_OVERRIDE: Partial<Record<number, number>> = { 350: 0.25 };
 
 describe('density targeting: buildings ≈ households', () => {

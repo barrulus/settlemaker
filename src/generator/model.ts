@@ -1496,7 +1496,12 @@ export class Model {
       ? this.countCoreOrdinaryBuildings()
       : this.pretrimOrdinaryCount;
     this.applyBuildingBudget();
-    stampVillageRows(this);
+    // Pass the census target in rather than have village-rows.ts import
+    // `buildingBudget` from here — this file already imports
+    // `stampVillageRows` from village-rows.ts at runtime, so a reverse
+    // runtime import would close a cycle. village-rows.ts subtracts the
+    // survivor count itself via `countOrdinaryBuildingsPublic()`.
+    stampVillageRows(this, buildingBudget(this.params.population, this.params.urbanDensity));
   }
 
   /** Public wrapper so village-rows.ts can read the census without duplicating it. */
