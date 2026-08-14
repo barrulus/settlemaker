@@ -29,7 +29,7 @@ Copied directly from `src/scene/scene.ts` — this is the real interface, not a
 paraphrase:
 
 ```ts
-export const SCENE_VERSION = 1 as const;
+export const SCENE_VERSION = 2 as const;
 
 export interface ScenePoint { x: number; y: number }
 
@@ -44,6 +44,8 @@ export interface FieldPlot {
   ring: ScenePoint[];
   /** Furrow-hatch direction in degrees, from the plot's OBB. */
   angleDeg: number;
+  /** false → plot ground draws but furrow hatch is suppressed (windmill plot). */
+  hatch?: boolean;
 }
 /** @deprecated Always empty since settlemaker 0.8.0 — fields carry angleDeg instead of furrow segments. */
 export interface Furrow { start: ScenePoint; end: ScenePoint }
@@ -51,10 +53,21 @@ export interface GreenFeature { ring: ScenePoint[] }
 
 export interface VegetationInstance {
   at: ScenePoint;
-  kind: 'tree';
-  /** Uniform scale in local units (symbol is authored in a unit box). */
+  /** Glyph id (batch001 canopy) or legacy unit-box kind ('tree'). */
+  kind: string;
+  /** World-unit size of the whole glyph box. */
   scale: number;
   rotationDeg: number;
+}
+
+export interface SymbolInstance {
+  /** batch001 id, e.g. 'sm-well'. */
+  id: string;
+  at: ScenePoint;
+  /** World-unit size of the glyph box (fixed: max footprint axis). */
+  scale: number;
+  rotationDeg: number;
+  zBand: 'structure' | 'overlay';
 }
 
 export interface RoadFeature {
@@ -101,6 +114,7 @@ export interface Scene {
     furrows: Furrow[];
     greens: GreenFeature[];
     vegetation: VegetationInstance[];
+    symbols: SymbolInstance[];
     roads: RoadFeature[];
     buildings: BuildingFeature[];
     piers: PierFeature[];
@@ -108,6 +122,35 @@ export interface Scene {
   };
 }
 ```
+
+### SCENE_VERSION 2 (generator-native symbols)
+
+`SCENE_VERSION` bumped from `1` to `2` for the glyph-wiring work: settlemaker
+now places generator-native POI symbols (wells, mills, market crosses,
+church marks, etc.) as first-class scene data instead of leaving them to a
+downstream consumer.
+
+- **`layers.symbols: SymbolInstance[]`** — new layer. Each entry is a
+  placement of one `batch001` glyph (see `symbols/batch001/symbols.json` for
+  the raw manifest): `id` is the batch001 symbol id (e.g. `'sm-well'`,
+  `'sm-mill-wind'`, `'sm-mark-church'`),
+  `at`/`scale`/`rotationDeg` place it in output coordinates the same way a
+  `VegetationInstance` does, and `zBand` says which SVG paint pass it belongs
+  to: `'structure'` symbols (wells, mills, market crosses, ...) render in the
+  same pass as buildings; `'overlay'` symbols (church marks, ...) render on
+  top of their host building, in their own pass. See §3 for the corresponding
+  `#symbols`/`#marks` SVG groups.
+- **`VegetationInstance.kind` is now a string, not the literal `'tree'`.**
+  It's a lookup key that may be either a `batch001` canopy glyph id (e.g.
+  `'sm-tree-conifer'`, `'sm-tree-deciduous'`) or the legacy schematic
+  `'tree'` kind, depending on which `AssetSet` is in effect. This is a
+  breaking narrowing removal (the type was a literal union of one), which is
+  why it forced the version bump rather than landing as additive.
+- **`FieldPlot.hatch?: boolean`** — new optional field, additive. Omitted or
+  `true` means "draw the furrow hatch as before"; `false` means the plot's
+  ground still fills and outlines normally but the furrow pattern is
+  suppressed — used for the subplot converted to a windmill's sail clearing,
+  which shouldn't show plow lines under the mill.
 
 `LocalBounds` (from `src/generator/bounds.ts`) is a plain AABB:
 
@@ -203,12 +246,14 @@ const viewBox = `${b.min_x} ${b.min_y} ${b.max_x - b.min_x} ${b.max_y - b.min_y}
 ## 3. The SVG group/style contract
 
 `assembleSvg(scene, options)` renders a `Scene` to a self-contained SVG
-string: one `<svg>` root, a `<defs>` block (clip path + any symbol defs used
-by vegetation), one `<style>` block, and then one `<g id="...">` per visual
-layer, drawn in a fixed paint order — **fields → greens → water → roads →
-shadows → buildings → landmarks → walls** — chosen so later layers correctly
-occlude earlier ones (buildings sit on top of fields; walls sit on top of
-everything).
+string: one `<svg>` root, a `<defs>` block (clip path + any symbol/glyph defs
+used by vegetation and `layers.symbols`), one `<style>` block, and then one
+`<g id="...">` per visual layer, drawn in a fixed paint order — **fields →
+greens → water → roads → shadows → buildings → landmarks → symbols → walls →
+canopy → marks** — chosen so later layers correctly occlude earlier ones
+(buildings sit on top of fields; `#marks` — the `zBand: 'overlay'` glyphs —
+sits on top of everything, including walls, since an overlay mark like a
+church cross is meant to read above the building it decorates).
 
 ### Group ids and class vocabulary
 
@@ -221,11 +266,23 @@ everything).
 | `#shadows`   | offset building silhouettes                  | (none — group-level fill/opacity) |
 | `#buildings` | ordinary (non-landmark) buildings + piers    | `.<wardType>` (e.g. `.craftsmen`), `.pier` |
 | `#landmarks` | castles/cathedrals/markets                   | `.<wardType>` (`.castle`, `.cathedral`, `.market`) |
+| `#symbols`   | `SymbolInstance` glyphs with `zBand: 'structure'` (wells, mills, market crosses, ...) | (none — `<use>` per instance) |
 | `#walls`     | wall polylines, towers, gate bars            | `.gate` on gate `<line>`s |
+| `#canopy`    | `VegetationInstance` tree/canopy glyph `<use>`s | (none) |
+| `#marks`     | `SymbolInstance` glyphs with `zBand: 'overlay'` (e.g. the church mark on a cathedral building) | (none — `<use>` per instance) |
 
 `#water` and `#greens` only appear when their layer has content (e.g. no
 `#water` group at all for a landlocked settlement). `#buildings` is emitted
 if there are ordinary buildings *or* piers — the group can hold both.
+`#symbols` and `#marks` likewise only appear when `layers.symbols` has an
+entry of the matching `zBand`. A consumer that wants generator-native POI
+symbols and marks suppressed entirely — e.g. a caller layering its own
+symbol set on top — can hide both groups with plain CSS and no new
+`assembleSvg` option:
+
+```css
+#symbols, #marks { display: none; }
+```
 
 The `.<wardType>` class on every building/landmark path is the element's
 `kind` value written verbatim — the **lowercase** `WardType` enum value, not
@@ -420,7 +477,8 @@ this exact shape. Two rules govern how it may change:
 2. **Bump `SCENE_VERSION` on any breaking change** — renaming or removing a
    field, changing a field's type or meaning, changing the coordinate frame,
    or changing paint-order/group-id semantics that a consumer could have
-   relied on. `SCENE_VERSION` is currently `1`. A consumer should check
+   relied on. `SCENE_VERSION` is currently `2` (bumped from `1` for
+   generator-native symbols — see §1's "SCENE_VERSION 2" note). A consumer should check
    `scene.version` and reject (or explicitly branch on) versions it wasn't
    built against, the same way GeoJSON output carries
    `metadata.schema_version` for the same purpose (see `docs/schema-v3.md`).

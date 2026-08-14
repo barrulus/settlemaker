@@ -142,9 +142,18 @@ describe('fidelity round 4: probe path', () => {
     // Re-pinned for glyph-wiring Task 2 (sm* material tokens + themeToCss
     // rules for .sm-stone/.sm-timber/etc. and #shadows color): the CSS text
     // embedded in every SVG grew, changing the hash with no geometry change.
+    // Re-pinned for glyph-wiring Task 11 (release prep): glyph-wiring Task 4
+    // made the prevailing-wind rng draw unconditional (windmills need a wind
+    // bearing regardless of whether the burg ends up with a windmill), which
+    // re-rolls the rng stream for every layout from that point on — this has
+    // been the known cause of these two canaries failing since Task 4,
+    // deliberately left unpinned until this release-prep task per the SDD.
+    // Verified non-degenerate and deterministic (two runs byte-identical):
+    // viewBox "-69.0 -76.2 136.6 157.1", svg.length 45648, 323 patches, 19
+    // wards with geometry (measured locally).
     const { svg } = generateFromBurg(aldford(1400), { seed: 9 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('b460f7e7a066a22f093a25dfe512d4d7cc3b8d48c399d4ad208bd042f015f23f');
+    expect(sha256(svg)).toBe('435189d8f21a4f01b3a77217f0e386925de8d404f0a2c43b450e957fcd8ebe27');
   });
 
   it('pins current village output at pop 800 (not a base-equality guarantee)', () => {
@@ -221,9 +230,15 @@ describe('fidelity round 4: probe path', () => {
     // schematic unit-box tree symbol — a geometry-payload change, not a
     // regression. Verified non-degenerate and deterministic: svg.length
     // 45585, 327 patches, 22 wards with geometry (measured locally).
+    // Re-pinned for glyph-wiring Task 11 (release prep): same unconditional
+    // prevailing-wind rng draw as the pop-1400 hash above (Task 4), the
+    // known cause left unpinned since Task 4 per the SDD. Verified
+    // non-degenerate and deterministic (two runs byte-identical): viewBox
+    // "-71.4 -71.8 146.3 143.7", svg.length 40659, 327 patches, 18 wards
+    // with geometry (measured locally).
     const { svg } = generateFromBurg(aldford(800), { seed: 1 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('95ba94e752210a218403addbda190cdd11f7d6ea27c1559431ccd90e82d5fbfc');
+    expect(sha256(svg)).toBe('51367a82e58afbda3339059e777cac0405a667c9ec00c6e45766ace0586fd4dc');
   });
 });
 

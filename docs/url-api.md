@@ -374,6 +374,32 @@ applies. This means a malformed or hostile `style=` value can never break
 the page or inject markup: at worst, individual overrides silently fail to
 apply and the palette default shows through instead.
 
+### Symbol/mark visibility — consumer CSS, not a URL param
+
+settlemaker now places generator-native POI glyphs (wells, mills, market
+crosses, church marks, etc. — see `docs/scene-schema.md`'s `SCENE_VERSION 2`
+notes) directly in the rendered SVG, in two groups: `#symbols` (structure
+glyphs, e.g. wells and mills) and `#marks` (overlay glyphs drawn on top of
+their host building, e.g. a church cross). **There is no URL param to turn
+these off.** A host page that wants to suppress them — for example, an
+integrator layering its own symbol set over the settlement — does it with
+plain CSS on the embedded document, the same way any other group/class in
+the SVG's style contract is overridden (see `docs/scene-schema.md` §3):
+
+```css
+#symbols, #marks { display: none; }
+```
+
+`#symbols` and `#marks` are stable group ids in the SVG/asset styling
+contract (`docs/scene-schema.md` §3), not an internal implementation detail,
+so this rule is safe to depend on. It applies to any consumer that gets hold
+of the SVG markup directly — e.g. a library caller reading `svg` off
+`generateFromBurg`'s result and post-processing or wrapping it before
+display. No `i=`/flat/presentation param exists or is planned for this; the
+off-switch is deliberately a plain-CSS consumer concern, consistent with
+every other appearance override in this document (§5), rather than a new
+query-string knob.
+
 ## 6. Guarantees
 
 - **Determinism.** This guarantee applies to any URL carrying at least one
