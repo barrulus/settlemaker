@@ -5,6 +5,8 @@ import { interpolate, obb } from '../geom/geom-utils.js';
 import { Ward, createOrthoBuilding } from './ward.js';
 import type { Model } from '../generator/model.js';
 import type { Patch } from '../generator/patch.js';
+import { SYMBOL_MANIFEST } from '../assets/symbol-manifest.js';
+import { intersectsSite } from '../generator/symbols.js';
 
 const MIN_SUBPLOT = 400;
 const MIN_FURROW = 1.3;
@@ -18,6 +20,8 @@ export class Farm extends Ward {
   /** Angle (degrees) of the furrow direction per surviving subplot, parallel to subPlots. */
   plotAngles: number[] = [];
   buildings: Polygon[] = [];
+  /** Index into subPlots of the windmill's plot, or null when this farm rolled no mill. */
+  millPlotIndex: number | null = null;
 
   constructor(model: Model, patch: Patch) {
     super(model, patch);
@@ -52,11 +56,34 @@ export class Farm extends Ward {
       this.plotAngles.push(angleOf(box));
     }
 
-    // Generate farmstead buildings (20% per subplot)
+    // Windmill: convert one subplot — furrows go, housing keeps clear.
+    this.millPlotIndex = null;
+    const m = this.model;
+    const millRoll = rng.bool(0.25); // drawn unconditionally: draw count independent of budget state
+    if (millRoll && m.millBudget > 0 && this.subPlots.length > 0) {
+      let idx = 0, best = -1;
+      for (let i = 0; i < this.subPlots.length; i++) {
+        const a = polygonArea(this.subPlots[i]);
+        if (a > best) { best = a; idx = i; }
+      }
+      const plotPoly = new Polygon(this.subPlots[idx].map(p => new Point(p.x, p.y)));
+      const at = plotPoly.centroid;
+      const meta = SYMBOL_MANIFEST['sm-mill-wind'];
+      const size = Math.max(...(meta.footprint ?? [7, 7]));
+      this.millPlotIndex = idx;
+      m.symbols.push({ id: 'sm-mill-wind', at, scale: size, rotationDeg: m.prevailingWindDeg, zBand: 'structure' });
+      m.claimedSites.push({ at, radius: size });
+      m.millBudget--;
+    }
+
+    // Generate farmstead buildings (20% per subplot), skipping the mill plot
+    // and rejecting any that overlap the mill's clearance radius.
     this.buildings = [];
-    for (const plot of this.subPlots) {
+    for (let i = 0; i < this.subPlots.length; i++) {
+      if (i === this.millPlotIndex) continue;
       if (rng.bool(0.2)) {
-        this.buildings.push(this.getHousing(plot));
+        const h = this.getHousing(this.subPlots[i]);
+        if (!intersectsSite(h, m.claimedSites)) this.buildings.push(h);
       }
     }
 

@@ -4,6 +4,8 @@ import { Polygon } from '../src/geom/polygon.js';
 import { intersectsSite } from '../src/generator/symbols.js';
 import { pointInPolygon } from '../src/geom/point-in-polygon.js';
 import { CommonWard } from '../src/wards/common-ward.js';
+import { Farm } from '../src/wards/farm.js';
+import { buildScene } from '../src/scene/build-scene.js';
 import { Model, mapToGenerationParams, type AzgaarBurgInput } from '../src/index.js';
 
 // Canonical test-model helper (pattern from tests/degraded-generation.test.ts).
@@ -132,5 +134,38 @@ describe('wells', () => {
         }
       }
     }
+  });
+});
+
+function modelWithMill(): Model {
+  for (let seed = 1; seed <= 40; seed++) {
+    const m = mk(1200, seed);
+    if (m.symbols.some(s => s.id === 'sm-mill-wind')) return m;
+  }
+  throw new Error('no seed in 1..40 placed a windmill');
+}
+
+describe('windmill', () => {
+  it('mills share the town prevailing wind and respect budget', () => {
+    const m = modelWithMill();
+    const mills = m.symbols.filter(s => s.id === 'sm-mill-wind');
+    expect(mills.length).toBeLessThanOrEqual(m.params.population >= 2000 ? 2 : 1);
+    for (const mill of mills) expect(mill.rotationDeg).toBe(m.prevailingWindDeg);
+  });
+
+  it('no farm building intersects the mill clearance', () => {
+    const m = modelWithMill();
+    const sites = m.claimedSites;
+    for (const patch of m.patches) {
+      if (patch.ward instanceof Farm) {
+        for (const b of patch.ward.buildings) expect(intersectsSite(b, sites)).toBe(false);
+      }
+    }
+  });
+
+  it('the mill plot loses its furrow hatch in the scene', () => {
+    const m = modelWithMill();
+    const scene = buildScene(m);
+    expect(scene.layers.fields.some(f => f.hatch === false)).toBe(true);
   });
 });

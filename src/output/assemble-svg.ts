@@ -146,6 +146,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     for (const f of L.fields) parts.push(`<path class="plot" d="${ringPath(f.ring)}"/>`);
     if (fieldPattern) {
       for (const f of L.fields) {
+        if (f.hatch === false) continue;
         const bucket = bucketOf(f.angleDeg);
         parts.push(`<path class="hatch" d="${ringPath(f.ring)}" fill="url(#${clipId}-field-a${bucket})"/>`);
       }

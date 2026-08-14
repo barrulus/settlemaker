@@ -68,7 +68,11 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
       for (let i = 0; i < ward.subPlots.length; i++) {
         const plot = ward.subPlots[i];
         if (plot.length >= 3) {
-          scene.layers.fields.push({ ring: ring(plot), angleDeg: ward.plotAngles[i] ?? 0 });
+          scene.layers.fields.push({
+            ring: ring(plot),
+            angleDeg: ward.plotAngles[i] ?? 0,
+            ...(i === ward.millPlotIndex ? { hatch: false } : {}),
+          });
         }
       }
       // furrows layer stays empty — see Furrow deprecation note in scene.ts.
