@@ -1,6 +1,7 @@
 import { WardType } from '../types/interfaces.js';
 import { Ward, createAlleys, ALLEY } from './ward.js';
 import { rowHousing, maxLotArea } from '../generator/generation-params.js';
+import { SYMBOL_MANIFEST } from '../assets/symbol-manifest.js';
 import type { Model } from '../generator/model.js';
 import type { Patch } from '../generator/patch.js';
 
@@ -35,5 +36,41 @@ export class CommonWard extends Ward {
     if (!this.model.isEnclosed(this.patch)) {
       this.filterOutskirts();
     }
+
+    this.tryPlaceWell();
+  }
+
+  private static readonly WELL_WARDS = new Set<WardType>([
+    WardType.Craftsmen, WardType.Merchant, WardType.Patriciate, WardType.Slum,
+  ]);
+
+  /**
+   * Sacrifice one interior lot as a well courtyard. Wells CONSUME a lot
+   * (the one exception to claimed-site rejection — see the glyph spec).
+   * Budgeted per settlement in Model.createWards; slums rarely get one.
+   */
+  private tryPlaceWell(): void {
+    const m = this.model;
+    if (m.wellBudget <= 0 || !CommonWard.WELL_WARDS.has(this.type)) return;
+    const p = this.type === WardType.Slum ? 0.08 : 0.35;
+    const roll = this.rng.bool(p); // drawn before the guard below: draw count is size-independent
+    if (!roll || this.geometry.length < 2) return; // never consume a ward's only building
+    const c = this.patch.shape.centroid;
+    let bestIdx = 0, bestD2 = Infinity;
+    for (let i = 0; i < this.geometry.length; i++) {
+      const b = this.geometry[i].centroid;
+      const d2 = (b.x - c.x) * (b.x - c.x) + (b.y - c.y) * (b.y - c.y);
+      if (d2 < bestD2) { bestD2 = d2; bestIdx = i; }
+    }
+    const lot = this.geometry.splice(bestIdx, 1)[0];
+    const at = lot.centroid;
+    const meta = SYMBOL_MANIFEST['sm-well'];
+    const size = Math.max(...(meta.footprint ?? [3.2, 3.2]));
+    m.symbols.push({
+      id: 'sm-well', at, scale: size,
+      rotationDeg: Math.round(this.rng.float() * 360), zBand: 'structure',
+    });
+    m.claimedSites.push({ at, radius: size });
+    m.wellBudget--;
   }
 }

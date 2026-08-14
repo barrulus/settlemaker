@@ -62,3 +62,24 @@ describe('market cross', () => {
     expect(at.y).toBeLessThanOrEqual(Math.max(...ys));
   });
 });
+
+describe('wells', () => {
+  it('well count is bounded by the settlement budget and wells sit on consumed lots', () => {
+    let totalWells = 0;
+    for (const seed of [3, 7, 12]) {
+      const m = mk(4000, seed);
+      const wells = m.symbols.filter(s => s.id === 'sm-well');
+      totalWells += wells.length;
+      expect(wells.length).toBeLessThanOrEqual(Math.max(1, Math.round(m.inner.length / 5)));
+      for (const w of wells) expect(w.zBand).toBe('structure');
+    }
+    expect(totalWells).toBeGreaterThan(0);
+  });
+
+  it('hamlets get at most one well', () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const m = mk(150, seed);
+      expect(m.symbols.filter(s => s.id === 'sm-well').length).toBeLessThanOrEqual(1);
+    }
+  });
+});
