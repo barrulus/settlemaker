@@ -123,10 +123,10 @@ current lot-consuming behaviour untouched.
 - Version: **1.2.0**, `SETTLEMAKER_VERSION` bumped (questables' cache key
   rolls automatically; the rucio tile DISK cache manual wipe applies — and
   the 1.1.0 wipe is still owed).
-- The two fidelity-round4 sha256 canaries re-pin once (the pop-800 canary
-  is a village and changes wholesale), clearly labelled, following the
-  file's documented protocol. Town/city pins and outputs must be
-  byte-identical.
+- No canary re-pin: `ROW_HOUSING_MIN_POPULATION = 600`, so BOTH
+  fidelity-round4 canaries (pop 800 and pop 1400) are town-regime and must
+  stay byte-identical — they are the regression guard, not a casualty.
+  Only version-string pins (1.1.0 → 1.2.0) move.
 
 ## Testing (TDD throughout)
 
