@@ -23,6 +23,91 @@ export interface FrontageSlot {
   depth: number;
 }
 
+/**
+ * Gate-tune round 3 (2026-08-14): arclength walk math shared between
+ * `slotsAlongPolyline` (fixed-pitch, used by the packing pass) and
+ * `frontageSlotAt` (footprint-aware incremental pitch, used by the primary
+ * row walk — see stampVillageRows). Extracted rather than duplicated so
+ * both walk the same road geometry identically.
+ */
+export interface PolylineWalker {
+  readonly total: number;
+  at(s: number): { p: Point; tx: number; ty: number };
+}
+
+export function buildPolylineWalker(vertices: ReadonlyArray<Point>): PolylineWalker {
+  if (vertices.length < 2) {
+    return { total: 0, at: () => ({ p: vertices[0] ?? new Point(0, 0), tx: 1, ty: 0 }) };
+  }
+  const cum: number[] = [0];
+  for (let i = 1; i < vertices.length; i++) {
+    cum.push(cum[i - 1] + Point.distance(vertices[i - 1], vertices[i]));
+  }
+  const total = cum[cum.length - 1];
+  const at = (s: number): { p: Point; tx: number; ty: number } => {
+    let i = 1;
+    while (i < cum.length - 1 && cum[i] < s) i++;
+    const segLen = cum[i] - cum[i - 1] || 1;
+    const t = (s - cum[i - 1]) / segLen;
+    const a = vertices[i - 1], b = vertices[i];
+    const tx = (b.x - a.x) / segLen, ty = (b.y - a.y) / segLen;
+    return { p: new Point(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t), tx, ty };
+  };
+  return { total, at };
+}
+
+/**
+ * Generate ONE frontage slot at arclength `s`, sized to `house`. Returns
+ * null when there's no room left on the line (`s + house.width > total`) —
+ * callers stop walking. Fixed draw order per GENERATED slot: gap, setback,
+ * rotation (unchanged from round 1) — exactly 3 rng draws, whether the
+ * caller ultimately accepts or rejects this candidate. `nextS` is the
+ * cursor position an ACCEPTING caller should continue from; a rejecting
+ * caller advances by its own fixed probe step instead (see
+ * stampVillageRows) so a rejected stretch gets rescanned finely rather than
+ * skipped by a full pitch.
+ */
+export function frontageSlotAt(
+  walker: PolylineWalker,
+  s: number,
+  side: 1 | -1,
+  roadHalfWidth: number,
+  house: { width: number; depth: number },
+  rng: SeededRandom,
+  rowOffset = 0,
+): { slot: FrontageSlot; nextS: number } | null {
+  if (s + house.width > walker.total) return null;
+
+  // Gate-tune round 1 (2026-08-14): "too spread out" — tighten gap,
+  // setback jitter, and rotation jitter so rows pack denser and align
+  // more neatly.
+  const gap = 0.3 + rng.float() * 0.3;
+  const setback = (rng.float() - 0.5) * 0.3;
+  const rotJitter = (rng.float() - 0.5) * 4;
+
+  const mid = walker.at(s + house.width / 2);
+  const off = roadHalfWidth + house.depth / 2 + rowOffset + setback;
+  // Perpendicular: rotate tangent 90° toward `side`.
+  const px = -mid.ty * side, py = mid.tx * side;
+  return {
+    slot: {
+      center: new Point(mid.p.x + px * off, mid.p.y + py * off),
+      rotationDeg: Math.atan2(mid.ty, mid.tx) * 180 / Math.PI + rotJitter,
+      width: house.width,
+      depth: house.depth,
+    },
+    nextS: s + house.width + gap,
+  };
+}
+
+/**
+ * Fixed-pitch slot walk — still used by the packing pass, whose HUT_HOUSE
+ * pitch is already the smallest ordinary footprint, so it doesn't have the
+ * spacing defect footprint-aware pitch (frontageSlotAt) fixes for the
+ * primary rows. Rebuilt on the same PolylineWalker/frontageSlotAt math so
+ * both walks agree; draw order and output are unchanged from round 1 — the
+ * Task 1 unit tests below assert this directly.
+ */
 export function slotsAlongPolyline(
   vertices: ReadonlyArray<Point>,
   side: 1 | -1,
@@ -34,46 +119,13 @@ export function slotsAlongPolyline(
 ): FrontageSlot[] {
   const slots: FrontageSlot[] = [];
   if (vertices.length < 2) return slots;
-
-  // Cumulative arclength table.
-  const cum: number[] = [0];
-  for (let i = 1; i < vertices.length; i++) {
-    cum.push(cum[i - 1] + Point.distance(vertices[i - 1], vertices[i]));
-  }
-  const total = cum[cum.length - 1];
-
-  // Point + unit tangent at arclength s.
-  const at = (s: number): { p: Point; tx: number; ty: number } => {
-    let i = 1;
-    while (i < cum.length - 1 && cum[i] < s) i++;
-    const segLen = cum[i] - cum[i - 1] || 1;
-    const t = (s - cum[i - 1]) / segLen;
-    const a = vertices[i - 1], b = vertices[i];
-    const tx = (b.x - a.x) / segLen, ty = (b.y - a.y) / segLen;
-    return { p: new Point(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t), tx, ty };
-  };
-
+  const walker = buildPolylineWalker(vertices);
   let s = phase;
-  while (s + house.width <= total) {
-    // Fixed draw order per slot: gap, setback, rotation.
-    // Gate-tune round 1 (2026-08-14): "too spread out" — tighten gap,
-    // setback jitter, and rotation jitter so rows pack denser and align
-    // more neatly.
-    const gap = 0.3 + rng.float() * 0.3;
-    const setback = (rng.float() - 0.5) * 0.3;
-    const rotJitter = (rng.float() - 0.5) * 4;
-
-    const mid = at(s + house.width / 2);
-    const off = roadHalfWidth + house.depth / 2 + rowOffset + setback;
-    // Perpendicular: rotate tangent 90° toward `side`.
-    const px = -mid.ty * side, py = mid.tx * side;
-    slots.push({
-      center: new Point(mid.p.x + px * off, mid.p.y + py * off),
-      rotationDeg: Math.atan2(mid.ty, mid.tx) * 180 / Math.PI + rotJitter,
-      width: house.width,
-      depth: house.depth,
-    });
-    s += house.width + gap;
+  for (;;) {
+    const generated = frontageSlotAt(walker, s, side, roadHalfWidth, house, rng, rowOffset);
+    if (!generated) break;
+    slots.push(generated.slot);
+    s = generated.nextS;
   }
   return slots;
 }
@@ -81,6 +133,11 @@ export function slotsAlongPolyline(
 export const ROW_WARDS: ReadonlySet<WardType> = new Set([
   WardType.Craftsmen, WardType.Merchant, WardType.Patriciate,
   WardType.Slum, WardType.GateWard, WardType.Farm,
+  // Gate-tune round 3 (2026-08-14): MilitaryWard now also skips its own
+  // geometry in the village regime (see military-ward.ts) — its patch must
+  // accept dwelling rows like every other ROW_WARDS type instead of
+  // staying empty ground.
+  WardType.Military,
 ]);
 
 /**
@@ -419,48 +476,67 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
     ...model.roads.map(r => ({ v: r.vertices, hw: MAIN_STREET / 2 })),
   ];
 
+  // Gate-tune round 3 (2026-08-14): "a mix of all the hut types and the
+  // spacing is terrible" — two coordinated fixes to the primary row walk.
+  //
+  // FIX 1 (spacing): the old walk pre-generated ALL slots for a road+side+
+  // row at fixed BASE_HOUSE (6-unit) pitch, then materialised each with
+  // whatever glyph the run picked — so a hut run (4.5-wide) still sat on a
+  // 6-unit-pitched grid: materialiseSlot resizes the RECT around the
+  // already-fixed BASE-pitch center, but never moves the center itself,
+  // leaving ~1.5 units of dead air between successive hut centres beyond
+  // what their own gap needs. Replaced with an incremental walk (this
+  // loop): the cursor `s` advances by the CURRENT run's actual glyph width
+  // + gap, so a hut run's slots land ~4.8-5.1 apart (4.5 width + 0.3-0.6
+  // gap) instead of ~6.3-6.6 apart. Before a run's first slot is accepted
+  // (so its glyph — and therefore its footprint — isn't known yet), the
+  // probe footprint defaults to BASE_HOUSE, matching the old uniform pitch
+  // for that one probe; every slot after the run starts uses the run's own
+  // footprint. On acceptance the cursor advances by the probe's width+gap
+  // (nextS); on rejection it advances by a fixed fine probe step (1.5
+  // units, no rng draws) so a rejected stretch is rescanned finely instead
+  // of being skipped by a full pitch.
+  //
+  // FIX 2 (mixing): rounds 1's run coherence restarted the run whenever the
+  // slot's ATTRIBUTED ward type changed — but ribbon stretches (open
+  // countryside attributed to the nearest built ward, see resolveWardPatch)
+  // flip attribution constantly as "nearest built ward" changes house to
+  // house, collapsing what should be 3-7-slot runs down to 1-2 slots. A run
+  // is now keyed ONLY by its remaining count: the glyph is chosen once,
+  // from the ward type of the run's FIRST accepted slot, and every
+  // subsequent slot in the run keeps that glyph regardless of how
+  // attribution flips underneath it. Attribution itself is still recorded
+  // per-stamp (wardPatch is still resolved per slot for census/POI/ward
+  // geometry) — only the GLYPH stops churning. isRowEnd is still always
+  // false (unchanged since round 1 — the row-end hut rule stays dropped).
+  const REJECT_PROBE_STEP = 1.5;
   for (let row = 0; row < 3 && allowance > 0; row++) {
     for (const road of roads) {
       if (allowance <= 0) break;
       for (const side of [1, -1] as const) {
         if (allowance <= 0) break;
-        const slots = slotsAlongPolyline(
-          road.v, side, road.hw, BASE_HOUSE, model.rng, row * 6.5, row * 3,
-        );
-
-        // Buffer accepted slots for this road+side+row so row-end status
-        // (first/last ACCEPTED slot) can be assigned before materialising.
-        const accepted: Array<{ slot: FrontageSlot; patch: Patch }> = [];
-        for (const slot of slots) {
-          if (allowance <= 0) break;
-          const patch = acceptSlot(model, slot, ribbon);
-          if (!patch) continue;
-          accepted.push({ slot, patch });
-        }
-
-        // Run coherence (gate-tune round 1, 2026-08-14): "too mixed" — pick
-        // one glyph per run of slots instead of per house, so stretches of
-        // a street share a house type. A run ends (and a new one starts,
-        // with exactly two rng draws: glyph then length) when it runs out
-        // or the attributed ward type changes. isRowEnd is always false
-        // now — the old row-end hut rule was itself a mixing source; slum
-        // and farm wards still get huts/vernacular via pickHouseGlyph's own
-        // ward branches. A per-slot fallback (materialiseWithFallback)
-        // never changes the run's glyph for subsequent slots.
+        const walker = buildPolylineWalker(road.v);
+        let s = row * 3; // phase, unchanged from round 1
         let runGlyph: string | null = null;
         let runRemaining = 0;
-        let runWardType: WardType | null = null;
-        for (let i = 0; i < accepted.length && allowance > 0; i++) {
-          const { slot, patch } = accepted[i];
+        while (allowance > 0) {
+          const probeHouse = runGlyph !== null ? houseFootprint(runGlyph) : BASE_HOUSE;
+          const generated = frontageSlotAt(walker, s, side, road.hw, probeHouse, model.rng, row * 6.5);
+          if (!generated) break; // no more room on this line
+          const { slot, nextS } = generated;
+
+          const patch = acceptSlot(model, slot, ribbon);
+          if (!patch) { s += REJECT_PROBE_STEP; continue; }
+
           const wardPatch = resolveWardPatch(patch, builtPatches);
-          const wardType = wardPatch.ward!.type;
-          if (runRemaining === 0 || wardType !== runWardType) {
+          if (runRemaining === 0) {
+            const wardType = wardPatch.ward!.type;
             runGlyph = pickHouseGlyph(wardType, bias, false, model.rng);
             runRemaining = 3 + Math.floor(model.rng.float() * 5);
-            runWardType = wardType;
           }
           if (materialiseWithFallback(model, wardPatch, slot, runGlyph!, bias, ribbon)) allowance--;
           runRemaining--;
+          s = nextS;
         }
       }
     }

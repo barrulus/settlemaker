@@ -336,9 +336,12 @@ describe('fallback chain', () => {
     // first, or the synthetic hut placement at the same spot would
     // "overlap" itself and the test's premise (hut still fits here) would
     // no longer hold.
+    // Gate-tune round 3 (2026-08-14): coordinates re-pinned again — the
+    // primary row walk is now footprint-aware/incremental (see
+    // frontageSlotAt), which moves every slot in the model again.
     const sym = m.symbols.find(s =>
       s.wardType === WardType.Farm && s.id === 'sm-hut-straw' &&
-      Math.abs(s.at.x - -39.14009826991925) < 0.1 && Math.abs(s.at.y - 49.988532674546114) < 0.1);
+      Math.abs(s.at.x - -44.68660139549952) < 0.1 && Math.abs(s.at.y - 35.73086009253545) < 0.1);
     expect(sym).toBeDefined();
     const rect = [...m.glyphBackedBuildings].find(r =>
       Math.abs(r.centroid.x - sym!.at.x) < 1e-6 && Math.abs(r.centroid.y - sym!.at.y) < 1e-6);
@@ -427,5 +430,54 @@ describe('overlap rejection (gate-tune round 2)', () => {
         }
       }
     }
+  });
+});
+
+describe('village regime coverage (gate-tune round 3)', () => {
+  // Owner render feedback round 3, fix 3: MilitaryWard extends Ward
+  // directly (not CommonWard) and ran its own createAlleys unconditionally
+  // in createGeometry, so CommonWard's village-regime skip never applied to
+  // it — a barracks jumble rendered even in villages. Fixed by mirroring
+  // CommonWard's early return in MilitaryWard.createGeometry and adding
+  // WardType.Military to ROW_WARDS so its patch accepts dwelling rows.
+  //
+  // Structural pin: rather than asserting on MilitaryWard specifically
+  // (which only catches THIS bug), assert the general invariant that
+  // catches ANY ward class — current or future — that bypasses the village
+  // regime: in a !rowHousing model, every ordinary (non-exempt) ward's
+  // geometry must consist ENTIRELY of glyph-backed stamps from
+  // stampVillageRows, except Farm (whose subplot/field geometry is
+  // intentionally unconditional — see farm.ts, which never checks
+  // rowHousing) and the landmark-exempt ward types that also build their
+  // own geometry unconditionally (Castle, Cathedral, Market, Harbour) and
+  // Park (never budgeted).
+  //
+  // Proved this test demonstrably bites: ran a standalone probe against
+  // pre-fix HEAD (git stash of village-rows.ts + military-ward.ts) for
+  // every (pop, seed) pair below — every one produced a Military ward
+  // patch with non-glyph-backed geometry (createAlleys jumble): pop 300
+  // seeds 3/7/11 → 8/12/12 stray shapes; pop 600 seeds 3/7/11 → 5/7/11
+  // stray shapes. No fixture-forcing needed — MilitaryWard.rateLocation
+  // returns 0 (most favoured) whenever there's no citadel and no wall,
+  // which is every unwalled village `mk()` builds, so it spawns in all six
+  // sampled (pop, seed) pairs without exception.
+  const EXEMPT = new Set<WardType>([
+    WardType.Castle, WardType.Cathedral, WardType.Market, WardType.Harbour, WardType.Park,
+  ]);
+
+  it.each([300, 600])('pop %i seeds 3/7/11: every non-glyph-backed building belongs to Farm or an exempt ward', (pop) => {
+    let checkedAny = false;
+    for (const seed of [3, 7, 11]) {
+      const m = mk(pop, seed);
+      for (const patch of m.patches) {
+        if (!patch.ward || EXEMPT.has(patch.ward.type)) continue;
+        for (const rect of patch.ward.geometry) {
+          if (m.glyphBackedBuildings.has(rect)) continue;
+          checkedAny = true;
+          expect(patch.ward.type).toBe(WardType.Farm);
+        }
+      }
+    }
+    expect(checkedAny).toBe(true); // Farm subplots exist in these seeds — the check isn't vacuous
   });
 });
