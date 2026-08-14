@@ -13,6 +13,15 @@ import { Farm } from '../wards/farm.js';
 import type { Model } from './model.js';
 import type { Patch } from './patch.js';
 import { SYMBOL_MANIFEST } from '../assets/symbol-manifest.js';
+import { rowHousing } from './generation-params.js';
+import { MAIN_STREET, REGULAR_STREET } from '../wards/ward.js';
+// `buildingBudget` actually lives in model.ts (not generation-params.js, as
+// the brief assumed) — runtime import from here closes a cycle with
+// model.ts's `import { stampVillageRows } from './village-rows.js'`. Safe
+// under Node ESM because `buildingBudget` is a hoisted function declaration
+// used only inside `stampVillageRows`'s body, never at module-init time; see
+// task-4-report.md for the verification.
+import { buildingBudget } from './model.js';
 
 export interface FrontageSlot {
   center: Point;
@@ -145,4 +154,100 @@ export function pickHouseGlyph(
 export function houseFootprint(id: string): { width: number; depth: number } {
   const fp = SYMBOL_MANIFEST[id].footprint ?? [4.5, 4.5];
   return { width: fp[0], depth: fp[1] };
+}
+
+const BASE_HOUSE = { width: 6, depth: 6 };
+
+/** Stamp dwelling rows for a !rowHousing settlement. No-op otherwise. */
+export function stampVillageRows(model: Model): void {
+  if (rowHousing(model.params.population)) return;
+
+  let allowance = buildingBudget(model.params.population, model.params.urbanDensity)
+    - model.countOrdinaryBuildingsPublic();
+
+  const bias = drawRoofBias(model.rng);
+
+  // Well reservation: unconditional draw order when wellBudget > 0.
+  if (model.wellBudget > 0) {
+    let best: Point | null = null;
+    let bestD2 = Infinity;
+    // Per the brief: only artery/street vertices, not `roads` (the
+    // outward approach segments outside the settled frontage).
+    const allRoadVertices = [
+      ...model.arteries.flatMap(a => a.vertices),
+      ...model.streets.flatMap(s => s.vertices),
+    ];
+    for (const v of allRoadVertices) {
+      const dx = v.x - model.center.x, dy = v.y - model.center.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < bestD2) { bestD2 = d2; best = v; }
+    }
+    if (best) {
+      model.claimedSites.push({ at: best, radius: 3.2 });
+      model.symbols.push({
+        id: 'sm-well',
+        at: best,
+        scale: 3.2,
+        rotationDeg: Math.round(model.rng.float() * 360),
+        zBand: 'structure',
+        wardType: undefined,
+      });
+      model.wellBudget--;
+    }
+  }
+
+  if (allowance <= 0) return;
+
+  const roads: Array<{ v: ReadonlyArray<Point>; hw: number }> = [
+    ...model.arteries.map(a => ({ v: a.vertices, hw: MAIN_STREET / 2 })),
+    ...model.streets.map(s => ({ v: s.vertices, hw: REGULAR_STREET / 2 })),
+    ...model.roads.map(r => ({ v: r.vertices, hw: MAIN_STREET / 2 })),
+  ];
+
+  for (let row = 0; row < 3 && allowance > 0; row++) {
+    for (const road of roads) {
+      if (allowance <= 0) break;
+      for (const side of [1, -1] as const) {
+        if (allowance <= 0) break;
+        const slots = slotsAlongPolyline(
+          road.v, side, road.hw, BASE_HOUSE, model.rng, row * 6.5, row * 3,
+        );
+
+        // Buffer accepted slots for this road+side+row so row-end status
+        // (first/last ACCEPTED slot) can be assigned before materialising.
+        const accepted: Array<{ slot: FrontageSlot; patch: Patch }> = [];
+        for (const slot of slots) {
+          if (allowance <= 0) break;
+          const patch = acceptSlot(model, slot);
+          if (!patch) continue;
+          accepted.push({ slot, patch });
+        }
+
+        for (let i = 0; i < accepted.length && allowance > 0; i++) {
+          const { slot, patch } = accepted[i];
+          const isRowEnd = i === 0 || i === accepted.length - 1;
+          const id = pickHouseGlyph(patch.ward!.type, bias, isRowEnd, model.rng);
+          const fp = houseFootprint(id);
+          const resized: FrontageSlot = { ...slot, width: fp.width, depth: fp.depth };
+          const rect = slotRect(resized);
+          if (!acceptSlot(model, resized)) continue;
+
+          patch.ward!.geometry.push(rect);
+          model.glyphBackedBuildings.add(rect);
+          const centre = rect.centroid;
+          const scale = Math.max(fp.width, fp.depth);
+          model.symbols.push({
+            id,
+            at: centre,
+            scale,
+            rotationDeg: slot.rotationDeg,
+            zBand: 'structure',
+            wardType: patch.ward!.type,
+          });
+          model.claimedSites.push({ at: centre, radius: scale * 0.55 });
+          allowance--;
+        }
+      }
+    }
+  }
 }

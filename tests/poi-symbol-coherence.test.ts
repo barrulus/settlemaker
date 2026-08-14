@@ -71,13 +71,15 @@ describe('POI / placed-symbol coherence', () => {
   });
 
   it('hamlet with no placed well still gets its plaza well fallback', () => {
-    for (let seed = 1; seed <= 30; seed++) {
-      const m = mk(100, seed);
-      if (m.symbols.some(s => s.id === 'sm-well')) continue;
-      const pois = poisFor(m);
-      expect(pois.filter(p => p.kind === 'well').length).toBe(1);
-      return;
-    }
-    throw new Error('no wellless hamlet found in seeds 1..30');
+    // Village rows (Task 4, stampVillageRows) reserves a well unconditionally
+    // whenever model.wellBudget > 0, which Model.createWards always sets to
+    // >= 1 (Math.max(1, ...)) — so no seed can produce a real wellless
+    // hamlet anymore. Strip the stamped well symbol to exercise
+    // emitHamlet's plaza-fallback path directly; the fallback logic itself
+    // (poi-selector.ts) is unchanged and still worth covering.
+    const m = mk(100, 1);
+    m.symbols = m.symbols.filter(s => s.id !== 'sm-well');
+    const pois = poisFor(m);
+    expect(pois.filter(p => p.kind === 'well').length).toBe(1);
   });
 });

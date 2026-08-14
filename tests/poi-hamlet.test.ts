@@ -23,11 +23,16 @@ function buildingMap(model: ReturnType<typeof generateFromBurg>['model']): Map<P
 }
 
 describe('selectPois — hamlet regime (P < 300)', () => {
-  it('emits no POIs below the tavern threshold (P < 30)', () => {
+  it('emits no adopted POIs below the tavern threshold (P < 30)', () => {
     const { model } = generateFromBurg(makeBurg({ population: 20 }), { seed: 1 });
     const pois = selectPois(model, 20, new IdAllocator(), buildingMap(model));
     expect(pois.filter(p => p.kind === 'tavern')).toHaveLength(0);
-    expect(pois.filter(p => p.kind === 'well')).toHaveLength(0);
+    // Village rows (Task 4, stampVillageRows) reserves a well unconditionally
+    // whenever model.wellBudget > 0, which is always true (Math.max(1, ...)
+    // in Model.createWards) — no population floor. A well POI is now
+    // authoritative from that placed symbol at every village population,
+    // including below the old P>=30 tavern threshold. This test's tavern
+    // assertion (the emitHamlet adoption gate) still holds unchanged.
   });
 
   it('emits tavern and well at P=30', () => {

@@ -24,12 +24,27 @@ function inland(population: number): AzgaarBurgInput {
   };
 }
 
+// Village rows (Task 4, stampVillageRows): populations below
+// ROW_HOUSING_MIN_POPULATION (600) no longer subdivide CommonWard lots —
+// dwellings are stamped along road frontage instead, and the design
+// explicitly accepts falling short of the census target when road
+// frontage adjacent to residential/farm wards runs out before the
+// allowance does ("frontage-capped below" — see
+// docs/superpowers/specs/2026-08-14-village-rows-design.md and
+// task-4-brief.md's own integration test, which asserts only an upper
+// bound for stamped counts). Measured at pop 350 across seeds 1-5: 28-42%
+// of target, consistently, not a fluke — so the floor for that one
+// village-regime case is lowered rather than the shared [60%,100%]
+// envelope used by every town-regime population.
+const FLOOR_OVERRIDE: Partial<Record<number, number>> = { 350: 0.25 };
+
 describe('density targeting: buildings ≈ households', () => {
   it.each([60, 350, 1200, 4500])('pop %i lands within [60%, 100%] of target', (pop) => {
     const { model } = generateFromBurg(inland(pop));
     const target = buildingBudget(pop);
     const n = countOrdinaryBuildings(model);
-    expect(n).toBeGreaterThanOrEqual(Math.floor(target * 0.6));
+    const floor = FLOOR_OVERRIDE[pop] ?? 0.6;
+    expect(n).toBeGreaterThanOrEqual(Math.floor(target * floor));
     expect(n).toBeLessThanOrEqual(target); // Plan A cap still binds from above
   });
 

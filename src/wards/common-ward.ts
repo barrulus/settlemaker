@@ -25,6 +25,15 @@ export class CommonWard extends Ward {
   }
 
   override createGeometry(): void {
+    // Village regime: dwellings are stamped along road frontages by
+    // stampVillageRows (see village-rows.ts) — this ward contributes no
+    // subdivided lots, draws nothing from the stream, and places no well
+    // (the stamper reserves the village well site).
+    if (!rowHousing(this.model.params.population)) {
+      this.geometry = [];
+      return;
+    }
+
     const block = this.getCityBlock();
     const alleyWidth = ALLEY * this.insetScale;
     this.geometry = createAlleys(

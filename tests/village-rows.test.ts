@@ -80,6 +80,11 @@ describe('slot acceptance', () => {
     const patch = m.patches.find(p => p.ward && ROW_WARDS.has(p.ward.type) && !m.waterbody.includes(p))!;
     const c = patch.shape.centroid;
     const slot = { center: c, rotationDeg: 0, width: 4.5, depth: 4.5 };
+    // Task 4 wired stampVillageRows into generate(), so a real village model
+    // now arrives with its own claimed sites from stamped houses — clear
+    // them here so this test isolates acceptSlot's water/claim mechanics
+    // instead of depending on incidental stamper coverage of this patch.
+    m.claimedSites = [];
     expect(acceptSlot(m, slot)).not.toBeNull();
     // Claim the site → same slot now rejected.
     m.claimedSites.push({ at: c, radius: 6 });
@@ -98,6 +103,66 @@ describe('slot acceptance', () => {
 });
 
 import { drawRoofBias, pickHouseGlyph, houseFootprint } from '../src/generator/village-rows.js';
+import { rowHousing } from '../src/generator/generation-params.js';
+import { buildingBudget } from '../src/generator/model.js';
+
+const RESIDENTIAL = ['sm-house', 'sm-house-tiled', 'sm-house-large-tiled', 'sm-hut-mud', 'sm-hut-round', 'sm-hut-straw', 'sm-longhouse'];
+
+describe('stampVillageRows integration', () => {
+  it('census exactness: stamped + generated survivors equals the budget (or frontage-capped below)', () => {
+    for (const seed of [3, 7, 11]) {
+      const m = mk(300, seed);
+      const houses = m.symbols.filter(s => RESIDENTIAL.includes(s.id));
+      expect(houses.length).toBeGreaterThan(0);
+      const target = buildingBudget(m.params.population, m.params.urbanDensity);
+      expect(houses.length).toBeLessThanOrEqual(target);
+    }
+  });
+
+  it('every stamped house rect is in a ward geometry and marked glyph-backed', () => {
+    const m = mk(300, 3);
+    const houses = m.symbols.filter(s => RESIDENTIAL.includes(s.id));
+    expect(m.glyphBackedBuildings.size).toBe(houses.length);
+    for (const rect of m.glyphBackedBuildings) {
+      const owned = m.patches.some(p => p.ward?.geometry.includes(rect));
+      expect(owned).toBe(true);
+    }
+  });
+
+  it('no stamped rect intersects water, another claim, or a farm subplot', () => {
+    const m = mk(300, 3);
+    for (const rect of m.glyphBackedBuildings) {
+      for (const v of rect.vertices) expect(m.isWaterAt(v)).toBe(false);
+      for (const p of m.patches) {
+        if (p.ward instanceof Farm) {
+          for (const plot of p.ward.subPlots) {
+            expect(pointInPolygon(rect.centroid, plot)).toBe(false);
+          }
+        }
+      }
+    }
+  });
+
+  it('village well exists on a road-adjacent reserved site', () => {
+    let found = 0;
+    for (const seed of [3, 7, 11]) {
+      if (mk(300, seed).symbols.some(s => s.id === 'sm-well')) found++;
+    }
+    expect(found).toBeGreaterThan(0);
+  });
+
+  it('towns are untouched: rowHousing model has zero glyph-backed buildings', () => {
+    const m = mk(1200, 3);
+    expect(m.glyphBackedBuildings.size).toBe(0);
+    expect(m.symbols.filter(s => RESIDENTIAL.includes(s.id))).toHaveLength(0);
+  });
+
+  it('deterministic', () => {
+    const a = mk(300, 5), b = mk(300, 5);
+    expect(JSON.stringify(a.symbols)).toBe(JSON.stringify(b.symbols));
+    expect(a.glyphBackedBuildings.size).toBe(b.glyphBackedBuildings.size);
+  });
+});
 
 describe('variety picker', () => {
   it('roof bias skews the house/house-tiled mix', () => {

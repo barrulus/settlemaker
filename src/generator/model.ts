@@ -32,6 +32,7 @@ import { CommonWard } from '../wards/common-ward.js';
 import { CraftsmenWard } from '../wards/craftsmen-ward.js';
 import { buildWardDistribution, type WardConstructor } from '../wards/ward-distribution.js';
 import type { PlacedSymbol, ClaimedSite } from './symbols.js';
+import { stampVillageRows } from './village-rows.js';
 
 const MAX_ATTEMPTS = 20;
 /**
@@ -138,6 +139,8 @@ export class Model {
   prevailingWindDeg = 0;
   wellBudget = 0;
   millBudget = 0;
+  /** Rect identity → glyph-rendered, for the village row-housing regime. */
+  glyphBackedBuildings: Set<Polygon> = new Set();
 
   border: CurtainWall | null = null;
   wall: CurtainWall | null = null;
@@ -341,6 +344,7 @@ export class Model {
     this.prevailingWindDeg = 0;
     this.wellBudget = 0;
     this.millBudget = 0;
+    this.glyphBackedBuildings = new Set();
     this.border = null;
     this.wall = null;
     this.gates = [];
@@ -1492,6 +1496,12 @@ export class Model {
       ? this.countCoreOrdinaryBuildings()
       : this.pretrimOrdinaryCount;
     this.applyBuildingBudget();
+    stampVillageRows(this);
+  }
+
+  /** Public wrapper so village-rows.ts can read the census without duplicating it. */
+  countOrdinaryBuildingsPublic(): number {
+    return this.countOrdinaryBuildings();
   }
 
   private countOrdinaryBuildings(): number {
@@ -1520,6 +1530,7 @@ export class Model {
    * approximate on coasts).
    */
   private refineDensity(): void {
+    if (!rowHousing(this.params.population)) return; // village dwellings are stamped, not subdivided — see village-rows.ts
     const target = buildingBudget(this.params.population, this.params.urbanDensity);
     // The pass exists to make a settlement house its people, and
     // `applyBuildingBudget` trims everything above the budget away moments
