@@ -96,13 +96,19 @@ describe('GeoJSON schema v4 — feature IDs', () => {
     for (const id of poiLinks) expect(buildingIds.has(id)).toBe(true);
   });
 
-  it('floating POIs (pier, well) have building_id=null and all others have non-null', () => {
+  it('floating POIs (pier, well, market, mill) have building_id=null and all others have non-null', () => {
+    // Task 10: market/mill are now sourced from generator-placed symbol
+    // sites (sm-market-cross, sm-mill-wind), not adopted buildings, so
+    // they float like pier/well — no building_id.
     const { geojson } = generateFromBurg(makeBurg({ port: true }), { seed: 1 });
     for (const f of layer(geojson, 'poi')) {
       const kind = f.properties!['kind'] as string;
       const bid = f.properties!['building_id'];
-      if (kind === 'pier' || kind === 'well') expect(bid).toBeNull();
-      else expect(bid).not.toBeNull();
+      if (kind === 'pier' || kind === 'well' || kind === 'market' || kind === 'mill') {
+        expect(bid).toBeNull();
+      } else {
+        expect(bid).not.toBeNull();
+      }
     }
   });
 

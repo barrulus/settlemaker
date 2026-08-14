@@ -2,8 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { FLOATING_POI_KINDS, POI_TIER, type PoiKind } from '../src/poi/poi-kinds.js';
 
 describe('PoiKind constants', () => {
-  it('FLOATING_POI_KINDS contains exactly pier and well', () => {
-    expect(FLOATING_POI_KINDS).toEqual(new Set<PoiKind>(['pier', 'well']));
+  it('FLOATING_POI_KINDS contains exactly pier, well, market, mill', () => {
+    // Task 10: market/mill are now sourced from generator-placed symbol
+    // sites (sm-market-cross, sm-mill-wind) rather than adopted buildings,
+    // so they carry a null building_id like the other floating kinds.
+    expect(FLOATING_POI_KINDS).toEqual(new Set<PoiKind>(['pier', 'well', 'market', 'mill']));
   });
 
   it('POI_TIER has one entry per PoiKind and tiers are 1/2/3', () => {

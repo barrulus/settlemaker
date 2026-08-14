@@ -163,14 +163,9 @@ function emitTown(ctx: EmitCtx): void {
   emitAdopted(ctx, 'inn', new Set([WardType.Merchant]),
     Math.max(1, Math.round(P / 1500)), { allowFallback: true });
 
-  for (const _ of patchesWithWard(ctx.model, WardType.Market)) {
-    emitAdopted(ctx, 'market', new Set([WardType.Market]), 1, { allowFallback: false });
-  }
-
-  if (isWaterAdjacent(ctx.model)) {
-    const wards = new Set(waterAdjacentPatches(ctx.model).map(p => p.ward!.type));
-    emitAdopted(ctx, 'mill', wards, 1, { allowFallback: false });
-  }
+  // market and mill are now sourced from generator-placed symbol sites
+  // (sm-market-cross, sm-mill-wind) via emitPlacedSymbolPois — see
+  // selectPois. Adoption paths retired for POI/glyph coherence.
 
   emitAdopted(ctx, 'smithy', new Set([WardType.Craftsmen]),
     Math.max(1, Math.round(P / 2000)), { allowFallback: true });
@@ -210,9 +205,8 @@ function emitHamlet(ctx: EmitCtx): void {
   if (P >= 30) emitAdopted(ctx, 'tavern', ALL, 1, { allowFallback: true });
   if (P >= 50) emitAdopted(ctx, 'chapel', ALL, 1, { allowFallback: true });
   if (P >= 80) emitAdopted(ctx, 'smithy', ALL, 1, { allowFallback: true });
-  if (isWaterAdjacent(ctx.model)) {
-    emitAdopted(ctx, 'mill', ALL, 1, { allowFallback: true });
-  }
+  // mill is now sourced from a generator-placed sm-mill-wind symbol (see
+  // emitPlacedSymbolPois in selectPois). Adoption path retired.
 
   const gateCount = ctx.model.border?.gateMeta.size ?? 0;
   if (P >= 150 && gateCount >= 2) {
@@ -223,7 +217,9 @@ function emitHamlet(ctx: EmitCtx): void {
     }
   }
 
-  if (P >= 30) {
+  // Plaza well fallback only when the generator didn't place an sm-well
+  // symbol; a placed well is authoritative (emitPlacedSymbolPois).
+  if (P >= 30 && !ctx.model.symbols.some(s => s.id === 'sm-well')) {
     const point = ctx.model.plaza ? ctx.model.plaza.shape.center : ctx.model.center;
     const wardType = ctx.model.plaza ? ctx.model.plaza.ward?.type ?? null : null;
     ctx.pois.push({ kind: 'well', point, wardType, buildingId: null });
@@ -281,6 +277,23 @@ function emitHarbour(ctx: EmitCtx): void {
   }
 }
 
+/**
+ * Generator-placed symbol sites are authoritative for well/mill/market —
+ * the GeoJSON and the rendered map must tell the same story (glyph spec,
+ * POI coherence). Floating points: no building is consumed.
+ */
+function emitPlacedSymbolPois(ctx: EmitCtx): void {
+  for (const s of ctx.model.symbols) {
+    if (s.id === 'sm-well') {
+      ctx.pois.push({ kind: 'well', point: s.at, wardType: null, buildingId: null });
+    } else if (s.id === 'sm-mill-wind') {
+      ctx.pois.push({ kind: 'mill', point: s.at, wardType: WardType.Farm, buildingId: null });
+    } else if (s.id === 'sm-market-cross') {
+      ctx.pois.push({ kind: 'market', point: s.at, wardType: WardType.Market, buildingId: null });
+    }
+  }
+}
+
 export function selectPois(
   model: Model,
   population: number,
@@ -292,6 +305,7 @@ export function selectPois(
     usedBuildings: new Set(),
     pois: [],
   };
+  emitPlacedSymbolPois(ctx);
   if (regimeFor(population) === 'hamlet') emitHamlet(ctx);
   else emitTown(ctx);
   emitHarbour(ctx);

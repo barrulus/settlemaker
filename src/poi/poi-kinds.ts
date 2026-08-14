@@ -14,7 +14,11 @@ export interface Poi {
   buildingId: string | null;
 }
 
-export const FLOATING_POI_KINDS: ReadonlySet<PoiKind> = new Set(['pier', 'well']);
+// market and mill are now sourced from generator-placed symbol sites
+// (sm-market-cross, sm-mill-wind — see poi-selector.ts emitPlacedSymbolPois)
+// rather than adopted buildings, so they carry a null building_id like the
+// other floating kinds.
+export const FLOATING_POI_KINDS: ReadonlySet<PoiKind> = new Set(['pier', 'well', 'market', 'mill']);
 
 /**
  * Priority tiers determine drop-off order when building supply is exhausted.
