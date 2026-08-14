@@ -1,14 +1,29 @@
 import { describe, it, expect } from 'vitest';
 import { assembleSvg } from '../src/output/assemble-svg.js';
+import { buildScene } from '../src/scene/build-scene.js';
 import { SCENE_VERSION, type Scene } from '../src/scene/scene.js';
+import { Point } from '../src/types/point.js';
+import type { OriginShift } from '../src/generator/origin-shift.js';
+import { Model, mapToGenerationParams, type AzgaarBurgInput } from '../src/index.js';
 
-function sceneWith(symbols: Scene['layers']['symbols']): Scene {
+// Canonical test-model helper (pattern from tests/degraded-generation.test.ts).
+function mk(population: number, seed: number, overrides: Partial<AzgaarBurgInput> = {}): Model {
+  return new Model(mapToGenerationParams({
+    name: 'Test', population, port: false, citadel: false, walls: false,
+    plaza: false, temple: false, shanty: false, capital: false, ...overrides,
+  }, seed)).generate();
+}
+
+function sceneWith(
+  symbols: Scene['layers']['symbols'],
+  vegetation: Scene['layers']['vegetation'] = [],
+): Scene {
   return {
     version: SCENE_VERSION, seed: 1, population: 500,
     bounds: { min_x: -50, min_y: -50, max_x: 50, max_y: 50 },
     layers: {
       water: { rings: [], synthetic: false },
-      fields: [], furrows: [], greens: [], vegetation: [],
+      fields: [], furrows: [], greens: [], vegetation,
       roads: [], buildings: [], piers: [], walls: [],
       symbols,
     },
@@ -17,6 +32,7 @@ function sceneWith(symbols: Scene['layers']['symbols']): Scene {
 
 const WELL = { id: 'sm-well', at: { x: 0, y: 0 }, scale: 3.2, rotationDeg: 45, zBand: 'structure' as const };
 const MARK = { id: 'sm-mark-church', at: { x: 5, y: 5 }, scale: 4, rotationDeg: 0, zBand: 'overlay' as const };
+const TREE = { at: { x: -10, y: -10 }, kind: 'sm-tree-deciduous', scale: 2, rotationDeg: 0 };
 
 describe('assembler symbol path', () => {
   it('structure symbols land in #symbols with a sil shadow, offset outside rotation', () => {
@@ -27,13 +43,18 @@ describe('assembler symbol path', () => {
     expect(svg).toMatch(/<g id="shadows" transform="translate\([^)]*\)">[\s\S]*href="#glyph-sm-well-sil"/);
   });
 
-  it('marks land in #marks after #canopy-position (last group)', () => {
-    const svg = assembleSvg(sceneWith([WELL, MARK]));
+  it('marks land in #marks after #symbols and after #canopy, and drop unknown ids', () => {
+    const svg = assembleSvg(sceneWith([WELL, MARK, { ...WELL, id: 'sm-nonexistent' }], [TREE]));
     const marks = svg.indexOf('<g id="marks">');
+    const canopy = svg.indexOf('<g id="canopy">');
+    expect(canopy).toBeGreaterThan(-1);
     expect(marks).toBeGreaterThan(svg.indexOf('<g id="symbols">'));
+    expect(marks).toBeGreaterThan(canopy);
     expect(svg.slice(marks)).toContain('href="#glyph-sm-mark-church"');
     // marks never shadow
     expect(svg).not.toMatch(/shadows[\s\S]*sm-mark-church-sil/);
+    // unknown manifest id is silently dropped
+    expect(svg).not.toContain('sm-nonexistent');
   });
 
   it('minScale gate drops sub-floor fixed instances', () => {
@@ -43,9 +64,47 @@ describe('assembler symbol path', () => {
   });
 
   it('symbols:false removes symbol groups and their defs, keeps everything else', () => {
-    const svg = assembleSvg(sceneWith([WELL, MARK]), { symbols: false });
+    const svg = assembleSvg(sceneWith([WELL, MARK], [TREE]), { symbols: false });
     expect(svg).not.toContain('<g id="symbols">');
     expect(svg).not.toContain('<g id="marks">');
     expect(svg).not.toContain('glyph-sm-well');
+    expect(svg).not.toContain('glyph-sm-mark-church');
+    expect(svg).not.toContain('<symbol id="glyph-sm-well"');
+    expect(svg).not.toContain('<symbol id="glyph-sm-mark-church"');
+    // canopy is unaffected by the symbols off-switch
+    expect(svg).toContain('<g id="canopy">');
+  });
+
+  it('a manifest id with no glyph asset in the active asset set is silently dropped', () => {
+    const svg = assembleSvg(sceneWith([WELL], []), {
+      assetSet: { name: 'empty', symbols: {}, glyphs: {} },
+    });
+    expect(svg).not.toContain('glyph-sm-well');
+    expect(svg).not.toContain('<g id="symbols">');
+  });
+
+  it('buildScene applies the origin shift to model.symbols instances, unchanged otherwise', () => {
+    const model = mk(1200, 11);
+    const placed = {
+      id: 'sm-well',
+      at: new Point(3, 4),
+      scale: 3.2,
+      rotationDeg: 45,
+      zBand: 'structure' as const,
+    };
+    model.symbols.push(placed);
+
+    const shift: OriginShift = { dx: 7, dy: -3, source: 'coast_pull' };
+    const scene = buildScene(model, { shift });
+
+    const instance = scene.layers.symbols.find(s => s.at.x === 10 && s.at.y === 1);
+    expect(instance).toBeDefined();
+    expect(instance).toMatchObject({
+      id: 'sm-well',
+      at: { x: 10, y: 1 },
+      scale: 3.2,
+      rotationDeg: 45,
+      zBand: 'structure',
+    });
   });
 });

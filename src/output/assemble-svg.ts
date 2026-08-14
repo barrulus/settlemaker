@@ -100,6 +100,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   const visibleSymbols = (showSymbols ? L.symbols : []).filter(s => {
     const meta = SYMBOL_MANIFEST[s.id];
     if (!meta) return false;
+    if (!assets.glyphs?.[s.id]) return false;            // no glyph asset for this id
     if (meta.footprint === null) return true;           // marks: no footprint floor
     return s.scale / Math.max(...meta.footprint) >= meta.minScale;
   });
