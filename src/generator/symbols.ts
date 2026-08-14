@@ -1,5 +1,6 @@
 import { Point } from '../types/point.js';
 import type { Polygon } from '../geom/polygon.js';
+import type { WardType } from '../types/interfaces.js';
 
 export interface PlacedSymbol {
   id: string;
@@ -7,6 +8,14 @@ export interface PlacedSymbol {
   scale: number;        // world units, glyph box size
   rotationDeg: number;
   zBand: 'structure' | 'overlay';
+  /**
+   * The ward type consuming/hosting this placement, when the placing ward
+   * knows it at placement time (e.g. a well sacrifices a lot inside a
+   * specific CommonWard subclass). Optional and model/POI-level only — the
+   * scene layer (SymbolInstance) never carries this; see poi-selector.ts's
+   * emitPlacedSymbolPois, which reads it to populate POI ward_type.
+   */
+  wardType?: WardType;
 }
 
 export interface ClaimedSite { at: Point; radius: number }

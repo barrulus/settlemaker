@@ -23,10 +23,15 @@ function fmt4(n: number): string { return n.toFixed(4); }
 function glyphTransform(
   at: ScenePoint, scale: number, rotationDeg: number,
   viewBox: [number, number, number, number],
+  anchor?: [number, number],
 ): string {
   const n = viewBox[2];        // glyph grid size (64, or 32 for marks)
   const c = n / 2;
-  return `translate(${fmt(at.x)},${fmt(at.y)}) scale(${fmt4(scale / n)}) rotate(${rotationDeg}) translate(${-c},${-c})`;
+  // Default to the center anchor when the asset carries none (e.g. non-glyph
+  // symbol kinds). All 38 currently-placeable batch001 glyphs are center-
+  // anchored anyway; only sm-mill-water [34,32] (never placed) differs.
+  const [ax, ay] = anchor ?? [c, c];
+  return `translate(${fmt(at.x)},${fmt(at.y)}) scale(${fmt4(scale / n)}) rotate(${rotationDeg}) translate(${-ax},${-ay})`;
 }
 
 function ringPath(ring: ScenePoint[]): string {
@@ -198,7 +203,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     parts.push(`<g id="shadows" transform="translate(${fmt(dx)},${fmt(dy)})">`);
     for (const bld of shadowable) parts.push(`<path d="${ringPath(bld.ring)}"/>`);
     for (const s of structureSymbols) {
-      parts.push(`<use href="#glyph-${s.id}-sil" transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox)}"/>`);
+      parts.push(`<use href="#glyph-${s.id}-sil" transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor)}"/>`);
     }
     parts.push('</g>');
   }
@@ -221,7 +226,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   if (structureSymbols.length > 0) {
     parts.push('<g id="symbols">');
     for (const s of [...structureSymbols].sort((a, b) => a.at.y - b.at.y)) {
-      parts.push(`<use href="#glyph-${s.id}" transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox)}"/>`);
+      parts.push(`<use href="#glyph-${s.id}" transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor)}"/>`);
     }
     parts.push('</g>');
   }
@@ -245,7 +250,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   if (canopy.length > 0) {
     parts.push('<g id="canopy">');
     for (const v of [...canopy].sort((a, b) => a.at.y - b.at.y)) {
-      parts.push(`<use href="#glyph-${v.kind}" transform="${glyphTransform(v.at, v.scale, v.rotationDeg, assets.glyphs![v.kind].viewBox)}"/>`);
+      parts.push(`<use href="#glyph-${v.kind}" transform="${glyphTransform(v.at, v.scale, v.rotationDeg, assets.glyphs![v.kind].viewBox, assets.glyphs![v.kind].anchor)}"/>`);
     }
     parts.push('</g>');
   }
@@ -253,7 +258,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   if (markSymbols.length > 0) {
     parts.push('<g id="marks">');
     for (const s of [...markSymbols].sort((a, b) => a.at.y - b.at.y)) {
-      parts.push(`<use href="#glyph-${s.id}" transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox)}"/>`);
+      parts.push(`<use href="#glyph-${s.id}" transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor)}"/>`);
     }
     parts.push('</g>');
   }

@@ -3,6 +3,7 @@ import { Model, mapToGenerationParams, type AzgaarBurgInput } from '../src/index
 import { selectPois } from '../src/poi/poi-selector.js';
 import { IdAllocator } from '../src/output/id-allocator.js';
 import type { Polygon } from '../src/geom/polygon.js';
+import { WardType } from '../src/types/interfaces.js';
 
 // Canonical test-model helper (pattern from tests/degraded-generation.test.ts).
 function mk(population: number, seed: number, overrides: Partial<AzgaarBurgInput> = {}): Model {
@@ -49,6 +50,24 @@ describe('POI / placed-symbol coherence', () => {
       }
       expect(byKind('mill').length).toBe(placed('sm-mill-wind').length);
     }
+  });
+
+  it('placed-well POIs carry the consuming ward\'s type, not null', () => {
+    let sawPlacedWell = false;
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+      const m = mk(4000, seed, { plaza: true });
+      const placedWells = m.symbols.filter(s => s.id === 'sm-well');
+      if (placedWells.length === 0) continue;
+      sawPlacedWell = true;
+      const pois = poisFor(m);
+      const wellPois = pois.filter(p => p.kind === 'well');
+      expect(wellPois.length).toBe(placedWells.length);
+      for (const p of wellPois) {
+        expect(p.wardType).not.toBeNull();
+        expect(Object.values(WardType)).toContain(p.wardType);
+      }
+    }
+    expect(sawPlacedWell).toBe(true);
   });
 
   it('hamlet with no placed well still gets its plaza well fallback', () => {

@@ -36,13 +36,22 @@ Each `layer: 'street'` feature has exactly one `street_id`. IDs are **never shar
 
 ## `building_id` rule for POIs
 
-`building_id` is `null` only when `poi.kind ∈ {'pier', 'well'}`. For all other kinds, `building_id` is non-null; if no suitable building exists, the POI is omitted entirely rather than emitted with `null`.
+`building_id` is `null` only when `poi.kind ∈ {'pier', 'well', 'market', 'mill'}`. For all other kinds, `building_id` is non-null; if no suitable building exists, the POI is omitted entirely rather than emitted with `null`.
 
 ## `ward_type` rule for POIs
 
-Non-null for every adopted POI (the ward of the adopted building) and for every ward-intrinsic floating POI (piers → `'harbour'`). Null only when the floating POI isn't geographically inside any ward — currently just `well` POIs in hamlet burgs that lack a Market ward.
+Non-null for every adopted POI (the ward of the adopted building) and for every ward-intrinsic floating POI (piers → `'harbour'`; placed `market`/`mill`/`well` symbols → the ward that placed them). Null only when a floating POI isn't geographically inside any ward — in practice this is just the hamlet-regime plaza/burg-center `well` fallback (`emitHamlet`) when the burg has no plaza (or the plaza patch has no ward), and only fires when the generator did NOT already place an `sm-well` symbol.
 
-Consumer predicate: `ward_type === null` iff the POI is a hamlet well without a Market ward.
+Consumer predicate: `ward_type === null` iff the POI is the hamlet plaza-less well fallback.
+
+## POI semantics under settlemaker 1.1.0
+
+Since `1.1.0`, `FLOATING_POI_KINDS` (`src/poi/poi-kinds.ts`) grew from `{'pier', 'well'}` to `{'pier', 'well', 'market', 'mill'}`. `market` and `mill` are no longer adopted from ward buildings — they're sourced from generator-placed symbol sites (`sm-market-cross`, `sm-mill-wind`), the same glyphs the SVG renders, so the GeoJSON and the rendered map always agree. `well` POIs come from generator-placed sites too (`sm-well`) when the generator placed one; only the hamlet no-plaza fallback still floats independent of a symbol.
+
+- **New floating kinds:** `market`, `mill` (joining `pier`, `well`). All four always emit a `building_id: null` POI — they never consume building supply.
+- **`building_id` rule:** as above — `null` for all four floating kinds, non-null (or omitted) for everything else.
+- **`ward_type` rule:** as above — placed `well`/`mill`/`market` symbols now carry the consuming ward's type (the ward that placed the symbol knows it at placement time: a `CommonWard` subclass for wells, `Farm` for mills, `Market` for market crosses), not a hardcoded value. Only the plaza-less hamlet well fallback stays null.
+- **Deprecation caveat:** `POI_TIER` (`src/poi/poi-kinds.ts`) still assigns tiers to `market`/`mill`/`well` for type-completeness, but tiers only govern drop-off order when building supply runs out during adoption. Since these three kinds are symbol-sourced and never adopt a building, `POI_TIER` does not apply to them in practice — they always emit (or don't, per generator placement) independent of building-supply pressure.
 
 ## POI regimes
 

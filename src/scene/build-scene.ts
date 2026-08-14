@@ -110,6 +110,10 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
   // the SAME building the cathedral POI adopts (tier-1-first ⇒ usedBuildings
   // empty ⇒ scoreBuildings[0]); scaled to the building's short axis per the
   // manifest scaleTo contract; locked upright.
+  // This mark's single-ward `.find()` and the POI's pooled `patchesWithWard`
+  // read coincide only because Cathedral is a singleton ward (at most one
+  // patch carries it per burg) — a ward-distribution invariant, not
+  // something this code enforces itself.
   const cathedralWard = model.patches.find(p => p.ward?.type === WardType.Cathedral)?.ward;
   if (cathedralWard != null && cathedralWard.geometry.length > 0) {
     const building = scoreBuildings(cathedralWard.geometry, scoringReference(model))[0];

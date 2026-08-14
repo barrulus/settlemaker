@@ -21,6 +21,8 @@ export interface GlyphAsset {
   viewBox: [number, number, number, number];
   body: string;
   sil: string;
+  /** Glyph-grid anchor point (SYMBOL_MANIFEST[id].anchor); [c,c] for center-anchored glyphs. */
+  anchor: [number, number];
 }
 
 export const CANOPY_KINDS = ['sm-tree-deciduous', 'sm-tree-deciduous-round', 'sm-tree-conifer'] as const;
@@ -39,7 +41,10 @@ export const SCHEMATIC_SET: AssetSet = {
 function batchGlyphs(): Record<string, GlyphAsset> {
   const out: Record<string, GlyphAsset> = {};
   for (const [id, g] of Object.entries(BATCH001_GLYPHS)) {
-    out[id] = { viewBox: SYMBOL_MANIFEST[id].viewBox, body: g.body, sil: g.sil };
+    out[id] = {
+      viewBox: SYMBOL_MANIFEST[id].viewBox, body: g.body, sil: g.sil,
+      anchor: SYMBOL_MANIFEST[id].anchor,
+    };
   }
   return out;
 }

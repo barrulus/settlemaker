@@ -15,7 +15,10 @@ export class Market extends Ward {
 
   override createGeometry(): void {
     // Only the plaza becomes a true plaza with the cross; secondary Market
-    // wards keep the legacy statue/fountain object.
+    // wards keep the legacy statue/fountain object. `this.model.plaza ===
+    // this.patch` relies on object identity (===), which is valid because
+    // createWards assigns each patch the same Patch object instance
+    // throughout — model.plaza is never a copy.
     if (this.model.plaza !== this.patch) {
       this.createLegacyGeometry();
       return;
@@ -35,7 +38,10 @@ export class Market extends Ward {
     const rotationDeg = meta.rotation === 'snap-cardinal'
       ? Math.floor(rng.float() * 4) * 90
       : meta.rotation === 'invariant' ? Math.round(rng.float() * 360) : 0;
-    this.model.symbols.push({ id: 'sm-market-cross', at, scale: size, rotationDeg, zBand: 'structure' });
+    this.model.symbols.push({
+      id: 'sm-market-cross', at, scale: size, rotationDeg, zBand: 'structure',
+      wardType: WardType.Market,
+    });
     this.model.claimedSites.push({ at, radius: size });
     this.geometry = []; // open ground — the plaza is the point
   }

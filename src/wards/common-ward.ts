@@ -80,7 +80,13 @@ export class CommonWard extends Ward {
 
     if (m.wellBudget <= 0 || !CommonWard.WELL_WARDS.has(this.type)) return;
     const p = this.type === WardType.Slum ? 0.08 : 0.35;
-    const roll = this.rng.bool(p); // drawn before the guard below: draw count is size-independent
+    // Drawn before the guard below so the draw itself is size-independent —
+    // it always consumes the same amount of RNG state regardless of ward
+    // geometry length. The budget gate above (m.wellBudget <= 0) DOES still
+    // skip the roll entirely once the budget is exhausted, so determinism
+    // relies on m.wellBudget itself being seed-deterministic, not on this
+    // roll running unconditionally for every ward.
+    const roll = this.rng.bool(p);
     if (!roll || this.geometry.length < 2) return; // never consume a ward's only building
     const c = this.patch.shape.centroid;
     let bestIdx = 0, bestD2 = Infinity;
@@ -96,6 +102,7 @@ export class CommonWard extends Ward {
     const symbol: PlacedSymbol = {
       id: 'sm-well', at, scale: size,
       rotationDeg: Math.round(this.rng.float() * 360), zBand: 'structure',
+      wardType: this.type,
     };
     const site: ClaimedSite = { at, radius: size };
     m.symbols.push(symbol);

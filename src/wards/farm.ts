@@ -71,7 +71,10 @@ export class Farm extends Ward {
       const meta = SYMBOL_MANIFEST['sm-mill-wind'];
       const size = Math.max(...(meta.footprint ?? [7, 7]));
       this.millPlotIndex = idx;
-      m.symbols.push({ id: 'sm-mill-wind', at, scale: size, rotationDeg: m.prevailingWindDeg, zBand: 'structure' });
+      m.symbols.push({
+        id: 'sm-mill-wind', at, scale: size, rotationDeg: m.prevailingWindDeg, zBand: 'structure',
+        wardType: WardType.Farm,
+      });
       m.claimedSites.push({ at, radius: size });
       m.millBudget--;
     }

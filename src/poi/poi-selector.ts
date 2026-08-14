@@ -285,11 +285,11 @@ function emitHarbour(ctx: EmitCtx): void {
 function emitPlacedSymbolPois(ctx: EmitCtx): void {
   for (const s of ctx.model.symbols) {
     if (s.id === 'sm-well') {
-      ctx.pois.push({ kind: 'well', point: s.at, wardType: null, buildingId: null });
+      ctx.pois.push({ kind: 'well', point: s.at, wardType: s.wardType ?? null, buildingId: null });
     } else if (s.id === 'sm-mill-wind') {
-      ctx.pois.push({ kind: 'mill', point: s.at, wardType: WardType.Farm, buildingId: null });
+      ctx.pois.push({ kind: 'mill', point: s.at, wardType: s.wardType ?? null, buildingId: null });
     } else if (s.id === 'sm-market-cross') {
-      ctx.pois.push({ kind: 'market', point: s.at, wardType: WardType.Market, buildingId: null });
+      ctx.pois.push({ kind: 'market', point: s.at, wardType: s.wardType ?? null, buildingId: null });
     }
   }
 }
