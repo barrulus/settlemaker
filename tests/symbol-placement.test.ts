@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { Point } from '../src/types/point.js';
 import { Polygon } from '../src/geom/polygon.js';
 import { intersectsSite } from '../src/generator/symbols.js';
+import { pointInPolygon } from '../src/geom/point-in-polygon.js';
+import { CommonWard } from '../src/wards/common-ward.js';
 import { Model, mapToGenerationParams, type AzgaarBurgInput } from '../src/index.js';
 
 // Canonical test-model helper (pattern from tests/degraded-generation.test.ts).
@@ -80,6 +82,55 @@ describe('wells', () => {
     for (const seed of [1, 2, 3, 4, 5]) {
       const m = mk(150, seed);
       expect(m.symbols.filter(s => s.id === 'sm-well').length).toBeLessThanOrEqual(1);
+    }
+  });
+
+  // Model.buildGeometry's refineDensity/densifyGroup pass can call a
+  // CommonWard's createGeometry() a second time when the first pass
+  // under-yields (live at hamlet scale too). A well placed on the first
+  // call must not survive stale against the rebuilt geometry, and the
+  // ward must never hold more than one well's worth of budget.
+  it('a second createGeometry() call on the same ward never strands or duplicates its well', () => {
+    const m = mk(4000, 3);
+    const wardPatch = m.patches.find(p =>
+      p.ward instanceof CommonWard &&
+      m.symbols.some(s => s.id === 'sm-well' && pointInPolygon(s.at, p.shape.vertices)),
+    );
+    expect(wardPatch).toBeDefined();
+    const ward = wardPatch!.ward as CommonWard;
+
+    const wellsForWard = () => m.symbols.filter(s =>
+      s.id === 'sm-well' && pointInPolygon(s.at, wardPatch!.shape.vertices),
+    );
+    expect(wellsForWard().length).toBe(1);
+    const budgetBefore = m.wellBudget;
+
+    ward.createGeometry();
+
+    expect(wellsForWard().length).toBeLessThanOrEqual(1);
+    // The ward retracts its stale well (refunding the budget) before any
+    // re-roll, so it can never hold a net second draw against the budget.
+    expect(m.wellBudget).toBeGreaterThanOrEqual(budgetBefore);
+
+    for (const w of wellsForWard()) {
+      for (const building of ward.geometry) {
+        expect(pointInPolygon(w.at, building.vertices)).toBe(false);
+      }
+    }
+  });
+
+  it('every well sits outside every building polygon, across seeds', () => {
+    for (const seed of [3, 7, 12]) {
+      const m = mk(4000, seed);
+      const wells = m.symbols.filter(s => s.id === 'sm-well');
+      for (const w of wells) {
+        for (const patch of m.patches) {
+          if (!patch.ward) continue;
+          for (const building of patch.ward.geometry) {
+            expect(pointInPolygon(w.at, building.vertices)).toBe(false);
+          }
+        }
+      }
     }
   });
 });

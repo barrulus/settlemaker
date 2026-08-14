@@ -2,6 +2,7 @@ import { WardType } from '../types/interfaces.js';
 import { Ward, createAlleys, ALLEY } from './ward.js';
 import { rowHousing, maxLotArea } from '../generator/generation-params.js';
 import { SYMBOL_MANIFEST } from '../assets/symbol-manifest.js';
+import type { PlacedSymbol, ClaimedSite } from '../generator/symbols.js';
 import type { Model } from '../generator/model.js';
 import type { Patch } from '../generator/patch.js';
 
@@ -44,6 +45,14 @@ export class CommonWard extends Ward {
     WardType.Craftsmen, WardType.Merchant, WardType.Patriciate, WardType.Slum,
   ]);
 
+  // The well this ward placed on a PRIOR createGeometry() call, if any.
+  // `refineDensity`/`densifyGroup` (Model.buildGeometry) can rebuild a
+  // CommonWard's geometry a second time when the first pass under-yields,
+  // which would otherwise strand this well's symbol/site at a centroid from
+  // the old (discarded) lot layout — see tryPlaceWell's retraction step.
+  private wellSymbol: PlacedSymbol | null = null;
+  private wellSite: ClaimedSite | null = null;
+
   /**
    * Sacrifice one interior lot as a well courtyard. Wells CONSUME a lot
    * (the one exception to claimed-site rejection — see the glyph spec).
@@ -51,6 +60,24 @@ export class CommonWard extends Ward {
    */
   private tryPlaceWell(): void {
     const m = this.model;
+
+    // Retract any well this ward placed on a previous createGeometry() call
+    // before doing anything else, so a rebuilt ward is never left with a
+    // stale well and never double-consumes the budget. Runs unconditionally
+    // (ahead of the budget/type gate) so the refund lands even if the
+    // budget is currently exhausted by other wards.
+    if (this.wellSymbol) {
+      const si = m.symbols.indexOf(this.wellSymbol);
+      if (si !== -1) m.symbols.splice(si, 1);
+      if (this.wellSite) {
+        const ci = m.claimedSites.indexOf(this.wellSite);
+        if (ci !== -1) m.claimedSites.splice(ci, 1);
+      }
+      m.wellBudget++;
+      this.wellSymbol = null;
+      this.wellSite = null;
+    }
+
     if (m.wellBudget <= 0 || !CommonWard.WELL_WARDS.has(this.type)) return;
     const p = this.type === WardType.Slum ? 0.08 : 0.35;
     const roll = this.rng.bool(p); // drawn before the guard below: draw count is size-independent
@@ -66,11 +93,15 @@ export class CommonWard extends Ward {
     const at = lot.centroid;
     const meta = SYMBOL_MANIFEST['sm-well'];
     const size = Math.max(...(meta.footprint ?? [3.2, 3.2]));
-    m.symbols.push({
+    const symbol: PlacedSymbol = {
       id: 'sm-well', at, scale: size,
       rotationDeg: Math.round(this.rng.float() * 360), zBand: 'structure',
-    });
-    m.claimedSites.push({ at, radius: size });
+    };
+    const site: ClaimedSite = { at, radius: size };
+    m.symbols.push(symbol);
+    m.claimedSites.push(site);
+    this.wellSymbol = symbol;
+    this.wellSite = site;
     m.wellBudget--;
   }
 }
