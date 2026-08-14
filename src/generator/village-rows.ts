@@ -12,6 +12,7 @@ import { WardType } from '../types/interfaces.js';
 import { Farm } from '../wards/farm.js';
 import type { Model } from './model.js';
 import type { Patch } from './patch.js';
+import { SYMBOL_MANIFEST } from '../assets/symbol-manifest.js';
 
 export interface FrontageSlot {
   center: Point;
@@ -112,4 +113,36 @@ export function acceptSlot(model: Model, slot: FrontageSlot): Patch | null {
   }
   if (intersectsSite(rect, model.claimedSites)) return null;
   return centerPatch;
+}
+
+export type RoofBias = 'thatch' | 'tile';
+
+export function drawRoofBias(rng: SeededRandom): RoofBias {
+  return rng.bool(0.5) ? 'thatch' : 'tile';
+}
+
+const HUTS = ['sm-hut-mud', 'sm-hut-round', 'sm-hut-straw'] as const;
+
+export function pickHouseGlyph(
+  wardType: WardType, bias: RoofBias, isRowEnd: boolean, rng: SeededRandom,
+): string {
+  const r = rng.float(); // exactly one draw per call
+  if (wardType === WardType.Slum || isRowEnd) return HUTS[Math.min(2, Math.floor(r * 3))];
+  if (wardType === WardType.Farm) {
+    if (r < 0.15) return 'sm-longhouse';
+    return HUTS[Math.min(2, Math.floor(((r - 0.15) / 0.85) * 3))];
+  }
+  if (wardType === WardType.Merchant || wardType === WardType.Patriciate) {
+    if (r < 0.35) return 'sm-house-large-tiled';
+    const r2 = (r - 0.35) / 0.65;
+    return bias === 'thatch' ? (r2 < 0.75 ? 'sm-house' : 'sm-house-tiled')
+                             : (r2 < 0.25 ? 'sm-house' : 'sm-house-tiled');
+  }
+  return bias === 'thatch' ? (r < 0.75 ? 'sm-house' : 'sm-house-tiled')
+                           : (r < 0.25 ? 'sm-house' : 'sm-house-tiled');
+}
+
+export function houseFootprint(id: string): { width: number; depth: number } {
+  const fp = SYMBOL_MANIFEST[id].footprint ?? [4.5, 4.5];
+  return { width: fp[0], depth: fp[1] };
 }

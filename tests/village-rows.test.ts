@@ -96,3 +96,36 @@ describe('slot acceptance', () => {
     expect(acceptSlot(m, { center: new Point(cx, cy), rotationDeg: 0, width: 4.5, depth: 4.5 })).toBeNull();
   });
 });
+
+import { drawRoofBias, pickHouseGlyph, houseFootprint } from '../src/generator/village-rows.js';
+
+describe('variety picker', () => {
+  it('roof bias skews the house/house-tiled mix', () => {
+    const count = (bias: 'thatch' | 'tile') => {
+      const rng = new SeededRandom(7);
+      let tiled = 0;
+      for (let i = 0; i < 200; i++) {
+        if (pickHouseGlyph(WardType.Craftsmen, bias, false, rng) === 'sm-house-tiled') tiled++;
+      }
+      return tiled;
+    };
+    expect(count('tile')).toBeGreaterThan(count('thatch') + 40);
+  });
+
+  it('slums and row-ends get huts; farms get vernacular; merchants get large houses sometimes', () => {
+    const rng = new SeededRandom(11);
+    for (let i = 0; i < 50; i++) {
+      expect(pickHouseGlyph(WardType.Slum, 'tile', false, rng)).toMatch(/^sm-hut-/);
+      expect(pickHouseGlyph(WardType.Craftsmen, 'tile', true, rng)).toMatch(/^sm-hut-/);
+      expect(pickHouseGlyph(WardType.Farm, 'thatch', false, rng)).toMatch(/^sm-(hut-|longhouse)/);
+    }
+    const picks = new Set<string>();
+    for (let i = 0; i < 100; i++) picks.add(pickHouseGlyph(WardType.Merchant, 'tile', false, rng));
+    expect(picks.has('sm-house-large-tiled')).toBe(true);
+  });
+
+  it('houseFootprint reads the manifest (longhouse is 10×5)', () => {
+    expect(houseFootprint('sm-longhouse')).toEqual({ width: 10, depth: 5 });
+    expect(houseFootprint('sm-house')).toEqual({ width: 6, depth: 6 });
+  });
+});
