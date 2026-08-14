@@ -1442,10 +1442,25 @@ git commit -m "POI coherence: well/mill/market report generator-placed sites, ad
 
 ---
 
-### Task 11: Version 1.1.0, canary re-pin, docs
+### Task 11: Merge library-only master, version 1.1.0, canary re-pin, docs
 
 **Files:**
+- Merge: `master` into `glyphs` (library-only layout — verified conflict-free file-by-file by the split's reviewer, 2026-08-14)
+- Modify: `scripts/extract-glyphs.ts` (source path + doc comment)
+- Regenerate: `src/assets/batch001.ts`, `src/assets/symbol-manifest.ts`
 - Modify: `package.json` (version 1.0.0 → 1.1.0)
+
+- [ ] **Step 0: Merge master and fix the codegen source path**
+
+The site/repo split landed on master while this branch was in flight: the public repo is now a pure library — `web/` is gone, the symbol assets live at `symbols/` at the repo root, and the licence file moved with them. After `git merge master` (expected conflict-free):
+
+1. `scripts/extract-glyphs.ts` line ~106 (`main()`): change the source directory from `join(root, 'web', 'public', 'symbols', 'batch001')` to `join(root, 'symbols', 'batch001')`; update the file's doc comment paths to match.
+2. The generated attribution header in `renderGlyphModule` bakes the licence path (`web/public/symbols/LICENSE`) — update it to the new `symbols/LICENSE` location (confirm the actual path on master first).
+3. Update the paths in `tests/extract-glyphs.test.ts` (it reads `web/public/symbols/batch001/...` directly).
+4. Re-run codegen (`npx tsx scripts/extract-glyphs.ts`) so the committed modules regenerate with the new header, and verify the idempotency test passes.
+5. Run the full suite: post-merge, failures must still be ONLY the two fidelity-round4 canaries (Step 2 re-pins them).
+
+Commit the merge + path fix separately from the re-pin so the render-gate bisect stays clean.
 - Modify: the `SETTLEMAKER_VERSION` constant (locate: `grep -rn SETTLEMAKER_VERSION src/`)
 - Modify: `tests/fidelity-round4.test.ts` + any other pinned-hash/determinism tests failing since Task 4
 - Modify: `docs/scene-schema.md`, `docs/url-api.md`
@@ -1485,16 +1500,17 @@ git commit -m "Release prep 1.1.0: pins re-pinned once for generator-native symb
 
 - [ ] **Step 1: Generate before/after contact sheets**
 
-Use the review harness (`scripts/make-review-page.ts`, vite on 5199). Seed spread: hamlet (~150), town (~1200), city (~4000, ~10000), a coastal seed, a farm-heavy seed. Variants: parchment/blueprint/night × {symbols on, symbols off} — shadows are part of "on" (one boolean to drop if the owner rejects them).
+Use the review harness (`scripts/make-review-page.ts`; post-split the vite 5199 dev server runs from `settlemaker-web/site` and live-compiles the submodule's library source — check out the `glyphs` branch inside the private repo's `settlemaker/` submodule for HMR; the harness knows the new output path). Seed spread: hamlet (~150), town (~1200), city (~4000, ~10000), a coastal seed, a farm-heavy seed. Variants: parchment/blueprint/night × {symbols on, symbols off} — shadows are part of "on" (one boolean to drop if the owner rejects them).
 
-- [ ] **Step 2: Push branch, open draft PR**
+- [ ] **Step 2: Push branch, open the preview via settlemaker-web**
+
+Post-split, pushing the public repo deploys NOTHING — previews go through the private repo:
 
 ```bash
 git push -u origin glyphs
-gh pr create --draft --title "Glyphs: generator-native symbols (batch 001)" --body "Preview for the glyph-wiring spec (docs/superpowers/specs/2026-08-13-glyph-wiring-design.md). Render-gate: owner judges the Netlify deploy preview. 🤖 Generated with [Claude Code](https://claude.com/claude-code)"
 ```
 
-Netlify builds a deploy preview off the PR if previews are enabled; if no preview URL appears on the PR, tell the owner the one manual step is enabling branch/PR deploys for this site in the Netlify UI.
+Then in `/home/barrulus/dev/settlemaker-web`: create a branch that bumps the `settlemaker/` submodule to the pushed `glyphs` head, and open a PR there — Netlify builds the deploy preview off the private repo's PR. Do not merge either repo.
 
 - [ ] **Step 3: STOP — owner eyes required**
 
