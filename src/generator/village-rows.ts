@@ -335,21 +335,26 @@ export function houseFootprint(id: string): { width: number; depth: number } {
 export type DwellingFamily = 'hut' | 'house';
 
 /**
- * Deterministic, data-driven family rule (no rng draw): a settlement
- * reads as poor/rural — and gets huts — iff its population is below 120
- * (villages this small are hamlets by any reading) OR its built Farm
- * patches outnumber its built non-Farm ROW_WARDS patches (Craftsmen,
- * Merchant, Patriciate, Slum, GateWard, Military) — i.e. the settlement
- * is more farmstead than town. Otherwise it's a house settlement.
- * `builtPatches` is the same ROW_WARDS-filtered list `stampVillageRows`
- * already computes for the ribbon bound.
+ * Gate-tune round 6b (2026-08-14): the original rule also drew huts
+ * whenever built Farm patches outnumbered built non-Farm ROW_WARDS
+ * patches — but farm belts outnumber residential patches in nearly every
+ * village regardless of size, so that clause fired far more often than
+ * the population clause and inverted the intended read in practice
+ * (pop-300 going all-huts while a smaller pop-150 settlement drew houses,
+ * exactly backwards). The farm-count clause was noise, not signal —
+ * deleted outright. Population alone is the rule now.
  */
-export function settlementDwellingFamily(
-  population: number, builtPatches: readonly Patch[],
-): DwellingFamily {
-  const farmCount = builtPatches.filter(p => p.ward!.type === WardType.Farm).length;
-  const residentialCount = builtPatches.length - farmCount;
-  return (population < 120 || farmCount > residentialCount) ? 'hut' : 'house';
+export const HUT_FAMILY_MAX_POPULATION = 100;
+
+/**
+ * Deterministic, data-driven family rule (no rng draw, no patch data
+ * needed): a settlement reads as poor/rural — and gets huts — iff its
+ * population is strictly below `HUT_FAMILY_MAX_POPULATION`. Everything at
+ * or above draws the house family (roof-bias variant + merchant/patriciate
+ * large accent, unchanged).
+ */
+export function settlementDwellingFamily(population: number): DwellingFamily {
+  return population < HUT_FAMILY_MAX_POPULATION ? 'hut' : 'house';
 }
 
 /**
@@ -526,7 +531,7 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
   // settlement, chosen once, here, before any stamping. `family` is a pure
   // data-driven rule (no draw); `settlementGlyph` is the settlement's one
   // variant draw (exactly one rng call — see pickSettlementGlyph).
-  const family = settlementDwellingFamily(model.params.population, builtPatches);
+  const family = settlementDwellingFamily(model.params.population);
   const settlementGlyph = pickSettlementGlyph(family, model.rng);
   const settlementFootprint = houseFootprint(settlementGlyph);
 
@@ -721,16 +726,25 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
   // test fixture in tests/village-rows.test.ts's `mk()`, `plaza: true` for
   // the census-floor scenario in tests/density-target.test.ts's
   // `inland()` — so both had to be checked, not just one) at several
-  // widths before settling: 1.3 (unwidened) dropped the census floor as
-  // low as 50.0% — below 60% on 3 of 6 seeds; 1.7 recovered a 73.9% census
-  // floor but one pop-300/plaza:false seed still sat at 66.2% row-0 share
-  // — under the 70% target — because that settlement's row-0 frontage was
-  // geometrically saturated (out of room, not out of allowance) at that
-  // ring width; 2.5 (shipped) clears BOTH comfortably: every sampled
-  // pop-350/plaza:true seed hits 100% census yield, and every sampled pop
-  // 150/300/plaza:false seed's row-0 share is 88.7-100%. See the round-6
-  // report for the full seed-by-seed tables for both measurements.
-  const RING4_FACTOR = 2.5;
+  // widths before settling on 2.5: 1.3 (unwidened) dropped the census
+  // floor as low as 50.0%; 1.7 recovered a 73.9% census floor but one
+  // pop-300/plaza:false seed still sat at 66.2% row-0 share (under the
+  // 70% target); 2.5 cleared both comfortably.
+  //
+  // Gate-tune round 6b (2026-08-14): the owner's zoomed render caught what
+  // 2.5's yield/row-0 wins were actually costing — the pop-300 southern
+  // road bead-strung dwellings out to the map edge, dissolving the
+  // village along the road ("too spread out" reborn at macro scale; a
+  // ribbon-sprawl regression the per-seed census/row-0 measurements above
+  // don't surface at all, since they only count WHETHER a house landed,
+  // not HOW FAR from the settlement it landed). Capped back down to 1.6
+  // per explicit instruction: "yield will drop from 100%... anything
+  // ≥ ~80% is acceptable (60% floor must hold regardless)... if a seed
+  // lands below 80%, report it plainly — do NOT re-widen; the owner
+  // prefers a compact village over a complete census." See the round-6b
+  // report section for the measured per-seed yield at 1.6 — some seeds
+  // land under 80%, reported as instructed rather than chased.
+  const RING4_FACTOR = 1.6;
   const RING_FACTORS = [0.5, 0.75, 1.0, RING4_FACTOR] as const;
 
   // Gate-tune round 6 (2026-08-14) — CORRECTION 3(c)/(e): "population
