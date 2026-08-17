@@ -75,6 +75,26 @@ the contract yet.
 
     https://settlemaker.com/fmg?i=dY_dasMwDIXfRdcpZC2F4cs9Qm_HKGqixAbVNraS0IW8e5WGJGzQy--g86MRejAfBdy61IIZweOdwMDF9ZQGlMpCATHEjlFc8GCOx7KclSRgGuRMBVROsCbeeEDmDEZSpxAZf3EFoXtkWilb9PLYYzBq0B6TAtZfhMn5VtO-R7gtcK1Jl36W80UndHW17u2R6TA7dG6relRtxqwsVoXWrrWJ2FGzeJgeetAE5jDk18_L1VT8qzuVf_usY37XtxVgrsgLTD-TPkukvvP0BA
 
+**Millbrook** — village rows on route vectors: a pop-320 riverside mill
+village. The through road (paired bearings sharing `route_id:
+'mill-road'`, `followsRiver`/`valley`) carries continuous house terraces;
+the foot trail stays bare. One dwelling type for the whole settlement.
+
+    https://settlemaker.com/fmg?i=xZHNasMwEITfZc8O5Ie2oGPvvfRaQlhHK1tkLQl57ZAYv3tXJNhtX6DHbzSaGaQJRjC7CuohN2AmCNgRGPjwzHWO8QIVpJgGRvExgDnst0XIAsYh91TB2Qta4oWvyNwvlBjvuJBQl5gW7FsMcluTMGnWmpQj2nfC7EOjgV8T1A84WdKpb9viGIRO3urgTgdvyg0dfPGhSE9q1JWe2CtLq0LTgpE8lBZiT07PRx1ONzW4yByv_acfKT9cc_WnfP_yn-2719_tzhPbDWOgtd7FKD_qJaPXb5mPsz47kToO8zc
+
+**Wayfare** — crossroads village, pop 480: two through trade roads
+(`kings-way`, `drove-road`, each a paired-bearing route) crossing at the
+well. Terrace chains must cluster the crossing on all four arms, with
+bare stretches further out.
+
+    https://settlemaker.com/fmg?i=vZFBDoIwEEXvMmtI0GjULr2EC2PIYAdoLNC0BYKEuzuNBqOuTIy7vunv-0MYoQOxiCBrbQFihBorAgEHHHK0BBGYxrQavWpqEKttEgbWg8hRO4rgrDxK0jP3qLWbyWi84kyeKqNpRldi7YenCQ27nibboNwTWlUXLDyOkN0hlcSLLtYh0XpKleR1LyEV9zjwwnwOo_CeqeCUeaBj9iUPihKEt21oIa0o5_ucvxGm6L1m96eeJHnpkbbpKH6ovyj6EC-3PxKfJv5jRJzfTDc
+
+**Fordham** — ford hamlet, pop 85 (below the hut threshold): a single
+river-following through road with one short terrace of huts at the
+crossing. Hut family only — no square houses may appear.
+
+    https://settlemaker.com/fmg?i=vZBBCsIwEEXvMuu6qFKQLF14ALciMpppG5wmIUlbtPTuTqhU8AAu38yf_z8zwQCqLODWhwbUBBY7AgVHF3SLHRTgne8Zk3EW1L7KHBKoGjlSAXeTUBOvPCJzXMkzvnClRJ1nWjG2aNPz64RevL5OwaE-EAZjGzE8T3Bb4KpJeu6qrOgTXY2WtrW03Yz4lLoPY_Mknws1IvIfjMKplUHTgkqhzyHEhmrZD9Kb8nntmN0YT2agsKjm4id7W_4x_DLLp4jEtZrf
+
 **Kingsmoor** — `coreCapacity: 5000` against 60 000 people: a compact
 walled old town (citadel inside) surrounded by much larger unwalled sprawl
 along the two real roads; the trail approach stays quiet.
@@ -93,5 +113,8 @@ piers that reach the water.
 - Park and Cathedral wards are currently very rare at city scale (the ward
   deck is sized against more patches than are actually dealt — tracked as a
   known defect with a pinned test, `tests/known-defects.test.ts`).
-- Tiny hamlets (pop 40-100) render thin (well under their building target)
-  on some seeds — thinning, not emptiness.
+- Village-regime settlements (pop ≤ 600) may house fewer households than
+  their census target on some seeds — terrace chains stop where frontage
+  runs out, and compactness deliberately wins over completeness (owner
+  ruling at the village-rows render gate). Never emptiness: a minimum
+  viability pass guarantees every settlement renders dwellings.

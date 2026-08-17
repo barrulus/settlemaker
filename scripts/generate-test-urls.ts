@@ -76,6 +76,49 @@ export const riverwatch: AzgaarBurgInput = {
 };
 
 /**
+ * Village rows + route vectors: a riverside mill village. One through road
+ * (paired bearings sharing route_id) follows the river through the valley;
+ * terrace chains must string along it, with the field lane staying bare.
+ */
+export const millbrook: AzgaarBurgInput = {
+  name: 'Millbrook', population: 320, port: false, citadel: false, walls: false,
+  plaza: false, temple: false, shanty: false, capital: false,
+  roadBearings: [
+    { bearing_deg: 70, route_id: 'mill-road', kind: 'road', group: 'roads', through: true, relief: 'valley', followsRiver: true },
+    { bearing_deg: 250, route_id: 'mill-road', kind: 'road', group: 'roads', through: true, relief: 'valley', followsRiver: true },
+    { bearing_deg: 160, route_id: 'field-lane', kind: 'foot', group: 'trails' },
+  ],
+};
+
+/**
+ * Crossroads village: two through trade roads crossing at the well.
+ * Terrace chains must cluster around the crossing on all four arms.
+ */
+export const wayfare: AzgaarBurgInput = {
+  name: 'Wayfare', population: 480, port: false, citadel: false, walls: false,
+  plaza: false, temple: false, shanty: false, capital: false,
+  roadBearings: [
+    { bearing_deg: 15, route_id: 'kings-way', kind: 'road', group: 'roads', through: true, relief: 'flat' },
+    { bearing_deg: 195, route_id: 'kings-way', kind: 'road', group: 'roads', through: true, relief: 'flat' },
+    { bearing_deg: 100, route_id: 'drove-road', kind: 'road', group: 'roads', through: true },
+    { bearing_deg: 280, route_id: 'drove-road', kind: 'road', group: 'roads', through: true },
+  ],
+};
+
+/**
+ * Ford hamlet (hut family: pop < 100): a single river-following through
+ * road — one short terrace of huts at the crossing, nothing else.
+ */
+export const fordham: AzgaarBurgInput = {
+  name: 'Fordham', population: 85, port: false, citadel: false, walls: false,
+  plaza: false, temple: false, shanty: false, capital: false,
+  roadBearings: [
+    { bearing_deg: 35, route_id: 'ford-way', kind: 'road', group: 'roads', through: true, relief: 'valley', followsRiver: true },
+    { bearing_deg: 215, route_id: 'ford-way', kind: 'road', group: 'roads', through: true, relief: 'valley', followsRiver: true },
+  ],
+};
+
+/**
  * coreCapacity demonstration: 60 000 people against a deliberately small
  * 5 000-person core. The walled old town stays compact; the overflow lives
  * outside as faubourgs and roadside sprawl along the three routes.
@@ -108,12 +151,15 @@ export const saltmarsh: AzgaarBurgInput = {
 };
 
 async function main(): Promise<void> {
-  const [gri, hig, fen, tho, riv, kin, sal] = await Promise.all([
+  const [gri, hig, fen, tho, riv, mil, way, forHam, kin, sal] = await Promise.all([
     encodeBurgParam(grimhaven, 11),
     encodeBurgParam(highbury, 4),
     encodeBurgParam(fenwick, 21),
     encodeBurgParam(thornbury, 3),
     encodeBurgParam(riverwatch, 5),
+    encodeBurgParam(millbrook, 3),
+    encodeBurgParam(wayfare, 7),
+    encodeBurgParam(fordham, 5),
     encodeBurgParam(kingsmoor, 2),
     encodeBurgParam(saltmarsh, 7),
   ]);
@@ -195,6 +241,26 @@ the contract yet.
 
     ${IMG}?i=${riv}
 
+**Millbrook** — village rows on route vectors: a pop-320 riverside mill
+village. The through road (paired bearings sharing \`route_id:
+'mill-road'\`, \`followsRiver\`/\`valley\`) carries continuous house terraces;
+the foot trail stays bare. One dwelling type for the whole settlement.
+
+    ${IMG}?i=${mil}
+
+**Wayfare** — crossroads village, pop 480: two through trade roads
+(\`kings-way\`, \`drove-road\`, each a paired-bearing route) crossing at the
+well. Terrace chains must cluster the crossing on all four arms, with
+bare stretches further out.
+
+    ${IMG}?i=${way}
+
+**Fordham** — ford hamlet, pop 85 (below the hut threshold): a single
+river-following through road with one short terrace of huts at the
+crossing. Hut family only — no square houses may appear.
+
+    ${IMG}?i=${forHam}
+
 **Kingsmoor** — \`coreCapacity: 5000\` against 60 000 people: a compact
 walled old town (citadel inside) surrounded by much larger unwalled sprawl
 along the two real roads; the trail approach stays quiet.
@@ -213,8 +279,11 @@ piers that reach the water.
 - Park and Cathedral wards are currently very rare at city scale (the ward
   deck is sized against more patches than are actually dealt — tracked as a
   known defect with a pinned test, \`tests/known-defects.test.ts\`).
-- Tiny hamlets (pop 40-100) render thin (well under their building target)
-  on some seeds — thinning, not emptiness.
+- Village-regime settlements (pop ≤ 600) may house fewer households than
+  their census target on some seeds — terrace chains stop where frontage
+  runs out, and compactness deliberately wins over completeness (owner
+  ruling at the village-rows render gate). Never emptiness: a minimum
+  viability pass guarantees every settlement renders dwellings.
 `;
 
   writeFileSync('docs/test-urls.md', md);
