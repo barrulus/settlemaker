@@ -729,7 +729,17 @@ describe('continuous terraces (gate-tune round 7)', () => {
         pairs++;
         if (d <= w + 0.1 + 1e-6) tight++;
         // Sanity ceiling — never an unbounded/broken gap.
-        expect(d).toBeLessThanOrEqual(3 * w);
+        //
+        // Gate-tune round 8 (2026-08-17): raised 3x → 6x glyph width. The
+        // minimum-viability relaxation pass (see stampVillageRows) runs
+        // with the obstruction tolerance TRIPLED, so a chain grown by that
+        // pass may legitimately jump up to 3 x LONG_OBSTRUCTION (= 4.5
+        // glyph widths) plus the stamp's own width before it terminates.
+        // 6x is the honest ceiling for the loosest pass that exists; it
+        // still catches a genuinely uncapped gap. (The strict pass's own
+        // chains stay well inside 3x — this fixture, pop 300 seed 3, never
+        // reaches the relaxation pass at all.)
+        expect(d).toBeLessThanOrEqual(6 * w);
       }
     }
     expect(pairs).toBeGreaterThan(0);
@@ -741,7 +751,12 @@ describe('continuous terraces (gate-tune round 7)', () => {
     for (const seed of [3, 5, 7, 11]) {
       const m = mk(300, seed);
       const houses = m.symbols.filter(s => RESIDENTIAL.includes(s.id));
-      if (houses.length === 0) continue; // a chain-growth village CAN be empty this round — see density-target.test.ts
+      // Gate-tune round 8 (2026-08-17): the "a chain-growth village CAN be
+      // empty" skip is gone — round 7's empty villages were the
+      // pre-birth-termination bug, and the minimum-viability pass now
+      // guarantees a settlement always houses somebody (see the
+      // minimum-viability test below).
+      expect(houses.length).toBeGreaterThan(0);
       const lengths = new Map<number, number>();
       for (const h of houses) lengths.set(h.chainIndex!, (lengths.get(h.chainIndex!) ?? 0) + 1);
       const values = [...lengths.values()];
@@ -784,5 +799,43 @@ describe('continuous terraces (gate-tune round 7)', () => {
       globalMaxEmpty = Math.max(globalMaxEmpty, maxEmpty, curEmpty);
     }
     expect(globalMaxEmpty).toBeGreaterThanOrEqual(20);
+  });
+});
+
+describe('chain lifecycle (gate-tune round 8)', () => {
+  // Round 7's chain-termination rule could fire BEFORE a chain had placed
+  // anything: a village's centre-most road frontage is exactly where the
+  // plaza, greens and fields sit, so the first ~1.5 house-widths of a road
+  // are routinely un-stampable, and with no birth exemption and no restart
+  // the road died having accepted zero stamps. Instrumented on pop-300
+  // seed-3 under round 7: 8 of 14 road-sides ended at s = 9.0 with zero
+  // stamps, including every road longer than 250 units. Round 8 adds the
+  // birth exemption, one restart per road-side, and a minimum-viability
+  // relaxation pass. These two tests pin the observable consequences.
+
+  it('minimum viability: every settlement houses somebody (pops 60/150/300/350, seeds 1-4)', () => {
+    for (const pop of [60, 150, 300, 350]) {
+      for (const seed of [1, 2, 3, 4]) {
+        const m = mk(pop, seed);
+        const houses = m.symbols.filter(s => RESIDENTIAL.includes(s.id));
+        expect(houses.length, `pop ${pop} seed ${seed} rendered an empty settlement`)
+          .toBeGreaterThanOrEqual(6);
+      }
+    }
+  });
+
+  it('long roads are used: the fixture that starved under round 7 now grows real terraces', () => {
+    // pop 300 seed 3 — the controller-supplied regression fixture. Round 7
+    // yielded 15 houses in 4 chains here (most road-sides dead at birth);
+    // round 8 measures 58 houses in 12 chains. Pinned well under the
+    // measured value so ordinary mesh drift can't flap it, but far above
+    // anything the round-7 lifecycle could produce.
+    const m = mk(300, 3);
+    const houses = m.symbols.filter(s => RESIDENTIAL.includes(s.id));
+    expect(houses.length).toBeGreaterThanOrEqual(40);
+    const lengths = new Map<number, number>();
+    for (const h of houses) lengths.set(h.chainIndex!, (lengths.get(h.chainIndex!) ?? 0) + 1);
+    // At least one genuinely long terrace, not just many scattered stubs.
+    expect(Math.max(...lengths.values())).toBeGreaterThanOrEqual(8);
   });
 });

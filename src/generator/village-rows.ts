@@ -694,13 +694,46 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
   const ROW1_OFFSET = settlementFootprint.depth + 1.0;
   const ROW1_PHASE = 3; // arclength stagger so row 1 doesn't align directly behind row 0 — unchanged concept from round 1
 
+  // Gate-tune round 8 (2026-08-17) — CHAIN LIFECYCLE FIX. Round 7's
+  // termination rule fired before a chain had ever placed anything: the
+  // centre-most stretch of a village road is exactly where the plaza,
+  // greens and fields sit, so the first ~9 units of a 250-300 unit road
+  // are routinely un-stampable ground. With no birth exemption and no
+  // restart, whole roads died at s=9 having accepted ZERO stamps
+  // (instrumented on pop-300 seed-3: 8 of 14 road-sides, including every
+  // road over 250 units long). Three rules fix the lifecycle without
+  // touching the terrace mechanics rounds 6-7 got right:
+  //
+  // 1. NO TERMINATION BEFORE BIRTH — while a chain has yet to accept its
+  //    first stamp, a rejection run never terminates it; the walk keeps
+  //    probing forward at REJECT_PROBE_STEP until it either lands its
+  //    first stamp, runs past the reach bound, or runs off the road. The
+  //    obstruction rule is about ENDING a terrace, and there is no terrace
+  //    to end yet.
+  // 2. ONE RESTART PER ROAD-SIDE — after a chain terminates on a long
+  //    obstruction, if at least RESTART_MIN_ROAD units of road remain,
+  //    exactly one further chain may be born past the obstruction. Two
+  //    clusters per road-side is the cap: that preserves the owner's
+  //    empty-stretch contrast (a road never fills end to end) while
+  //    letting a settlement that straddles an obstruction still read as
+  //    one place.
+  // 3. MINIMUM VIABILITY — see the relaxation pass after the main passes
+  //    below. A settlement must never render empty.
+  const RESTART_MIN_ROAD = 15;
+  const MAX_CHAINS_PER_SIDE = 2;
+
   let chainCounter = 0; // one per growChain call — see PlacedSymbol.chainIndex
+
+  /** Why a chain stopped — only `obstruction` is worth restarting past. */
+  type ChainEnd = 'obstruction' | 'reach' | 'roadEnd';
 
   /**
    * Grow one contiguous chain along `road`'s frontage (`side`, `row`),
-   * starting at the end of `road.v` nearest `model.center` and walking
-   * outward. Returns the number of stamps this chain successfully
-   * accepted (used to pick which chains earn a second row — see below).
+   * starting at arclength `startS` along the road ordered from the end
+   * nearest `model.center` outward. Returns the number of stamps accepted
+   * (used to pick which road-sides earn a second row — see below), the
+   * cursor a restart should resume from, the road's total length, and why
+   * the chain ended.
    *
    * Draw discipline (stated plainly, round 7's final contract):
    * - Exactly 3 draws per GENERATED candidate (`frontageSlotAt`: gap,
@@ -715,30 +748,34 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
    * - `materialiseWithFallback`/`materialiseSlot`: 0 draws (id already
    *   chosen).
    */
-  function growChain(road: { v: ReadonlyArray<Point>; hw: number }, side: 1 | -1, row: 0 | 1): number {
+  function growChain(
+    road: { v: ReadonlyArray<Point>; hw: number }, side: 1 | -1, row: 0 | 1,
+    startS: number, longObstruction: number,
+  ): { accepted: number; endS: number; roadTotal: number; end: ChainEnd } {
     const first = road.v[0], last = road.v[road.v.length - 1];
     const nearFirstEnd = Point.distance(first, model.center) <= Point.distance(last, model.center);
     const orderedVertices = nearFirstEnd ? road.v : [...road.v].reverse();
     const walker = buildPolylineWalker(orderedVertices);
 
     const rowOffset = row === 0 ? 0 : ROW1_OFFSET;
-    let s = row === 0 ? 0 : ROW1_PHASE;
+    let s = startS;
 
     const thisChainIndex = chainCounter++;
     let chainPredecessor: Polygon | null = null;
     let rejectRunStart: number | null = null;
     let acceptedCount = 0;
+    let end: ChainEnd = 'roadEnd';
 
     while (allowance > 0) {
       const generated = frontageSlotAt(walker, s, side, road.hw, settlementFootprint, model.rng, rowOffset);
-      if (!generated) break; // ran off the physical end of the road — draw-free
+      if (!generated) { end = 'roadEnd'; break; } // ran off the physical end of the road — draw-free
 
       const { slot, nextS } = generated;
 
       // Reach bound: draw-free hard stop. The 3 frontageSlotAt draws for
       // THIS candidate already happened (see the draw-discipline note
       // above); nothing further is drawn or attempted once we're past it.
-      if (Point.distance(slot.center, model.center) > chainReachBound) break;
+      if (Point.distance(slot.center, model.center) > chainReachBound) { end = 'reach'; break; }
 
       const patch = acceptSlot(model, slot, ribbon, chainReachBound);
       let placedRect: Polygon | null = null;
@@ -765,22 +802,57 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
       chainPredecessor = null;
       if (rejectRunStart === null) rejectRunStart = s;
       s += REJECT_PROBE_STEP;
-      if (s - rejectRunStart >= LONG_OBSTRUCTION) break; // long obstruction: terminate this road's chain
+      // Round 8 rule 1: an unborn chain can't be terminated by an
+      // obstruction — keep probing outward until it lands its first stamp
+      // (or hits the reach bound / the end of the road above).
+      if (acceptedCount > 0 && s - rejectRunStart >= longObstruction) {
+        end = 'obstruction'; // long obstruction: this terrace is finished
+        break;
+      }
     }
-    return acceptedCount;
+    return { accepted: acceptedCount, endS: s, roadTotal: walker.total, end };
+  }
+
+  /**
+   * Grow up to `maxChains` chains along one road-side, restarting past a
+   * long obstruction only while enough road remains (round 8 rule 2).
+   * Returns the total stamps accepted and the LONGEST single chain — the
+   * latter is what decides double-file eligibility, since "behind the
+   * longest chains" is about one continuous terrace, not a road-side's
+   * aggregate.
+   */
+  function growRoadSide(
+    road: { v: ReadonlyArray<Point>; hw: number }, side: 1 | -1, row: 0 | 1,
+    longObstruction: number, maxChains: number,
+  ): { total: number; longest: number } {
+    let s = row === 0 ? 0 : ROW1_PHASE;
+    let total = 0, longest = 0;
+    for (let i = 0; i < maxChains; i++) {
+      if (allowance <= 0) break;
+      const r = growChain(road, side, row, s, longObstruction);
+      total += r.accepted;
+      longest = Math.max(longest, r.accepted);
+      if (r.end !== 'obstruction') break;      // reach bound / road end — nothing left to restart into
+      if (r.roadTotal - r.endS < RESTART_MIN_ROAD) break;
+      s = r.endS;
+    }
+    return { total, longest };
   }
 
   // Front chains (row 0): every road, priority order as before, both
   // sides, nearest-to-centre-outward. This is the pass that produces the
   // mockup's core look — no ring loop any more, chain growth is
   // inherently centre-first.
+  const startAllowance = allowance;
+  let stamped = 0;
   const frontChains: Array<{ road: { v: ReadonlyArray<Point>; hw: number }; side: 1 | -1; acceptedCount: number }> = [];
   for (const road of roads) {
     if (allowance <= 0) break;
     for (const side of [1, -1] as const) {
       if (allowance <= 0) break;
-      const acceptedCount = growChain(road, side, 0);
-      frontChains.push({ road, side, acceptedCount });
+      const { total, longest } = growRoadSide(road, side, 0, LONG_OBSTRUCTION, MAX_CHAINS_PER_SIDE);
+      stamped += total;
+      frontChains.push({ road, side, acceptedCount: longest });
     }
   }
 
@@ -797,6 +869,31 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
     .sort((a, b) => b.acceptedCount - a.acceptedCount);
   for (const c of doubleFileOrder) {
     if (allowance <= 0) break;
-    growChain(c.road, c.side, 1);
+    stamped += growRoadSide(c.road, c.side, 1, LONG_OBSTRUCTION, MAX_CHAINS_PER_SIDE).total;
+  }
+
+  // Gate-tune round 8 (2026-08-17) — MINIMUM VIABILITY (rule 3). Round 7
+  // let a settlement render with zero dwellings on unlucky meshes; that is
+  // never acceptable output, whatever the clustering contract says. If the
+  // passes above left the settlement under-housed — fewer than
+  // VIABILITY_MIN dwellings, or under a quarter of its allowance — run ONE
+  // further row-0 pass with the obstruction tolerance tripled and restarts
+  // effectively unlimited, so chains can push through the blocked ground
+  // that starved the strict pass. Deliberately a fallback, not a default:
+  // on healthy meshes it never runs, so the strict pass's empty-road
+  // contrast is untouched; on starved ones a looser, longer-reaching
+  // terrace is strictly better than an empty village.
+  const VIABILITY_MIN = 6;
+  const RELAXED_OBSTRUCTION_FACTOR = 3;
+  const RELAXED_MAX_CHAINS = 8;
+  const viabilityFloor = Math.max(VIABILITY_MIN, Math.ceil(startAllowance * 0.25));
+  if (stamped < viabilityFloor) {
+    for (const road of roads) {
+      if (allowance <= 0) break;
+      for (const side of [1, -1] as const) {
+        if (allowance <= 0) break;
+        growRoadSide(road, side, 0, LONG_OBSTRUCTION * RELAXED_OBSTRUCTION_FACTOR, RELAXED_MAX_CHAINS);
+      }
+    }
   }
 }

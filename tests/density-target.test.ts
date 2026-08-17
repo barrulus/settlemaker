@@ -58,9 +58,26 @@ function inland(population: number): AzgaarBurgInput {
 // that a few dead chains barely move the aggregate. Floors adjusted
 // per-population below, honestly, to the measured reality rather than
 // forcing yield back up.
+//
+// Gate-tune round 8 (2026-08-17): those two lowered floors were
+// capitulations to a BUG, not to the compactness contract. Round 7's
+// chain-termination rule could fire before a chain had accepted its first
+// stamp, so a road whose centre-most frontage was blocked (a village's
+// plaza/greens/fields sit exactly there) died at s≈9 having placed
+// nothing, with no restart — instrumented on pop-300 seed-3, 8 of 14
+// road-sides died at zero, including every road over 250 units long. The
+// round-8 chain lifecycle (no termination before birth, one restart per
+// road-side past a long obstruction, plus a minimum-viability relaxation
+// pass) fixes the lifecycle without loosening a single terrace constant,
+// so the shared 60% floor is honest again at every population and both
+// special cases are removed. Re-measured on this exact scenario:
+// pop 60 0% → 66.7%, pop 350 79.5% → 100%, pop 1200 70.9% (unchanged —
+// above ROW_HOUSING_MIN_POPULATION, so village rows never ran), pop 4500
+// 99.4% (unchanged, same reason). A pop-350 explicit-seed sweep
+// (seeds 1-5) reads 100/68.2/76.1/67.0/97.7%, all clear of 60%.
 describe('density targeting: buildings ≈ households', () => {
   it.each([
-    [60, 0], [350, 20], [1200, 60], [4500, 60],
+    [60, 60], [350, 60], [1200, 60], [4500, 60],
   ] as const)('pop %i lands within [%i%%, 100%] of target', (pop, floorPct) => {
     const { model } = generateFromBurg(inland(pop));
     const target = buildingBudget(pop);
@@ -102,8 +119,14 @@ describe('density targeting: buildings ≈ households', () => {
   // populations) without asserting something round 7 no longer guarantees
   // for an arbitrary seed. Found by sweeping seeds 1-15 at each population
   // for the first one with `n > 0`.
+  //
+  // Gate-tune round 8 (2026-08-17): the swap is reverted — round 7's zero
+  // yields on those seeds were the pre-birth-termination bug described
+  // above, not a design consequence. Both ORIGINAL seeds house somebody
+  // again (pop 60 default: 0 → 10 ordinary buildings; pop 100 seed 3:
+  // 1 → 25), so the test guards its original scenarios once more.
   it.each([
-    [60, 4], [140, 1], [140, 6], [100, 4],
+    [60, undefined], [60, 20], [140, 1], [140, 6], [100, 3],
   ] as const)('pop %i seed %s houses somebody', (pop, seed) => {
     const { model } = generateFromBurg(inland(pop), seed === undefined ? undefined : { seed });
     // Built-up patches only — farmsteads sit outside the settlement and
