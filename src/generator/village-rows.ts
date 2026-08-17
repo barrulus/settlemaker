@@ -25,10 +25,10 @@ export interface FrontageSlot {
 
 /**
  * Gate-tune round 3 (2026-08-14): arclength walk math shared between
- * `slotsAlongPolyline` (fixed-pitch, used by the packing pass) and
- * `frontageSlotAt` (footprint-aware incremental pitch, used by the primary
- * row walk — see stampVillageRows). Extracted rather than duplicated so
- * both walk the same road geometry identically.
+ * `slotsAlongPolyline` (fixed-pitch) and `frontageSlotAt` (footprint-aware
+ * incremental pitch, used by chain growth — see `growChain` in
+ * stampVillageRows). Extracted rather than duplicated so both walk the
+ * same road geometry identically.
  */
 export interface PolylineWalker {
   readonly total: number;
@@ -93,9 +93,18 @@ export function frontageSlotAt(
   // Gate-tune round 6 (2026-08-14): owner reference image — "closer
   // together", near-touching terraces. Gap floor tightened again to
   // match OVERLAP_CLEARANCE's new value (0.1, see below).
-  const gap = 0.1 + rng.float() * 0.15;
-  const setback = (rng.float() - 0.5) * 0.3;
-  const rotJitter = (rng.float() - 0.5) * 4;
+  // Gate-tune round 7 (2026-08-14): owner mockup — CONTINUOUS TERRACES,
+  // houses touching shoulder-to-shoulder. Gap tightened to visually
+  // touching (0-0.08, floor dropped to 0 entirely — the two-tier SAT
+  // clearance below, TERRACE_CLEARANCE, is what actually keeps immediate
+  // chain neighbours from true geometric penetration, not the gap floor
+  // any more). Setback and rotation jitter both tightened hard too — a
+  // terrace has to read as one smooth line following the road curve, and
+  // the old jitter was enough to break corner-to-corner contact between
+  // consecutive touching stamps.
+  const gap = 0.0 + rng.float() * 0.08;
+  const setback = (rng.float() - 0.5) * 0.1;
+  const rotJitter = (rng.float() - 0.5) * 2;
 
   const mid = walker.at(s + house.width / 2);
   const off = roadHalfWidth + house.depth / 2 + rowOffset + setback;
@@ -113,13 +122,15 @@ export function frontageSlotAt(
 }
 
 /**
- * Fixed-pitch slot walk — still used by the packing pass (see
- * stampVillageRows), which always walks at the settlement's own footprint
- * (there is no smaller "hut pitch" fallback footprint any more — gate-tune
- * round 6 made dwelling type a single settlement-wide choice, see
- * CORRECTION 1). Rebuilt on the same PolylineWalker/frontageSlotAt math so
- * both walks agree; draw order and output are unchanged from round 1 — the
- * Task 1 unit tests in tests/village-rows.test.ts assert this directly.
+ * Fixed-pitch slot walk. Gate-tune round 7 (2026-08-14): no longer used by
+ * `stampVillageRows` internally (the packing pass it served is gone —
+ * chain growth's own small-obstruction tolerance now does that backfill
+ * job as part of the main walk) but kept exported as a tested utility: the
+ * Task 1 unit tests in tests/village-rows.test.ts exercise it directly,
+ * and it's still the simplest way to get a fixed-pitch slot sequence along
+ * a polyline. Built on the same PolylineWalker/frontageSlotAt math as
+ * `growChain`, so both walks agree; draw order and output are unchanged
+ * from round 1.
  */
 export function slotsAlongPolyline(
   vertices: ReadonlyArray<Point>,
@@ -192,14 +203,50 @@ function separated(a: Polygon, b: Polygon, margin: number): boolean {
  * Required gap (units) between any two stamped house rects — see
  * `separated`. Gate-tune round 6 (2026-08-14): tightened from 0.15 to
  * match the round-6 gap floor exactly (owner reference image called for
- * near-touching terraces).
+ * near-touching terraces). Gate-tune round 7 (2026-08-14): this is now the
+ * clearance for every pair EXCEPT a candidate against the immediately
+ * preceding stamp of its own chain — see `TERRACE_CLEARANCE` below for
+ * that pair specifically.
  */
 const OVERLAP_CLEARANCE = 0.1;
 
-/** True when `rect` clears every rect already stamped this generation run. */
-export function overlapsStamped(rect: Polygon, stamped: Iterable<Polygon>): boolean {
+/**
+ * Gate-tune round 7 (2026-08-14) — CONTINUOUS TERRACES: houses touch
+ * shoulder-to-shoulder within a chain, so the SAT check must not reject
+ * two chain neighbours placed at their intended near-zero gap (0-0.08,
+ * see `frontageSlotAt`) or at the tiny incidental overlap perpendicular
+ * jitter (±1° rotation, ±0.05 setback) can introduce at their touching
+ * edge. Unlike `OVERLAP_CLEARANCE` (a REQUIRED minimum clearance —
+ * `separated` only returns true, i.e. "far enough apart", when the gap
+ * exceeds the margin), `TERRACE_CLEARANCE` is used as a PENETRATION
+ * TOLERANCE instead, by passing it to `separated` as a negative margin:
+ * `separated` then returns true (accepted) whenever the two rects
+ * penetrate by LESS than this amount, and only rejects genuine, larger
+ * overlap. This is the deliberate opposite convention from
+ * `OVERLAP_CLEARANCE`, chosen because the two constants serve opposite
+ * purposes now: `OVERLAP_CLEARANCE` enforces a visible gap between
+ * stamps that were never meant to touch; `TERRACE_CLEARANCE` is a small
+ * forgiveness margin for stamps that WERE meant to touch, so floating-point
+ * and jitter noise at zero gap doesn't spuriously reject an intended
+ * chain-continuation candidate.
+ */
+const TERRACE_CLEARANCE = 0.02;
+
+/**
+ * True when `rect` clears every rect already stamped this generation run.
+ * `chainPredecessor`, when given, identifies which ALREADY-STAMPED rect
+ * (by reference — see `growChain`) is the candidate's immediately
+ * preceding chain neighbour; that ONE pair is checked with
+ * `TERRACE_CLEARANCE` (a penetration tolerance), every other pair still
+ * uses `OVERLAP_CLEARANCE` (a required clearance) — see both constants'
+ * doc comments for why the two use opposite margin conventions.
+ */
+export function overlapsStamped(
+  rect: Polygon, stamped: Iterable<Polygon>, chainPredecessor: Polygon | null = null,
+): boolean {
   for (const other of stamped) {
-    if (!separated(rect, other, OVERLAP_CLEARANCE)) return true;
+    const margin = other === chainPredecessor ? -TERRACE_CLEARANCE : OVERLAP_CLEARANCE;
+    if (!separated(rect, other, margin)) return true;
   }
   return false;
 }
@@ -248,16 +295,22 @@ function isOpenCountryside(patch: Patch): boolean {
 }
 
 /**
- * Gate-tune round 5 (2026-08-14): ring-expansion stamping. `ringRadius`,
- * when given, bounds EVERY probe — built-patch or ribbon-countryside
- * alike — to within that distance of the settlement centre, so an inner
- * ring genuinely restricts the whole walk to a compact core rather than
- * just tightening the ribbon rule. Omitted (undefined) for every
- * pre-round-5 caller, including every earlier-round unit test that calls
- * `acceptSlot` with 0-2 args — behaviour there is completely unchanged.
+ * Gate-tune round 5 (2026-08-14): introduced a settlement-centre distance
+ * bound, `reachBound` (named `ringRadius` through round 6, when it was
+ * re-supplied once per expanding ring). Gate-tune round 7 (2026-08-14)
+ * removed the ring-expansion machinery entirely — chain growth walks each
+ * road from the end nearest the centre outward and terminates on its own
+ * (long obstruction or reach bound; see `growChain` in
+ * `stampVillageRows`), so a village no longer needs multiple successively
+ * wider passes to read as centre-first. `reachBound` itself stays as each
+ * chain's hard stop: when given, it bounds EVERY probe — built-patch or
+ * ribbon-countryside alike — to within that distance of the settlement
+ * centre. Omitted (undefined) for every caller that predates round 5,
+ * including every such unit test that calls `acceptSlot` with 0-2 args —
+ * behaviour there is completely unchanged.
  */
 export function acceptSlot(
-  model: Model, slot: FrontageSlot, ribbon?: RibbonContext, ringRadius?: number,
+  model: Model, slot: FrontageSlot, ribbon?: RibbonContext, reachBound?: number,
 ): Patch | null {
   const rect = slotRect(slot);
   const probes = [...rect.vertices, slot.center];
@@ -266,9 +319,9 @@ export function acceptSlot(
   for (const probe of probes) {
     if (model.isWaterAt(probe)) return null;
 
-    if (ringRadius !== undefined) {
+    if (reachBound !== undefined) {
       const dx = probe.x - model.center.x, dy = probe.y - model.center.y;
-      if (dx * dx + dy * dy > ringRadius * ringRadius) return null;
+      if (dx * dx + dy * dy > reachBound * reachBound) return null;
     }
 
     const patch = model.patches.find(p =>
@@ -290,14 +343,12 @@ export function acceptSlot(
       // within the settlement's built radius * 1.3 — see RibbonContext.
       // The centre probe's patch may end up here; callers that materialise
       // a stamp must attribute it to a real ward (see resolveWardPatch).
-      // Round 5: when a ring radius is supplied, it's ALREADY the tighter
-      // (or equal, at the final ring) bound checked above — the ribbon
-      // rule's own radius bound becomes that same ring radius rather than
-      // the fixed `maxBuiltRadius * RIBBON_FACTOR`, exactly per the brief
-      // ("the ribbon countryside rule keeps its own existing conditions
-      // but its radius bound becomes the CURRENT ring's").
+      // When a reach bound is supplied, it's ALREADY the tighter (or
+      // equal) bound checked above — the ribbon rule's own radius bound
+      // becomes that same reach bound rather than the fixed
+      // `maxBuiltRadius * RIBBON_FACTOR`.
       if (!ribbon) return null;
-      if (ringRadius === undefined) {
+      if (reachBound === undefined) {
         const dx = probe.x - model.center.x, dy = probe.y - model.center.y;
         const limit = ribbon.maxBuiltRadius * RIBBON_FACTOR;
         if (dx * dx + dy * dy > limit * limit) return null;
@@ -430,21 +481,28 @@ function resolveWardPatch(patch: Patch, builtPatches: readonly Patch[]): Patch {
  * (ward geometry + glyph-backed marker + PlacedSymbol + claimed site) on
  * success. No rng draws here — id is already chosen. `patch` must already
  * be ward-resolved (see resolveWardPatch) — its `.ward` is never null here.
+ *
+ * Gate-tune round 7 (2026-08-14): returns the stamped `Polygon` (not a
+ * boolean) on success, `null` on failure — `growChain` needs the actual
+ * rect reference back so it can pass it as the NEXT candidate's
+ * `chainPredecessor` (the two-tier SAT clearance in `overlapsStamped`
+ * identifies that pair by object identity). `chainPredecessor` is
+ * threaded straight through to `overlapsStamped`.
  */
 function materialiseSlot(
-  model: Model, patch: Patch, slot: FrontageSlot, id: string, ribbon?: RibbonContext, ringRadius?: number,
-  row?: number,
-): boolean {
+  model: Model, patch: Patch, slot: FrontageSlot, id: string, ribbon: RibbonContext | undefined,
+  reachBound: number | undefined, row: number, chainIndex: number, chainPredecessor: Polygon | null,
+): Polygon | null {
   const fp = houseFootprint(id);
   const resized: FrontageSlot = { ...slot, width: fp.width, depth: fp.depth };
-  if (!acceptSlot(model, resized, ribbon, ringRadius)) return false;
+  if (!acceptSlot(model, resized, ribbon, reachBound)) return null;
   const rect = slotRect(resized);
   // Gate-tune round 2 (2026-08-14): exact rect-vs-rect overlap rejection —
   // acceptSlot's claimedSites circle check (radius-based) and vertex-probe
   // sampling both let corner/edge overlaps through; this is the single
-  // choke point every acceptance path (primary rows, fallback-chain
-  // retries, packing pass) routes through before a rect is ever pushed.
-  if (overlapsStamped(rect, model.glyphBackedBuildings)) return false;
+  // choke point every acceptance path (primary chains, fallback-chain
+  // retries) routes through before a rect is ever pushed.
+  if (overlapsStamped(rect, model.glyphBackedBuildings, chainPredecessor)) return null;
   patch.ward!.geometry.push(rect);
   model.glyphBackedBuildings.add(rect);
   const centre = rect.centroid;
@@ -457,12 +515,13 @@ function materialiseSlot(
     zBand: 'structure',
     wardType: patch.ward!.type,
     row,
+    chainIndex,
   });
   // Gate-tune round 1 (2026-08-14): shrunk from 0.55 so stamps block less of
   // their neighbourhood's slots — overlap safety is still covered by
   // acceptSlot's rect re-check on the resized footprint.
   model.claimedSites.push({ at: centre, radius: scale * 0.45 });
-  return true;
+  return rect;
 }
 
 /**
@@ -481,14 +540,22 @@ function materialiseSlot(
  * family as `id` (id is either `settlementGlyph` itself or the
  * same-family accent), so there is no cross-family step left to remove —
  * the chain is `id → settlementGlyph → drop`.
+ *
+ * Gate-tune round 7 (2026-08-14): returns the stamped rect (or `null`) —
+ * same reasoning as `materialiseSlot`.
  */
 export function materialiseWithFallback(
   model: Model, patch: Patch, slot: FrontageSlot, id: string, settlementGlyph: string,
-  ribbon?: RibbonContext, ringRadius?: number, row?: number,
-): boolean {
-  if (materialiseSlot(model, patch, slot, id, ribbon, ringRadius, row)) return true;
-  if (id !== settlementGlyph && materialiseSlot(model, patch, slot, settlementGlyph, ribbon, ringRadius, row)) return true;
-  return false;
+  ribbon: RibbonContext | undefined, reachBound: number | undefined, row: number, chainIndex: number,
+  chainPredecessor: Polygon | null,
+): Polygon | null {
+  const rect = materialiseSlot(model, patch, slot, id, ribbon, reachBound, row, chainIndex, chainPredecessor);
+  if (rect) return rect;
+  if (id !== settlementGlyph) {
+    const fallbackRect = materialiseSlot(model, patch, slot, settlementGlyph, ribbon, reachBound, row, chainIndex, chainPredecessor);
+    if (fallbackRect) return fallbackRect;
+  }
+  return null;
 }
 
 /** Stamp dwelling rows for a !rowHousing settlement. No-op otherwise. */
@@ -573,208 +640,163 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
     ...model.streets.map(s => ({ v: s.vertices, hw: REGULAR_STREET / 2 })),
     ...model.roads.map(r => ({ v: r.vertices, hw: MAIN_STREET / 2 })),
   ];
-  const packingRoads: Array<{ v: ReadonlyArray<Point>; hw: number }> = [
-    ...model.arteries.map(a => ({ v: a.vertices, hw: MAIN_STREET / 2 })),
-    ...model.streets.map(s => ({ v: s.vertices, hw: REGULAR_STREET / 2 })),
-  ];
 
   // Gate-tune round 4 (2026-08-14): "still too far apart" — rejected
   // stretches rescan finely instead of being skipped by a full pitch.
   const REJECT_PROBE_STEP = 0.75;
 
-  // Gate-tune round 6 (2026-08-14) — CORRECTION 3: "population lives ON
-  // the roads" — the owner's reference showed dwellings hugging the
-  // frontage, not spread two ranks deep with half the settlement tucked
-  // behind. Three changes to row structure:
+  // Gate-tune round 7 (2026-08-14) — CONTINUOUS TERRACES: owner annotated
+  // our render with arrows pulling scattered houses toward the roads/each
+  // other, and supplied a mockup built from our own glyphs. The contract:
+  // houses touch shoulder-to-shoulder in long unbroken chains hugging the
+  // road edge; a chain is a dense cluster; road stretches without a chain
+  // are completely EMPTY — contrast is the point ("people cluster
+  // together"). This replaces rounds 5-6's ring-expansion + uniform row
+  // walk entirely with CHAIN GROWTH:
   //
-  // (a) row 2 is DELETED — only rows 0 (front line) and 1 (one lane
-  //     behind) exist now; the old third rank is gone entirely.
-  // (b) row 1's perpendicular offset used to be a flat `row * 6.5`
-  //     regardless of what was actually being stamped; it's now
-  //     `settlementFootprint.depth + 1.0` — "one lane behind row 0" sized
-  //     to what this settlement is actually building, not a constant
-  //     tuned for the old 6-wide BASE_HOUSE probe. (The brief's own
-  //     worked example, "≈5.5 for houses", numerically matches a 4.5-deep
-  //     HUT footstamp + 1.0, not the 6-deep house footprint this formula
-  //     actually produces for a house-family settlement (7.0) — the
-  //     FORMULA is implemented exactly as specified; flagging the
-  //     discrepancy here rather than silently picking whichever number
-  //     happens to match the parenthetical.)
-  // (c) ordering: row must be the OUTERMOST loop so ring N's row 0
-  //     completes across every road (both sides) before ring N's row 1
-  //     starts on ANY road — verified below (row is the outer `for`, road
-  //     and side are nested inside it), not "for each road, do row 0 then
-  //     row 1" (which would be road-major and NOT what the brief asks
-  //     for). No structural fix was needed here — the nesting already had
-  //     row outermost since round 3; only re-verified and documented.
+  // For each road (priority order unchanged — arteries, then streets,
+  // then the outward `roads` list), walk from the end NEAREST
+  // model.center outward, stamping contiguously (`growChain` below). A
+  // short run of rejected candidates (< ~1.5 house widths) is a small
+  // obstruction — probe past it (fine REJECT_PROBE_STEP steps, same as
+  // before) and keep the chain going, same as always. A LONG run
+  // (≥ ~1.5 house widths) or the chain's reach bound (CHAIN_REACH_FACTOR
+  // × maxBuiltRadius, replacing round 5-6's ring machinery — see below)
+  // TERMINATES this road's chain outright: the rest of that road is left
+  // empty, and the walk moves to the next road. That's what produces the
+  // mockup's look — full terraces near the centre, bare road further out.
+  //
+  // Rings are GONE. Round 5 introduced ring-expansion specifically because
+  // a uniform walk spread allowance thin across the whole road network
+  // instead of favouring the centre; chain growth is inherently
+  // centre-first (every chain starts at the end nearest model.center and
+  // grows outward until it runs out of room or hits an obstruction), so
+  // the ring machinery is now redundant and has been deleted outright —
+  // `RING_FACTORS`, the ring loop, and the ring-bounded packing pass are
+  // all gone. What's left of round 5-6's radius bound is a single hard
+  // stop per chain: `CHAIN_REACH_FACTOR * maxBuiltRadius`, passed to
+  // `acceptSlot` as `reachBound` exactly like a ring radius used to be,
+  // just never widened across successive passes.
+  const CHAIN_REACH_FACTOR = 1.6;
+  const chainReachBound = maxBuiltRadius * CHAIN_REACH_FACTOR;
+
+  // "Small obstruction" vs. "long obstruction" — ~1.5 house widths,
+  // measured in the settlement's own footprint (so a hut settlement's
+  // obstruction tolerance is proportionally smaller than a house
+  // settlement's, matching what "1.5 house widths" actually means for
+  // THIS settlement's houses).
+  const LONG_OBSTRUCTION = 1.5 * settlementFootprint.width;
+
+  // CORRECTION 3b: row 1 sits one lane behind row 0, sized to the
+  // settlement's own footprint depth (unchanged formula/reasoning from
+  // round 6 — see the round-6 report for the worked-example discrepancy
+  // this was already flagged against).
   const ROW1_OFFSET = settlementFootprint.depth + 1.0;
   const ROW1_PHASE = 3; // arclength stagger so row 1 doesn't align directly behind row 0 — unchanged concept from round 1
 
+  let chainCounter = 0; // one per growChain call — see PlacedSymbol.chainIndex
+
   /**
-   * Primary row walk for ONE row (0 or 1 — see CORRECTION 3a, row 2 is
-   * deleted), all roads, both sides, bounded to `ringRadius` of the
-   * settlement centre. Pulled into a function so the ring/row loop below
-   * can run it once per (row, ring) combination.
+   * Grow one contiguous chain along `road`'s frontage (`side`, `row`),
+   * starting at the end of `road.v` nearest `model.center` and walking
+   * outward. Returns the number of stamps this chain successfully
+   * accepted (used to pick which chains earn a second row — see below).
    *
-   * Gate-tune round 6 (2026-08-14) — CORRECTION 1: the settlement's glyph
-   * is chosen ONCE, before this function ever runs (see
-   * `settlementGlyph`/`settlementFootprint` above), so the walk no longer
-   * needs a "probe with a default footprint until the run decides"
-   * two-phase dance — every candidate is generated directly at the
-   * settlement's own footprint. Run machinery (`runGlyph`/`runRemaining`)
-   * is deleted outright: with exactly one dwelling type per settlement, a
-   * "run" of same-glyph stamps is the whole settlement, so tracking run
-   * boundaries was meaningless bookkeeping. `pickStampGlyph` (exactly one
-   * draw, every accepted stamp — see its own doc comment) replaces both
-   * the old run-start draw pair and the per-slot ward-type variety pick.
-   *
-   * Took `row` as a parameter (rather than looping 0..1 internally) so the
-   * ring/row loop below can run EVERY ring's row 0 before ANY ring's row 1
-   * — see that loop's own comment for why.
+   * Draw discipline (stated plainly, round 7's final contract):
+   * - Exactly 3 draws per GENERATED candidate (`frontageSlotAt`: gap,
+   *   setback, rotation) — unchanged mechanism since round 1, whether the
+   *   candidate is ultimately accepted, rejected, or never even reaches
+   *   acceptance because it's already past the reach bound.
+   * - Exactly 1 draw per ACCEPTED-then-materialised stamp
+   *   (`pickStampGlyph`) — unchanged since round 6.
+   * - Chain-termination decisions (reach bound, long obstruction, ran off
+   *   the physical end of the road) are pure geometry/bookkeeping —
+   *   ZERO draws.
+   * - `materialiseWithFallback`/`materialiseSlot`: 0 draws (id already
+   *   chosen).
    */
-  function runPrimaryWalkRow(row: 0 | 1, ringRadius: number): void {
+  function growChain(road: { v: ReadonlyArray<Point>; hw: number }, side: 1 | -1, row: 0 | 1): number {
+    const first = road.v[0], last = road.v[road.v.length - 1];
+    const nearFirstEnd = Point.distance(first, model.center) <= Point.distance(last, model.center);
+    const orderedVertices = nearFirstEnd ? road.v : [...road.v].reverse();
+    const walker = buildPolylineWalker(orderedVertices);
+
     const rowOffset = row === 0 ? 0 : ROW1_OFFSET;
-    const phase = row === 0 ? 0 : ROW1_PHASE;
-    for (const road of roads) {
+    let s = row === 0 ? 0 : ROW1_PHASE;
+
+    const thisChainIndex = chainCounter++;
+    let chainPredecessor: Polygon | null = null;
+    let rejectRunStart: number | null = null;
+    let acceptedCount = 0;
+
+    while (allowance > 0) {
+      const generated = frontageSlotAt(walker, s, side, road.hw, settlementFootprint, model.rng, rowOffset);
+      if (!generated) break; // ran off the physical end of the road — draw-free
+
+      const { slot, nextS } = generated;
+
+      // Reach bound: draw-free hard stop. The 3 frontageSlotAt draws for
+      // THIS candidate already happened (see the draw-discipline note
+      // above); nothing further is drawn or attempted once we're past it.
+      if (Point.distance(slot.center, model.center) > chainReachBound) break;
+
+      const patch = acceptSlot(model, slot, ribbon, chainReachBound);
+      let placedRect: Polygon | null = null;
+      if (patch) {
+        const wardPatch = resolveWardPatch(patch, builtPatches);
+        const id = pickStampGlyph(wardPatch.ward!.type, family, settlementGlyph, model.rng);
+        placedRect = materialiseWithFallback(
+          model, wardPatch, slot, id, settlementGlyph, ribbon, chainReachBound, row, thisChainIndex, chainPredecessor,
+        );
+      }
+
+      if (placedRect) {
+        allowance--;
+        acceptedCount++;
+        chainPredecessor = placedRect; // next candidate touches THIS stamp
+        rejectRunStart = null; // obstruction streak resets — chain is unbroken again
+        s = nextS;
+        continue;
+      }
+
+      // Rejected (no patch) or materialise failed — a candidate right
+      // after a real stamp is no longer touching anything, so clearance
+      // reverts to the ordinary OVERLAP_CLEARANCE for whatever comes next.
+      chainPredecessor = null;
+      if (rejectRunStart === null) rejectRunStart = s;
+      s += REJECT_PROBE_STEP;
+      if (s - rejectRunStart >= LONG_OBSTRUCTION) break; // long obstruction: terminate this road's chain
+    }
+    return acceptedCount;
+  }
+
+  // Front chains (row 0): every road, priority order as before, both
+  // sides, nearest-to-centre-outward. This is the pass that produces the
+  // mockup's core look — no ring loop any more, chain growth is
+  // inherently centre-first.
+  const frontChains: Array<{ road: { v: ReadonlyArray<Point>; hw: number }; side: 1 | -1; acceptedCount: number }> = [];
+  for (const road of roads) {
+    if (allowance <= 0) break;
+    for (const side of [1, -1] as const) {
       if (allowance <= 0) break;
-      for (const side of [1, -1] as const) {
-        if (allowance <= 0) break;
-        const walker = buildPolylineWalker(road.v);
-        let s = phase;
-        while (allowance > 0) {
-          const generated = frontageSlotAt(walker, s, side, road.hw, settlementFootprint, model.rng, rowOffset);
-          if (!generated) break; // no more room on this line
-
-          const { slot, nextS } = generated;
-          const patch = acceptSlot(model, slot, ribbon, ringRadius);
-          if (!patch) { s += REJECT_PROBE_STEP; continue; }
-
-          const wardPatch = resolveWardPatch(patch, builtPatches);
-          const id = pickStampGlyph(wardPatch.ward!.type, family, settlementGlyph, model.rng);
-          if (materialiseWithFallback(model, wardPatch, slot, id, settlementGlyph, ribbon, ringRadius, row)) allowance--;
-          s = nextS;
-        }
-      }
+      const acceptedCount = growChain(road, side, 0);
+      frontChains.push({ road, side, acceptedCount });
     }
   }
 
-  // Packing pass: an independent extra sweep (fresh rng draws) over the
-  // SAME settlement footprint and row-0 offset only (CORRECTION 3d — the
-  // old packing pass walked "rows 0-2" at a separate smaller HUT_HOUSE
-  // pitch specifically to backfill gaps a larger BASE_HOUSE-pitched run
-  // left behind; that whole rationale is gone now that the primary walk
-  // uses the settlement's own footprint throughout, so there's no pitch
-  // mismatch to backfill and no reason to ever plant a stamp behind row 0
-  // from this pass). What's left is simpler and still useful: a second
-  // (and third — PACKING_SWEEPS) full pass at row-0's frontage, with its
-  // own fresh rng draw stream, picks up any slot the primary walk's
-  // particular random gap/setback sequence happened to miss.
-  //
-  // Gate-tune round 2 (2026-08-14) established PACKING_SWEEPS=2 as the
-  // point of diminishing returns for yield recovery under the SAT overlap
-  // check; unchanged here.
-  const PACKING_SWEEPS = 2;
-
-  /** Packing pass (see comment above), bounded to `ringRadius`. */
-  function runPackingPass(ringRadius: number): void {
-    for (let sweep = 0; sweep < PACKING_SWEEPS && allowance > 0; sweep++) {
-      for (const road of packingRoads) {
-        if (allowance <= 0) break;
-        for (const side of [1, -1] as const) {
-          if (allowance <= 0) break;
-          const slots = slotsAlongPolyline(road.v, side, road.hw, settlementFootprint, model.rng, 0, 0);
-
-          for (const slot of slots) {
-            if (allowance <= 0) break;
-            const patch = acceptSlot(model, slot, ribbon, ringRadius);
-            if (!patch) continue;
-            const wardPatch = resolveWardPatch(patch, builtPatches);
-            const id = pickStampGlyph(wardPatch.ward!.type, family, settlementGlyph, model.rng);
-            if (materialiseWithFallback(model, wardPatch, slot, id, settlementGlyph, ribbon, ringRadius, 0)) allowance--;
-          }
-        }
-      }
-    }
-  }
-
-  // Gate-tune round 5 (2026-08-14): "still too far apart" (macro) — the
-  // owner's zoom-in feedback confirmed within-run pitch is right (round 4
-  // constants kept as-is), but allowance was being spread uniformly across
-  // the ENTIRE road network in one pass, so a modest pop-300 budget
-  // (~75 houses) thinned out everywhere instead of forming a dense core.
-  // Ring-expansion stamping: run the full primary-walk + packing-pass
-  // machinery once per ring, each ring bounded to `maxBuiltRadius *
-  // ringFactor` of the settlement centre (see acceptSlot's `ringRadius`
-  // param). `allowance` is a single shared counter across all rings (not
-  // reset per ring), so it exhausts on the innermost rings first — a small
-  // budget produces a compact core, a larger one grows outward through
-  // ring 2, 3, 4 naturally. Re-walking the same road stretches in an outer
-  // ring after an inner ring already stamped them is expected and
-  // harmless: the SAT overlap check (round 2) and claimedSites rejects
-  // every already-filled slot, so an outer ring can only fill NEW ground
-  // the inner ring's tighter radius excluded.
-  //
-  // Gate-tune round 6 (2026-08-14): row 2's deletion (CORRECTION 3a)
-  // removes real capacity from the walk (a third of the old frontage
-  // rank), which cost both census yield AND the row-0-share invariant
-  // (CORRECTION 3e, ≥70% of houses on the front line for pop 150/300) at
-  // the standard RING_FACTORS — this is exactly the ribbon-reach-not-depth
-  // trade the brief asks for ("extend ribbon reach along roads... rather
-  // than adding depth... ring bounds may widen for the LAST ring only if
-  // needed to keep the 60% census floor"). Measured two scenarios (they
-  // use different generation params — `plaza: false` for the row-0-share
-  // test fixture in tests/village-rows.test.ts's `mk()`, `plaza: true` for
-  // the census-floor scenario in tests/density-target.test.ts's
-  // `inland()` — so both had to be checked, not just one) at several
-  // widths before settling on 2.5: 1.3 (unwidened) dropped the census
-  // floor as low as 50.0%; 1.7 recovered a 73.9% census floor but one
-  // pop-300/plaza:false seed still sat at 66.2% row-0 share (under the
-  // 70% target); 2.5 cleared both comfortably.
-  //
-  // Gate-tune round 6b (2026-08-14): the owner's zoomed render caught what
-  // 2.5's yield/row-0 wins were actually costing — the pop-300 southern
-  // road bead-strung dwellings out to the map edge, dissolving the
-  // village along the road ("too spread out" reborn at macro scale; a
-  // ribbon-sprawl regression the per-seed census/row-0 measurements above
-  // don't surface at all, since they only count WHETHER a house landed,
-  // not HOW FAR from the settlement it landed). Capped back down to 1.6
-  // per explicit instruction: "yield will drop from 100%... anything
-  // ≥ ~80% is acceptable (60% floor must hold regardless)... if a seed
-  // lands below 80%, report it plainly — do NOT re-widen; the owner
-  // prefers a compact village over a complete census." See the round-6b
-  // report section for the measured per-seed yield at 1.6 — some seeds
-  // land under 80%, reported as instructed rather than chased.
-  const RING4_FACTOR = 1.6;
-  const RING_FACTORS = [0.5, 0.75, 1.0, RING4_FACTOR] as const;
-
-  // Gate-tune round 6 (2026-08-14) — CORRECTION 3(c)/(e): "population
-  // lives ON the roads" — measured against a real village, per-ring
-  // row-major ordering (ring 1: row 0 then row 1; ring 2: row 0 then row
-  // 1; ...) satisfies the brief's literal per-ring ordering requirement
-  // but let 2 of 8 sampled (population, seed) pairs fall under the
-  // brief's own 70% row-0-share target (61.1% and 67.1%) — an inner
-  // ring's row 1 was consuming allowance a later ring's row 0 could have
-  // used instead. Restructured into three GLOBAL phases instead: every
-  // ring's row 0 first, then every ring's packing pass (row-0 offset
-  // only — see runPackingPass), then every ring's row 1 last. This is a
-  // strictly stronger version of "within each ring, row 0 completes
-  // before row 1" (the brief's literal requirement), prioritising
-  // frontage occupancy across the WHOLE settlement over ring compactness
-  // for row 1 specifically — exactly the trade-off CORRECTION 3 asks for
-  // ("one or two among the fields is fine, half the population off the
-  // road does not ring true"). Re-measured after this change: row-0 share
-  // across every sampled seed/population is 76-93%, comfortably clearing
-  // 70% everywhere (see the round-6 report for the full table).
-  for (const ringFactor of RING_FACTORS) {
+  // CORRECTION 4 — double-file at the core: ONLY behind chains long
+  // enough to read as the settlement's dense core (≥ LONGEST_CHAIN_MIN
+  // stamps), longest first, so the second rank backs the fullest terraces
+  // first. Then stop outright — leftover allowance is forfeit (the owner
+  // chose compactness over a complete census; see the round-7 report for
+  // the measured floor consequence, honestly reported rather than
+  // chased). No packing pass, no further sweeps of any kind after this.
+  const LONGEST_CHAIN_MIN = 8;
+  const doubleFileOrder = frontChains
+    .filter(c => c.acceptedCount >= LONGEST_CHAIN_MIN)
+    .sort((a, b) => b.acceptedCount - a.acceptedCount);
+  for (const c of doubleFileOrder) {
     if (allowance <= 0) break;
-    runPrimaryWalkRow(0, maxBuiltRadius * ringFactor);
-  }
-  for (const ringFactor of RING_FACTORS) {
-    if (allowance <= 0) break;
-    runPackingPass(maxBuiltRadius * ringFactor);
-  }
-  for (const ringFactor of RING_FACTORS) {
-    if (allowance <= 0) break;
-    runPrimaryWalkRow(1, maxBuiltRadius * ringFactor);
+    growChain(c.road, c.side, 1);
   }
 }

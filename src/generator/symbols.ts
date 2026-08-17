@@ -28,6 +28,20 @@ export interface PlacedSymbol {
    * the scene layer (SymbolInstance) never carries it.
    */
   row?: number;
+  /**
+   * Gate-tune round 7 (2026-08-14): which chain-growth call this
+   * village-row dwelling stamp belongs to — a simple per-`stampVillageRows`
+   * counter incremented once per `growChain` invocation (one per
+   * road+side+row walk), shared by every stamp that walk successfully
+   * places. Consecutive same-`chainIndex` entries in `model.symbols` are
+   * literally consecutive stamps along one continuous terrace (chains are
+   * stamped in push order, so grouping by this field needs no geometric
+   * reconstruction). Exists so the chain-contiguity and chain-length
+   * invariants (CORRECTION 3, "continuous terraces") can be measured
+   * directly. Optional and model-level only, same as `row`/`wardType` —
+   * the scene layer (SymbolInstance) never carries it.
+   */
+  chainIndex?: number;
 }
 
 export interface ClaimedSite { at: Point; radius: number }
