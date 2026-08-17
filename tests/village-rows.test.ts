@@ -348,9 +348,14 @@ describe('fallback chain', () => {
     // `sm-hut-straw`) — irrelevant to the test, which only needs a Farm
     // site where the resized longhouse naturally fails and both the plain
     // house and hut fit.
+    // Gate-tune round 5 (2026-08-14): coordinates re-pinned again —
+    // ring-expansion stamping (see stampVillageRows) re-walks every road at
+    // successively larger ring radii, so allowance is now consumed in a
+    // different order and every slot shifts again. Fixture stays a real
+    // `sm-hut-mud` stamp.
     const sym = m.symbols.find(s =>
       s.wardType === WardType.Farm && s.id === 'sm-hut-mud' &&
-      Math.abs(s.at.x - -43.9050055036387) < 0.1 && Math.abs(s.at.y - 44.62978809174039) < 0.1);
+      Math.abs(s.at.x - -30.238411025180184) < 0.1 && Math.abs(s.at.y - -0.6541667084400731) < 0.1);
     expect(sym).toBeDefined();
     const rect = [...m.glyphBackedBuildings].find(r =>
       Math.abs(r.centroid.x - sym!.at.x) < 1e-6 && Math.abs(r.centroid.y - sym!.at.y) < 1e-6);

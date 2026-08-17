@@ -238,13 +238,30 @@ function isOpenCountryside(patch: Patch): boolean {
   return patch.ward === null || patch.ward.type === WardType.Empty;
 }
 
-export function acceptSlot(model: Model, slot: FrontageSlot, ribbon?: RibbonContext): Patch | null {
+/**
+ * Gate-tune round 5 (2026-08-14): ring-expansion stamping. `ringRadius`,
+ * when given, bounds EVERY probe — built-patch or ribbon-countryside
+ * alike — to within that distance of the settlement centre, so an inner
+ * ring genuinely restricts the whole walk to a compact core rather than
+ * just tightening the ribbon rule. Omitted (undefined) for every
+ * pre-round-5 caller, including every earlier-round unit test that calls
+ * `acceptSlot` with 0-2 args — behaviour there is completely unchanged.
+ */
+export function acceptSlot(
+  model: Model, slot: FrontageSlot, ribbon?: RibbonContext, ringRadius?: number,
+): Patch | null {
   const rect = slotRect(slot);
   const probes = [...rect.vertices, slot.center];
 
   let centerPatch: Patch | null = null;
   for (const probe of probes) {
     if (model.isWaterAt(probe)) return null;
+
+    if (ringRadius !== undefined) {
+      const dx = probe.x - model.center.x, dy = probe.y - model.center.y;
+      if (dx * dx + dy * dy > ringRadius * ringRadius) return null;
+    }
+
     const patch = model.patches.find(p =>
       !model.waterbody.includes(p) && pointInPolygon(probe, p.shape.vertices));
     if (!patch) return null; // outside the mesh entirely
@@ -264,10 +281,18 @@ export function acceptSlot(model: Model, slot: FrontageSlot, ribbon?: RibbonCont
       // within the settlement's built radius * 1.3 — see RibbonContext.
       // The centre probe's patch may end up here; callers that materialise
       // a stamp must attribute it to a real ward (see resolveWardPatch).
+      // Round 5: when a ring radius is supplied, it's ALREADY the tighter
+      // (or equal, at the final ring) bound checked above — the ribbon
+      // rule's own radius bound becomes that same ring radius rather than
+      // the fixed `maxBuiltRadius * RIBBON_FACTOR`, exactly per the brief
+      // ("the ribbon countryside rule keeps its own existing conditions
+      // but its radius bound becomes the CURRENT ring's").
       if (!ribbon) return null;
-      const dx = probe.x - model.center.x, dy = probe.y - model.center.y;
-      const limit = ribbon.maxBuiltRadius * RIBBON_FACTOR;
-      if (dx * dx + dy * dy > limit * limit) return null;
+      if (ringRadius === undefined) {
+        const dx = probe.x - model.center.x, dy = probe.y - model.center.y;
+        const limit = ribbon.maxBuiltRadius * RIBBON_FACTOR;
+        if (dx * dx + dy * dy > limit * limit) return null;
+      }
     }
     if (probe === slot.center) centerPatch = patch;
   }
@@ -349,11 +374,11 @@ function resolveWardPatch(patch: Patch, builtPatches: readonly Patch[]): Patch {
  * be ward-resolved (see resolveWardPatch) — its `.ward` is never null here.
  */
 function materialiseSlot(
-  model: Model, patch: Patch, slot: FrontageSlot, id: string, ribbon?: RibbonContext,
+  model: Model, patch: Patch, slot: FrontageSlot, id: string, ribbon?: RibbonContext, ringRadius?: number,
 ): boolean {
   const fp = houseFootprint(id);
   const resized: FrontageSlot = { ...slot, width: fp.width, depth: fp.depth };
-  if (!acceptSlot(model, resized, ribbon)) return false;
+  if (!acceptSlot(model, resized, ribbon, ringRadius)) return false;
   const rect = slotRect(resized);
   // Gate-tune round 2 (2026-08-14): exact rect-vs-rect overlap rejection —
   // acceptSlot's claimedSites circle check (radius-based) and vertex-probe
@@ -392,12 +417,12 @@ function materialiseSlot(
  */
 export function materialiseWithFallback(
   model: Model, patch: Patch, slot: FrontageSlot, id: string, bias: RoofBias,
-  ribbon?: RibbonContext,
+  ribbon?: RibbonContext, ringRadius?: number,
 ): boolean {
-  if (materialiseSlot(model, patch, slot, id, ribbon)) return true;
+  if (materialiseSlot(model, patch, slot, id, ribbon, ringRadius)) return true;
   const plainHouse = bias === 'thatch' ? 'sm-house' : 'sm-house-tiled';
-  if (materialiseSlot(model, patch, slot, plainHouse, ribbon)) return true;
-  if (materialiseSlot(model, patch, slot, 'sm-hut-mud', ribbon)) return true;
+  if (materialiseSlot(model, patch, slot, plainHouse, ribbon, ringRadius)) return true;
+  if (materialiseSlot(model, patch, slot, 'sm-hut-mud', ribbon, ringRadius)) return true;
   return false;
 }
 
@@ -409,10 +434,10 @@ export function materialiseWithFallback(
  */
 export function pickAndMaterialise(
   model: Model, patch: Patch, slot: FrontageSlot, bias: RoofBias, isRowEnd: boolean,
-  ribbon?: RibbonContext,
+  ribbon?: RibbonContext, ringRadius?: number,
 ): boolean {
   const id = pickHouseGlyph(patch.ward!.type, bias, isRowEnd, model.rng);
-  return materialiseWithFallback(model, patch, slot, id, bias, ribbon);
+  return materialiseWithFallback(model, patch, slot, id, bias, ribbon, ringRadius);
 }
 
 /** Stamp dwelling rows for a !rowHousing settlement. No-op otherwise. */
@@ -484,6 +509,10 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
     ...model.streets.map(s => ({ v: s.vertices, hw: REGULAR_STREET / 2 })),
     ...model.roads.map(r => ({ v: r.vertices, hw: MAIN_STREET / 2 })),
   ];
+  const packingRoads: Array<{ v: ReadonlyArray<Point>; hw: number }> = [
+    ...model.arteries.map(a => ({ v: a.vertices, hw: MAIN_STREET / 2 })),
+    ...model.streets.map(s => ({ v: s.vertices, hw: REGULAR_STREET / 2 })),
+  ];
 
   // Gate-tune round 3 (2026-08-14): "a mix of all the hut types and the
   // spacing is terrible" — two coordinated fixes to the primary row walk.
@@ -502,9 +531,9 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
   // probe footprint defaults to BASE_HOUSE, matching the old uniform pitch
   // for that one probe; every slot after the run starts uses the run's own
   // footprint. On acceptance the cursor advances by the probe's width+gap
-  // (nextS); on rejection it advances by a fixed fine probe step (1.5
-  // units, no rng draws) so a rejected stretch is rescanned finely instead
-  // of being skipped by a full pitch.
+  // (nextS); on rejection it advances by a fixed fine probe step (no rng
+  // draws) so a rejected stretch is rescanned finely instead of being
+  // skipped by a full pitch.
   //
   // FIX 2 (mixing): rounds 1's run coherence restarted the run whenever the
   // slot's ATTRIBUTED ward type changed — but ribbon stretches (open
@@ -521,33 +550,41 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
   // Gate-tune round 4 (2026-08-14): "still too far apart" — halved from
   // 1.5 so rejected stretches rescan twice as finely, halving void sizes.
   const REJECT_PROBE_STEP = 0.75;
-  for (let row = 0; row < 3 && allowance > 0; row++) {
-    for (const road of roads) {
-      if (allowance <= 0) break;
-      for (const side of [1, -1] as const) {
+
+  /**
+   * Primary row walk (rows 0-2, all roads, both sides) bounded to
+   * `ringRadius` of the settlement centre. Pulled into a function so the
+   * round-5 ring loop below can run it once per ring.
+   */
+  function runPrimaryWalk(ringRadius: number): void {
+    for (let row = 0; row < 3 && allowance > 0; row++) {
+      for (const road of roads) {
         if (allowance <= 0) break;
-        const walker = buildPolylineWalker(road.v);
-        let s = row * 3; // phase, unchanged from round 1
-        let runGlyph: string | null = null;
-        let runRemaining = 0;
-        while (allowance > 0) {
-          const probeHouse = runGlyph !== null ? houseFootprint(runGlyph) : BASE_HOUSE;
-          const generated = frontageSlotAt(walker, s, side, road.hw, probeHouse, model.rng, row * 6.5);
-          if (!generated) break; // no more room on this line
-          const { slot, nextS } = generated;
+        for (const side of [1, -1] as const) {
+          if (allowance <= 0) break;
+          const walker = buildPolylineWalker(road.v);
+          let s = row * 3; // phase, unchanged from round 1
+          let runGlyph: string | null = null;
+          let runRemaining = 0;
+          while (allowance > 0) {
+            const probeHouse = runGlyph !== null ? houseFootprint(runGlyph) : BASE_HOUSE;
+            const generated = frontageSlotAt(walker, s, side, road.hw, probeHouse, model.rng, row * 6.5);
+            if (!generated) break; // no more room on this line
+            const { slot, nextS } = generated;
 
-          const patch = acceptSlot(model, slot, ribbon);
-          if (!patch) { s += REJECT_PROBE_STEP; continue; }
+            const patch = acceptSlot(model, slot, ribbon, ringRadius);
+            if (!patch) { s += REJECT_PROBE_STEP; continue; }
 
-          const wardPatch = resolveWardPatch(patch, builtPatches);
-          if (runRemaining === 0) {
-            const wardType = wardPatch.ward!.type;
-            runGlyph = pickHouseGlyph(wardType, bias, false, model.rng);
-            runRemaining = 3 + Math.floor(model.rng.float() * 5);
+            const wardPatch = resolveWardPatch(patch, builtPatches);
+            if (runRemaining === 0) {
+              const wardType = wardPatch.ward!.type;
+              runGlyph = pickHouseGlyph(wardType, bias, false, model.rng);
+              runRemaining = 3 + Math.floor(model.rng.float() * 5);
+            }
+            if (materialiseWithFallback(model, wardPatch, slot, runGlyph!, bias, ribbon, ringRadius)) allowance--;
+            runRemaining--;
+            s = nextS;
           }
-          if (materialiseWithFallback(model, wardPatch, slot, runGlyph!, bias, ribbon)) allowance--;
-          runRemaining--;
-          s = nextS;
         }
       }
     }
@@ -584,37 +621,77 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
   // the shared 60% floor (density-target.test.ts) holds with a large
   // margin regardless.
   const PACKING_SWEEPS = 2;
-  for (let sweep = 0; sweep < PACKING_SWEEPS && allowance > 0; sweep++) {
-    const packingRoads: Array<{ v: ReadonlyArray<Point>; hw: number }> = [
-      ...model.arteries.map(a => ({ v: a.vertices, hw: MAIN_STREET / 2 })),
-      ...model.streets.map(s => ({ v: s.vertices, hw: REGULAR_STREET / 2 })),
-    ];
-    for (const road of packingRoads) {
-      if (allowance <= 0) break;
-      for (const side of [1, -1] as const) {
+
+  /** Packing pass (see comment above), bounded to `ringRadius`. */
+  function runPackingPass(ringRadius: number): void {
+    for (let sweep = 0; sweep < PACKING_SWEEPS && allowance > 0; sweep++) {
+      for (const road of packingRoads) {
         if (allowance <= 0) break;
-        const slots = slotsAlongPolyline(road.v, side, road.hw, HUT_HOUSE, model.rng, 0, 0);
-
-        const accepted: Array<{ slot: FrontageSlot; patch: Patch; idx: number }> = [];
-        for (let j = 0; j < slots.length; j++) {
+        for (const side of [1, -1] as const) {
           if (allowance <= 0) break;
-          const patch = acceptSlot(model, slots[j], ribbon);
-          if (!patch) continue;
-          accepted.push({ slot: slots[j], patch, idx: j });
-        }
+          const slots = slotsAlongPolyline(road.v, side, road.hw, HUT_HOUSE, model.rng, 0, 0);
 
-        let stretchHutId: string | null = null;
-        let prevIdx = -2;
-        for (let i = 0; i < accepted.length && allowance > 0; i++) {
-          const { slot, patch, idx } = accepted[i];
-          const wardPatch = resolveWardPatch(patch, builtPatches);
-          if (stretchHutId === null || idx !== prevIdx + 1) {
-            stretchHutId = pickHouseGlyph(wardPatch.ward!.type, bias, true, model.rng);
+          const accepted: Array<{ slot: FrontageSlot; patch: Patch; idx: number }> = [];
+          for (let j = 0; j < slots.length; j++) {
+            if (allowance <= 0) break;
+            const patch = acceptSlot(model, slots[j], ribbon, ringRadius);
+            if (!patch) continue;
+            accepted.push({ slot: slots[j], patch, idx: j });
           }
-          prevIdx = idx;
-          if (materialiseSlot(model, wardPatch, slot, stretchHutId, ribbon)) allowance--;
+
+          let stretchHutId: string | null = null;
+          let prevIdx = -2;
+          for (let i = 0; i < accepted.length && allowance > 0; i++) {
+            const { slot, patch, idx } = accepted[i];
+            const wardPatch = resolveWardPatch(patch, builtPatches);
+            if (stretchHutId === null || idx !== prevIdx + 1) {
+              stretchHutId = pickHouseGlyph(wardPatch.ward!.type, bias, true, model.rng);
+            }
+            prevIdx = idx;
+            if (materialiseSlot(model, wardPatch, slot, stretchHutId, ribbon, ringRadius)) allowance--;
+          }
         }
       }
     }
+  }
+
+  // Gate-tune round 5 (2026-08-14): "still too far apart" (macro) — the
+  // owner's zoom-in feedback confirmed within-run pitch is right (round 4
+  // constants kept as-is), but allowance was being spread uniformly across
+  // the ENTIRE road network in one pass, so a modest pop-300 budget
+  // (~75 houses) thinned out everywhere instead of forming a dense core.
+  // Ring-expansion stamping: run the full primary-walk + packing-pass
+  // machinery once per ring, each ring bounded to `maxBuiltRadius *
+  // ringFactor` of the settlement centre (see acceptSlot's `ringRadius`
+  // param). `allowance` is a single shared counter across all rings (not
+  // reset per ring), so it exhausts on the innermost rings first — a small
+  // budget produces a compact core, a larger one grows outward through
+  // ring 2, 3, 4 naturally. RING_FACTORS' last value (1.3) is exactly
+  // RIBBON_FACTOR, the pre-round-5 ribbon bound — so ring 4 reproduces the
+  // full pre-round-5 footprint bound-for-bound; rounds 1-4's behaviour is
+  // unchanged for any settlement whose allowance was never exhausted
+  // before reaching ring 4 (the common case once a village is fully
+  // built). Re-walking the same road stretches in an outer ring after an
+  // inner ring already stamped them is expected and harmless: the SAT
+  // overlap check (round 2) and claimedSites rejects every already-filled
+  // slot, so an outer ring can only fill NEW ground the inner ring's
+  // tighter radius excluded.
+  //
+  // Draw-order contract: within one ring, draw order is exactly rounds
+  // 1-4's (3 draws per generated primary-walk slot; 2 more per run start;
+  // 1 per packing-pass stretch start) — unchanged. Across rings, each ring
+  // re-walks every road+side+row from scratch (fresh arclength cursor,
+  // fresh run state) and so draws again for every slot it (re-)generates,
+  // including ground an earlier ring already claimed (immediately rejected
+  // there, after its 3 draws, same as any other rejected candidate) — this
+  // is MORE total draws than a single-ring walk made, but it is still
+  // fully deterministic per seed (same ring sequence, same rng stream
+  // position at every step, every time).
+  const RING_FACTORS = [0.5, 0.75, 1.0, 1.3] as const;
+  for (const ringFactor of RING_FACTORS) {
+    if (allowance <= 0) break;
+    const ringRadius = maxBuiltRadius * ringFactor;
+    runPrimaryWalk(ringRadius);
+    if (allowance > 0) runPackingPass(ringRadius);
   }
 }
