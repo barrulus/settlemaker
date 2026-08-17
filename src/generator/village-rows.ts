@@ -374,6 +374,57 @@ export function houseFootprint(id: string): { width: number; depth: number } {
 }
 
 /**
+ * Gate-tune round 9 (2026-08-17) — INK EXTENTS. Rounds 1-8 spaced houses
+ * by their MANIFEST FOOTPRINT, and that is the root cause of the owner's
+ * entire "too far apart" saga, which no amount of gap/clearance tuning
+ * could ever have fixed. A glyph's manifest footprint is the size of its
+ * ART BOX, not of its painted walls: `sm-house` declares `footprint:
+ * [6, 6]` but its ink fills only about two-thirds of the 64x64 viewBox,
+ * the rest being transparent paper margin. So a chain pitched at
+ * "footprint width + a 0-0.08 gap" — the round-7 contract, honoured to
+ * the letter (measured consecutive centres 6.05-6.12 apart) — still
+ * renders with roughly two units of blank paper between neighbouring
+ * walls. The contract was satisfied and the picture was still wrong.
+ *
+ * The fix is placement-side only: PITCH, SETBACK, the SAT rects and the
+ * `acceptSlot` probes all switch to the glyph's INK extents (footprint x
+ * ratio), while the RENDERED scale stays `max(footprint)` — the art box
+ * is unchanged, only the spacing tightens, so painted wall meets painted
+ * wall. Rendered art boxes therefore OVERLAP on their transparent
+ * margins by design; nothing visible overlaps, because every overlap test
+ * now runs on ink.
+ *
+ * Deliberately NOT touched: the manifest/codegen contract. Measuring real
+ * ink bounds at codegen time and publishing them per glyph is the honest
+ * long-term fix and is a deferred follow-up; these two per-family
+ * constants are a placement-side approximation in the meantime.
+ *
+ * Final values and how they were chosen: started from the
+ * controller-supplied 0.72 / 0.85, rendered pop-300 seed-3 (house family)
+ * and pop-150 seed-5 (hut family) at 1600px, and compared painted wall
+ * gaps against the owner's mockup. 0.72 left a hairline of paper still
+ * visible between house walls, so houses were tightened one notch to
+ * **0.68**; huts at 0.85 already read as a solid terrace with walls
+ * meeting, and tightening them further started to bury the roof outlines
+ * of neighbouring huts in each other, so huts stayed at **0.85**.
+ * Longhouses use the house ratio (same art family, same margin style).
+ */
+export const HOUSE_INK_RATIO = 0.68;
+export const HUT_INK_RATIO = 0.85;
+
+/**
+ * The painted extents of `id` — what must actually clear its neighbours,
+ * the road line, water, and field edges. Per-family ratio: a house whose
+ * transparent margin overhangs a field boundary is fine; its WALLS are
+ * what has to stay off the crop.
+ */
+export function inkFootprint(id: string): { width: number; depth: number } {
+  const fp = houseFootprint(id);
+  const ratio = (HUTS as ReadonlyArray<string>).includes(id) ? HUT_INK_RATIO : HOUSE_INK_RATIO;
+  return { width: fp.width * ratio, depth: fp.depth * ratio };
+}
+
+/**
  * Gate-tune round 6 (2026-08-14) — CORRECTION 1, owner reference image:
  * "no settlement ever mixes hut and house families." Replaces the old
  * per-run/per-ward `pickHouseGlyph` variety picker entirely — that
@@ -493,8 +544,14 @@ function materialiseSlot(
   model: Model, patch: Patch, slot: FrontageSlot, id: string, ribbon: RibbonContext | undefined,
   reachBound: number | undefined, row: number, chainIndex: number, chainPredecessor: Polygon | null,
 ): Polygon | null {
+  // Gate-tune round 9 (2026-08-17): the rect that gets probed, SAT-tested,
+  // and pushed into the ward geometry is the INK rect (see
+  // `inkFootprint`); the RENDERED `scale` below still comes from the full
+  // manifest footprint, so the drawn art is completely unchanged — only
+  // the space it is required to keep clear shrinks to its painted walls.
   const fp = houseFootprint(id);
-  const resized: FrontageSlot = { ...slot, width: fp.width, depth: fp.depth };
+  const ink = inkFootprint(id);
+  const resized: FrontageSlot = { ...slot, width: ink.width, depth: ink.depth };
   if (!acceptSlot(model, resized, ribbon, reachBound)) return null;
   const rect = slotRect(resized);
   // Gate-tune round 2 (2026-08-14): exact rect-vs-rect overlap rejection —
@@ -520,7 +577,16 @@ function materialiseSlot(
   // Gate-tune round 1 (2026-08-14): shrunk from 0.55 so stamps block less of
   // their neighbourhood's slots — overlap safety is still covered by
   // acceptSlot's rect re-check on the resized footprint.
-  model.claimedSites.push({ at: centre, radius: scale * 0.45 });
+  //
+  // Gate-tune round 9 (2026-08-17): the claim radius is now measured on
+  // the INK extents too, and it has to be. `acceptSlot` rejects any
+  // candidate whose rect intersects a claimed site, so a claim sized to
+  // the ART BOX (radius 2.7 for a 6-unit house) would swallow the very
+  // next stamp in an ink-pitched terrace (whose near edge sits ~2.1 units
+  // from its neighbour's centre) and no chain could ever grow past its
+  // first house. Sized to ink (radius ~1.84 for the same house) the claim
+  // still keeps unrelated placements off a dwelling, which is its job.
+  model.claimedSites.push({ at: centre, radius: Math.max(ink.width, ink.depth) * 0.45 });
   return rect;
 }
 
@@ -600,7 +666,11 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
   // variant draw (exactly one rng call — see pickSettlementGlyph).
   const family = settlementDwellingFamily(model.params.population);
   const settlementGlyph = pickSettlementGlyph(family, model.rng);
-  const settlementFootprint = houseFootprint(settlementGlyph);
+  // Gate-tune round 9 (2026-08-17): every placement decision below — chain
+  // pitch, setback, the long-obstruction length, the row-1 lane offset —
+  // is measured in the settlement glyph's INK extents, not its art box
+  // (see `inkFootprint`). The art box is still what gets drawn.
+  const settlementInk = inkFootprint(settlementGlyph);
 
   // Well reservation: unconditional draw order when wellBudget > 0.
   if (model.wellBudget > 0) {
@@ -685,13 +755,13 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
   // obstruction tolerance is proportionally smaller than a house
   // settlement's, matching what "1.5 house widths" actually means for
   // THIS settlement's houses).
-  const LONG_OBSTRUCTION = 1.5 * settlementFootprint.width;
+  const LONG_OBSTRUCTION = 1.5 * settlementInk.width;
 
   // CORRECTION 3b: row 1 sits one lane behind row 0, sized to the
   // settlement's own footprint depth (unchanged formula/reasoning from
   // round 6 — see the round-6 report for the worked-example discrepancy
   // this was already flagged against).
-  const ROW1_OFFSET = settlementFootprint.depth + 1.0;
+  const ROW1_OFFSET = settlementInk.depth + 1.0;
   const ROW1_PHASE = 3; // arclength stagger so row 1 doesn't align directly behind row 0 — unchanged concept from round 1
 
   // Gate-tune round 8 (2026-08-17) — CHAIN LIFECYCLE FIX. Round 7's
@@ -767,7 +837,7 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
     let end: ChainEnd = 'roadEnd';
 
     while (allowance > 0) {
-      const generated = frontageSlotAt(walker, s, side, road.hw, settlementFootprint, model.rng, rowOffset);
+      const generated = frontageSlotAt(walker, s, side, road.hw, settlementInk, model.rng, rowOffset);
       if (!generated) { end = 'roadEnd'; break; } // ran off the physical end of the road — draw-free
 
       const { slot, nextS } = generated;

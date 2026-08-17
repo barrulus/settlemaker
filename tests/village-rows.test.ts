@@ -188,6 +188,8 @@ import {
   houseFootprint, materialiseWithFallback,
   settlementDwellingFamily, pickSettlementGlyph, pickStampGlyph, type DwellingFamily,
   HUT_FAMILY_MAX_POPULATION,
+  // Gate-tune round 9 (2026-08-17): ink extents — see village-rows.ts.
+  inkFootprint, HOUSE_INK_RATIO, HUT_INK_RATIO,
 } from '../src/generator/village-rows.js';
 import { rowHousing } from '../src/generator/generation-params.js';
 import { buildingBudget } from '../src/generator/model.js';
@@ -408,10 +410,25 @@ describe('fallback chain (gate-tune round 7)', () => {
     // neighbours are already touching-close, as round 7's terraces are by
     // design, can fail this second check even when acceptSlot alone
     // passes — this fixture was verified against both).
+    //
+    // Gate-tune round 9 (2026-08-17): re-found for INK extents. The rect
+    // that `materialiseWithFallback` probes and stamps is now the glyph's
+    // ink rect (4.08 for sm-house, 5.44 for the sm-house-large-tiled
+    // accent — the manifest 6x6 / 8x8 art boxes are only what gets DRAWN),
+    // so the old 6/8-sized fixture no longer describes what the code does,
+    // and the tighter ink pitch moved every stamp in this model anyway.
+    // Re-found by the same method (probe every base-glyph stamp for one
+    // whose ACCENT ink rect collides with a synthetic claim while its BASE
+    // ink rect clears both `acceptSlot` and `overlapsStamped`). The new
+    // fixture sits on a Farm-attributed stamp rather than a Merchant one —
+    // no Merchant stamp in this model satisfies the requirement under
+    // round 9, and the ward type is irrelevant to what this test actually
+    // exercises: `materialiseWithFallback` is ward-agnostic (ward type
+    // only steers `pickStampGlyph`, which this test does not call).
     const m = mk(300, 3);
     const sym = m.symbols.find(s =>
-      s.wardType === WardType.Merchant && s.id === 'sm-house' &&
-      Math.abs(s.at.x - -12.038556919847238) < 0.1 && Math.abs(s.at.y - 11.758808458125085) < 0.1);
+      s.id === 'sm-house' &&
+      Math.abs(s.at.x - -28.132847823843818) < 0.1 && Math.abs(s.at.y - 23.334330507444655) < 0.1);
     expect(sym).toBeDefined();
     const rect = [...m.glyphBackedBuildings].find(r =>
       Math.abs(r.centroid.x - sym!.at.x) < 1e-6 && Math.abs(r.centroid.y - sym!.at.y) < 1e-6);
@@ -430,14 +447,18 @@ describe('fallback chain (gate-tune round 7)', () => {
     const c = sym!.at, rot = sym!.rotationDeg;
     const ribbon = { maxBuiltRadius: 1000 };
 
-    // Force accent (8x8) rejection with a claim on one of its resized-rect
-    // corners, far enough from the base (6x6) rect's corners to leave it clear.
-    const accentRect = slotRect({ center: c, rotationDeg: rot, width: 8, depth: 8 });
-    const claimVertex = accentRect.vertices[0];
-    m.claimedSites = [{ at: claimVertex, radius: 0.1 }];
+    // Force accent-INK (5.44) rejection with a claim on one of its
+    // resized-rect corners, far enough from the base-INK (4.08) rect's
+    // corners to leave it clear. Sizes read from `inkFootprint` rather
+    // than hardcoded, so they track the ratio constants.
+    const accentInk = inkFootprint('sm-house-large-tiled');
+    const baseInk = inkFootprint('sm-house');
+    const accentSlot = { center: c, rotationDeg: rot, width: accentInk.width, depth: accentInk.depth };
+    const baseSlot = { center: c, rotationDeg: rot, width: baseInk.width, depth: baseInk.depth };
+    m.claimedSites = [{ at: slotRect(accentSlot).vertices[0], radius: 0.1 }];
 
-    expect(acceptSlot(m, { center: c, rotationDeg: rot, width: 8, depth: 8 }, ribbon)).toBeNull();
-    expect(acceptSlot(m, { center: c, rotationDeg: rot, width: 6, depth: 6 }, ribbon)).not.toBeNull();
+    expect(acceptSlot(m, accentSlot, ribbon)).toBeNull();
+    expect(acceptSlot(m, baseSlot, ribbon)).not.toBeNull();
 
     let draws = 0;
     const countingRng = { float: () => { draws++; return Math.random(); } } as unknown as SeededRandom;
@@ -724,7 +745,13 @@ describe('continuous terraces (gate-tune round 7)', () => {
     for (const group of byChain.values()) {
       for (let i = 1; i < group.length; i++) {
         const a = group[i - 1], b = group[i];
-        const w = HOUSE_WIDTH[a.id] ?? 6;
+        // Gate-tune round 9 (2026-08-17): "touching" is now measured on
+        // INK width, not the art box. A chain advances by
+        // inkWidth + gap(0-0.08), so `w` here is the ink width — checking
+        // against the 6-unit art box would pass vacuously (every real
+        // pitch, ~4.1, is trivially under 6.1) and would no longer be
+        // testing the terrace contract at all.
+        const w = inkFootprint(a.id).width;
         const d = Math.hypot(b.at.x - a.at.x, b.at.y - a.at.y);
         pairs++;
         if (d <= w + 0.1 + 1e-6) tight++;
@@ -837,5 +864,63 @@ describe('chain lifecycle (gate-tune round 8)', () => {
     for (const h of houses) lengths.set(h.chainIndex!, (lengths.get(h.chainIndex!) ?? 0) + 1);
     // At least one genuinely long terrace, not just many scattered stubs.
     expect(Math.max(...lengths.values())).toBeGreaterThanOrEqual(8);
+  });
+});
+
+describe('ink extents (gate-tune round 9)', () => {
+  // A glyph's manifest footprint is its ART BOX, not its painted walls:
+  // sm-house declares 6x6 but its ink fills about two-thirds of that, the
+  // rest transparent margin. Spacing by the art box is why every prior
+  // round's "touching" terrace still rendered with paper between the
+  // walls. Round 9 moves pitch, setback, the SAT rects and the acceptSlot
+  // probes onto ink extents while leaving the DRAWN scale alone.
+
+  it('ratios are sane and huts are less padded than houses', () => {
+    expect(HOUSE_INK_RATIO).toBeGreaterThan(0);
+    expect(HOUSE_INK_RATIO).toBeLessThan(1);
+    expect(HUT_INK_RATIO).toBeGreaterThan(HOUSE_INK_RATIO);
+    expect(HUT_INK_RATIO).toBeLessThanOrEqual(1);
+    expect(inkFootprint('sm-house').width).toBeCloseTo(6 * HOUSE_INK_RATIO, 6);
+    expect(inkFootprint('sm-hut-mud').width).toBeCloseTo(4.5 * HUT_INK_RATIO, 6);
+    // Longhouse is the house family — same art style, same margin.
+    expect(inkFootprint('sm-longhouse').width).toBeCloseTo(10 * HOUSE_INK_RATIO, 6);
+  });
+
+  it('the DRAWN scale is still the full art box — only spacing changed', () => {
+    // The whole point: nothing about the rendered glyph moves. If this
+    // ever fails, round 9 has leaked out of placement and into rendering.
+    for (const [pop, seed] of [[300, 3], [150, 5]] as const) {
+      const m = mk(pop, seed);
+      const houses = m.symbols.filter(s => RESIDENTIAL.includes(s.id));
+      expect(houses.length).toBeGreaterThan(0);
+      for (const h of houses) {
+        const fp = houseFootprint(h.id);
+        expect(h.scale).toBeCloseTo(Math.max(fp.width, fp.depth), 6);
+      }
+    }
+  });
+
+  it('median nearest-neighbour distance lands on ink width, not art-box width', () => {
+    // This is the measurement the owner's complaint reduces to. Before
+    // round 9 these medians read 6.1 (houses) and 4.5 (huts) — the art
+    // box. They must now read ink width plus at most a small gap.
+    for (const [pop, seed] of [[300, 3], [150, 5], [60, 2]] as const) {
+      const m = mk(pop, seed);
+      const houses = m.symbols.filter(s => RESIDENTIAL.includes(s.id));
+      expect(houses.length).toBeGreaterThan(4);
+      const nns = houses.map((a, i) => Math.min(...houses
+        .filter((_, j) => j !== i)
+        .map(b => Math.hypot(a.at.x - b.at.x, a.at.y - b.at.y))));
+      nns.sort((x, y) => x - y);
+      const med = nns.length % 2
+        ? nns[(nns.length - 1) / 2]
+        : (nns[nns.length / 2 - 1] + nns[nns.length / 2]) / 2;
+      const inkW = inkFootprint(houses[0].id).width;
+      // Lower bound: neighbours cannot be closer than their ink allows
+      // (minus the TERRACE_CLEARANCE penetration tolerance and jitter).
+      expect(med).toBeGreaterThan(inkW - 0.3);
+      // Upper bound: at most ink width plus a probe step's worth of slack.
+      expect(med).toBeLessThanOrEqual(inkW + 0.85);
+    }
   });
 });
