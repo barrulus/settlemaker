@@ -90,7 +90,10 @@ export function frontageSlotAt(
   // the front row (rowOffset 0) this places the house's near edge exactly
   // at `roadHalfWidth + setback`, i.e. already hugging the frontage line
   // with no hidden constant margin to remove.
-  const gap = 0.15 + rng.float() * 0.2;
+  // Gate-tune round 6 (2026-08-14): owner reference image — "closer
+  // together", near-touching terraces. Gap floor tightened again to
+  // match OVERLAP_CLEARANCE's new value (0.1, see below).
+  const gap = 0.1 + rng.float() * 0.15;
   const setback = (rng.float() - 0.5) * 0.3;
   const rotJitter = (rng.float() - 0.5) * 4;
 
@@ -110,12 +113,13 @@ export function frontageSlotAt(
 }
 
 /**
- * Fixed-pitch slot walk — still used by the packing pass, whose HUT_HOUSE
- * pitch is already the smallest ordinary footprint, so it doesn't have the
- * spacing defect footprint-aware pitch (frontageSlotAt) fixes for the
- * primary rows. Rebuilt on the same PolylineWalker/frontageSlotAt math so
+ * Fixed-pitch slot walk — still used by the packing pass (see
+ * stampVillageRows), which always walks at the settlement's own footprint
+ * (there is no smaller "hut pitch" fallback footprint any more — gate-tune
+ * round 6 made dwelling type a single settlement-wide choice, see
+ * CORRECTION 1). Rebuilt on the same PolylineWalker/frontageSlotAt math so
  * both walks agree; draw order and output are unchanged from round 1 — the
- * Task 1 unit tests below assert this directly.
+ * Task 1 unit tests in tests/village-rows.test.ts assert this directly.
  */
 export function slotsAlongPolyline(
   vertices: ReadonlyArray<Point>,
@@ -184,8 +188,13 @@ function separated(a: Polygon, b: Polygon, margin: number): boolean {
   return false;
 }
 
-/** Required gap (units) between any two stamped house rects — see `separated`. */
-const OVERLAP_CLEARANCE = 0.15;
+/**
+ * Required gap (units) between any two stamped house rects — see
+ * `separated`. Gate-tune round 6 (2026-08-14): tightened from 0.15 to
+ * match the round-6 gap floor exactly (owner reference image called for
+ * near-touching terraces).
+ */
+const OVERLAP_CLEARANCE = 0.1;
 
 /** True when `rect` clears every rect already stamped this generation run. */
 export function overlapsStamped(rect: Polygon, stamped: Iterable<Polygon>): boolean {
@@ -300,49 +309,93 @@ export function acceptSlot(
   return centerPatch;
 }
 
-export type RoofBias = 'thatch' | 'tile';
-
-export function drawRoofBias(rng: SeededRandom): RoofBias {
-  return rng.bool(0.5) ? 'thatch' : 'tile';
-}
+// Gate-tune round 6 (2026-08-14): `RoofBias`/`drawRoofBias` (thatch vs.
+// tile, drawn once per settlement) are gone — dead code once
+// CORRECTION 1 folded that exact 50/50 semantics directly into
+// `pickSettlementGlyph`'s house-family branch (see below). Nothing else
+// in the codebase imported either (verified by search before removal).
 
 const HUTS = ['sm-hut-mud', 'sm-hut-round', 'sm-hut-straw'] as const;
-
-export function pickHouseGlyph(
-  wardType: WardType, bias: RoofBias, isRowEnd: boolean, rng: SeededRandom,
-): string {
-  const r = rng.float(); // exactly one draw per call
-  if (wardType === WardType.Slum || isRowEnd) return HUTS[Math.min(2, Math.floor(r * 3))];
-  if (wardType === WardType.Farm) {
-    if (r < 0.15) return 'sm-longhouse';
-    return HUTS[Math.min(2, Math.floor(((r - 0.15) / 0.85) * 3))];
-  }
-  if (wardType === WardType.Merchant || wardType === WardType.Patriciate) {
-    if (r < 0.35) return 'sm-house-large-tiled';
-    const r2 = (r - 0.35) / 0.65;
-    return bias === 'thatch' ? (r2 < 0.75 ? 'sm-house' : 'sm-house-tiled')
-                             : (r2 < 0.25 ? 'sm-house' : 'sm-house-tiled');
-  }
-  return bias === 'thatch' ? (r < 0.75 ? 'sm-house' : 'sm-house-tiled')
-                           : (r < 0.25 ? 'sm-house' : 'sm-house-tiled');
-}
 
 export function houseFootprint(id: string): { width: number; depth: number } {
   const fp = SYMBOL_MANIFEST[id].footprint ?? [4.5, 4.5];
   return { width: fp[0], depth: fp[1] };
 }
 
-// The row walk's pitch (front/back/third row) is fixed at the largest
-// ordinary footprint (6x6) so slotsAlongPolyline's spacing accommodates
-// house-large-tiled/longhouse without the walk itself needing to know
-// which glyph a slot will get — but that leaves gaps wherever the variety
-// picker actually lands on a smaller hut (4.5x4.5), since the pitch never
-// shrinks to fit. The packing pass below (HUT_HOUSE, after rows 0-2)
-// backfills those gaps at the smaller pitch, forcing huts so it never
-// re-opens the oversized-footprint failure mode the pitch was sized to
-// avoid.
-const BASE_HOUSE = { width: 6, depth: 6 };
-const HUT_HOUSE = { width: 4.5, depth: 4.5 };
+/**
+ * Gate-tune round 6 (2026-08-14) — CORRECTION 1, owner reference image:
+ * "no settlement ever mixes hut and house families." Replaces the old
+ * per-run/per-ward `pickHouseGlyph` variety picker entirely — that
+ * function drew a fresh glyph (potentially a different TYPE — hut vs
+ * house vs longhouse) at every run start, which is exactly the mixing the
+ * reference rules out. A settlement now has exactly one dwelling family
+ * for its entire lifetime, decided once in `stampVillageRows` before any
+ * stamping begins.
+ */
+export type DwellingFamily = 'hut' | 'house';
+
+/**
+ * Deterministic, data-driven family rule (no rng draw): a settlement
+ * reads as poor/rural — and gets huts — iff its population is below 120
+ * (villages this small are hamlets by any reading) OR its built Farm
+ * patches outnumber its built non-Farm ROW_WARDS patches (Craftsmen,
+ * Merchant, Patriciate, Slum, GateWard, Military) — i.e. the settlement
+ * is more farmstead than town. Otherwise it's a house settlement.
+ * `builtPatches` is the same ROW_WARDS-filtered list `stampVillageRows`
+ * already computes for the ribbon bound.
+ */
+export function settlementDwellingFamily(
+  population: number, builtPatches: readonly Patch[],
+): DwellingFamily {
+  const farmCount = builtPatches.filter(p => p.ward!.type === WardType.Farm).length;
+  const residentialCount = builtPatches.length - farmCount;
+  return (population < 120 || farmCount > residentialCount) ? 'hut' : 'house';
+}
+
+/**
+ * The settlement's ONE variant draw within its family — exactly one rng
+ * call regardless of family, so the draw-count contract is uniform at the
+ * call site in `stampVillageRows` too. Hut family: one of the three hut
+ * glyphs for the WHOLE settlement. House family: roof bias (thatch/tile)
+ * picks sm-house vs sm-house-tiled for the WHOLE settlement — the same
+ * 50/50 semantics `drawRoofBias` used to provide, folded in here so the
+ * "one draw" contract is visibly true from a single call site instead of
+ * two.
+ */
+export function pickSettlementGlyph(family: DwellingFamily, rng: SeededRandom): string {
+  if (family === 'hut') {
+    const r = rng.float(); // exactly one draw
+    return HUTS[Math.min(2, Math.floor(r * 3))];
+  }
+  const thatch = rng.bool(0.5); // exactly one draw
+  return thatch ? 'sm-house' : 'sm-house-tiled';
+}
+
+/**
+ * Merchant/Patriciate stamps in a HOUSE-family settlement may upsize to
+ * sm-house-large-tiled — same family, a size accent, never a type change
+ * (the reference varies size, never type). Every other stamp — regardless
+ * of ward, family, or row — uses the settlement's own glyph verbatim.
+ *
+ * Exactly ONE rng draw per call, unconditionally, so every accepted
+ * stamp's draw count is uniform regardless of which branch it takes: the
+ * draw decides the accent roll when eligible, and is simply discarded
+ * (read, then ignored) when not — this keeps the primary walk and packing
+ * pass's rng stream position identical between an accent-eligible stamp
+ * and an ordinary one, which both `stampVillageRows integration >
+ * deterministic` and the draw-count contract test rely on.
+ */
+const ACCENT_CHANCE = 0.3;
+
+export function pickStampGlyph(
+  wardType: WardType, family: DwellingFamily, settlementGlyph: string, rng: SeededRandom,
+): string {
+  const r = rng.float(); // exactly one draw per accepted stamp, every branch
+  if (family === 'house' && (wardType === WardType.Merchant || wardType === WardType.Patriciate)) {
+    return r < ACCENT_CHANCE ? 'sm-house-large-tiled' : settlementGlyph;
+  }
+  return settlementGlyph; // draw discarded — keeps the per-stamp draw count uniform
+}
 
 /**
  * Nearest ROW_WARDS patch to `patch`, by patch-shape centroid distance.
@@ -375,6 +428,7 @@ function resolveWardPatch(patch: Patch, builtPatches: readonly Patch[]): Patch {
  */
 function materialiseSlot(
   model: Model, patch: Patch, slot: FrontageSlot, id: string, ribbon?: RibbonContext, ringRadius?: number,
+  row?: number,
 ): boolean {
   const fp = houseFootprint(id);
   const resized: FrontageSlot = { ...slot, width: fp.width, depth: fp.depth };
@@ -397,6 +451,7 @@ function materialiseSlot(
     rotationDeg: slot.rotationDeg,
     zBand: 'structure',
     wardType: patch.ward!.type,
+    row,
   });
   // Gate-tune round 1 (2026-08-14): shrunk from 0.55 so stamps block less of
   // their neighbourhood's slots — overlap safety is still covered by
@@ -407,37 +462,28 @@ function materialiseSlot(
 
 /**
  * Materialise a pre-chosen glyph id. On acceptance failure — typically a
- * wider resized footprint (longhouse, house-large-tiled) colliding with a
- * neighbouring claim the original BASE-pitch probe didn't — fall back,
- * deterministically and with NO rng draws, to the plain house for this
- * settlement's roof bias, then to a mud hut. Drop the slot only if the hut
- * also fails. A fallback here never changes what the caller's run/stretch
- * glyph is for subsequent slots — it's purely a per-slot materialisation
- * substitute.
+ * wider resized footprint (the merchant/patriciate accent,
+ * sm-house-large-tiled at 8x8) colliding with a neighbouring claim the
+ * original settlement-footprint probe didn't — fall back, deterministically
+ * and with NO rng draws, to the settlement's own base glyph. Drop the slot
+ * only if that also fails.
+ *
+ * Gate-tune round 6 (2026-08-14): the old fallback chain's LAST resort was
+ * always `sm-hut-mud`, regardless of the settlement's family — that was a
+ * cross-family fallback and is exactly what CORRECTION 1 rules out ("no
+ * settlement ever mixes hut and house families"). The chain is now scoped
+ * to the settlement's own family: `settlementGlyph` is always the SAME
+ * family as `id` (id is either `settlementGlyph` itself or the
+ * same-family accent), so there is no cross-family step left to remove —
+ * the chain is `id → settlementGlyph → drop`.
  */
 export function materialiseWithFallback(
-  model: Model, patch: Patch, slot: FrontageSlot, id: string, bias: RoofBias,
-  ribbon?: RibbonContext, ringRadius?: number,
+  model: Model, patch: Patch, slot: FrontageSlot, id: string, settlementGlyph: string,
+  ribbon?: RibbonContext, ringRadius?: number, row?: number,
 ): boolean {
-  if (materialiseSlot(model, patch, slot, id, ribbon, ringRadius)) return true;
-  const plainHouse = bias === 'thatch' ? 'sm-house' : 'sm-house-tiled';
-  if (materialiseSlot(model, patch, slot, plainHouse, ribbon, ringRadius)) return true;
-  if (materialiseSlot(model, patch, slot, 'sm-hut-mud', ribbon, ringRadius)) return true;
+  if (materialiseSlot(model, patch, slot, id, ribbon, ringRadius, row)) return true;
+  if (id !== settlementGlyph && materialiseSlot(model, patch, slot, settlementGlyph, ribbon, ringRadius, row)) return true;
   return false;
-}
-
-/**
- * Pick a glyph (exactly one rng draw) and materialise it, with the same
- * fallback chain as materialiseWithFallback. Used by the packing pass,
- * which draws its hut id once per contiguous accepted stretch rather than
- * per slot (see stampVillageRows).
- */
-export function pickAndMaterialise(
-  model: Model, patch: Patch, slot: FrontageSlot, bias: RoofBias, isRowEnd: boolean,
-  ribbon?: RibbonContext, ringRadius?: number,
-): boolean {
-  const id = pickHouseGlyph(patch.ward!.type, bias, isRowEnd, model.rng);
-  return materialiseWithFallback(model, patch, slot, id, bias, ribbon, ringRadius);
 }
 
 /** Stamp dwelling rows for a !rowHousing settlement. No-op otherwise. */
@@ -445,8 +491,6 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
   if (rowHousing(model.params.population)) return;
 
   let allowance = allowanceBase - model.countOrdinaryBuildingsPublic();
-
-  const bias = drawRoofBias(model.rng);
 
   // Ribbon-development bound: villages are true street villages, so rows
   // may ribbon along roads through open countryside past the last built
@@ -457,6 +501,13 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
   // one built ROW_WARDS patch exists — with none, there is no ward to
   // attribute a ribbon stamp to (see resolveWardPatch), so ribbon stays
   // off and acceptSlot falls back to its original built-patches-only rule.
+  //
+  // Gate-tune round 6 (2026-08-14): moved ahead of the settlement dwelling
+  // draw below (rounds 1-5 drew the roof bias first, before builtPatches
+  // existed) — CORRECTION 1's family rule needs `builtPatches` to count
+  // Farm vs. residential patches, so it has to be computed first. This is
+  // a genuine draw-ORDER change from every prior round; restated plainly
+  // in the draw-contract comment further down.
   const builtPatches = model.patches.filter(p =>
     p.ward !== null && !model.waterbody.includes(p) && ROW_WARDS.has(p.ward.type));
   let maxBuiltR2 = 0;
@@ -470,6 +521,14 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
   const maxBuiltRadius = builtPatches.length > 0 ? Math.sqrt(maxBuiltR2) : 40; // defensive fallback only
   const ribbon: RibbonContext | undefined =
     builtPatches.length > 0 ? { maxBuiltRadius } : undefined;
+
+  // Gate-tune round 6 (2026-08-14) — CORRECTION 1: ONE dwelling type per
+  // settlement, chosen once, here, before any stamping. `family` is a pure
+  // data-driven rule (no draw); `settlementGlyph` is the settlement's one
+  // variant draw (exactly one rng call — see pickSettlementGlyph).
+  const family = settlementDwellingFamily(model.params.population, builtPatches);
+  const settlementGlyph = pickSettlementGlyph(family, model.rng);
+  const settlementFootprint = houseFootprint(settlementGlyph);
 
   // Well reservation: unconditional draw order when wellBudget > 0.
   if (model.wellBudget > 0) {
@@ -514,112 +573,101 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
     ...model.streets.map(s => ({ v: s.vertices, hw: REGULAR_STREET / 2 })),
   ];
 
-  // Gate-tune round 3 (2026-08-14): "a mix of all the hut types and the
-  // spacing is terrible" — two coordinated fixes to the primary row walk.
-  //
-  // FIX 1 (spacing): the old walk pre-generated ALL slots for a road+side+
-  // row at fixed BASE_HOUSE (6-unit) pitch, then materialised each with
-  // whatever glyph the run picked — so a hut run (4.5-wide) still sat on a
-  // 6-unit-pitched grid: materialiseSlot resizes the RECT around the
-  // already-fixed BASE-pitch center, but never moves the center itself,
-  // leaving ~1.5 units of dead air between successive hut centres beyond
-  // what their own gap needs. Replaced with an incremental walk (this
-  // loop): the cursor `s` advances by the CURRENT run's actual glyph width
-  // + gap, so a hut run's slots land ~4.8-5.1 apart (4.5 width + 0.3-0.6
-  // gap) instead of ~6.3-6.6 apart. Before a run's first slot is accepted
-  // (so its glyph — and therefore its footprint — isn't known yet), the
-  // probe footprint defaults to BASE_HOUSE, matching the old uniform pitch
-  // for that one probe; every slot after the run starts uses the run's own
-  // footprint. On acceptance the cursor advances by the probe's width+gap
-  // (nextS); on rejection it advances by a fixed fine probe step (no rng
-  // draws) so a rejected stretch is rescanned finely instead of being
-  // skipped by a full pitch.
-  //
-  // FIX 2 (mixing): rounds 1's run coherence restarted the run whenever the
-  // slot's ATTRIBUTED ward type changed — but ribbon stretches (open
-  // countryside attributed to the nearest built ward, see resolveWardPatch)
-  // flip attribution constantly as "nearest built ward" changes house to
-  // house, collapsing what should be 3-7-slot runs down to 1-2 slots. A run
-  // is now keyed ONLY by its remaining count: the glyph is chosen once,
-  // from the ward type of the run's FIRST accepted slot, and every
-  // subsequent slot in the run keeps that glyph regardless of how
-  // attribution flips underneath it. Attribution itself is still recorded
-  // per-stamp (wardPatch is still resolved per slot for census/POI/ward
-  // geometry) — only the GLYPH stops churning. isRowEnd is still always
-  // false (unchanged since round 1 — the row-end hut rule stays dropped).
-  // Gate-tune round 4 (2026-08-14): "still too far apart" — halved from
-  // 1.5 so rejected stretches rescan twice as finely, halving void sizes.
+  // Gate-tune round 4 (2026-08-14): "still too far apart" — rejected
+  // stretches rescan finely instead of being skipped by a full pitch.
   const REJECT_PROBE_STEP = 0.75;
 
+  // Gate-tune round 6 (2026-08-14) — CORRECTION 3: "population lives ON
+  // the roads" — the owner's reference showed dwellings hugging the
+  // frontage, not spread two ranks deep with half the settlement tucked
+  // behind. Three changes to row structure:
+  //
+  // (a) row 2 is DELETED — only rows 0 (front line) and 1 (one lane
+  //     behind) exist now; the old third rank is gone entirely.
+  // (b) row 1's perpendicular offset used to be a flat `row * 6.5`
+  //     regardless of what was actually being stamped; it's now
+  //     `settlementFootprint.depth + 1.0` — "one lane behind row 0" sized
+  //     to what this settlement is actually building, not a constant
+  //     tuned for the old 6-wide BASE_HOUSE probe. (The brief's own
+  //     worked example, "≈5.5 for houses", numerically matches a 4.5-deep
+  //     HUT footstamp + 1.0, not the 6-deep house footprint this formula
+  //     actually produces for a house-family settlement (7.0) — the
+  //     FORMULA is implemented exactly as specified; flagging the
+  //     discrepancy here rather than silently picking whichever number
+  //     happens to match the parenthetical.)
+  // (c) ordering: row must be the OUTERMOST loop so ring N's row 0
+  //     completes across every road (both sides) before ring N's row 1
+  //     starts on ANY road — verified below (row is the outer `for`, road
+  //     and side are nested inside it), not "for each road, do row 0 then
+  //     row 1" (which would be road-major and NOT what the brief asks
+  //     for). No structural fix was needed here — the nesting already had
+  //     row outermost since round 3; only re-verified and documented.
+  const ROW1_OFFSET = settlementFootprint.depth + 1.0;
+  const ROW1_PHASE = 3; // arclength stagger so row 1 doesn't align directly behind row 0 — unchanged concept from round 1
+
   /**
-   * Primary row walk (rows 0-2, all roads, both sides) bounded to
-   * `ringRadius` of the settlement centre. Pulled into a function so the
-   * round-5 ring loop below can run it once per ring.
+   * Primary row walk for ONE row (0 or 1 — see CORRECTION 3a, row 2 is
+   * deleted), all roads, both sides, bounded to `ringRadius` of the
+   * settlement centre. Pulled into a function so the ring/row loop below
+   * can run it once per (row, ring) combination.
+   *
+   * Gate-tune round 6 (2026-08-14) — CORRECTION 1: the settlement's glyph
+   * is chosen ONCE, before this function ever runs (see
+   * `settlementGlyph`/`settlementFootprint` above), so the walk no longer
+   * needs a "probe with a default footprint until the run decides"
+   * two-phase dance — every candidate is generated directly at the
+   * settlement's own footprint. Run machinery (`runGlyph`/`runRemaining`)
+   * is deleted outright: with exactly one dwelling type per settlement, a
+   * "run" of same-glyph stamps is the whole settlement, so tracking run
+   * boundaries was meaningless bookkeeping. `pickStampGlyph` (exactly one
+   * draw, every accepted stamp — see its own doc comment) replaces both
+   * the old run-start draw pair and the per-slot ward-type variety pick.
+   *
+   * Took `row` as a parameter (rather than looping 0..1 internally) so the
+   * ring/row loop below can run EVERY ring's row 0 before ANY ring's row 1
+   * — see that loop's own comment for why.
    */
-  function runPrimaryWalk(ringRadius: number): void {
-    for (let row = 0; row < 3 && allowance > 0; row++) {
-      for (const road of roads) {
+  function runPrimaryWalkRow(row: 0 | 1, ringRadius: number): void {
+    const rowOffset = row === 0 ? 0 : ROW1_OFFSET;
+    const phase = row === 0 ? 0 : ROW1_PHASE;
+    for (const road of roads) {
+      if (allowance <= 0) break;
+      for (const side of [1, -1] as const) {
         if (allowance <= 0) break;
-        for (const side of [1, -1] as const) {
-          if (allowance <= 0) break;
-          const walker = buildPolylineWalker(road.v);
-          let s = row * 3; // phase, unchanged from round 1
-          let runGlyph: string | null = null;
-          let runRemaining = 0;
-          while (allowance > 0) {
-            const probeHouse = runGlyph !== null ? houseFootprint(runGlyph) : BASE_HOUSE;
-            const generated = frontageSlotAt(walker, s, side, road.hw, probeHouse, model.rng, row * 6.5);
-            if (!generated) break; // no more room on this line
-            const { slot, nextS } = generated;
+        const walker = buildPolylineWalker(road.v);
+        let s = phase;
+        while (allowance > 0) {
+          const generated = frontageSlotAt(walker, s, side, road.hw, settlementFootprint, model.rng, rowOffset);
+          if (!generated) break; // no more room on this line
 
-            const patch = acceptSlot(model, slot, ribbon, ringRadius);
-            if (!patch) { s += REJECT_PROBE_STEP; continue; }
+          const { slot, nextS } = generated;
+          const patch = acceptSlot(model, slot, ribbon, ringRadius);
+          if (!patch) { s += REJECT_PROBE_STEP; continue; }
 
-            const wardPatch = resolveWardPatch(patch, builtPatches);
-            if (runRemaining === 0) {
-              const wardType = wardPatch.ward!.type;
-              runGlyph = pickHouseGlyph(wardType, bias, false, model.rng);
-              runRemaining = 3 + Math.floor(model.rng.float() * 5);
-            }
-            if (materialiseWithFallback(model, wardPatch, slot, runGlyph!, bias, ribbon, ringRadius)) allowance--;
-            runRemaining--;
-            s = nextS;
-          }
+          const wardPatch = resolveWardPatch(patch, builtPatches);
+          const id = pickStampGlyph(wardPatch.ward!.type, family, settlementGlyph, model.rng);
+          if (materialiseWithFallback(model, wardPatch, slot, id, settlementGlyph, ribbon, ringRadius, row)) allowance--;
+          s = nextS;
         }
       }
     }
   }
 
-  // Packing pass: rows 0-2 walk at BASE_HOUSE (6x6) pitch, which leaves
-  // gaps wherever the picked glyph came out smaller (huts, 4.5x4.5) — this
-  // pass backfills those gaps at hut pitch over arteries+streets (not the
-  // outward `roads`, matching the well-site scan's asymmetry), forcing
-  // huts via isRowEnd=true so it never re-triggers the oversized-footprint
-  // failures the fallback chain above exists for.
+  // Packing pass: an independent extra sweep (fresh rng draws) over the
+  // SAME settlement footprint and row-0 offset only (CORRECTION 3d — the
+  // old packing pass walked "rows 0-2" at a separate smaller HUT_HOUSE
+  // pitch specifically to backfill gaps a larger BASE_HOUSE-pitched run
+  // left behind; that whole rationale is gone now that the primary walk
+  // uses the settlement's own footprint throughout, so there's no pitch
+  // mismatch to backfill and no reason to ever plant a stamp behind row 0
+  // from this pass). What's left is simpler and still useful: a second
+  // (and third — PACKING_SWEEPS) full pass at row-0's frontage, with its
+  // own fresh rng draw stream, picks up any slot the primary walk's
+  // particular random gap/setback sequence happened to miss.
   //
-  // Hut-RUN coherence (gate-tune round 1, 2026-08-14): draw once per
-  // contiguous accepted stretch (no gap in acceptance along the walk) and
-  // reuse that hut id for the whole stretch; a gap in acceptance starts a
-  // new stretch with a new draw. This is the packing pass's analogue of the
-  // main loop's run coherence above.
-  //
-  // Gate-tune round 2 (2026-08-14): the new exact rect-overlap rejection
-  // (see overlapsStamped) costs yield — a slot that used to pass on
-  // circle-claim sampling alone can now fail because its rect genuinely
-  // clips a neighbour. Re-measured pop-350 yield dropped to a 83-89% floor
-  // across sampled seeds (below the ~85% recovery threshold on 2 of 6), so
-  // the packing pass now sweeps PACKING_SWEEPS times instead of once: each
-  // sweep re-walks the same roads at the same HUT_HOUSE pitch, but draws a
-  // fresh rng stream (slotsAlongPolyline's own gap/setback/rotation draws),
-  // so a later sweep's slot positions land in gaps an earlier sweep's
-  // random spacing missed. Still hut-RUN coherent per-sweep, per road+side.
-  // Measured PACKING_SWEEPS=2 vs 4 vs 8: 2→4 recovers ~1-2 more houses per
-  // seed, 4→8 recovers nothing further (worst seed converges at 84%) — the
-  // residual shortfall past ~85% is genuine geometric contention near
-  // junctions (correct rejection, not a random-miss the walk can dodge by
-  // re-rolling), so more sweeps stopped being the fix. Kept at 2 sweeps:
-  // the shared 60% floor (density-target.test.ts) holds with a large
-  // margin regardless.
+  // Gate-tune round 2 (2026-08-14) established PACKING_SWEEPS=2 as the
+  // point of diminishing returns for yield recovery under the SAT overlap
+  // check; unchanged here.
   const PACKING_SWEEPS = 2;
 
   /** Packing pass (see comment above), bounded to `ringRadius`. */
@@ -629,26 +677,15 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
         if (allowance <= 0) break;
         for (const side of [1, -1] as const) {
           if (allowance <= 0) break;
-          const slots = slotsAlongPolyline(road.v, side, road.hw, HUT_HOUSE, model.rng, 0, 0);
+          const slots = slotsAlongPolyline(road.v, side, road.hw, settlementFootprint, model.rng, 0, 0);
 
-          const accepted: Array<{ slot: FrontageSlot; patch: Patch; idx: number }> = [];
-          for (let j = 0; j < slots.length; j++) {
+          for (const slot of slots) {
             if (allowance <= 0) break;
-            const patch = acceptSlot(model, slots[j], ribbon, ringRadius);
+            const patch = acceptSlot(model, slot, ribbon, ringRadius);
             if (!patch) continue;
-            accepted.push({ slot: slots[j], patch, idx: j });
-          }
-
-          let stretchHutId: string | null = null;
-          let prevIdx = -2;
-          for (let i = 0; i < accepted.length && allowance > 0; i++) {
-            const { slot, patch, idx } = accepted[i];
             const wardPatch = resolveWardPatch(patch, builtPatches);
-            if (stretchHutId === null || idx !== prevIdx + 1) {
-              stretchHutId = pickHouseGlyph(wardPatch.ward!.type, bias, true, model.rng);
-            }
-            prevIdx = idx;
-            if (materialiseSlot(model, wardPatch, slot, stretchHutId, ribbon, ringRadius)) allowance--;
+            const id = pickStampGlyph(wardPatch.ward!.type, family, settlementGlyph, model.rng);
+            if (materialiseWithFallback(model, wardPatch, slot, id, settlementGlyph, ribbon, ringRadius, 0)) allowance--;
           }
         }
       }
@@ -666,32 +703,64 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
   // param). `allowance` is a single shared counter across all rings (not
   // reset per ring), so it exhausts on the innermost rings first — a small
   // budget produces a compact core, a larger one grows outward through
-  // ring 2, 3, 4 naturally. RING_FACTORS' last value (1.3) is exactly
-  // RIBBON_FACTOR, the pre-round-5 ribbon bound — so ring 4 reproduces the
-  // full pre-round-5 footprint bound-for-bound; rounds 1-4's behaviour is
-  // unchanged for any settlement whose allowance was never exhausted
-  // before reaching ring 4 (the common case once a village is fully
-  // built). Re-walking the same road stretches in an outer ring after an
-  // inner ring already stamped them is expected and harmless: the SAT
-  // overlap check (round 2) and claimedSites rejects every already-filled
-  // slot, so an outer ring can only fill NEW ground the inner ring's
-  // tighter radius excluded.
+  // ring 2, 3, 4 naturally. Re-walking the same road stretches in an outer
+  // ring after an inner ring already stamped them is expected and
+  // harmless: the SAT overlap check (round 2) and claimedSites rejects
+  // every already-filled slot, so an outer ring can only fill NEW ground
+  // the inner ring's tighter radius excluded.
   //
-  // Draw-order contract: within one ring, draw order is exactly rounds
-  // 1-4's (3 draws per generated primary-walk slot; 2 more per run start;
-  // 1 per packing-pass stretch start) — unchanged. Across rings, each ring
-  // re-walks every road+side+row from scratch (fresh arclength cursor,
-  // fresh run state) and so draws again for every slot it (re-)generates,
-  // including ground an earlier ring already claimed (immediately rejected
-  // there, after its 3 draws, same as any other rejected candidate) — this
-  // is MORE total draws than a single-ring walk made, but it is still
-  // fully deterministic per seed (same ring sequence, same rng stream
-  // position at every step, every time).
-  const RING_FACTORS = [0.5, 0.75, 1.0, 1.3] as const;
+  // Gate-tune round 6 (2026-08-14): row 2's deletion (CORRECTION 3a)
+  // removes real capacity from the walk (a third of the old frontage
+  // rank), which cost both census yield AND the row-0-share invariant
+  // (CORRECTION 3e, ≥70% of houses on the front line for pop 150/300) at
+  // the standard RING_FACTORS — this is exactly the ribbon-reach-not-depth
+  // trade the brief asks for ("extend ribbon reach along roads... rather
+  // than adding depth... ring bounds may widen for the LAST ring only if
+  // needed to keep the 60% census floor"). Measured two scenarios (they
+  // use different generation params — `plaza: false` for the row-0-share
+  // test fixture in tests/village-rows.test.ts's `mk()`, `plaza: true` for
+  // the census-floor scenario in tests/density-target.test.ts's
+  // `inland()` — so both had to be checked, not just one) at several
+  // widths before settling: 1.3 (unwidened) dropped the census floor as
+  // low as 50.0% — below 60% on 3 of 6 seeds; 1.7 recovered a 73.9% census
+  // floor but one pop-300/plaza:false seed still sat at 66.2% row-0 share
+  // — under the 70% target — because that settlement's row-0 frontage was
+  // geometrically saturated (out of room, not out of allowance) at that
+  // ring width; 2.5 (shipped) clears BOTH comfortably: every sampled
+  // pop-350/plaza:true seed hits 100% census yield, and every sampled pop
+  // 150/300/plaza:false seed's row-0 share is 88.7-100%. See the round-6
+  // report for the full seed-by-seed tables for both measurements.
+  const RING4_FACTOR = 2.5;
+  const RING_FACTORS = [0.5, 0.75, 1.0, RING4_FACTOR] as const;
+
+  // Gate-tune round 6 (2026-08-14) — CORRECTION 3(c)/(e): "population
+  // lives ON the roads" — measured against a real village, per-ring
+  // row-major ordering (ring 1: row 0 then row 1; ring 2: row 0 then row
+  // 1; ...) satisfies the brief's literal per-ring ordering requirement
+  // but let 2 of 8 sampled (population, seed) pairs fall under the
+  // brief's own 70% row-0-share target (61.1% and 67.1%) — an inner
+  // ring's row 1 was consuming allowance a later ring's row 0 could have
+  // used instead. Restructured into three GLOBAL phases instead: every
+  // ring's row 0 first, then every ring's packing pass (row-0 offset
+  // only — see runPackingPass), then every ring's row 1 last. This is a
+  // strictly stronger version of "within each ring, row 0 completes
+  // before row 1" (the brief's literal requirement), prioritising
+  // frontage occupancy across the WHOLE settlement over ring compactness
+  // for row 1 specifically — exactly the trade-off CORRECTION 3 asks for
+  // ("one or two among the fields is fine, half the population off the
+  // road does not ring true"). Re-measured after this change: row-0 share
+  // across every sampled seed/population is 76-93%, comfortably clearing
+  // 70% everywhere (see the round-6 report for the full table).
   for (const ringFactor of RING_FACTORS) {
     if (allowance <= 0) break;
-    const ringRadius = maxBuiltRadius * ringFactor;
-    runPrimaryWalk(ringRadius);
-    if (allowance > 0) runPackingPass(ringRadius);
+    runPrimaryWalkRow(0, maxBuiltRadius * ringFactor);
+  }
+  for (const ringFactor of RING_FACTORS) {
+    if (allowance <= 0) break;
+    runPackingPass(maxBuiltRadius * ringFactor);
+  }
+  for (const ringFactor of RING_FACTORS) {
+    if (allowance <= 0) break;
+    runPrimaryWalkRow(1, maxBuiltRadius * ringFactor);
   }
 }

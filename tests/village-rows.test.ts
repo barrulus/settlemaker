@@ -7,6 +7,7 @@ import { slotRect, acceptSlot, ROW_WARDS } from '../src/generator/village-rows.j
 import { WardType } from '../src/types/interfaces.js';
 import { pointInPolygon } from '../src/geom/point-in-polygon.js';
 import { Farm } from '../src/wards/farm.js';
+import type { Patch } from '../src/generator/patch.js';
 
 const HOUSE = { width: 6, depth: 6 };
 const straight = [new Point(0, 0), new Point(100, 0)];
@@ -18,13 +19,16 @@ describe('slotsAlongPolyline', () => {
   // Gate-tune round 4 (2026-08-14): "still too far apart" — gap floor now
   // matches OVERLAP_CLEARANCE (0.15); bound re-pinned mechanically to
   // [0.15, 0.35].
-  it('spaces slots at width+gap with gap in [0.15, 0.35]', () => {
+  // Gate-tune round 6 (2026-08-14) — CORRECTION 2, owner reference image:
+  // "closer together". Gap floor now matches OVERLAP_CLEARANCE's new value
+  // (0.1); bound re-pinned mechanically to [0.1, 0.25].
+  it('spaces slots at width+gap with gap in [0.1, 0.25]', () => {
     const slots = slotsAlongPolyline(straight, 1, 1.0, HOUSE, new SeededRandom(1));
     expect(slots.length).toBeGreaterThan(10);
     for (let i = 1; i < slots.length; i++) {
       const d = slots[i].center.x - slots[i - 1].center.x;
-      expect(d).toBeGreaterThanOrEqual(HOUSE.width + 0.15 - 1e-9);
-      expect(d).toBeLessThanOrEqual(HOUSE.width + 0.35 + 1e-9);
+      expect(d).toBeGreaterThanOrEqual(HOUSE.width + 0.1 - 1e-9);
+      expect(d).toBeLessThanOrEqual(HOUSE.width + 0.25 + 1e-9);
     }
   });
 
@@ -177,11 +181,15 @@ describe('slot acceptance', () => {
   });
 });
 
-import { drawRoofBias, pickHouseGlyph, houseFootprint, pickAndMaterialise } from '../src/generator/village-rows.js';
+import {
+  houseFootprint, materialiseWithFallback,
+  settlementDwellingFamily, pickSettlementGlyph, pickStampGlyph, type DwellingFamily,
+} from '../src/generator/village-rows.js';
 import { rowHousing } from '../src/generator/generation-params.js';
 import { buildingBudget } from '../src/generator/model.js';
 
 const RESIDENTIAL = ['sm-house', 'sm-house-tiled', 'sm-house-large-tiled', 'sm-hut-mud', 'sm-hut-round', 'sm-hut-straw', 'sm-longhouse'];
+const HUT_IDS = ['sm-hut-mud', 'sm-hut-round', 'sm-hut-straw'];
 
 describe('stampVillageRows integration', () => {
   it('census exactness: stamped + generated survivors equals the budget (or frontage-capped below)', () => {
@@ -239,130 +247,168 @@ describe('stampVillageRows integration', () => {
   });
 });
 
-describe('run coherence', () => {
-  // Gate-tune round 1 (2026-08-14): "too mixed" — glyphs are now picked per
-  // run of slots, not per house (see stampVillageRows). Simplest honest
-  // proxy on a real village: the number of distinct glyph ids among all
-  // stamped residential symbols should be well below the house count (huts
-  // and house-tiled variants repeat across many runs); a stronger secondary
-  // check confirms consecutive same-id stretches actually exist in
-  // placement order (the model.symbols push order tracks the road/side/row
-  // walk, so consecutive entries are consecutive slots along the same
-  // road+side+row until the walk moves on).
-  it('mk(300,3): distinct glyph ids are well below the house count, with real consecutive runs; deterministic', () => {
-    const m1 = mk(300, 3);
-    const houses1 = m1.symbols.filter(s => RESIDENTIAL.includes(s.id));
-    expect(houses1.length).toBeGreaterThan(10);
+// Gate-tune round 6 (2026-08-14): the old 'run coherence' describe block
+// (rounds 1/3's per-run glyph-variety picker) no longer applies and has
+// been deleted outright — CORRECTION 1 replaced run-based variety with a
+// SINGLE settlement-wide dwelling choice, so "distinct glyph ids... well
+// below the house count" and "consecutive same-id runs" are no longer
+// meaningful measurements: with one glyph (plus an optional same-family
+// size accent) for the whole settlement, the distinct-id count is 1-2 by
+// construction, not an emergent property of run length. See 'settlement
+// dwelling type (gate-tune round 6)' below for this round's replacement
+// invariant.
 
-    const idSet = new Set(houses1.map(h => h.id));
-    expect(idSet.size).toBeLessThanOrEqual(Math.ceil(houses1.length / 2));
+describe('settlementDwellingFamily (gate-tune round 6, CORRECTION 1)', () => {
+  function fakeRowWardPatch(wardType: WardType): Patch {
+    return { ward: { type: wardType } } as unknown as Patch;
+  }
 
-    let maxRun = 1, curRun = 1;
-    for (let i = 1; i < houses1.length; i++) {
-      if (houses1[i].id === houses1[i - 1].id) { curRun++; maxRun = Math.max(maxRun, curRun); }
-      else curRun = 1;
-    }
-    expect(maxRun).toBeGreaterThanOrEqual(3); // matches the 3-7 run-length contract
+  it('huts when population < 120, regardless of patch mix', () => {
+    expect(settlementDwellingFamily(119, [])).toBe('hut');
+    expect(settlementDwellingFamily(50, [fakeRowWardPatch(WardType.Craftsmen)])).toBe('hut');
+  });
 
-    const m2 = mk(300, 3);
-    const houses2 = m2.symbols.filter(s => RESIDENTIAL.includes(s.id));
-    expect(JSON.stringify(houses1)).toBe(JSON.stringify(houses2));
+  it('house when population >= 120 and residential patches are not outnumbered by farms', () => {
+    const patches = [
+      fakeRowWardPatch(WardType.Craftsmen), fakeRowWardPatch(WardType.Merchant), fakeRowWardPatch(WardType.Farm),
+    ];
+    expect(settlementDwellingFamily(120, patches)).toBe('house');
+    expect(settlementDwellingFamily(500, [])).toBe('house'); // no farms, no residential — 0 > 0 is false
+  });
+
+  it('huts when farm patches strictly outnumber residential ROW_WARDS patches, even above population 120', () => {
+    const patches = [
+      fakeRowWardPatch(WardType.Farm), fakeRowWardPatch(WardType.Farm), fakeRowWardPatch(WardType.Farm),
+      fakeRowWardPatch(WardType.Craftsmen),
+    ];
+    expect(settlementDwellingFamily(500, patches)).toBe('hut');
+  });
+
+  it('no rng draw — pure function', () => {
+    // Passing a rng-less call site is the test: settlementDwellingFamily's
+    // signature doesn't even accept a SeededRandom, so there's nothing to
+    // stub — this test exists to document the "no draw" contract sits at
+    // the type level, not just as a runtime accident.
+    expect(settlementDwellingFamily.length).toBe(2); // (population, builtPatches) — no rng parameter
   });
 });
 
-describe('variety picker', () => {
-  it('roof bias skews the house/house-tiled mix', () => {
-    const count = (bias: 'thatch' | 'tile') => {
-      const rng = new SeededRandom(7);
-      let tiled = 0;
-      for (let i = 0; i < 200; i++) {
-        if (pickHouseGlyph(WardType.Craftsmen, bias, false, rng) === 'sm-house-tiled') tiled++;
-      }
-      return tiled;
-    };
-    expect(count('tile')).toBeGreaterThan(count('thatch') + 40);
+describe('pickSettlementGlyph (gate-tune round 6, CORRECTION 1)', () => {
+  it('hut family: one of the three hut glyphs, exactly one draw', () => {
+    const rng = new SeededRandom(1);
+    let draws = 0;
+    const counting = { float: () => { draws++; return rng.float(); }, bool: (p: number) => { draws++; return rng.bool(p); } } as unknown as SeededRandom;
+    const id = pickSettlementGlyph('hut', counting);
+    expect(HUT_IDS).toContain(id);
+    expect(draws).toBe(1);
   });
 
-  it('slums and row-ends get huts; farms get vernacular; merchants get large houses sometimes', () => {
-    const rng = new SeededRandom(11);
-    for (let i = 0; i < 50; i++) {
-      expect(pickHouseGlyph(WardType.Slum, 'tile', false, rng)).toMatch(/^sm-hut-/);
-      expect(pickHouseGlyph(WardType.Craftsmen, 'tile', true, rng)).toMatch(/^sm-hut-/);
-      expect(pickHouseGlyph(WardType.Farm, 'thatch', false, rng)).toMatch(/^sm-(hut-|longhouse)/);
+  it('house family: sm-house or sm-house-tiled, exactly one draw', () => {
+    const rng = new SeededRandom(2);
+    let draws = 0;
+    const counting = { float: () => { draws++; return rng.float(); }, bool: (p: number) => { draws++; return rng.bool(p); } } as unknown as SeededRandom;
+    const id = pickSettlementGlyph('house', counting);
+    expect(['sm-house', 'sm-house-tiled']).toContain(id);
+    expect(draws).toBe(1);
+  });
+
+  it('all three hut variants and both house variants are reachable (not degenerate)', () => {
+    // Draws from ONE continuously-advancing rng stream, not many freshly
+    // re-seeded instances — fresh `new SeededRandom(n)` for small
+    // consecutive integer n produced a correlated first draw (all landing
+    // in the same HUTS third), which isn't a property of pickSettlementGlyph
+    // itself; a long draw sequence from a single stream is the honest way
+    // to sample its output distribution.
+    const rng = new SeededRandom(1);
+    const huts = new Set<string>(), houses = new Set<string>();
+    for (let i = 0; i < 300; i++) huts.add(pickSettlementGlyph('hut', rng));
+    for (let i = 0; i < 300; i++) houses.add(pickSettlementGlyph('house', rng));
+    expect(huts.size).toBe(3);
+    expect(houses.size).toBe(2);
+  });
+
+  it('deterministic per seed', () => {
+    expect(pickSettlementGlyph('house', new SeededRandom(9))).toBe(pickSettlementGlyph('house', new SeededRandom(9)));
+    expect(pickSettlementGlyph('hut', new SeededRandom(9))).toBe(pickSettlementGlyph('hut', new SeededRandom(9)));
+  });
+});
+
+describe('pickStampGlyph (gate-tune round 6, CORRECTION 1)', () => {
+  it('consumes exactly one rng draw per call, every branch', () => {
+    const rng = new SeededRandom(13);
+    let draws = 0;
+    const counting = { float: () => { draws++; return rng.float(); }, bool: (p: number) => { draws++; return rng.bool(p); } } as unknown as SeededRandom;
+    const cases: Array<[WardType, DwellingFamily, string]> = [
+      [WardType.Merchant, 'house', 'sm-house'], [WardType.Patriciate, 'house', 'sm-house-tiled'],
+      [WardType.Craftsmen, 'house', 'sm-house'], [WardType.Slum, 'house', 'sm-house'],
+      [WardType.Merchant, 'hut', 'sm-hut-mud'], [WardType.Farm, 'hut', 'sm-hut-mud'],
+      [WardType.GateWard, 'house', 'sm-house-tiled'],
+    ];
+    for (const [ward, family, glyph] of cases) {
+      const before = draws;
+      pickStampGlyph(ward, family, glyph, counting);
+      expect(draws - before).toBe(1);
     }
+  });
+
+  it('non-accent-eligible stamps always return the settlement glyph verbatim (draw discarded)', () => {
+    const rng = new SeededRandom(3);
+    for (let i = 0; i < 50; i++) {
+      expect(pickStampGlyph(WardType.Craftsmen, 'house', 'sm-house', rng)).toBe('sm-house');
+      expect(pickStampGlyph(WardType.Slum, 'house', 'sm-house-tiled', rng)).toBe('sm-house-tiled');
+    }
+  });
+
+  it('ALL hut-family stamps return the settlement glyph verbatim — no accent branch exists for huts', () => {
+    const rng = new SeededRandom(5);
+    for (let i = 0; i < 50; i++) {
+      // Even a merchant/patriciate-attributed stamp gets no accent when
+      // the settlement is hut-family — accent is a HOUSE-family-only,
+      // same-family size variation (CORRECTION 1).
+      expect(pickStampGlyph(WardType.Merchant, 'hut', 'sm-hut-mud', rng)).toBe('sm-hut-mud');
+      expect(pickStampGlyph(WardType.Patriciate, 'hut', 'sm-hut-round', rng)).toBe('sm-hut-round');
+    }
+  });
+
+  it('merchant/patriciate stamps in a HOUSE settlement sometimes upsize to sm-house-large-tiled', () => {
+    const rng = new SeededRandom(11);
     const picks = new Set<string>();
-    for (let i = 0; i < 100; i++) picks.add(pickHouseGlyph(WardType.Merchant, 'tile', false, rng));
+    for (let i = 0; i < 200; i++) picks.add(pickStampGlyph(WardType.Merchant, 'house', 'sm-house', rng));
     expect(picks.has('sm-house-large-tiled')).toBe(true);
+    expect(picks.has('sm-house')).toBe(true);
+    expect(picks.size).toBe(2); // never any third id — same family, size accent only
   });
 
   it('houseFootprint reads the manifest (longhouse is 10×5)', () => {
     expect(houseFootprint('sm-longhouse')).toEqual({ width: 10, depth: 5 });
     expect(houseFootprint('sm-house')).toEqual({ width: 6, depth: 6 });
-  });
-
-  it('consumes exactly one rng draw per call in every branch', () => {
-    const rng = new SeededRandom(13);
-    let draws = 0;
-    const counting = { float: () => { draws++; return rng.float(); }, bool: (p: number) => { draws++; return rng.bool(p); } } as unknown as SeededRandom;
-    const cases: Array<[WardType, 'thatch' | 'tile', boolean]> = [
-      [WardType.Slum, 'tile', false], [WardType.Craftsmen, 'tile', true],
-      [WardType.Farm, 'thatch', false], [WardType.Merchant, 'tile', false],
-      [WardType.Patriciate, 'thatch', false], [WardType.Craftsmen, 'thatch', false],
-      [WardType.GateWard, 'tile', false],
-    ];
-    for (const [ward, bias, end] of cases) {
-      const before = draws;
-      pickHouseGlyph(ward, bias, end, counting);
-      expect(draws - before).toBe(1);
-    }
+    expect(houseFootprint('sm-house-large-tiled')).toEqual({ width: 8, depth: 8 });
   });
 });
 
-describe('fallback chain', () => {
-  it('a longhouse collision falls through the biased house to sm-hut-mud, with exactly one rng draw', () => {
+describe('fallback chain (gate-tune round 6)', () => {
+  it('an accent collision falls through to the settlement base glyph, with zero rng draws', () => {
+    // Gate-tune round 6 (2026-08-14): rewritten for the new contract —
+    // materialiseWithFallback's chain is now `id → settlementGlyph → drop`
+    // (no more cross-family hut fallback; see materialiseWithFallback's
+    // doc comment in village-rows.ts). Found by probing every
+    // Merchant-attributed base-glyph stamp in this seeded model for one
+    // whose accent-sized (8x8) resize collides once a synthetic claim is
+    // added, while the base 6x6 footprint still fits.
     const m = mk(300, 3);
-    // A real Farm-ward-attributed dwelling site where the resized longhouse
-    // footprint (10x5) already fails to fit naturally (mesh/subplot edge),
-    // while the plain house (6x6) and hut (4.5x4.5) footprints both fit —
-    // found by probing every farm-attributed stamp in this seeded model.
-    // Gate-tune round 1 (2026-08-14): coordinates re-pinned — tighter
-    // packing (gap/setback/rotation/claim-radius) shifted every slot in
-    // this seeded model, so the old fixture's real Farm-attributed dwelling
-    // site no longer exists at those coordinates. Re-probed for a fresh
-    // site meeting the same preconditions (longhouse fails naturally;
-    // plain house and hut both still fit).
-    // Gate-tune round 2 (2026-08-14): coordinates re-pinned again — packing
-    // shifted again. Also: materialiseSlot now rejects on exact rect
-    // overlap against every already-stamped rect (see overlapsStamped),
-    // and this fixture reuses a REAL stamped site's location to probe a
-    // synthetic retry — so the site's own existing rect must be removed
-    // first, or the synthetic hut placement at the same spot would
-    // "overlap" itself and the test's premise (hut still fits here) would
-    // no longer hold.
-    // Gate-tune round 3 (2026-08-14): coordinates re-pinned again — the
-    // primary row walk is now footprint-aware/incremental (see
-    // frontageSlotAt), which moves every slot in the model again.
-    // Gate-tune round 4 (2026-08-14): coordinates re-pinned again — gap and
-    // rejection-probe-step constants tightened, shifting every slot again.
-    // This round's fixture happens to be a real `sm-hut-mud` stamp (not
-    // `sm-hut-straw`) — irrelevant to the test, which only needs a Farm
-    // site where the resized longhouse naturally fails and both the plain
-    // house and hut fit.
-    // Gate-tune round 5 (2026-08-14): coordinates re-pinned again —
-    // ring-expansion stamping (see stampVillageRows) re-walks every road at
-    // successively larger ring radii, so allowance is now consumed in a
-    // different order and every slot shifts again. Fixture stays a real
-    // `sm-hut-mud` stamp.
     const sym = m.symbols.find(s =>
-      s.wardType === WardType.Farm && s.id === 'sm-hut-mud' &&
-      Math.abs(s.at.x - -30.238411025180184) < 0.1 && Math.abs(s.at.y - -0.6541667084400731) < 0.1);
+      s.wardType === WardType.Merchant && s.id === 'sm-house' &&
+      Math.abs(s.at.x - -7.0309161718159086) < 0.1 && Math.abs(s.at.y - -0.2305499552615452) < 0.1);
     expect(sym).toBeDefined();
     const rect = [...m.glyphBackedBuildings].find(r =>
       Math.abs(r.centroid.x - sym!.at.x) < 1e-6 && Math.abs(r.centroid.y - sym!.at.y) < 1e-6);
     expect(rect).toBeDefined();
-    const patch = m.patches.find(p => p.ward instanceof Farm && p.ward.geometry.includes(rect!));
+    const patch = m.patches.find(p => p.ward?.geometry.includes(rect!));
     expect(patch).toBeDefined();
 
+    // This fixture reuses a REAL stamped site's location — remove its own
+    // existing rect first (round 2's SAT overlap check would otherwise
+    // reject the synthetic retry against itself).
     m.glyphBackedBuildings.delete(rect!);
     const geomIdx = patch!.ward!.geometry.indexOf(rect!);
     expect(geomIdx).toBeGreaterThanOrEqual(0);
@@ -371,31 +417,41 @@ describe('fallback chain', () => {
     const c = sym!.at, rot = sym!.rotationDeg;
     const ribbon = { maxBuiltRadius: 1000 };
 
-    // Force plain-house (6x6) rejection with a claim placed exactly on one
-    // of its resized-rect corners, far enough from the hut (4.5x4.5)
-    // corners at the same center/rotation to leave the hut footprint clear.
-    const plainRect = slotRect({ center: c, rotationDeg: rot, width: 6, depth: 6 });
-    const claimVertex = plainRect.vertices[0];
+    // Force accent (8x8) rejection with a claim on one of its resized-rect
+    // corners, far enough from the base (6x6) rect's corners to leave it clear.
+    const accentRect = slotRect({ center: c, rotationDeg: rot, width: 8, depth: 8 });
+    const claimVertex = accentRect.vertices[0];
     m.claimedSites = [{ at: claimVertex, radius: 0.1 }];
 
-    // Sanity: longhouse already fails naturally at this spot; plain house
-    // now fails too (our claim); hut still fits.
-    expect(acceptSlot(m, { center: c, rotationDeg: rot, width: 10, depth: 5 }, ribbon)).toBeNull();
-    expect(acceptSlot(m, { center: c, rotationDeg: rot, width: 6, depth: 6 }, ribbon)).toBeNull();
-    expect(acceptSlot(m, { center: c, rotationDeg: rot, width: 4.5, depth: 4.5 }, ribbon)).not.toBeNull();
+    expect(acceptSlot(m, { center: c, rotationDeg: rot, width: 8, depth: 8 }, ribbon)).toBeNull();
+    expect(acceptSlot(m, { center: c, rotationDeg: rot, width: 6, depth: 6 }, ribbon)).not.toBeNull();
 
     let draws = 0;
-    const countingRng = { float: () => { draws++; return 0.05; } } as unknown as SeededRandom; // r<0.15 → Farm picks sm-longhouse
+    const countingRng = { float: () => { draws++; return Math.random(); } } as unknown as SeededRandom;
     m.rng = countingRng;
 
     const before = m.symbols.length;
-    const ok = pickAndMaterialise(m, patch!, { center: c, rotationDeg: rot, width: 6, depth: 6 }, 'thatch', false, ribbon);
+    const ok = materialiseWithFallback(
+      m, patch!, { center: c, rotationDeg: rot, width: 6, depth: 6 }, 'sm-house-large-tiled', 'sm-house', ribbon,
+    );
 
     expect(ok).toBe(true);
-    expect(draws).toBe(1); // exactly the pickHouseGlyph draw — no rng draws in the fallback materialisation attempts
+    expect(draws).toBe(0); // materialiseWithFallback itself never draws — id is already chosen
     expect(m.symbols.length).toBe(before + 1);
     const placed = m.symbols[m.symbols.length - 1];
-    expect(placed.id).toBe('sm-hut-mud'); // longhouse (chosen) and sm-house (bias fallback) both rejected in turn
+    expect(placed.id).toBe('sm-house'); // accent rejected, falls back to the settlement's base glyph
+  });
+
+  it('dropping when even the base glyph fails', () => {
+    const m = mk(300, 3);
+    const patch = m.patches.find(p => p.ward && ROW_WARDS.has(p.ward.type) && !m.waterbody.includes(p))!;
+    const c = patch.shape.centroid;
+    m.claimedSites = [{ at: c, radius: 20 }]; // blankets both accent and base
+    const ribbon = { maxBuiltRadius: 1000 };
+    const ok = materialiseWithFallback(
+      m, patch, { center: c, rotationDeg: 0, width: 6, depth: 6 }, 'sm-house-large-tiled', 'sm-house', ribbon,
+    );
+    expect(ok).toBe(false);
   });
 });
 
@@ -474,7 +530,9 @@ describe('village regime coverage (gate-tune round 3)', () => {
   // stray shapes. No fixture-forcing needed — MilitaryWard.rateLocation
   // returns 0 (most favoured) whenever there's no citadel and no wall,
   // which is every unwalled village `mk()` builds, so it spawns in all six
-  // sampled (pop, seed) pairs without exception.
+  // sampled (pop, seed) pairs without exception. Re-verified still green
+  // after gate-tune round 6's structural rewrite — the invariant is
+  // orthogonal to how dwelling glyphs are chosen.
   const EXEMPT = new Set<WardType>([
     WardType.Castle, WardType.Cathedral, WardType.Market, WardType.Harbour, WardType.Park,
   ]);
@@ -493,5 +551,77 @@ describe('village regime coverage (gate-tune round 3)', () => {
       }
     }
     expect(checkedAny).toBe(true); // Farm subplots exist in these seeds — the check isn't vacuous
+  });
+});
+
+describe('settlement dwelling type (gate-tune round 6, CORRECTION 1)', () => {
+  // Owner reference image + explicit correction: "no settlement ever mixes
+  // hut and house families." Measured type histogram, real villages: every
+  // sampled (population, seed) pair below produces EXACTLY one family
+  // (never both a hut id and a house-family id in the same settlement),
+  // and within that family, at most 2 distinct ids (the settlement's base
+  // glyph, plus the merchant/patriciate size accent for house families —
+  // huts have no accent at all, see pickStampGlyph). sm-longhouse (the old
+  // Farm-specific pick) never appears — that per-ward variety branch was
+  // removed outright by CORRECTION 1.
+  it.each([150, 300, 600])('pop %i seeds 3/5/7/11: exactly one dwelling family, no cross-family mixing', (pop) => {
+    for (const seed of [3, 5, 7, 11]) {
+      const m = mk(pop, seed);
+      const houses = m.symbols.filter(s => RESIDENTIAL.includes(s.id));
+      expect(houses.length).toBeGreaterThan(0);
+
+      const idSet = new Set(houses.map(h => h.id));
+      expect(idSet.has('sm-longhouse')).toBe(false);
+
+      const isHut = (id: string) => HUT_IDS.includes(id);
+      const allHut = [...idSet].every(isHut);
+      const allHouse = [...idSet].every(id => !isHut(id));
+      expect(allHut || allHouse).toBe(true); // never a mix of both
+
+      if (allHut) {
+        expect(idSet.size).toBe(1); // exactly one hut variant for the WHOLE settlement — no accent for huts
+      } else {
+        expect(idSet.size).toBeLessThanOrEqual(2); // base glyph + optional size accent, never more
+        for (const id of idSet) expect(['sm-house', 'sm-house-tiled', 'sm-house-large-tiled']).toContain(id);
+      }
+    }
+  });
+
+  // (ii) accent only under house family.
+  it('sm-house-large-tiled (the size accent) never appears in a hut-family settlement', () => {
+    for (const pop of [150, 300, 600]) {
+      for (const seed of [3, 5, 7, 11]) {
+        const m = mk(pop, seed);
+        const houses = m.symbols.filter(s => RESIDENTIAL.includes(s.id));
+        const hasHut = houses.some(h => HUT_IDS.includes(h.id));
+        const hasAccent = houses.some(h => h.id === 'sm-house-large-tiled');
+        expect(hasHut && hasAccent).toBe(false);
+      }
+    }
+  });
+});
+
+describe('population lives on the roads (gate-tune round 6, CORRECTION 3)', () => {
+  // Owner: "one or two among the fields is fine, half the population off
+  // the road does not ring true ESPECIALLY in hamlets." Row 2 is deleted
+  // (only row 0, the front line, and row 1, one lane behind, exist); the
+  // ring/row loop in stampVillageRows runs every ring's row 0 (plus the
+  // row-0-only packing pass) before any ring's row 1, specifically to keep
+  // this share high across the whole settlement, not just within one ring.
+  it.each([150, 300])('pop %i seeds 3/5/7/11: at least 70%% of stamped houses are row 0 (front line)', (pop) => {
+    for (const seed of [3, 5, 7, 11]) {
+      const m = mk(pop, seed);
+      const houses = m.symbols.filter(s => RESIDENTIAL.includes(s.id));
+      expect(houses.length).toBeGreaterThan(0);
+      const row0 = houses.filter(h => h.row === 0).length;
+      expect(row0 / houses.length).toBeGreaterThanOrEqual(0.7);
+    }
+  });
+
+  it('every stamped house has a defined row (0 or 1), never row 2 or undefined', () => {
+    const m = mk(300, 3);
+    const houses = m.symbols.filter(s => RESIDENTIAL.includes(s.id));
+    expect(houses.length).toBeGreaterThan(0);
+    for (const h of houses) expect(h.row === 0 || h.row === 1).toBe(true);
   });
 });

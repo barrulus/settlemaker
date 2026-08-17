@@ -16,6 +16,18 @@ export interface PlacedSymbol {
    * emitPlacedSymbolPois, which reads it to populate POI ward_type.
    */
   wardType?: WardType;
+  /**
+   * Gate-tune round 6 (2026-08-14): which frontage row a village-row
+   * dwelling stamp belongs to (0 = front line on the road, 1 = one lane
+   * behind — see stampVillageRows/village-rows.ts; row 2 was deleted this
+   * round). Set only by materialiseSlot for village-row stamps; every
+   * other symbol placer leaves this undefined. Exists so the row-0-share
+   * invariant (CORRECTION 3e: "population lives ON the roads") can be
+   * measured directly from `model.symbols` instead of reconstructed
+   * geometrically. Optional and model-level only, same as `wardType` —
+   * the scene layer (SymbolInstance) never carries it.
+   */
+  row?: number;
 }
 
 export interface ClaimedSite { at: Point; radius: number }
