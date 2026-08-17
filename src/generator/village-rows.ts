@@ -672,6 +672,12 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
   // (see `inkFootprint`). The art box is still what gets drawn.
   const settlementInk = inkFootprint(settlementGlyph);
 
+  // Gate-tune round 10 (2026-08-17): the well's site is remembered for
+  // junction seeding (see the road ordering below). Null when no well was
+  // placed; the ordering falls back to the plaza and, failing that, to
+  // `model.center` alone.
+  let wellSite: Point | null = null;
+
   // Well reservation: unconditional draw order when wellBudget > 0.
   if (model.wellBudget > 0) {
     let best: Point | null = null;
@@ -690,6 +696,7 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
     if (best) {
       // Gate-tune round 1 (2026-08-14): shrunk from 3.2 — the well was
       // blocking too much of its neighbourhood's frontage slots.
+      wellSite = best;
       model.claimedSites.push({ at: best, radius: 2.5 });
       model.symbols.push({
         id: 'sm-well',
@@ -792,10 +799,30 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
   const RESTART_MIN_ROAD = 15;
   const MAX_CHAINS_PER_SIDE = 2;
 
+  // Gate-tune round 10 (2026-08-17) — CHAIN-LENGTH CAP + ROTATION. Round
+  // 9's ink pitch fits ~50% more dwellings into the same length of road,
+  // which had an unintended consequence: the first road-side in priority
+  // order consumed the settlement's whole allowance before the rest of the
+  // network was ever visited. Villages started rendering as one 20-25
+  // house ribbon down a single road with a bare centre — measured, and
+  // visible in the round-9 pop-150 seed-5 zoom render. The owner's mockup
+  // is the opposite: SEVERAL distinct clusters, the longest around 15
+  // houses, and a populated crossroads.
+  //
+  // So a chain now stops at MAX_CHAIN accepted stamps and the walk moves
+  // on to the NEXT road-side. The road-side keeps its restart eligibility
+  // under the round-8 rules, so a later rotation may add its second
+  // cluster — but only after every other road-side has had its turn.
+  const MAX_CHAIN = 16;
+
   let chainCounter = 0; // one per growChain call — see PlacedSymbol.chainIndex
 
-  /** Why a chain stopped — only `obstruction` is worth restarting past. */
-  type ChainEnd = 'obstruction' | 'reach' | 'roadEnd';
+  /**
+   * Why a chain stopped. `obstruction` and (round 10) `capped` both leave
+   * the road-side eligible for a restart; `reach` and `roadEnd` mean there
+   * is nothing left on that road to restart into.
+   */
+  type ChainEnd = 'obstruction' | 'capped' | 'reach' | 'roadEnd';
 
   /**
    * Grow one contiguous chain along `road`'s frontage (`side`, `row`),
@@ -863,6 +890,11 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
         chainPredecessor = placedRect; // next candidate touches THIS stamp
         rejectRunStart = null; // obstruction streak resets — chain is unbroken again
         s = nextS;
+        // Round 10: this cluster is as long as a cluster gets. Hand the
+        // budget to the next road-side; the restart bookkeeping in
+        // `growRoadSide` treats `capped` exactly like `obstruction`, so
+        // this road can grow a second cluster on a later rotation.
+        if (acceptedCount >= MAX_CHAIN) { end = 'capped'; break; }
         continue;
       }
 
@@ -902,29 +934,98 @@ export function stampVillageRows(model: Model, allowanceBase: number): void {
       const r = growChain(road, side, row, s, longObstruction);
       total += r.accepted;
       longest = Math.max(longest, r.accepted);
-      if (r.end !== 'obstruction') break;      // reach bound / road end — nothing left to restart into
+      // Reach bound / road end — nothing left to restart into. Round 10:
+      // `capped` restarts exactly like `obstruction` (the chain stopped
+      // because it was long enough, not because the road ran out).
+      if (r.end !== 'obstruction' && r.end !== 'capped') break;
       if (r.roadTotal - r.endS < RESTART_MIN_ROAD) break;
       s = r.endS;
     }
     return { total, longest };
   }
 
-  // Front chains (row 0): every road, priority order as before, both
-  // sides, nearest-to-centre-outward. This is the pass that produces the
-  // mockup's core look — no ring loop any more, chain growth is
-  // inherently centre-first.
-  const startAllowance = allowance;
-  let stamped = 0;
-  const frontChains: Array<{ road: { v: ReadonlyArray<Point>; hw: number }; side: 1 | -1; acceptedCount: number }> = [];
-  for (const road of roads) {
-    if (allowance <= 0) break;
+  // Front chains (row 0). Gate-tune round 10 (2026-08-17): ROTATION.
+  // Rounds 7-9 grew a road-side to exhaustion (up to both its chains)
+  // before looking at the next one, which under round 9's tighter pitch
+  // meant road one spent the entire allowance. Now the walk takes ONE
+  // chain per road-side per rotation, in priority order, and comes back
+  // for second clusters only after every road-side has had a first. Each
+  // road-side keeps its own cursor and restart eligibility (round-8
+  // rules, unchanged); growth is still centre-out within each road.
+  //
+  // JUNCTION SEEDING: the owner's mockup populates the crossroads, so
+  // road-sides whose near end sits within JUNCTION_RADIUS of the village
+  // junction (the well site, and the plaza centroid when there is one)
+  // sort ahead of the rest. This is a STABLE partition — within each
+  // group the original arteries → streets → outward-roads priority is
+  // untouched.
+  //
+  // Verified, and the honest answer is MOSTLY YES, the existing order
+  // already did this — so this seeding is a small guarantee, not the fix.
+  // Measured (pop 150 seed 5 / 300 seed 3 / 350 seed 4): the well is
+  // placed at the artery-or-street vertex NEAREST `model.center`, and
+  // every artery and street in these meshes begins at exactly that vertex
+  // — near-end distance to the junction is 0.0 for all of them. So the
+  // junction partition never reorders arteries or streets; it can only
+  // reorder the outward `roads` list, where it does real work (pop-150
+  // seed-5 promotes the approach road that meets the junction ahead of
+  // one starting 17.0 units away). Kept because it makes the intent
+  // explicit and does not depend on the well-placement coincidence
+  // holding for every mesh; the ACTUAL fix for the ribbon problem is the
+  // MAX_CHAIN cap and the rotation, not this.
+  const JUNCTION_RADIUS = 10;
+  const anchors: Point[] = [];
+  if (wellSite) anchors.push(wellSite);
+  if (model.plaza) anchors.push(model.plaza.shape.centroid);
+
+  function nearEnd(road: { v: ReadonlyArray<Point> }): Point {
+    const first = road.v[0], last = road.v[road.v.length - 1];
+    return Point.distance(first, model.center) <= Point.distance(last, model.center) ? first : last;
+  }
+  function atJunction(road: { v: ReadonlyArray<Point> }): boolean {
+    if (road.v.length === 0 || anchors.length === 0) return false;
+    const e = nearEnd(road);
+    return anchors.some(a => Point.distance(e, a) <= JUNCTION_RADIUS);
+  }
+
+  type SideState = {
+    road: { v: ReadonlyArray<Point>; hw: number };
+    side: 1 | -1;
+    nextS: number;
+    chains: number;
+    done: boolean;
+    longest: number;
+  };
+  const orderedRoads = [...roads.filter(atJunction), ...roads.filter(r => !atJunction(r))];
+  const sides: SideState[] = [];
+  for (const road of orderedRoads) {
     for (const side of [1, -1] as const) {
-      if (allowance <= 0) break;
-      const { total, longest } = growRoadSide(road, side, 0, LONG_OBSTRUCTION, MAX_CHAINS_PER_SIDE);
-      stamped += total;
-      frontChains.push({ road, side, acceptedCount: longest });
+      sides.push({ road, side, nextS: 0, chains: 0, done: false, longest: 0 });
     }
   }
+
+  const startAllowance = allowance;
+  let stamped = 0;
+  for (let rotation = 0; rotation < MAX_CHAINS_PER_SIDE; rotation++) {
+    if (allowance <= 0) break;
+    for (const st of sides) {
+      if (allowance <= 0) break;
+      if (st.done || st.chains >= MAX_CHAINS_PER_SIDE) continue;
+      const r = growChain(st.road, st.side, 0, st.nextS, LONG_OBSTRUCTION);
+      st.chains++;
+      stamped += r.accepted;
+      st.longest = Math.max(st.longest, r.accepted);
+      // Same restart bookkeeping as growRoadSide, just spread across
+      // rotations instead of run back-to-back on one road.
+      if ((r.end === 'obstruction' || r.end === 'capped')
+        && r.roadTotal - r.endS >= RESTART_MIN_ROAD) {
+        st.nextS = r.endS;
+      } else {
+        st.done = true;
+      }
+    }
+  }
+  const frontChains = sides.map(st => ({ road: st.road, side: st.side, acceptedCount: st.longest }));
 
   // CORRECTION 4 — double-file at the core: ONLY behind chains long
   // enough to read as the settlement's dense core (≥ LONGEST_CHAIN_MIN

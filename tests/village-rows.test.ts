@@ -867,6 +867,57 @@ describe('chain lifecycle (gate-tune round 8)', () => {
   });
 });
 
+describe('cluster distribution (gate-tune round 10)', () => {
+  // Round 9's ink pitch fits ~50% more dwellings per unit of road, and the
+  // round-9 render showed the consequence: the first road-side in priority
+  // order spent the whole allowance, so a village read as ONE 20-25 house
+  // ribbon with a bare centre. The owner's mockup is several distinct
+  // clusters, the longest around 15, with the crossroads populated. Round
+  // 10 caps a chain at MAX_CHAIN = 16 accepted stamps and rotates to the
+  // next road-side, coming back for second clusters only after every
+  // road-side has had a first.
+
+  it('no chain exceeds the cap, on any fixture', () => {
+    for (const [pop, seed] of [[150, 4], [150, 5], [300, 3], [350, 4], [350, 9]] as const) {
+      const m = mk(pop, seed);
+      const houses = m.symbols.filter(s => RESIDENTIAL.includes(s.id));
+      const lengths = new Map<number, number>();
+      for (const h of houses) lengths.set(h.chainIndex!, (lengths.get(h.chainIndex!) ?? 0) + 1);
+      // 16 is MAX_CHAIN (module-private by design — it is a tuning knob,
+      // not an API). Measured maxima before the cap: 19-25.
+      expect(Math.max(...lengths.values()), `pop ${pop} seed ${seed}`).toBeLessThanOrEqual(16);
+    }
+  });
+
+  it('a village is several clusters, not one ribbon', () => {
+    // Round 9 measured 2 chains at pop-150 seed-4 (19 + 19) and 2 at
+    // seed-11 (21 + 16) — the ribbon. Round 10 measures 3-8 chains across
+    // pop-150 seeds and 7-13 at pop 300/350.
+    for (const [pop, seed] of [[150, 4], [150, 5], [150, 11], [300, 3], [350, 4]] as const) {
+      const m = mk(pop, seed);
+      const houses = m.symbols.filter(s => RESIDENTIAL.includes(s.id));
+      const chains = new Set(houses.map(h => h.chainIndex!));
+      expect(chains.size, `pop ${pop} seed ${seed}`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('the crossroads is populated: dwellings stand near the village junction', () => {
+    // The junction anchor is the well's site (the artery/street vertex
+    // nearest model.center — see stampVillageRows). The mockup has houses
+    // AT the crossroads, so the settlement must not leave its own centre
+    // bare while terracing a remote road.
+    for (const [pop, seed] of [[150, 5], [300, 3], [350, 4]] as const) {
+      const m = mk(pop, seed);
+      const well = m.symbols.find(s => s.id === 'sm-well');
+      expect(well, `pop ${pop} seed ${seed} has no well to anchor on`).toBeDefined();
+      const houses = m.symbols.filter(s => RESIDENTIAL.includes(s.id));
+      const near = houses.filter(h => Math.hypot(h.at.x - well!.at.x, h.at.y - well!.at.y) <= 25);
+      expect(near.length, `pop ${pop} seed ${seed}: only ${near.length} dwellings near the junction`)
+        .toBeGreaterThanOrEqual(6);
+    }
+  });
+});
+
 describe('ink extents (gate-tune round 9)', () => {
   // A glyph's manifest footprint is its ART BOX, not its painted walls:
   // sm-house declares 6x6 but its ink fills about two-thirds of that, the
