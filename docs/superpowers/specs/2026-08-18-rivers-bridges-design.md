@@ -266,6 +266,48 @@ counts, bank-affinity strength) are tuned at these gates, not in advance.
 - Netlify (settlemaker.com) picks the change up via the usual settlemaker-web
   submodule bump.
 
+## Addendum — render-gate 2 verdict model (2026-08-19, owner-directed)
+
+Round-2 review replaced several first-draft behaviours. This addendum is binding
+over the corresponding sections above.
+
+### Village morphology (fords and village bridges)
+
+A route that DEAD-ENDS at the river terminates in a **riverside town square**;
+houses branch off the square **along the river bank**, not along the approach
+road. The approach road stays sparse — people cluster at the water unless the
+route is a through route. Far-bank development exists **only when the route
+continues onward** (through route): then the crossing carries the road and the
+fabric straddles the crossing (dense at the bridgehead, both sides). A far-bank
+route stub with a token house is wrong.
+
+### Town band
+
+Default **one** bridge; a second is exceptional, not budgeted. No empty ward
+carve-outs on the river side (under investigation as a defect, not a design
+choice).
+
+### City band (pop ≥ 10 000) — corrected wall reading
+
+"Wall stops at banks" always meant the circuit is CLOSED across the river by
+**chains/water-gates** (owner clarification): the wall reaches each bank and the
+two river crossings render as water-gate/chain spans that boats pass under —
+the Darkwood look — never as an open gap between disconnected arcs. The
+existing river-gap wall segments are the vehicle: render them as spans instead
+of skipping them.
+
+Population, routes, and bridges must AGREE: routes and gates concentrate on the
+populated side(s); bridges sit where the fabric is (internal streets of the
+city, typically 1–2 like the reference), never a cluster of decks on an
+unpopulated bank. Fabric genuinely astride the river is the target for this
+band.
+
+### Confluence
+
+Cross-river connection must be visually real — a painted road over a deck
+joining the built clusters (graph-level component union is not sufficient
+evidence).
+
 ## Out of scope
 
 - Pier/quay/harbour geometry on river banks — issue #3 (next), consuming this
