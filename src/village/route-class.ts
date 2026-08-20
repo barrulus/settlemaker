@@ -1,11 +1,12 @@
-import type { RouteKind } from '../generator/generation-params.js';
-
 /** Barry's Bazgaar route vocabulary, highest class first. */
 export type RouteType =
   | 'royal' | 'main' | 'market' | 'town' | 'local' | 'trail' | 'footpath';
 
 /** Special groups that are not part of the land hierarchy. */
 export type RouteGroup = 'searoutes' | 'airroutes' | 'traderoutes';
+
+/** The legacy three-kind form, declared locally so this module stays dependency-free. */
+export type LegacyRouteKind = 'road' | 'foot' | 'sea';
 
 export const ROUTE_CLASS_ORDER: RouteType[] = [
   'royal', 'main', 'market', 'town', 'local', 'trail', 'footpath',
@@ -41,7 +42,7 @@ export function stepDown(t: RouteType, floor: RouteType): RouteType {
 }
 
 /** Back-compat: the three-kind input form is widened, never replaced. */
-export function fromLegacyKind(k: 'road' | 'foot' | 'sea'): RouteType | RouteGroup {
+export function fromLegacyKind(k: LegacyRouteKind): RouteType | RouteGroup {
   if (k === 'road') return 'main';
   if (k === 'foot') return 'trail';
   return 'searoutes';
@@ -54,7 +55,7 @@ export function fromLegacyKind(k: 'road' | 'foot' | 'sea'): RouteType | RouteGro
  * type must not leak new classes into consumers that compare against the
  * old three, or a trail silently gets a road's weight.
  */
-export function toLegacyKind(k: RouteKind | RouteType | RouteGroup | undefined): RouteKind | undefined {
+export function toLegacyKind(k: LegacyRouteKind | RouteType | RouteGroup | undefined): LegacyRouteKind | undefined {
   if (k === undefined) return undefined;
   if (k === 'road' || k === 'foot' || k === 'sea') return k;
   // Special groups: searoutes → 'sea', airroutes and traderoutes → undefined
@@ -63,6 +64,6 @@ export function toLegacyKind(k: RouteKind | RouteType | RouteGroup | undefined):
   // Path group: trail, footpath → 'foot'
   if (k === 'trail' || k === 'footpath') return 'foot';
   // Road group: royal, main, market, town, local → 'road'
-  if (classRank(k as RouteType) <= classRank('local')) return 'road';
+  if (isRoadClass(k as RouteType)) return 'road';
   return undefined;
 }

@@ -1,7 +1,6 @@
 import { Point } from '../types/point.js';
 import type { GenerationParams, RoadEntry, RouteKind, RouteRelief } from '../generator/generation-params.js';
-import type { RouteType } from '../village/route-class.js';
-import { toLegacyKind } from '../village/route-class.js';
+import { toLegacyKind, type RouteType } from '../village/route-class.js';
 import { densityCurve, perPatchDensity } from '../generator/generation-params.js';
 
 /**
