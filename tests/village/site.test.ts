@@ -59,4 +59,12 @@ describe('buildSite', () => {
     expect(site.routes).toHaveLength(1);
     expect(site.routes[0]).toMatchObject({ bearingDeg: 90, type: 'main' });
   });
+
+  it('object-form bearing with no kind defaults to main road', () => {
+    const site = buildSite({ ...base, roadBearings: [{ bearing_deg: 45 }] });
+    expect(site.routes).toEqual([
+      { bearingDeg: 45, type: 'main', through: false, routeId: undefined,
+        followsRiver: undefined, relief: undefined },
+    ]);
+  });
 });

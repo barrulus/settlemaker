@@ -1,7 +1,10 @@
 import { Point } from '../types/point.js';
 import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import type { Site, SiteRoute } from './types.js';
-import { fromLegacyKind, type RouteType } from './route-class.js';
+import { ROUTE_CLASS_ORDER, fromLegacyKind, type RouteType } from './route-class.js';
+
+/** The seven land classes, from route-class.ts's single source of truth. */
+const LAND_CLASSES = new Set<string>(ROUTE_CLASS_ORDER);
 
 /**
  * Pass 1. Resolves FMG's input into burg-local metres. No geometry is
@@ -9,7 +12,7 @@ import { fromLegacyKind, type RouteType } from './route-class.js';
  */
 export function buildSite(input: AzgaarBurgInput): Site {
   const routes: SiteRoute[] = (input.roadBearings ?? [])
-    .map((b) => {
+    .map((b): SiteRoute | null => {
       if (typeof b === 'number') {
         return { bearingDeg: b, type: 'main' as RouteType, through: false,
           routeId: undefined, followsRiver: undefined, relief: undefined };
@@ -17,7 +20,7 @@ export function buildSite(input: AzgaarBurgInput): Site {
       // A caller on the widened contract sends a real class; a legacy caller
       // sends road|foot|sea, which is widened, never rejected.
       const raw = b.kind as string | undefined;
-      const typeOrGroup = (raw && ['royal', 'main', 'market', 'town', 'local', 'trail', 'footpath'].includes(raw))
+      const typeOrGroup = (raw && LAND_CLASSES.has(raw))
         ? (raw as RouteType)
         : fromLegacyKind((raw as 'road' | 'foot' | 'sea') ?? 'road');
 
@@ -38,7 +41,7 @@ export function buildSite(input: AzgaarBurgInput): Site {
         relief: b.relief,
       };
     })
-    .filter((r) => r !== null) as SiteRoute[];
+    .filter((r): r is SiteRoute => r !== null);
 
   const water: Point[][] = (input.coastlineGeometry ?? [])
     .map((ring) => ring.map((p) => new Point(p.x, p.y)));
