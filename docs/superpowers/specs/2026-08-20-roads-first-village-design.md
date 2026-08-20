@@ -417,7 +417,16 @@ face the nearest road. Glyphs marked `invariant` (the round huts) are not rotate
 | Instance jitter | ±10% | footprint only | Aesthetic: stops a row reading as stamped copies. |
 | Fit sizing | 0.85–1.15× | footprint only | Practical: shrink into a slightly narrow lot rather than abandoning it; grow into a generously wide fringe lot so a cottage is not lost in its plot. |
 
-Total bound on any instance: **0.85–1.65× nominal footprint**.
+**The bound applies to the non-semantic multipliers only.** Jitter × fit lands in
+**[0.765, 1.3225]**, and that combined factor is applied on top of the entry's
+`sizeFactor`. So an ordinary dwelling stays within roughly 0.77–1.32× nominal, while an
+inn at `sizeFactor` 1.5 reaches roughly 1.15–1.98×.
+
+`sizeFactor` is deliberately outside the bound: it is a statement about *what the
+building is*, not variation applied to it. Clamping it would squash the very distinction
+it exists to express. (Ruling R13, 2026-08-20 — an earlier draft of this section stated a
+total bound of 0.85–1.65×, which was an arithmetic slip: it multiplied `sizeFactor` by
+jitter and omitted fit.)
 
 Fringe dwellings therefore end up slightly larger *and* much further apart, which is closer
 to how a straggling edge actually looks than uniform dwellings would be.
