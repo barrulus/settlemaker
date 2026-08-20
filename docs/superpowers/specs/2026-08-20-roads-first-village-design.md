@@ -50,6 +50,9 @@ Rendering paints bands bottom-up: `parcel` → route → `structure` → `canopy
 New directory `src/village/`, nothing shared with `src/generator/model.ts`:
 
 ```
+geometry.ts                  bearings, arc-length, sampling, water membership
+glyphs.ts                    the single reader of SYMBOL_MANIFEST
+constants.ts                 every tunable from §11, in one place
 site.ts                      input → Site
 skeleton/green-siting.ts     which junction, which shape, how big
 skeleton/lanes.ts            spine, arms, invented lanes
@@ -64,6 +67,30 @@ dressing/scatter.ts
 dressing/poi.ts
 village-model.ts             orchestrates the five passes
 ```
+
+### Shared foundations
+
+Three modules sit under the five passes. They exist because the alternative is the same
+helper written three times with three slightly different sign conventions — the classic
+way a deterministic generator acquires a bug that only shows up at one bearing.
+
+- **`geometry.ts`** — compass bearings (0 = N, clockwise) to and from vectors, angular
+  gaps, polyline arc-length and sampling, unit vectors, distance, and "is this point in
+  any water polygon". Passes 2, 3, 4 and 5 all use it. Nothing in `src/geom/` covers
+  bearings or arc-length sampling, so this is new code, not a wrapper.
+- **`glyphs.ts`** — the **only** module that reads `SYMBOL_MANIFEST`. Nominal footprint,
+  ink extent, rotation class, `minScale`. The ink ratios currently living in
+  `src/generator/village-rows.ts` move here and are re-exported from their old home, so
+  there is one definition and the dependency points from the old engine to the shared
+  module rather than from the new engine to the old one.
+- **`constants.ts`** — every tunable in §11, in one file. §11 promises that a render-gate
+  verdict maps to a single edit; that promise is only true if the constants are in one
+  place rather than scattered across the passes that use them.
+
+**Rule for every pass:** a pass that needs an angle, an arc-length, a glyph dimension or a
+tunable **calls these modules**. It does not define its own local copy, and it does not
+inline a literal. If a helper is needed in two passes, it belongs here; if a constant is
+tuned at a gate, it belongs here.
 
 ### Invariants
 

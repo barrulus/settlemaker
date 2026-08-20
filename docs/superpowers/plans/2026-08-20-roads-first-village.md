@@ -18,7 +18,13 @@
 - **Zero runtime dependencies.** No new packages, for any reason.
 - **Existing engine untouched.** Nothing in `src/generator/model.ts` or `src/wards/` changes behaviour. New code lives in `src/village/`.
 - **Run commands through nix:** `nix develop --command bash -c "npx vitest run <path>"`.
-- **Reuse, don't re-implement:** `Point` (`src/types/point.js`), `SeededRandom` (`src/utils/random.js`), `pointInPolygon` (`src/geom/point-in-polygon.js`), `SYMBOL_MANIFEST` (`src/assets/symbol-manifest.js`), `inkFootprint` / `houseFootprint` (`src/generator/village-rows.js`).
+- **Reuse, don't re-implement:** `Point` (`src/types/point.js`), `SeededRandom` (`src/utils/random.js`), `pointInPolygon` (`src/geom/point-in-polygon.js`).
+- **Call the shared modules. Do not re-implement them.** Task 1 builds `src/village/geometry.ts`, `src/village/glyphs.ts` and `src/village/constants.ts`. Every task after it **imports** from them. Specifically:
+  - Need an angle, a bearing, an arc-length, a point along a polyline, a distance, or "is this in water"? → `geometry.ts`. Never write a local `bearingVector`, `polylineLength`, `unit` or `atan2` conversion inside a pass.
+  - Need a glyph's footprint, ink extent, rotation class or `minScale`? → `glyphs.ts`. It is the **only** module permitted to import `SYMBOL_MANIFEST`.
+  - Need a number that a render gate might change? → `constants.ts`. No tunable literal is inlined in a pass; the design's §11 promises that a gate verdict maps to one edit, and that is only true if the constants live in one file.
+  - If you find yourself about to write a helper that a neighbouring task also needs, stop and add it to `geometry.ts` with its own test, rather than writing it twice with two sign conventions. Two copies of an angle helper that disagree at one bearing is exactly the bug this rule exists to prevent.
+  - **Tests are the exception, deliberately.** A test may compute its expectation the long way — raw `Math.atan2`, a direct `pointInPolygon` call — precisely so it does not agree with the implementation by construction. A test that checks `bearingOf` by calling `bearingOf` proves nothing. Two tasks below do this on purpose; leave them alone.
 - **Imports use `.js` extensions** on relative paths, matching the existing codebase (NodeNext resolution).
 - **Commit after every task.** No Co-Authored-By lines.
 
@@ -28,6 +34,9 @@
 
 | File | Responsibility |
 |---|---|
+| `src/village/geometry.ts` | Bearings, angles, arc-length, sampling, water membership — used by every pass |
+| `src/village/glyphs.ts` | The only reader of `SYMBOL_MANIFEST`: footprints, ink extents, rotation |
+| `src/village/constants.ts` | Every tunable from the design's §11, in one place |
 | `src/village/types.ts` | Every village-domain type and the id helpers |
 | `src/village/route-class.ts` | The seven-type vocabulary: order, groups, widths, back-compat mapping |
 | `src/village/site.ts` | Pass 1 — `AzgaarBurgInput` → `Site` |
@@ -44,7 +53,434 @@
 
 ---
 
-### Task 1: Route vocabulary
+### Task 1: Shared foundations — geometry, glyphs, constants
+
+Every later task depends on this one. Build it first, and when a later task needs a helper
+or a number, import it from here rather than writing a local copy.
+
+**Files:**
+- Create: `src/village/geometry.ts`
+- Create: `src/village/glyphs.ts`
+- Create: `src/village/constants.ts`
+- Modify: `src/generator/village-rows.ts` (ink ratios move out; re-export from their old home)
+- Test: `tests/village/geometry.test.ts`, `tests/village/glyphs.test.ts`
+
+**Interfaces:**
+- Consumes: `Point`, `pointInPolygon`, `SYMBOL_MANIFEST`.
+- Produces:
+  - geometry — `bearingVector(deg): Point`, `bearingOf(from: Point, to: Point): number`, `angularGap(a, b): number`, `unit(dx, dy): Point`, `dist(a, b): number`, `polylineLength(pts): number`, `arcLengths(pts): number[]`, `sampleAt(pts, acc, s): { p: Point; dirDeg: number }`, `inAnyWater(p, water): boolean`
+  - glyphs — `hasGlyph(glyph): boolean`, `nominalFootprint(glyph): [number, number]`, `inkExtent(glyph, footprint): { width: number; depth: number }`, `rotationOf(glyph): 'invariant'|'free'|'locked'|'snap-cardinal'`, `minScaleOf(glyph): number`, `HOUSE_INK_RATIO`, `HUT_INK_RATIO`
+  - constants — the design's §11 table as named exports
+
+**Conventions this module fixes once, so no pass has to decide again:**
+- A **bearing** is degrees, 0 = North, clockwise, wrapped to `[0, 360)`.
+- North is `-y` (SVG-native, +y down), matching the symbol contract's `upVector: [0,-1]`.
+- **Arc-length** functions take a polyline and its cumulative-length array together, so a
+  caller that samples repeatedly computes the walk once.
+
+- [ ] **Step 1: Write the failing geometry test**
+
+```ts
+// tests/village/geometry.test.ts
+import { describe, it, expect } from 'vitest';
+import { Point } from '../../src/types/point.js';
+import {
+  angularGap, arcLengths, bearingOf, bearingVector, dist, inAnyWater,
+  polylineLength, sampleAt, unit,
+} from '../../src/village/geometry.js';
+
+describe('bearings', () => {
+  it('treats 0 as north, which is -y', () => {
+    const v = bearingVector(0);
+    expect(v.x).toBeCloseTo(0, 6);
+    expect(v.y).toBeCloseTo(-1, 6);
+  });
+
+  it('treats 90 as east', () => {
+    const v = bearingVector(90);
+    expect(v.x).toBeCloseTo(1, 6);
+    expect(v.y).toBeCloseTo(0, 6);
+  });
+
+  it('round-trips a bearing through a vector', () => {
+    for (const deg of [0, 37, 90, 180, 271, 359]) {
+      const v = bearingVector(deg);
+      expect(bearingOf(new Point(0, 0), v)).toBeCloseTo(deg, 4);
+    }
+  });
+
+  it('wraps out-of-range bearings', () => {
+    expect(bearingOf(new Point(0, 0), bearingVector(370))).toBeCloseTo(10, 4);
+  });
+
+  it('measures the shorter way round', () => {
+    expect(angularGap(10, 350)).toBeCloseTo(20, 6);
+    expect(angularGap(350, 10)).toBeCloseTo(20, 6);
+    expect(angularGap(0, 180)).toBeCloseTo(180, 6);
+  });
+});
+
+describe('vectors', () => {
+  it('normalises', () => {
+    const u = unit(3, 4);
+    expect(Math.hypot(u.x, u.y)).toBeCloseTo(1, 6);
+  });
+
+  it('survives a zero-length input instead of producing NaN', () => {
+    const u = unit(0, 0);
+    expect(Number.isNaN(u.x)).toBe(false);
+    expect(Number.isNaN(u.y)).toBe(false);
+  });
+
+  it('measures distance', () => {
+    expect(dist(new Point(0, 0), new Point(3, 4))).toBeCloseTo(5, 6);
+  });
+});
+
+describe('polylines', () => {
+  const line = [new Point(0, 0), new Point(10, 0), new Point(10, 10)];
+
+  it('measures total length', () => {
+    expect(polylineLength(line)).toBeCloseTo(20, 6);
+  });
+
+  it('is zero for a degenerate polyline', () => {
+    expect(polylineLength([new Point(1, 1)])).toBe(0);
+  });
+
+  it('accumulates length per vertex', () => {
+    expect(arcLengths(line)).toEqual([0, 10, 20]);
+  });
+
+  it('samples a point partway along, with its local direction', () => {
+    const acc = arcLengths(line);
+    const mid = sampleAt(line, acc, 5);
+    expect(mid.p.x).toBeCloseTo(5, 6);
+    expect(mid.p.y).toBeCloseTo(0, 6);
+    expect(mid.dirDeg).toBeCloseTo(90, 4); // running east
+  });
+
+  it('clamps a sample beyond either end', () => {
+    const acc = arcLengths(line);
+    expect(sampleAt(line, acc, -5).p.x).toBeCloseTo(0, 6);
+    expect(sampleAt(line, acc, 999).p.y).toBeCloseTo(10, 6);
+  });
+});
+
+describe('inAnyWater', () => {
+  const pond = [[new Point(0, 0), new Point(10, 0), new Point(10, 10), new Point(0, 10)]];
+
+  it('is true inside a ring', () => {
+    expect(inAnyWater(new Point(5, 5), pond)).toBe(true);
+  });
+
+  it('is false outside every ring', () => {
+    expect(inAnyWater(new Point(50, 50), pond)).toBe(false);
+  });
+
+  it('is false when there is no water at all', () => {
+    expect(inAnyWater(new Point(5, 5), [])).toBe(false);
+  });
+});
+```
+
+- [ ] **Step 2: Run it to verify it fails**
+
+Run: `nix develop --command bash -c "npx vitest run tests/village/geometry.test.ts"`
+Expected: FAIL — cannot find module `src/village/geometry.js`
+
+- [ ] **Step 3: Write geometry.ts**
+
+```ts
+// src/village/geometry.ts
+import { Point } from '../types/point.js';
+import { pointInPolygon } from '../geom/point-in-polygon.js';
+
+/**
+ * Bearings are degrees, 0 = North, clockwise, wrapped to [0, 360).
+ * North is -y: SVG-native, matching the symbol contract's upVector [0,-1].
+ * Every pass uses these — none of them redefines them.
+ */
+export function wrapDeg(deg: number): number {
+  return ((deg % 360) + 360) % 360;
+}
+
+export function bearingVector(deg: number): Point {
+  const r = (deg * Math.PI) / 180;
+  return new Point(Math.sin(r), -Math.cos(r));
+}
+
+export function bearingOf(from: Point, to: Point): number {
+  return wrapDeg((Math.atan2(to.x - from.x, -(to.y - from.y)) * 180) / Math.PI);
+}
+
+/** The shorter way round, 0..180. */
+export function angularGap(a: number, b: number): number {
+  return Math.abs(((wrapDeg(a) - wrapDeg(b) + 540) % 360) - 180);
+}
+
+export function unit(dx: number, dy: number): Point {
+  const len = Math.hypot(dx, dy);
+  return len === 0 ? new Point(0, 0) : new Point(dx / len, dy / len);
+}
+
+export function dist(a: Point, b: Point): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+export function polylineLength(points: Point[]): number {
+  let total = 0;
+  for (let i = 1; i < points.length; i++) total += dist(points[i], points[i - 1]);
+  return total;
+}
+
+/** Cumulative length at each vertex. Pair it with sampleAt. */
+export function arcLengths(points: Point[]): number[] {
+  const acc = [0];
+  for (let i = 1; i < points.length; i++) acc.push(acc[i - 1] + dist(points[i], points[i - 1]));
+  return acc;
+}
+
+/** The point at arc-length `s`, and the bearing the polyline runs there. */
+export function sampleAt(
+  points: Point[], acc: number[], s: number,
+): { p: Point; dirDeg: number } {
+  const total = acc[acc.length - 1];
+  const clamped = Math.min(Math.max(s, 0), total);
+  let i = 1;
+  while (i < acc.length - 1 && acc[i] < clamped) i++;
+  const seg = acc[i] - acc[i - 1] || 1;
+  const t = (clamped - acc[i - 1]) / seg;
+  const a = points[i - 1];
+  const b = points[i];
+  return {
+    p: new Point(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t),
+    dirDeg: bearingOf(a, b),
+  };
+}
+
+export function inAnyWater(p: Point, water: Point[][]): boolean {
+  return water.some((ring) => pointInPolygon(p, ring));
+}
+```
+
+- [ ] **Step 4: Run it to verify it passes**
+
+Run: `nix develop --command bash -c "npx vitest run tests/village/geometry.test.ts"`
+Expected: PASS, 14 tests
+
+- [ ] **Step 5: Write the failing glyphs test**
+
+```ts
+// tests/village/glyphs.test.ts
+import { describe, it, expect } from 'vitest';
+import {
+  HOUSE_INK_RATIO, HUT_INK_RATIO, hasGlyph, inkExtent, minScaleOf, nominalFootprint,
+  rotationOf,
+} from '../../src/village/glyphs.js';
+
+describe('glyph lookups', () => {
+  it('knows which ids the manifest actually has', () => {
+    expect(hasGlyph('sm-house')).toBe(true);
+    expect(hasGlyph('sm-house--tundra')).toBe(true);
+    // No tundra variant was drawn for the tiled house — the deck relies on
+    // this being false to fall back to the temperate id.
+    expect(hasGlyph('sm-house-tiled--tundra')).toBe(false);
+  });
+
+  it('reads a footprint in metres from the manifest', () => {
+    expect(nominalFootprint('sm-house')).toEqual([8, 6.6]);
+  });
+
+  it('falls back to a house-sized footprint for an unknown id', () => {
+    expect(nominalFootprint('sm-not-a-real-symbol')).toEqual([8, 6.6]);
+  });
+
+  it('reads the rotation contract', () => {
+    expect(rotationOf('sm-house')).toBe('free');
+    expect(rotationOf('sm-hut-round')).toBe('invariant');
+  });
+
+  it('reads minScale', () => {
+    expect(minScaleOf('sm-house')).toBeCloseTo(0.35, 5);
+  });
+
+  it('shrinks a footprint to its ink extent, by family', () => {
+    expect(inkExtent('sm-house', [8, 6.6]).width).toBeCloseTo(8 * HOUSE_INK_RATIO, 5);
+    expect(inkExtent('sm-hut-straw', [6.4, 6.4]).width).toBeCloseTo(6.4 * HUT_INK_RATIO, 5);
+  });
+
+  it('uses the scaled footprint it is given, not the nominal one', () => {
+    expect(inkExtent('sm-house', [12, 10]).width).toBeCloseTo(12 * HOUSE_INK_RATIO, 5);
+  });
+});
+
+describe('the old engine keeps working', () => {
+  it('still exports the ink ratios from village-rows for existing callers', async () => {
+    const old = await import('../../src/generator/village-rows.js');
+    expect(old.HOUSE_INK_RATIO).toBe(HOUSE_INK_RATIO);
+    expect(old.HUT_INK_RATIO).toBe(HUT_INK_RATIO);
+  });
+});
+```
+
+- [ ] **Step 6: Run it to verify it fails**
+
+Run: `nix develop --command bash -c "npx vitest run tests/village/glyphs.test.ts"`
+Expected: FAIL — cannot find module `src/village/glyphs.js`
+
+- [ ] **Step 7: Write glyphs.ts and move the ink ratios**
+
+```ts
+// src/village/glyphs.ts
+import { SYMBOL_MANIFEST } from '../assets/symbol-manifest.js';
+
+/**
+ * The ONLY module that reads SYMBOL_MANIFEST. Everything that needs a
+ * glyph dimension asks here, so there is one lookup and one fallback.
+ */
+
+/** Used when a glyph is missing from the manifest — a plain house. */
+const FALLBACK_FOOTPRINT: [number, number] = [8, 6.6];
+
+/**
+ * Painted extent as a fraction of the art box, per family. A house's
+ * transparent margin may overhang a neighbour; its WALLS may not.
+ * Moved here from src/generator/village-rows.ts so the new engine does not
+ * depend on the old one; village-rows re-exports them for its own callers.
+ */
+export const HOUSE_INK_RATIO = 0.68;
+export const HUT_INK_RATIO = 0.85;
+
+/** Whether the manifest carries this id at all — the biome-fallback test. */
+export function hasGlyph(glyph: string): boolean {
+  return Object.prototype.hasOwnProperty.call(SYMBOL_MANIFEST, glyph);
+}
+
+export function nominalFootprint(glyph: string): [number, number] {
+  const fp = SYMBOL_MANIFEST[glyph]?.footprint;
+  return fp ? [fp[0], fp[1]] : [...FALLBACK_FOOTPRINT];
+}
+
+export function rotationOf(glyph: string): 'invariant' | 'free' | 'locked' | 'snap-cardinal' {
+  return SYMBOL_MANIFEST[glyph]?.rotation ?? 'free';
+}
+
+export function minScaleOf(glyph: string): number {
+  return SYMBOL_MANIFEST[glyph]?.minScale ?? 0.35;
+}
+
+/**
+ * Ink extent of an ALREADY-SCALED footprint. Callers pass the building's
+ * final footprint, not the nominal one, because every size multiplier has
+ * already been applied by then.
+ */
+export function inkExtent(
+  glyph: string, footprint: [number, number],
+): { width: number; depth: number } {
+  const ratio = glyph.includes('hut') ? HUT_INK_RATIO : HOUSE_INK_RATIO;
+  return { width: footprint[0] * ratio, depth: footprint[1] * ratio };
+}
+```
+
+Then in `src/generator/village-rows.ts`, replace the two `export const` declarations of
+`HOUSE_INK_RATIO` and `HUT_INK_RATIO` (keeping the existing comment block above them,
+which records the gate-tuning history) with a re-export, so there is exactly one
+definition:
+
+```ts
+// Ink ratios now live in src/village/glyphs.ts — one definition, shared by
+// both engines. Re-exported here so this module's existing callers are
+// unaffected. The tuning history above still applies.
+export { HOUSE_INK_RATIO, HUT_INK_RATIO } from '../village/glyphs.js';
+```
+
+- [ ] **Step 8: Run the glyph test and the old engine's suite**
+
+Run: `nix develop --command bash -c "npx vitest run tests/village/glyphs.test.ts tests/village-rows.test.ts"`
+Expected: PASS both — the ratios moved, their values did not.
+
+- [ ] **Step 9: Write constants.ts**
+
+No test of its own: it is data, and every value is asserted by the task that consumes it.
+
+```ts
+// src/village/constants.ts
+
+/**
+ * Every tunable from the design's §11, in one place.
+ *
+ * The design promises that a render-gate verdict maps to a single edit.
+ * That is only true if the constants live here rather than inside the pass
+ * that happens to use them. If you are about to write a number into a pass,
+ * write it here instead.
+ */
+
+// --- Green -------------------------------------------------------------
+/** Diameter floor in metres, by the highest road class present. */
+export const GREEN_DIAMETER_FLOOR_M: Record<string, number> = {
+  royal: 26, main: 22, market: 20, town: 16, local: 12,
+};
+export const GREEN_REFERENCE_POP = 300;
+export const GREEN_DIAMETER_CAP_M = 40;
+export const GREEN_BUILT_RADIUS_DIVISOR = 1.5;
+export const GREEN_WATER_MARGIN_M = 6;
+
+// --- Lanes -------------------------------------------------------------
+export const LANE_SAMPLE_STEP_M = 12;
+export const LANE_WANDER_M = 3.5;
+export const MIN_ARM_SEPARATION_DEG = 35;
+export const MAX_INVENTED_LANES = 24;
+export const FRONTAGE_MARGIN = 1.15;
+
+// --- Relaxation --------------------------------------------------------
+export const RELAX_ITERATIONS = 3;
+export const RELAX_MAX_DISPLACEMENT_M = 1.5;
+export const RELAX_CLEARANCE_M = 0.5;
+export const TAIL_STUB_M = 12;
+
+// --- Parcels -----------------------------------------------------------
+export const GAP_LOOSE_M = 2.4;
+export const GAP_TIGHT_M = 1.0;
+export const GAP_POP_LOW = 100;
+export const GAP_POP_HIGH = 900;
+export const GRADIENT_EXPONENT = 1.5;
+export const GRADIENT_K = 2.6;
+export const FRONTAGE_JITTER = 0.1;
+export const LOT_DEPTH_M = 25;
+export const RING_SETBACK_M = 3;
+export const MEAN_LOT_AREA_M2 = 320;
+
+// --- Dwellings ---------------------------------------------------------
+export const SIZE_JITTER = 0.1;
+export const FIT_MIN = 0.85;
+export const FIT_MAX = 1.15;
+export const SEATING_SETBACK_MAX_M = 1.5;
+export const DECK_GAP_M = 1.5;
+
+// --- Feedback loop -----------------------------------------------------
+export const MAX_FEEDBACK_ROUNDS = 3;
+export const GAP_TIGHTEN = 0.85;
+
+// --- Shorefront (pass 5, declared here so it is not lost) ---------------
+export const SHOREFRONT_REACH_FACTOR = 1.5;
+```
+
+- [ ] **Step 10: Verify the whole suite still passes, then commit**
+
+Run: `nix develop --command bash -c "npx tsc --noEmit && npx vitest run"`
+Expected: PASS — nothing has changed behaviourally; one constant moved house.
+
+```bash
+git add src/village/geometry.ts src/village/glyphs.ts src/village/constants.ts \
+        src/generator/village-rows.ts \
+        tests/village/geometry.test.ts tests/village/glyphs.test.ts
+git commit -m "feat(village): shared geometry, glyph and constant modules"
+```
+
+---
+
+### Task 2: Route vocabulary
 
 **Files:**
 - Create: `src/village/route-class.ts`
@@ -204,14 +640,14 @@ git commit -m "feat(village): seven-type route class vocabulary"
 
 ---
 
-### Task 2: Village types and stable ids
+### Task 3: Village types and stable ids
 
 **Files:**
 - Create: `src/village/types.ts`
 - Test: `tests/village/ids.test.ts`
 
 **Interfaces:**
-- Consumes: `RouteType` from Task 1; `Point`.
+- Consumes: `RouteType` from Task 2; `Point`.
 - Produces: interfaces `Site`, `Green`, `Lane`, `Lot`, `Building`, `VillageModel`; id helpers `armLaneId(bearingDeg)`, `branchLaneId(parentId, atFraction)`, `lotId(laneId, side, ordinal)`, `buildingId(lotId)`.
 
 - [ ] **Step 1: Write the failing test**
@@ -379,14 +815,14 @@ git commit -m "feat(village): domain types and structural stable ids"
 
 ---
 
-### Task 3: Pass 1 — Site
+### Task 4: Pass 1 — Site
 
 **Files:**
 - Create: `src/village/site.ts`
 - Test: `tests/village/site.test.ts`
 
 **Interfaces:**
-- Consumes: `AzgaarBurgInput` (`src/input/azgaar-input.js`), `RouteType`/`fromLegacyKind` (Task 1), `Site`/`SiteRoute` (Task 2).
+- Consumes: `AzgaarBurgInput` (`src/input/azgaar-input.js`), `RouteType`/`fromLegacyKind` (Task 2), `Site`/`SiteRoute` (Task 3).
 - Produces: `buildSite(input: AzgaarBurgInput): Site`.
 
 - [ ] **Step 1: Write the failing test**
@@ -521,14 +957,14 @@ git commit -m "feat(village): pass 1 — site resolution from FMG input"
 
 ---
 
-### Task 4: Green shape and size
+### Task 5: Green shape and size
 
 **Files:**
 - Create: `src/village/skeleton/green-siting.ts`
 - Test: `tests/village/green-shape.test.ts`
 
 **Interfaces:**
-- Consumes: `Site`, `GreenShape` (Task 2); `isRoadClass`, `classRank` (Task 1).
+- Consumes: `Site`, `GreenShape` (Task 3); `isRoadClass`, `classRank` (Task 2).
 - Produces: `roadArms(site: Site): SiteRoute[]`, `greenShape(arms: SiteRoute[], clippedByWater: boolean): GreenShape`, `predictedBuiltRadius(population: number, meanOccupancy: number, meanLotAreaM2: number): number`, `greenDiameter(arms: SiteRoute[], population: number, builtRadiusM: number): number`.
 
 - [ ] **Step 1: Write the failing test**
@@ -627,20 +1063,18 @@ Expected: FAIL — cannot find module `src/village/skeleton/green-siting.js`
 // src/village/skeleton/green-siting.ts
 import type { GreenShape, Site, SiteRoute } from '../types.js';
 import { classRank, isRoadClass } from '../route-class.js';
+import {
+  GREEN_BUILT_RADIUS_DIVISOR, GREEN_DIAMETER_CAP_M, GREEN_DIAMETER_FLOOR_M,
+  GREEN_REFERENCE_POP,
+} from '../constants.js';
 
 /** Only road-group routes influence the green. */
 export function roadArms(site: Site): SiteRoute[] {
   return site.routes.filter((r) => isRoadClass(r.type));
 }
 
-/** Green diameter floor in metres, by the highest road class present. */
-const DIAMETER_FLOOR: Record<string, number> = {
-  royal: 26, main: 22, market: 20, town: 16, local: 12,
-};
-
-const REFERENCE_POP = 300;
-const DIAMETER_CAP_M = 40;
-const BUILT_RADIUS_DIVISOR = 1.5;
+// Floors, reference population and caps all live in constants.ts — a gate
+// verdict on green size is one edit there, not a hunt through this pass.
 
 /** The shape is a fossil of the junction that made it. */
 export function greenShape(arms: SiteRoute[], clippedByWater: boolean): GreenShape {
@@ -673,14 +1107,14 @@ export function greenDiameter(
   const best = arms.length
     ? arms.reduce((a, b) => (classRank(a.type) <= classRank(b.type) ? a : b))
     : undefined;
-  const floor = best ? (DIAMETER_FLOOR[best.type] ?? 12) : 12;
-  const scaled = floor * Math.sqrt(population / REFERENCE_POP);
-  const cap = Math.min(DIAMETER_CAP_M, builtRadiusM / BUILT_RADIUS_DIVISOR);
+  const floor = best ? (GREEN_DIAMETER_FLOOR_M[best.type] ?? 12) : 12;
+  const scaled = floor * Math.sqrt(population / GREEN_REFERENCE_POP);
+  const cap = Math.min(GREEN_DIAMETER_CAP_M, builtRadiusM / GREEN_BUILT_RADIUS_DIVISOR);
   return Math.max(floor, Math.min(scaled, Math.max(floor, cap)));
 }
 ```
 
-Note on the arm-count table: a single `through` route arrives as **one** `SiteRoute` with `through: true` (it exits on the far side automatically — see Task 6), so `arms.length === 2` means two distinct routes, which is a Y once the through route's far side is counted. Both 2 and 3 therefore give a triangle.
+Note on the arm-count table: a single `through` route arrives as **one** `SiteRoute` with `through: true` (it exits on the far side automatically — see Task 7), so `arms.length === 2` means two distinct routes, which is a Y once the through route's far side is counted. Both 2 and 3 therefore give a triangle.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -696,14 +1130,14 @@ git commit -m "feat(village): green shape and size from junction topology"
 
 ---
 
-### Task 5: Green position
+### Task 6: Green position
 
 **Files:**
 - Modify: `src/village/skeleton/green-siting.ts`
 - Test: `tests/village/green-position.test.ts`
 
 **Interfaces:**
-- Consumes: `roadArms`, `greenShape`, `greenDiameter` (Task 4); `pointInPolygon` (`src/geom/point-in-polygon.js`).
+- Consumes: `roadArms`, `greenShape`, `greenDiameter` (Task 5); `pointInPolygon` (`src/geom/point-in-polygon.js`).
 - Produces: `waterClips(centre: Point, radiusM: number, water: Point[][]): boolean`, `siteGreen(site: Site, builtRadiusM: number, rng: SeededRandom): Green`.
 
 - [ ] **Step 1: Write the failing test**
@@ -780,18 +1214,13 @@ Append to `src/village/skeleton/green-siting.ts`:
 ```ts
 import { Point } from '../../types/point.js';
 import { SeededRandom } from '../../utils/random.js';
-import { pointInPolygon } from '../../geom/point-in-polygon.js';
+import { bearingVector, inAnyWater } from '../geometry.js';
+import { GREEN_WATER_MARGIN_M } from '../constants.js';
 import type { Green } from '../types.js';
 
-const WATER_MARGIN_M = 6;
+/** Local to this pass: how the search walks, not what a gate would tune. */
 const PUSH_STEP_M = 2;
 const MAX_PUSH_STEPS = 200;
-
-/** Bearing degrees (0 = N, clockwise) to a unit vector in +y-down space. */
-function bearingVector(bearingDeg: number): Point {
-  const r = (bearingDeg * Math.PI) / 180;
-  return new Point(Math.sin(r), -Math.cos(r));
-}
 
 /** True when any point on the green's rim, or its centre, is in water. */
 export function waterClips(centre: Point, radiusM: number, water: Point[][]): boolean {
@@ -801,7 +1230,7 @@ export function waterClips(centre: Point, radiusM: number, water: Point[][]): bo
     const a = (i / 16) * Math.PI * 2;
     probes.push(new Point(centre.x + radiusM * Math.cos(a), centre.y + radiusM * Math.sin(a)));
   }
-  return probes.some((p) => water.some((ring) => pointInPolygon(p, ring)));
+  return probes.some((p) => inAnyWater(p, water));
 }
 
 /**
@@ -820,14 +1249,14 @@ export function siteGreen(site: Site, builtRadiusM: number, rng: SeededRandom): 
   // Position: origin, then pushed clear of water along the away bearing.
   let centre = new Point(0, 0);
   let clipped = false;
-  if (waterClips(centre, radius + WATER_MARGIN_M, site.water)) {
+  if (waterClips(centre, radius + GREEN_WATER_MARGIN_M, site.water)) {
     clipped = true;
     // Push along the bearing of the arm that best points away from water,
     // or due south when there is no arm to follow.
     const away = arms.length ? bearingVector(arms[0].bearingDeg) : new Point(0, 1);
     for (let i = 0; i < MAX_PUSH_STEPS; i++) {
       centre = new Point(centre.x + away.x * PUSH_STEP_M, centre.y + away.y * PUSH_STEP_M);
-      if (!waterClips(centre, radius + WATER_MARGIN_M, site.water)) break;
+      if (!waterClips(centre, radius + GREEN_WATER_MARGIN_M, site.water)) break;
     }
   }
 
@@ -853,14 +1282,14 @@ git commit -m "feat(village): green position, water displacement and D-shape sel
 
 ---
 
-### Task 6: Lane arms
+### Task 7: Lane arms
 
 **Files:**
 - Create: `src/village/skeleton/lanes.ts`
 - Test: `tests/village/lanes-arms.test.ts`
 
 **Interfaces:**
-- Consumes: `Green`, `Lane`, `Site`, `armLaneId` (Task 2); `laneWidth` (Task 1).
+- Consumes: `Green`, `Lane`, `Site`, `armLaneId` (Task 3); `laneWidth` (Task 2).
 - Produces: `buildArms(site: Site, green: Green, extentM: number, rng: SeededRandom): Lane[]`.
 
 - [ ] **Step 1: Write the failing test**
@@ -938,17 +1367,9 @@ Expected: FAIL — cannot find module `src/village/skeleton/lanes.js`
 import { Point } from '../../types/point.js';
 import { SeededRandom } from '../../utils/random.js';
 import { laneWidth } from '../route-class.js';
+import { bearingVector } from '../geometry.js';
+import { LANE_SAMPLE_STEP_M, LANE_WANDER_M } from '../constants.js';
 import { armLaneId, type Green, type Lane, type Site, type SiteRoute } from '../types.js';
-
-/** Metres between sample points along a lane. */
-const SAMPLE_STEP_M = 12;
-/** Maximum sideways wander per sample, in metres. */
-const WANDER_M = 3.5;
-
-function bearingVector(bearingDeg: number): Point {
-  const r = (bearingDeg * Math.PI) / 180;
-  return new Point(Math.sin(r), -Math.cos(r));
-}
 
 /**
  * One arm: a polyline from the green's rim outward along `bearingDeg`,
@@ -962,8 +1383,8 @@ function runArm(
   const start = green.diameter / 2;
   const points: Point[] = [];
   let drift = 0;
-  for (let d = start; d <= start + extentM; d += SAMPLE_STEP_M) {
-    drift += (rng.float() - 0.5) * 2 * WANDER_M;
+  for (let d = start; d <= start + extentM; d += LANE_SAMPLE_STEP_M) {
+    drift += (rng.float() - 0.5) * 2 * LANE_WANDER_M;
     points.push(new Point(
       green.centre.x + dir.x * d + normal.x * drift,
       green.centre.y + dir.y * d + normal.y * drift,
@@ -1011,14 +1432,14 @@ git commit -m "feat(village): lane arms from typed routes, with through crossing
 
 ---
 
-### Task 7: Frontage budget and invented lanes
+### Task 8: Frontage budget and invented lanes
 
 **Files:**
 - Modify: `src/village/skeleton/lanes.ts`
 - Test: `tests/village/lanes-invented.test.ts`
 
 **Interfaces:**
-- Consumes: `buildArms` (Task 6), `branchLaneId` (Task 2), `stepDown`, `laneWidth` (Task 1).
+- Consumes: `buildArms` (Task 7), `branchLaneId` (Task 3), `stepDown`, `laneWidth` (Task 2).
 - Produces: `polylineLength(points: Point[]): number`, `availableFrontage(lanes: Lane[]): number`, `requiredFrontage(population: number, meanOccupancy: number, meanFrontageM: number): number`, `addInventedLanes(lanes: Lane[], green: Green, requiredM: number, extentM: number, rng: SeededRandom): Lane[]`.
 
 - [ ] **Step 1: Write the failing test**
@@ -1103,21 +1524,10 @@ Append to `src/village/skeleton/lanes.ts`:
 ```ts
 import { branchLaneId } from '../types.js';
 import { classRank, stepDown, type RouteType } from '../route-class.js';
-
-/** Safety margin on the frontage budget. */
-export const FRONTAGE_MARGIN = 1.15;
-/** Minimum angular separation between lanes leaving the green, degrees. */
-const MIN_ARM_SEPARATION_DEG = 35;
-/** Bound on how many lanes may be invented before we accept the shortfall. */
-const MAX_INVENTED_LANES = 24;
-
-export function polylineLength(points: Point[]): number {
-  let total = 0;
-  for (let i = 1; i < points.length; i++) {
-    total += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
-  }
-  return total;
-}
+import { angularGap, bearingOf, polylineLength } from '../geometry.js';
+import {
+  FRONTAGE_MARGIN, MAX_INVENTED_LANES, MIN_ARM_SEPARATION_DEG,
+} from '../constants.js';
 
 /** Both sides of every lane are frontage. */
 export function availableFrontage(lanes: Lane[]): number {
@@ -1130,15 +1540,9 @@ export function requiredFrontage(
   return (population / meanOccupancy) * meanFrontageM;
 }
 
-function bearingOf(green: Green, lane: Lane): number {
-  const p = lane.points[0];
-  const deg = (Math.atan2(p.x - green.centre.x, -(p.y - green.centre.y)) * 180) / Math.PI;
-  return (deg + 360) % 360;
-}
-
-function angularGap(a: number, b: number): number {
-  const d = Math.abs(((a - b + 540) % 360) - 180);
-  return d;
+/** Which way a lane leaves the green — geometry.ts owns the trigonometry. */
+function laneBearing(green: Green, lane: Lane): number {
+  return bearingOf(green.centre, lane.points[0]);
 }
 
 /**
@@ -1159,7 +1563,7 @@ export function addInventedLanes(
   let guard = 0;
   while (availableFrontage(out) < requiredM * FRONTAGE_MARGIN && guard < MAX_INVENTED_LANES) {
     guard++;
-    const taken = out.map((l) => bearingOf(green, l));
+    const taken = out.map((l) => laneBearing(green, l));
     let bearing = -1;
     for (let attempt = 0; attempt < 36; attempt++) {
       const candidate = rng.int(0, 360);
@@ -1175,13 +1579,13 @@ export function addInventedLanes(
       const at = 0.33 + rng.float() * 0.34;
       const idx = Math.max(1, Math.floor(parent.points.length * at));
       const anchor = parent.points[Math.min(idx, parent.points.length - 1)];
-      const parentBearing = bearingOf(green, parent);
+      const parentBearing = laneBearing(green, parent);
       const side = rng.bool(0.5) ? 1 : -1;
       const branchBearing = (parentBearing + side * (60 + rng.int(0, 51)) + 360) % 360;
       const dir = bearingVector(branchBearing);
       const length = extentM * 0.5;
       const points: Point[] = [];
-      for (let d = 0; d <= length; d += SAMPLE_STEP_M) {
+      for (let d = 0; d <= length; d += LANE_SAMPLE_STEP_M) {
         points.push(new Point(anchor.x + dir.x * d, anchor.y + dir.y * d));
       }
       out.push({
@@ -1218,7 +1622,7 @@ git commit -m "feat(village): frontage budget drives invented lanes"
 
 ---
 
-### Task 8: Polyline offset
+### Task 9: Polyline offset
 
 **Files:**
 - Create: `src/village/parcels/strip.ts`
@@ -1280,11 +1684,7 @@ Expected: FAIL — cannot find module `src/village/parcels/strip.js`
 ```ts
 // src/village/parcels/strip.ts
 import { Point } from '../../types/point.js';
-
-function unit(dx: number, dy: number): Point {
-  const len = Math.hypot(dx, dy);
-  return len === 0 ? new Point(0, 0) : new Point(dx / len, dy / len);
-}
+import { unit } from '../geometry.js';
 
 /**
  * Offset a polyline sideways by `distanceM`. `side` is +1 for the right of
@@ -1331,14 +1731,14 @@ git commit -m "feat(village): polyline offset for frontage strips"
 
 ---
 
-### Task 9: Frontage gradient and lane subdivision
+### Task 10: Frontage gradient and lane subdivision
 
 **Files:**
 - Create: `src/village/parcels/lots.ts`
 - Test: `tests/village/lots-subdivide.test.ts`
 
 **Interfaces:**
-- Consumes: `offsetPolyline` (Task 8); `lotId`, `Lane`, `Lot`, `Green` (Task 2).
+- Consumes: `offsetPolyline` (Task 9); `lotId`, `Lane`, `Lot`, `Green` (Task 3).
 - Produces: `gapForPopulation(population: number): number`, `frontageAt(distanceM: number, builtRadiusM: number, f0: number): number`, `subdivideLane(lane: Lane, green: Green, builtRadiusM: number, f0: number, depthM: number, rng: SeededRandom): Lot[]`.
 
 - [ ] **Step 1: Write the failing test**
@@ -1443,20 +1843,12 @@ Expected: FAIL — cannot find module `src/village/parcels/lots.js`
 import { Point } from '../../types/point.js';
 import { SeededRandom } from '../../utils/random.js';
 import { offsetPolyline } from './strip.js';
+import { arcLengths, bearingOf, dist, sampleAt } from '../geometry.js';
+import {
+  FRONTAGE_JITTER, GAP_LOOSE_M, GAP_POP_HIGH, GAP_POP_LOW, GAP_TIGHT_M,
+  GRADIENT_EXPONENT, GRADIENT_K,
+} from '../constants.js';
 import { lotId, type Green, type Lane, type Lot } from '../types.js';
-
-/** Gap between neighbours: 2.4 m at pop 100, 1.0 m at pop 900. */
-const GAP_LOOSE_M = 2.4;
-const GAP_TIGHT_M = 1.0;
-const GAP_POP_LOW = 100;
-const GAP_POP_HIGH = 900;
-
-/** Frontage gradient exponent and fringe multiplier. */
-const GRADIENT_EXPONENT = 1.5;
-const GRADIENT_K = 2.6;
-
-/** ±10% jitter on each cut, so frontages are not mechanically even. */
-const FRONTAGE_JITTER = 0.1;
 
 export function gapForPopulation(population: number): number {
   const t = Math.min(1, Math.max(0, (population - GAP_POP_LOW) / (GAP_POP_HIGH - GAP_POP_LOW)));
@@ -1469,28 +1861,9 @@ export function frontageAt(distanceM: number, builtRadiusM: number, f0: number):
   return f0 * (1 + GRADIENT_K * Math.pow(ratio, GRADIENT_EXPONENT));
 }
 
-function lengthAlong(points: Point[]): number[] {
-  const acc = [0];
-  for (let i = 1; i < points.length; i++) {
-    acc.push(acc[i - 1] + Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y));
-  }
-  return acc;
-}
-
-/** Point at arc-length `s` along a polyline, plus the local direction. */
-function sampleAt(points: Point[], acc: number[], s: number): { p: Point; dirDeg: number } {
-  const total = acc[acc.length - 1];
-  const clamped = Math.min(Math.max(s, 0), total);
-  let i = 1;
-  while (i < acc.length - 1 && acc[i] < clamped) i++;
-  const seg = acc[i] - acc[i - 1] || 1;
-  const t = (clamped - acc[i - 1]) / seg;
-  const a = points[i - 1];
-  const b = points[i];
-  const p = new Point(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
-  const dirDeg = (Math.atan2(b.x - a.x, -(b.y - a.y)) * 180) / Math.PI;
-  return { p, dirDeg: (dirDeg + 360) % 360 };
-}
+// Arc-length walking and sampling come from geometry.ts. This pass samples
+// the same edge repeatedly, so it computes the cumulative walk once with
+// arcLengths() and passes it to every sampleAt() call.
 
 /**
  * Cut one lane's two frontage strips into lots. Ordinals count from the
@@ -1501,21 +1874,19 @@ export function subdivideLane(
   rng: SeededRandom,
 ): Lot[] {
   const lots: Lot[] = [];
-  const acc = lengthAlong(lane.points);
-  const total = acc[acc.length - 1];
   const setback = lane.widthM / 2 + 2;
 
   for (const side of [1, -1] as const) {
     const edge = offsetPolyline(lane.points, setback, side);
     if (edge.length < 2) continue;
-    const edgeAcc = lengthAlong(edge);
+    const edgeAcc = arcLengths(edge);
     const edgeTotal = edgeAcc[edgeAcc.length - 1];
 
     let s = 0;
     let ordinal = 0;
     while (s < edgeTotal) {
-      const { p, dirDeg } = sampleAt(edge, edgeAcc, s);
-      const d = Math.hypot(p.x - green.centre.x, p.y - green.centre.y);
+      const { p } = sampleAt(edge, edgeAcc, s);
+      const d = dist(p, green.centre);
       const jitter = 1 + (rng.float() - 0.5) * 2 * FRONTAGE_JITTER;
       const frontage = Math.max(f0, frontageAt(d, builtRadiusM, f0) * jitter);
       if (s + frontage > edgeTotal) break;
@@ -1536,7 +1907,6 @@ export function subdivideLane(
       ordinal++;
     }
   }
-  void total;
   return lots;
 }
 ```
@@ -1555,14 +1925,14 @@ git commit -m "feat(village): frontage gradient and lane subdivision into lots"
 
 ---
 
-### Task 10: Green perimeter lots
+### Task 11: Green perimeter lots
 
 **Files:**
 - Modify: `src/village/parcels/lots.ts`
 - Test: `tests/village/lots-green-ring.test.ts`
 
 **Interfaces:**
-- Consumes: `subdivideLane`, `gapForPopulation` (Task 9).
+- Consumes: `subdivideLane`, `gapForPopulation` (Task 10).
 - Produces: `subdivideGreen(green: Green, f0: number, depthM: number, rng: SeededRandom): Lot[]`.
 
 - [ ] **Step 1: Write the failing test**
@@ -1626,12 +1996,10 @@ Expected: FAIL — `subdivideGreen` is not exported
 
 - [ ] **Step 3: Write minimal implementation**
 
-Append to `src/village/parcels/lots.ts`:
+Add `RING_SETBACK_M` to the `../constants.js` import at the top of the file, then append
+to `src/village/parcels/lots.ts`:
 
 ```ts
-/** How far a ring lot's frontage sits outside the green's rim. */
-const RING_SETBACK_M = 3;
-
 /**
  * The green's perimeter is frontage too — the most valuable in the
  * settlement, so it takes the tightest frontages. The ring of buildings
@@ -1652,7 +2020,7 @@ export function subdivideGreen(
     const a = phase + i * step;
     const front = new Point(radius * Math.sin(a), -radius * Math.cos(a));
     // Face back at the centre.
-    const bearingDeg = ((Math.atan2(-front.x, front.y) * 180) / Math.PI + 360) % 360;
+      const bearingDeg = bearingOf(front, green.centre);
     lots.push({
       id: `green:R${i}`,
       laneId: 'green',
@@ -1682,14 +2050,14 @@ git commit -m "feat(village): green perimeter subdivided into ring lots"
 
 ---
 
-### Task 11: Clipping and lot scoring
+### Task 12: Clipping and lot scoring
 
 **Files:**
 - Modify: `src/village/parcels/lots.ts`
 - Test: `tests/village/lots-clip-score.test.ts`
 
 **Interfaces:**
-- Consumes: `Lot`, `Green` (Task 2); `pointInPolygon`; `classRank` (Task 1).
+- Consumes: `Lot`, `Green` (Task 3); `pointInPolygon`; `classRank` (Task 2).
 - Produces: `clipLots(lots: Lot[], green: Green, water: Point[][]): Lot[]`, `scoreLots(lots: Lot[], green: Green, laneTypeById: Map<string, RouteType>): Lot[]`, `orderLots(lots: Lot[]): Lot[]`.
 
 - [ ] **Step 1: Write the failing test**
@@ -1772,18 +2140,18 @@ Expected: FAIL — `clipLots` is not exported
 
 - [ ] **Step 3: Write minimal implementation**
 
-Append to `src/village/parcels/lots.ts`:
+Add `inAnyWater` to the `../geometry.js` import at the top of the file, then append to
+`src/village/parcels/lots.ts`:
 
 ```ts
-import { pointInPolygon } from '../../geom/point-in-polygon.js';
 import { classRank, type RouteType } from '../route-class.js';
 
 /** Water first, then the green. Anything left too narrow was never cut. */
 export function clipLots(lots: Lot[], green: Green, water: Point[][]): Lot[] {
   const greenRadius = green.diameter / 2;
   return lots.filter((l) => {
-    if (water.some((ring) => pointInPolygon(l.front, ring))) return false;
-    const d = Math.hypot(l.front.x - green.centre.x, l.front.y - green.centre.y);
+    if (inAnyWater(l.front, water)) return false;
+    const d = dist(l.front, green.centre);
     if (l.laneId !== 'green' && d < greenRadius) return false;
     return true;
   });
@@ -1800,7 +2168,7 @@ export function scoreLots(
   lots: Lot[], green: Green, laneTypeById: Map<string, RouteType>,
 ): Lot[] {
   return lots.map((l) => {
-    const d = Math.hypot(l.front.x - green.centre.x, l.front.y - green.centre.y);
+    const d = dist(l.front, green.centre);
     const type = laneTypeById.get(l.laneId);
     const classBonus = type ? (7 - classRank(type)) * 3 : 0;
     const ring = l.laneId === 'green' ? SCORE_RING_BONUS : 0;
@@ -1828,14 +2196,14 @@ git commit -m "feat(village): lot clipping, scoring and deterministic fill order
 
 ---
 
-### Task 12: The dwelling deck
+### Task 13: The dwelling deck
 
 **Files:**
 - Create: `src/village/deck.ts`
 - Test: `tests/village/deck.test.ts`
 
 **Interfaces:**
-- Consumes: `Site` (Task 2); `SYMBOL_MANIFEST` (`src/assets/symbol-manifest.js`).
+- Consumes: `Site` (Task 3); `SYMBOL_MANIFEST` (`src/assets/symbol-manifest.js`).
 - Produces: `interface DeckEntry`, `TEMPERATE_VILLAGE_DECK: DeckEntry[]`, `deckFor(biome: string): DeckEntry[]`, `meanOccupancy(deck: DeckEntry[]): number`, `eligible(entry: DeckEntry, site: Site, frontageM: number): boolean`, `drawEntry(deck: DeckEntry[], site: Site, frontageM: number, placed: Set<string>, rng: SeededRandom): DeckEntry | undefined`.
 
 - [ ] **Step 1: Write the failing test**
@@ -1925,7 +2293,8 @@ Expected: FAIL — cannot find module `src/village/deck.js`
 ```ts
 // src/village/deck.ts
 import { SeededRandom } from '../utils/random.js';
-import { SYMBOL_MANIFEST } from '../assets/symbol-manifest.js';
+import { hasGlyph, nominalFootprint } from './glyphs.js';
+import { DECK_GAP_M } from './constants.js';
 import type { Site } from './types.js';
 
 export interface DeckEntry {
@@ -1943,12 +2312,7 @@ export interface DeckEntry {
   requires?: { minPop?: number; flag?: 'temple' | 'trade' | 'port' };
 }
 
-const GAP_M = 1.5;
-
-function widthOf(glyph: string): number {
-  const fp = SYMBOL_MANIFEST[glyph]?.footprint;
-  return fp ? fp[0] : 8;
-}
+// Footprints come from glyphs.ts — this module never touches the manifest.
 
 function entry(
   glyph: string, occupancy: number, weight: number,
@@ -1959,7 +2323,8 @@ function entry(
     occupancy,
     weight,
     sizeFactor: extra.sizeFactor ?? 1,
-    minFrontage: extra.minFrontage ?? widthOf(glyph) * (extra.sizeFactor ?? 1) + GAP_M,
+    minFrontage: extra.minFrontage
+      ?? nominalFootprint(glyph)[0] * (extra.sizeFactor ?? 1) + DECK_GAP_M,
     cap: extra.cap,
     requires: extra.requires,
   };
@@ -1980,6 +2345,10 @@ const BIOME_SUFFIX: Record<string, string> = {
   tropical: '--tropical', coastal: '--coastal',
 };
 
+// Whether a suffixed id exists is a manifest question, so glyphs.ts answers
+// it. Biome sets are deliberately partial; the temperate id survives when
+// the variant was never drawn.
+
 /**
  * A deck is per biome, which is what stops a settlement mixing biome sets:
  * the ids are resolved once, here, with the manifest's temperate fallback.
@@ -1989,7 +2358,7 @@ export function deckFor(biome: string): DeckEntry[] {
   if (suffix === '') return TEMPERATE_VILLAGE_DECK;
   return TEMPERATE_VILLAGE_DECK.map((e) => {
     const suffixed = `${e.glyph}${suffix}`;
-    return SYMBOL_MANIFEST[suffixed] ? { ...e, glyph: suffixed } : e;
+    return hasGlyph(suffixed) ? { ...e, glyph: suffixed } : e;
   });
 }
 
@@ -2045,14 +2414,14 @@ git commit -m "feat(village): dwelling deck with occupancy, caps and biome resol
 
 ---
 
-### Task 13: Seating and sizing a dwelling
+### Task 14: Seating and sizing a dwelling
 
 **Files:**
 - Create: `src/village/dwellings.ts`
 - Test: `tests/village/seating.test.ts`
 
 **Interfaces:**
-- Consumes: `DeckEntry` (Task 12); `Lot`, `Building`, `buildingId` (Task 2); `SYMBOL_MANIFEST`; `inkFootprint` (`src/generator/village-rows.js`).
+- Consumes: `DeckEntry` (Task 13); `Lot`, `Building`, `buildingId` (Task 3); `SYMBOL_MANIFEST`; `inkFootprint` (`src/generator/village-rows.js`).
 - Produces: `SIZE_JITTER`, `FIT_MIN`, `FIT_MAX`, `sizeFor(entry: DeckEntry, lot: Lot, rng: SeededRandom): [number, number]`, `seat(entry: DeckEntry, lot: Lot, rng: SeededRandom): Building`, `inkExtentOf(glyph: string, footprint: [number, number]): { width: number; depth: number }`, `overlaps(a: Building, b: Building): boolean`.
 
 - [ ] **Step 1: Write the failing test**
@@ -2062,7 +2431,8 @@ git commit -m "feat(village): dwelling deck with occupancy, caps and biome resol
 import { describe, it, expect } from 'vitest';
 import { Point } from '../../src/types/point.js';
 import { SeededRandom } from '../../src/utils/random.js';
-import { FIT_MAX, FIT_MIN, overlaps, seat, sizeFor } from '../../src/village/dwellings.js';
+import { overlaps, seat, sizeFor } from '../../src/village/dwellings.js';
+import { FIT_MAX, FIT_MIN } from '../../src/village/constants.js';
 import { TEMPERATE_VILLAGE_DECK } from '../../src/village/deck.js';
 import type { Lot } from '../../src/village/types.js';
 
@@ -2150,21 +2520,13 @@ Expected: FAIL — cannot find module `src/village/dwellings.js`
 // src/village/dwellings.ts
 import { Point } from '../types/point.js';
 import { SeededRandom } from '../utils/random.js';
-import { SYMBOL_MANIFEST } from '../assets/symbol-manifest.js';
-import { HOUSE_INK_RATIO, HUT_INK_RATIO } from '../generator/village-rows.js';
+import { dist } from './geometry.js';
+import { inkExtent, nominalFootprint } from './glyphs.js';
+import {
+  FIT_MAX, FIT_MIN, SEATING_SETBACK_MAX_M, SIZE_JITTER,
+} from './constants.js';
 import { buildingId, type Building, type Lot } from './types.js';
 import type { DeckEntry } from './deck.js';
-
-/** Aesthetic jitter: footprint only, occupancy untouched. */
-export const SIZE_JITTER = 0.1;
-/** Fit sizing: shrink into a narrow lot, grow into a generous one. */
-export const FIT_MIN = 0.85;
-export const FIT_MAX = 1.15;
-
-function nominal(glyph: string): [number, number] {
-  const fp = SYMBOL_MANIFEST[glyph]?.footprint;
-  return fp ? [fp[0], fp[1]] : [8, 6.6];
-}
 
 /**
  * Three multipliers, deliberately separate: sizeFactor is semantic (an inn
@@ -2175,7 +2537,7 @@ function nominal(glyph: string): [number, number] {
 export function sizeFor(
   entry: DeckEntry, lot: Lot, rng: SeededRandom,
 ): [number, number] {
-  const [w, d] = nominal(entry.glyph);
+  const [w, d] = nominalFootprint(entry.glyph);
   const semantic = entry.sizeFactor;
   const jitter = 1 + (rng.float() - 0.5) * 2 * SIZE_JITTER;
   // How much of the lot's frontage the nominal building leaves spare.
@@ -2185,18 +2547,11 @@ export function sizeFor(
   return [w * k, d * k];
 }
 
-export function inkExtentOf(
-  glyph: string, footprint: [number, number],
-): { width: number; depth: number } {
-  const ratio = glyph.includes('hut') ? HUT_INK_RATIO : HOUSE_INK_RATIO;
-  return { width: footprint[0] * ratio, depth: footprint[1] * ratio };
-}
-
 /** Seat a dwelling at the front of its lot, facing the way the lot faces. */
 export function seat(entry: DeckEntry, lot: Lot, rng: SeededRandom): Building {
   const footprint = sizeFor(entry, lot, rng);
   // Set back 0-1.5 m from the frontage, along the lot's facing direction.
-  const setback = rng.float() * 1.5;
+  const setback = rng.float() * SEATING_SETBACK_MAX_M;
   const r = (lot.bearingDeg * Math.PI) / 180;
   const inward = new Point(-Math.sin(r), Math.cos(r));
   return {
@@ -2218,12 +2573,11 @@ export function seat(entry: DeckEntry, lot: Lot, rng: SeededRandom): Building {
  * footprint, and integration.md forbids clipping to it.
  */
 export function overlaps(a: Building, b: Building): boolean {
-  const ea = inkExtentOf(a.glyph, a.footprint);
-  const eb = inkExtentOf(b.glyph, b.footprint);
+  const ea = inkExtent(a.glyph, a.footprint);
+  const eb = inkExtent(b.glyph, b.footprint);
   const ra = Math.max(ea.width, ea.depth) / 2;
   const rb = Math.max(eb.width, eb.depth) / 2;
-  const d = Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y);
-  return d < ra + rb;
+  return dist(a.position, b.position) < ra + rb;
 }
 ```
 
@@ -2241,14 +2595,14 @@ git commit -m "feat(village): dwelling seating with semantic, jitter and fit siz
 
 ---
 
-### Task 14: Spending the census
+### Task 15: Spending the census
 
 **Files:**
 - Modify: `src/village/dwellings.ts`
 - Test: `tests/village/spend-census.test.ts`
 
 **Interfaces:**
-- Consumes: `seat`, `overlaps` (Task 13); `drawEntry`, `eligible`, `DeckEntry` (Task 12); `orderLots` (Task 11).
+- Consumes: `seat`, `overlaps` (Task 14); `drawEntry`, `eligible`, `DeckEntry` (Task 13); `orderLots` (Task 12).
 - Produces: `spendCensus(lots: Lot[], deck: DeckEntry[], site: Site, rng: SeededRandom): { buildings: Building[]; housed: number; unhoused: number }`.
 
 - [ ] **Step 1: Write the failing test**
@@ -2396,14 +2750,14 @@ git commit -m "feat(village): spend the census across scored lots"
 
 ---
 
-### Task 15: Lane relaxation and tail trimming
+### Task 16: Lane relaxation and tail trimming
 
 **Files:**
 - Create: `src/village/skeleton/relax.ts`
 - Test: `tests/village/relax.test.ts`
 
 **Interfaces:**
-- Consumes: `Lane`, `Building` (Task 2); `inkExtentOf` (Task 13).
+- Consumes: `Lane`, `Building` (Task 3); `inkExtentOf` (Task 14).
 - Produces: `relaxLanes(lanes: Lane[], buildings: Building[]): Lane[]`, `trimTails(lanes: Lane[], buildings: Building[]): Lane[]`.
 
 - [ ] **Step 1: Write the failing test**
@@ -2488,14 +2842,12 @@ Expected: FAIL — cannot find module `src/village/skeleton/relax.js`
 ```ts
 // src/village/skeleton/relax.ts
 import { Point } from '../../types/point.js';
-import { inkExtentOf } from '../dwellings.js';
+import { dist } from '../geometry.js';
+import { inkExtent } from '../glyphs.js';
+import {
+  RELAX_CLEARANCE_M, RELAX_ITERATIONS, RELAX_MAX_DISPLACEMENT_M, TAIL_STUB_M,
+} from '../constants.js';
 import type { Building, Lane } from '../types.js';
-
-const RELAX_ITERATIONS = 3;
-const MAX_DISPLACEMENT_M = 1.5;
-const CLEARANCE_M = 0.5;
-/** How much lane is left running past the last building. */
-const TAIL_STUB_M = 12;
 
 /**
  * Lanes bend around the houses they acquired. Bounded at three iterations
@@ -2508,8 +2860,9 @@ export function relaxLanes(lanes: Lane[], buildings: Building[]): Lane[] {
     for (let iter = 0; iter < RELAX_ITERATIONS; iter++) {
       for (let i = 0; i < points.length; i++) {
         for (const b of buildings) {
-          const ink = inkExtentOf(b.glyph, b.footprint);
-          const keepOut = lane.widthM / 2 + CLEARANCE_M + Math.max(ink.width, ink.depth) / 2;
+          const ink = inkExtent(b.glyph, b.footprint);
+          const keepOut =
+            lane.widthM / 2 + RELAX_CLEARANCE_M + Math.max(ink.width, ink.depth) / 2;
           const dx = points[i].x - b.position.x;
           const dy = points[i].y - b.position.y;
           const d = Math.hypot(dx, dy);
@@ -2524,10 +2877,10 @@ export function relaxLanes(lanes: Lane[], buildings: Building[]): Lane[] {
       const dx = points[i].x - origin[i].x;
       const dy = points[i].y - origin[i].y;
       const d = Math.hypot(dx, dy);
-      if (d > MAX_DISPLACEMENT_M) {
+      if (d > RELAX_MAX_DISPLACEMENT_M) {
         points[i] = new Point(
-          origin[i].x + (dx / d) * MAX_DISPLACEMENT_M,
-          origin[i].y + (dy / d) * MAX_DISPLACEMENT_M,
+          origin[i].x + (dx / d) * RELAX_MAX_DISPLACEMENT_M,
+          origin[i].y + (dy / d) * RELAX_MAX_DISPLACEMENT_M,
         );
       }
     }
@@ -2544,13 +2897,13 @@ export function trimTails(lanes: Lane[], buildings: Building[]): Lane[] {
     const mine = buildings.filter((b) => b.lotId.startsWith(`${lane.id}:`));
     if (mine.length === 0) return lane;
     const furthest = mine.reduce((best, b) => {
-      const d = Math.hypot(b.position.x - lane.points[0].x, b.position.y - lane.points[0].y);
+      const d = dist(b.position, lane.points[0]);
       return d > best ? d : best;
     }, 0);
     const keep: Point[] = [];
     for (const p of lane.points) {
       keep.push(p);
-      const d = Math.hypot(p.x - lane.points[0].x, p.y - lane.points[0].y);
+      const d = dist(p, lane.points[0]);
       if (d > furthest + TAIL_STUB_M) break;
     }
     while (keep.length < 2 && lane.points.length >= 2) keep.push(lane.points[keep.length]);
@@ -2573,14 +2926,14 @@ git commit -m "feat(village): lane relaxation around buildings and tail trimming
 
 ---
 
-### Task 16: Orchestrator with the frontage feedback loop
+### Task 17: Orchestrator with the frontage feedback loop
 
 **Files:**
 - Create: `src/village/village-model.ts`
 - Test: `tests/village/village-model.test.ts`
 
 **Interfaces:**
-- Consumes: everything from Tasks 3–15.
+- Consumes: everything from Tasks 4–16.
 - Produces: `generateVillage(input: AzgaarBurgInput, seed: number): VillageModel`, `VILLAGE_POP_CEILING`.
 
 - [ ] **Step 1: Write the failing test**
@@ -2669,19 +3022,17 @@ import {
 } from './parcels/lots.js';
 import { deckFor, meanOccupancy } from './deck.js';
 import { spendCensus, type SpendResult } from './dwellings.js';
+import {
+  GAP_TIGHTEN, LOT_DEPTH_M, MAX_FEEDBACK_ROUNDS, MEAN_LOT_AREA_M2,
+} from './constants.js';
 import type { Lot, VillageModel } from './types.js';
 import type { RouteType } from './route-class.js';
 
 /** The band this engine serves. Above it, the existing engine runs. */
 export const VILLAGE_POP_CEILING = 1000;
 
-/** Mean lot area used for the built-radius prediction, m². */
-const MEAN_LOT_AREA_M2 = 320;
-/** Lot depth, before crofts (pass 5) extend it. */
-const LOT_DEPTH_M = 25;
-/** Bounded feedback rounds — see the design's §6.3 ladder. */
-const MAX_FEEDBACK_ROUNDS = 3;
-const GAP_TIGHTEN = 0.85;
+// Every tunable below comes from constants.ts. VILLAGE_POP_CEILING lives
+// here because it is a routing decision, not a value a gate would tune.
 
 export function generateVillage(input: AzgaarBurgInput, seed: number): VillageModel {
   const rng = new SeededRandom(seed);
@@ -2747,13 +3098,13 @@ git commit -m "feat(village): orchestrate passes 1-4 with the frontage feedback 
 
 ---
 
-### Task 17: Property invariants across seeds
+### Task 18: Property invariants across seeds
 
 **Files:**
 - Test: `tests/village/invariants.test.ts`
 
 **Interfaces:**
-- Consumes: `generateVillage` (Task 16).
+- Consumes: `generateVillage` (Task 17).
 - Produces: nothing — this task is pure regression cover for the design's §5.7.
 
 - [ ] **Step 1: Write the failing test**
@@ -2896,7 +3247,7 @@ git commit -m "test(village): property invariants across seeds and inputs"
 
 ---
 
-### Task 18: Minimal render for the gate
+### Task 19: Minimal render for the gate
 
 **Files:**
 - Create: `src/village/render.ts`
@@ -2904,7 +3255,7 @@ git commit -m "test(village): property invariants across seeds and inputs"
 - Test: `tests/village/render.test.ts`
 
 **Interfaces:**
-- Consumes: `VillageModel` (Task 2), `generateVillage` (Task 16), `SYMBOL_MANIFEST`.
+- Consumes: `VillageModel` (Task 3), `generateVillage` (Task 17), `SYMBOL_MANIFEST`.
 - Produces: `renderVillage(model: VillageModel, pxPerMetre?: number): string`.
 
 - [ ] **Step 1: Write the failing test**
@@ -3089,7 +3440,7 @@ git commit -m "feat(village): minimal renderer and render-gate script"
 
 ---
 
-## After Task 18: the render gate
+## After Task 19: the render gate
 
 Generate a spread and put it in front of Barry before writing another line:
 
