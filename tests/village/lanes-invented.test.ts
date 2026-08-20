@@ -47,8 +47,9 @@ describe('addInventedLanes', () => {
   it('classes a green-attached lane one step below the best arm, floored at local', () => {
     const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -60))];
     const out = addInventedLanes(lanes, green, 800, 200, new SeededRandom(3));
-    // Invented arm-style lanes reuse armLaneId's `arm-` prefix too, so they
-    // must be excluded by original id, not by prefix.
+    // Excluded by original id, not by prefix: green-attached invented lanes
+    // now use their own `lane-` id space (ruling R10), but excluding by id
+    // is the more general check and doesn't depend on that detail.
     const invented = out.filter((l) => !lanes.some((orig) => orig.id === l.id));
     expect(invented.length).toBeGreaterThan(0);
     for (const l of invented) {
@@ -62,5 +63,20 @@ describe('addInventedLanes', () => {
       new SeededRandom(11),
     );
     expect(JSON.stringify(mk())).toBe(JSON.stringify(mk()));
+  });
+
+  it('gives green-attached invented lanes their own id space, distinct from arms (R10)', () => {
+    const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -60))];
+    const out = addInventedLanes(lanes, green, 800, 200, new SeededRandom(3));
+    const invented = out.filter((l) => !lanes.some((orig) => orig.id === l.id));
+    const greenAttached = invented.filter((l) => l.parentId === undefined);
+    expect(greenAttached.length).toBeGreaterThan(0);
+    for (const l of greenAttached) {
+      expect(l.id.startsWith('lane-')).toBe(true);
+    }
+    // No invented id may alias an arm id, in either direction.
+    const armIds = out.filter((l) => l.id.startsWith('arm-')).map((l) => l.id);
+    const inventedIds = greenAttached.map((l) => l.id);
+    expect(inventedIds.every((id) => !armIds.includes(id))).toBe(true);
   });
 });

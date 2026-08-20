@@ -6,7 +6,7 @@ import {
   FRONTAGE_MARGIN, LANE_SAMPLE_STEP_M, LANE_WANDER_M, MAX_INVENTED_LANES, MIN_ARM_SEPARATION_DEG,
 } from '../constants.js';
 import {
-  armLaneId, branchLaneId, type Green, type Lane, type Site, type SiteRoute,
+  armLaneId, branchLaneId, inventedLaneId, type Green, type Lane, type Site, type SiteRoute,
 } from '../types.js';
 
 // geometry.ts owns polylineLength; re-exported here since Task 8's tests
@@ -89,10 +89,13 @@ function laneBearing(green: Green, lane: Lane): number {
  * existing one (arms included); its class is one step below the best arm
  * present, floored at `local` so wagons always reach the green.
  *
- * The bearing search also rejects any candidate whose rounded armLaneId
- * would collide with a lane already present — the 35° separation rule
- * alone doesn't guarantee that against an existing *arm* sitting at the
- * same rounded bearing, and lot ids are built from lane ids downstream.
+ * The bearing search also rejects any candidate whose rounded armLaneId or
+ * inventedLaneId would collide with a lane already present — the 35°
+ * separation rule alone doesn't guarantee that against an existing *arm*
+ * sitting at the same rounded bearing, and lot ids are built from lane ids
+ * downstream. Green-attached invented lanes get their own `lane-` id space
+ * (ruling R10) so a lane's identity can't silently change meaning if FMG
+ * later adds a real route at the same bearing a budget lane once used.
  */
 export function addInventedLanes(
   lanes: Lane[], green: Green, requiredM: number, extentM: number, rng: SeededRandom,
@@ -111,7 +114,7 @@ export function addInventedLanes(
     for (let attempt = 0; attempt < 36; attempt++) {
       const candidate = rng.int(0, 360);
       const collides = taken.some((t) => angularGap(candidate, t) < MIN_ARM_SEPARATION_DEG)
-        || out.some((l) => l.id === armLaneId(candidate));
+        || out.some((l) => l.id === armLaneId(candidate) || l.id === inventedLaneId(candidate));
       if (!collides) {
         bearing = candidate;
         break;
@@ -146,7 +149,7 @@ export function addInventedLanes(
       continue;
     }
     out.push({
-      id: armLaneId(bearing),
+      id: inventedLaneId(bearing),
       type: inventedType,
       points: runArm(green, bearing, extentM * 0.6, rng),
       widthM: laneWidth(inventedType),

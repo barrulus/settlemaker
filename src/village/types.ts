@@ -88,6 +88,17 @@ export function armLaneId(bearingDeg: number): string {
   return `arm-${bearingKey(bearingDeg)}`;
 }
 
+/**
+ * An invented lane leaving the green — one the frontage budget added because
+ * the census needed somewhere to live, as opposed to an `arm-` lane, which
+ * FMG's route data asked for. Separate id spaces so a lane's identity cannot
+ * change meaning between regenerations when FMG adds a route at the same
+ * bearing (ruling R10).
+ */
+export function inventedLaneId(bearingDeg: number): string {
+  return `lane-${bearingKey(bearingDeg)}`;
+}
+
 /** `atFraction` is where along the parent the branch leaves, 0..1. */
 export function branchLaneId(parentId: string, atFraction: number): string {
   const pct = String(Math.round(atFraction * 100)).padStart(2, '0');
