@@ -7,8 +7,9 @@ import { inkExtent, nominalFootprint, rotationOf } from './glyphs.js';
 import {
   FIT_MAX, FIT_MIN, SEATING_SETBACK_MAX_M, SIZE_JITTER,
 } from './constants.js';
-import { buildingId, type Building, type Lot } from './types.js';
-import type { DeckEntry } from './deck.js';
+import { buildingId, type Building, type Lot, type Site } from './types.js';
+import { drawEntry, eligible, type DeckEntry } from './deck.js';
+import { orderLots } from './parcels/lots.js';
 
 /**
  * Three multipliers, deliberately separate and NOT all bounded together:
@@ -123,4 +124,50 @@ export function overlaps(a: Building, b: Building): boolean {
   const ra = Math.hypot(ea.width, ea.depth) / 2;
   const rb = Math.hypot(eb.width, eb.depth) / 2;
   return dist(a.position, b.position) < ra + rb;
+}
+
+export interface SpendResult {
+  buildings: Building[];
+  housed: number;
+  unhoused: number;
+}
+
+/**
+ * Capped landmarks first, onto the best lots they are eligible for; then
+ * ordinary entries down the score order until the census is housed.
+ * Remaining lots stay empty — that absence is the straggle.
+ */
+export function spendCensus(
+  lots: Lot[], deck: DeckEntry[], site: Site, rng: SeededRandom,
+): SpendResult {
+  const ordered = orderLots(lots);
+  const taken = new Set<string>();
+  const placedGlyphs = new Set<string>();
+  const buildings: Building[] = [];
+  let housed = 0;
+
+  for (const capped of deck.filter((e) => e.cap === 'one')) {
+    const lot = ordered.find((l) => !taken.has(l.id) && eligible(capped, site, l.frontageM));
+    if (!lot) continue;
+    const b = seat(capped, lot, rng);
+    if (buildings.some((other) => overlaps(b, other))) continue;
+    buildings.push(b);
+    taken.add(lot.id);
+    placedGlyphs.add(capped.glyph);
+    housed += b.occupancy;
+  }
+
+  for (const lot of ordered) {
+    if (housed >= site.population) break;
+    if (taken.has(lot.id)) continue;
+    const entry = drawEntry(deck, site, lot.frontageM, placedGlyphs, rng);
+    if (!entry) continue;
+    const b = seat(entry, lot, rng);
+    if (buildings.some((other) => overlaps(b, other))) continue;
+    buildings.push(b);
+    taken.add(lot.id);
+    housed += b.occupancy;
+  }
+
+  return { buildings, housed, unhoused: Math.max(0, site.population - housed) };
 }
