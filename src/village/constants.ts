@@ -37,10 +37,21 @@ export const GAP_POP_LOW = 100;
 export const GAP_POP_HIGH = 900;
 export const GRADIENT_EXPONENT = 1.5;
 export const GRADIENT_K = 2.6;
+/** Caps how wide a plot can get past the built radius: ratio d/R clamps here before the exponent. */
+export const GRADIENT_RATIO_CAP = 1.2;
 export const FRONTAGE_JITTER = 0.1;
 export const LOT_DEPTH_M = 25;
 export const RING_SETBACK_M = 3;
 export const MEAN_LOT_AREA_M2 = 320;
+/**
+ * Metres between the edge of the carriageway and the house fronts, by lane
+ * class. The spec's range is 1.5-3 m: a royal road keeps its buildings back,
+ * a footpath has them almost on top of it. Offsetting a lane by
+ * `widthM / 2 + LANE_SETBACK_M[type]` gives the frontage line.
+ */
+export const LANE_SETBACK_M: Record<string, number> = {
+  royal: 3, main: 3, market: 2.5, town: 2.5, local: 2, trail: 1.5, footpath: 1.5,
+};
 
 // --- Dwellings ---------------------------------------------------------
 export const SIZE_JITTER = 0.1;

@@ -3,7 +3,7 @@ import { offsetPolyline } from './strip.js';
 import { arcLengths, dist, sampleAt } from '../geometry.js';
 import {
   FRONTAGE_JITTER, GAP_LOOSE_M, GAP_POP_HIGH, GAP_POP_LOW, GAP_TIGHT_M,
-  GRADIENT_EXPONENT, GRADIENT_K,
+  GRADIENT_EXPONENT, GRADIENT_K, GRADIENT_RATIO_CAP, LANE_SETBACK_M,
 } from '../constants.js';
 import { lotId, type Green, type Lane, type Lot } from '../types.js';
 
@@ -25,7 +25,7 @@ export function gapForPopulation(population: number): number {
  * by the caller (subdivideLane), not by this function.
  */
 export function frontageAt(distanceM: number, builtRadiusM: number, f0: number): number {
-  const ratio = builtRadiusM <= 0 ? 0 : Math.min(1.2, distanceM / builtRadiusM);
+  const ratio = builtRadiusM <= 0 ? 0 : Math.min(GRADIENT_RATIO_CAP, distanceM / builtRadiusM);
   return f0 * (1 + GRADIENT_K * Math.pow(ratio, GRADIENT_EXPONENT));
 }
 
@@ -46,7 +46,7 @@ export function subdivideLane(
   rng: SeededRandom,
 ): Lot[] {
   const lots: Lot[] = [];
-  const setback = lane.widthM / 2 + 2;
+  const setback = lane.widthM / 2 + (LANE_SETBACK_M[lane.type] ?? 2);
 
   for (const side of [1, -1] as const) {
     const edge = offsetPolyline(lane.points, setback, side);

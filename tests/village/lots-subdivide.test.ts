@@ -81,4 +81,16 @@ describe('subdivideLane', () => {
     const mk = () => subdivideLane(straightLane, green, 100, 10, 25, new SeededRandom(5));
     expect(JSON.stringify(mk())).toBe(JSON.stringify(mk()));
   });
+
+  it('sets lots back further from a royal lane than a footpath, same geometry', () => {
+    const royalLane: Lane = { ...straightLane, id: 'arm-090-royal', type: 'royal' };
+    const footpathLane: Lane = { ...straightLane, id: 'arm-090-footpath', type: 'footpath' };
+    const royalLots = subdivideLane(royalLane, green, 100, 10, 25, new SeededRandom(1));
+    const footpathLots = subdivideLane(footpathLane, green, 100, 10, 25, new SeededRandom(1));
+    // The lane itself runs along y=0, so a lot's |y| is exactly its setback
+    // from the carriageway (side=1 offsets to +y, side=-1 to -y).
+    const royalOffset = Math.abs(royalLots.find((l) => l.side === 1)!.front.y);
+    const footpathOffset = Math.abs(footpathLots.find((l) => l.side === 1)!.front.y);
+    expect(royalOffset).toBeGreaterThan(footpathOffset);
+  });
 });
