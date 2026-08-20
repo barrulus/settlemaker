@@ -1,12 +1,13 @@
 import { SeededRandom } from '../../utils/random.js';
 import { offsetPolyline } from './strip.js';
-import { arcLengths, bearingOf, dist, sampleAt } from '../geometry.js';
+import { arcLengths, bearingOf, dist, inAnyWater, sampleAt } from '../geometry.js';
 import {
   FRONTAGE_JITTER, GAP_LOOSE_M, GAP_POP_HIGH, GAP_POP_LOW, GAP_TIGHT_M,
   GRADIENT_EXPONENT, GRADIENT_K, GRADIENT_RATIO_CAP, LANE_SETBACK_M, RING_SETBACK_M,
 } from '../constants.js';
 import { Point } from '../../types/point.js';
 import { lotId, type Green, type Lane, type Lot } from '../types.js';
+import { classRank, type RouteType } from '../route-class.js';
 
 /**
  * The gap between neighbouring plots, in metres. Loose in a hamlet
@@ -122,4 +123,39 @@ export function subdivideGreen(
     });
   }
   return lots;
+}
+
+/** Water first, then the green. Anything left too narrow was never cut. */
+export function clipLots(lots: Lot[], green: Green, water: Point[][]): Lot[] {
+  const greenRadius = green.diameter / 2;
+  return lots.filter((l) => {
+    if (inAnyWater(l.front, water)) return false;
+    const d = dist(l.front, green.centre);
+    if (l.laneId !== 'green' && d < greenRadius) return false;
+    return true;
+  });
+}
+
+const SCORE_RING_BONUS = 40;
+
+/**
+ * Nearer the green is better; a higher lane class is better; the green's
+ * own ring beats everything. Pass 4 fills the best first, so an
+ * under-populated village fills inward-out and the fringe stays empty.
+ */
+export function scoreLots(
+  lots: Lot[], green: Green, laneTypeById: Map<string, RouteType>,
+): Lot[] {
+  return lots.map((l) => {
+    const d = dist(l.front, green.centre);
+    const type = laneTypeById.get(l.laneId);
+    const classBonus = type ? (7 - classRank(type)) * 3 : 0;
+    const ring = l.laneId === 'green' ? SCORE_RING_BONUS : 0;
+    return { ...l, score: 100 - d * 0.5 + classBonus + ring };
+  });
+}
+
+/** Deterministic fill order: score descending, ties broken by id. */
+export function orderLots(lots: Lot[]): Lot[] {
+  return [...lots].sort((a, b) => (b.score - a.score) || a.id.localeCompare(b.id));
 }
