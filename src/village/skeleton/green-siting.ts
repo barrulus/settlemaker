@@ -1,6 +1,6 @@
 import { Point } from '../../types/point.js';
 import { SeededRandom } from '../../utils/random.js';
-import { bearingVector, inAnyWater } from '../geometry.js';
+import { dist, inAnyWater, unit } from '../geometry.js';
 import type { Green, GreenShape, Site, SiteRoute } from '../types.js';
 import { classRank, isRoadClass } from '../route-class.js';
 import {
@@ -78,16 +78,57 @@ export function greenDiameter(
 /** Local to this pass: how the search walks, not what a gate would tune. */
 const PUSH_STEP_M = 2;
 const MAX_PUSH_STEPS = 200;
+/** Below this, a sum of unit "wet" vectors is treated as cancelled to zero. */
+const WET_VECTOR_EPSILON = 1e-6;
 
-/** True when any point on the green's rim, or its centre, is in water. */
-export function waterClips(centre: Point, radiusM: number, water: Point[][]): boolean {
-  if (water.length === 0) return false;
-  const probes: Point[] = [centre];
+/**
+ * The rim, sampled at 16 points around `centre`. Raw sin/cos here is circle
+ * sampling in local space, not a compass-bearing conversion — `bearingVector`
+ * encodes the compass convention (0 = N, clockwise) and would be the wrong
+ * tool for "walk evenly around a circle."
+ */
+function probeRing(centre: Point, radiusM: number): Point[] {
+  const probes: Point[] = [];
   for (let i = 0; i < 16; i++) {
     const a = (i / 16) * Math.PI * 2;
     probes.push(new Point(centre.x + radiusM * Math.cos(a), centre.y + radiusM * Math.sin(a)));
   }
+  return probes;
+}
+
+/** True when any point on the green's rim, or its centre, is in water. */
+export function waterClips(centre: Point, radiusM: number, water: Point[][]): boolean {
+  if (water.length === 0) return false;
+  const probes: Point[] = [centre, ...probeRing(centre, radiusM)];
   return probes.some((p) => inAnyWater(p, water));
+}
+
+/**
+ * R9: the push direction derives from the water, not from a road arm.
+ * Ruling: sample the rim; for each wet probe, take the unit vector from
+ * `centre` to it; sum and normalise for the mean "wet" direction; push
+ * along its negation, away from the water's centre of mass.
+ *
+ * Falls back to due south — deterministic, and honest as a last resort —
+ * when no rim probe is wet (the centre alone is enclosed, e.g. a lake
+ * island) or when the wet vectors cancel to near-zero (water on opposite
+ * sides of the rim).
+ */
+function awayFromWater(centre: Point, radiusM: number, water: Point[][]): Point {
+  const wet = probeRing(centre, radiusM).filter((p) => inAnyWater(p, water));
+  if (wet.length === 0) return new Point(0, 1);
+
+  let sx = 0;
+  let sy = 0;
+  for (const p of wet) {
+    const v = unit(p.x - centre.x, p.y - centre.y);
+    sx += v.x;
+    sy += v.y;
+  }
+  if (dist(new Point(0, 0), new Point(sx, sy)) < WET_VECTOR_EPSILON) return new Point(0, 1);
+
+  const mean = unit(sx, sy);
+  return new Point(-mean.x, -mean.y);
 }
 
 /**
@@ -96,8 +137,9 @@ export function waterClips(centre: Point, radiusM: number, water: Point[][]): bo
  *
  * FMG gives bearings, not geometry — every incoming route already radiates
  * from the burg origin, so the confluence IS the origin. The green starts
- * there; if water intrudes, it is pushed clear along the first arm's
- * bearing (or due south absent any arm) until the rim, plus margin, is dry.
+ * there; if water intrudes, it is pushed clear along the direction away
+ * from the water itself (see `awayFromWater`) until the rim, plus margin,
+ * is dry.
  */
 export function siteGreen(site: Site, builtRadiusM: number, rng: SeededRandom): Green {
   const arms = roadArms(site);
@@ -107,18 +149,17 @@ export function siteGreen(site: Site, builtRadiusM: number, rng: SeededRandom): 
   const provisionalShape = greenShape(arms, false);
   const diameter = greenDiameter(arms, site.population, builtRadiusM);
   const radius = diameter / 2;
+  const clearRadius = radius + GREEN_WATER_MARGIN_M;
 
-  // Position: origin, then pushed clear of water along the away bearing.
+  // Position: origin, then pushed clear of water, re-steering each step.
   let centre = new Point(0, 0);
   let clipped = false;
-  if (waterClips(centre, radius + GREEN_WATER_MARGIN_M, site.water)) {
+  if (waterClips(centre, clearRadius, site.water)) {
     clipped = true;
-    // Push along the bearing of the arm that best points away from water,
-    // or due south when there is no arm to follow.
-    const away = arms.length ? bearingVector(arms[0].bearingDeg) : new Point(0, 1);
     for (let i = 0; i < MAX_PUSH_STEPS; i++) {
+      const away = awayFromWater(centre, clearRadius, site.water);
       centre = new Point(centre.x + away.x * PUSH_STEP_M, centre.y + away.y * PUSH_STEP_M);
-      if (!waterClips(centre, radius + GREEN_WATER_MARGIN_M, site.water)) break;
+      if (!waterClips(centre, clearRadius, site.water)) break;
     }
   }
 

@@ -19,6 +19,11 @@ const northWater = [[
   new Point(-500, -500), new Point(500, -500), new Point(500, 5), new Point(-500, 5),
 ]];
 
+// A square of water covering everything east of x = 5.
+const eastWater = [[
+  new Point(5, -500), new Point(500, -500), new Point(500, 500), new Point(5, 500),
+]];
+
 describe('waterClips', () => {
   it('is true when the green would reach into water', () => {
     expect(waterClips(new Point(0, 0), 30, northWater)).toBe(true);
@@ -47,6 +52,24 @@ describe('siteGreen', () => {
     // Water fills y <= 5 (north is -y). The green must sit south of it.
     expect(g.centre.y).toBeGreaterThan(5);
     expect(waterClips(g.centre, g.diameter / 2, northWater)).toBe(false);
+    expect(g.shape).toBe('sm-green-d');
+  });
+
+  it('pushes south when water is north even if the arm points straight into it (R9)', () => {
+    // The single arm bears due north (0deg) — straight into the water.
+    // A push that followed the arm's bearing would walk further into the
+    // water for all 200 steps and give up still wet. The push must instead
+    // read the water itself and go the other way.
+    const g = siteGreen(site([route(0, 'main')], northWater), 100, new SeededRandom(1));
+    expect(g.centre.y).toBeGreaterThan(5);
+    expect(waterClips(g.centre, g.diameter / 2, northWater)).toBe(false);
+    expect(g.shape).toBe('sm-green-d');
+  });
+
+  it('pushes west when water is east (not hardcoded to a north/south axis)', () => {
+    const g = siteGreen(site([route(180, 'main')], eastWater), 100, new SeededRandom(1));
+    expect(g.centre.x).toBeLessThan(5);
+    expect(waterClips(g.centre, g.diameter / 2, eastWater)).toBe(false);
     expect(g.shape).toBe('sm-green-d');
   });
 
