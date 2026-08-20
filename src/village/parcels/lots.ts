@@ -1,0 +1,86 @@
+import { SeededRandom } from '../../utils/random.js';
+import { offsetPolyline } from './strip.js';
+import { arcLengths, dist, sampleAt } from '../geometry.js';
+import {
+  FRONTAGE_JITTER, GAP_LOOSE_M, GAP_POP_HIGH, GAP_POP_LOW, GAP_TIGHT_M,
+  GRADIENT_EXPONENT, GRADIENT_K,
+} from '../constants.js';
+import { lotId, type Green, type Lane, type Lot } from '../types.js';
+
+/**
+ * The gap between neighbouring plots, in metres. Loose in a hamlet
+ * (GAP_LOOSE_M around a population of GAP_POP_LOW or below), tightening
+ * linearly to GAP_TIGHT_M at GAP_POP_HIGH and beyond. Feeds into `f0`
+ * (widest common dwelling + this gap) wherever a caller builds it.
+ */
+export function gapForPopulation(population: number): number {
+  const t = Math.min(1, Math.max(0, (population - GAP_POP_LOW) / (GAP_POP_HIGH - GAP_POP_LOW)));
+  return GAP_LOOSE_M + (GAP_TIGHT_M - GAP_LOOSE_M) * t;
+}
+
+/**
+ * frontage(d) = f0 x (1 + k(d/R)^1.5). The whole density gradient: plots
+ * are f0 wide at the green and widen outward as the crowd thins. The
+ * dwelling does not shrink; the plot grows. `f0` is a hard floor enforced
+ * by the caller (subdivideLane), not by this function.
+ */
+export function frontageAt(distanceM: number, builtRadiusM: number, f0: number): number {
+  const ratio = builtRadiusM <= 0 ? 0 : Math.min(1.2, distanceM / builtRadiusM);
+  return f0 * (1 + GRADIENT_K * Math.pow(ratio, GRADIENT_EXPONENT));
+}
+
+// Arc-length walking and sampling come from geometry.ts. This pass samples
+// the same edge repeatedly, so it computes the cumulative walk once with
+// arcLengths() and passes it to every sampleAt() call.
+
+/**
+ * Cut one lane's two frontage strips into lots. Ordinals count from the
+ * green end, which is what makes a lot id survive a change further out:
+ * lanes are built green-outward (Task 7), so walking the offset edge from
+ * its start (s=0, which sits at lane.points[0], the green end) numbers
+ * lots 0, 1, 2... green-outward too. Adding a lot further out only appends
+ * a higher ordinal; it never renumbers the ones already nearer the green.
+ */
+export function subdivideLane(
+  lane: Lane, green: Green, builtRadiusM: number, f0: number, depthM: number,
+  rng: SeededRandom,
+): Lot[] {
+  const lots: Lot[] = [];
+  const setback = lane.widthM / 2 + 2;
+
+  for (const side of [1, -1] as const) {
+    const edge = offsetPolyline(lane.points, setback, side);
+    if (edge.length < 2) continue;
+    const edgeAcc = arcLengths(edge);
+    const edgeTotal = edgeAcc[edgeAcc.length - 1];
+
+    let s = 0;
+    let ordinal = 0;
+    while (s < edgeTotal) {
+      const { p } = sampleAt(edge, edgeAcc, s);
+      const d = dist(p, green.centre);
+      const jitter = 1 + (rng.float() - 0.5) * 2 * FRONTAGE_JITTER;
+      const frontage = Math.max(f0, frontageAt(d, builtRadiusM, f0) * jitter);
+      if (s + frontage > edgeTotal) break;
+      const mid = sampleAt(edge, edgeAcc, s + frontage / 2);
+      // Inward normal: the lot faces back across the strip to its lane.
+      // side=1 (right of travel) offsets to +y (south, since north=-y);
+      // rotating the edge's direction of travel by -90 turns it to face
+      // north, back toward the lane. side=-1 mirrors it: +90, facing south.
+      const bearingDeg = (mid.dirDeg + (side === 1 ? -90 : 90) + 360) % 360;
+      lots.push({
+        id: lotId(lane.id, side, ordinal),
+        laneId: lane.id,
+        side,
+        front: mid.p,
+        bearingDeg,
+        frontageM: frontage,
+        depthM,
+        score: 0,
+      });
+      s += frontage;
+      ordinal++;
+    }
+  }
+  return lots;
+}
