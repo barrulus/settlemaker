@@ -79,4 +79,18 @@ describe('addInventedLanes', () => {
     const inventedIds = greenAttached.map((l) => l.id);
     expect(inventedIds.every((id) => !armIds.includes(id))).toBe(true);
   });
+
+  it('never collides branch-lane ids even once the green runs out of free bearings', () => {
+    // A frontage requirement this large forces every iteration up to
+    // MAX_INVENTED_LANES: the green's ~10 free-bearing slots fill fast
+    // (35deg separation), so most of the run takes the branch path on a
+    // shrinking set of parents — exactly where `branchLaneId`'s ~35
+    // percentage buckets can collide if the fallback probing is missing.
+    for (const seed of [2, 5, 7, 13, 21, 42]) {
+      const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -60))];
+      const out = addInventedLanes(lanes, green, 100000, 200, new SeededRandom(seed));
+      const ids = out.map((l) => l.id);
+      expect(new Set(ids).size).toBe(ids.length);
+    }
+  });
 });

@@ -120,14 +120,40 @@ export function addInventedLanes(
         break;
       }
     }
-    // No free bearing left at the green: branch off the longest lane instead.
+    // No free bearing left at the green: branch off an existing lane
+    // instead. Prefer longer lanes first, but `branchLaneId` only has ~35
+    // percentage buckets per parent (it formats `at` as a 2-digit percent),
+    // and once the green's bearings are full, every remaining iteration
+    // takes this path on a shrinking set of parents — repeated draws from
+    // 35 buckets collide well before MAX_INVENTED_LANES by the birthday
+    // paradox. So: draw `at` once from the RNG (preserves seeded variation),
+    // and if its bucket on the longest parent is taken, probe the rest of
+    // that parent's buckets deterministically before moving to the
+    // next-longest parent — no extra RNG draws, so same seed → same result.
     if (bearing < 0) {
-      const parent = out.reduce((a, b) =>
-        (polylineLength(a.points) >= polylineLength(b.points) ? a : b));
+      const parents = [...out].sort(
+        (a, b) => polylineLength(b.points) - polylineLength(a.points),
+      );
       // at stays within [0.33, 0.67] — branchLaneId formats it as a 2-digit
       // percentage; a value rounding to >= 1.0 would overflow that format.
       // Widen this range only alongside a clamp in branchLaneId itself.
-      const at = 0.33 + rng.float() * 0.34;
+      const seedAt = 0.33 + rng.float() * 0.34;
+      const seedPct = Math.round(seedAt * 100);
+      let chosen: { parent: Lane; at: number } | undefined;
+      for (const parent of parents) {
+        for (let step = 0; step < 35 && !chosen; step++) {
+          const pct = 33 + ((seedPct - 33 + step + 35) % 35);
+          const candidateAt = pct / 100;
+          if (!out.some((l) => l.id === branchLaneId(parent.id, candidateAt))) {
+            chosen = { parent, at: candidateAt };
+          }
+        }
+        if (chosen) break;
+      }
+      // Every bucket on every lane is taken: an honest give-up, same as
+      // the MAX_INVENTED_LANES cap.
+      if (!chosen) break;
+      const { parent, at } = chosen;
       const idx = Math.max(1, Math.floor(parent.points.length * at));
       const anchor = parent.points[Math.min(idx, parent.points.length - 1)];
       const parentBearing = laneBearing(green, parent);
