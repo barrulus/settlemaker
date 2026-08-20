@@ -23,7 +23,7 @@ describe('subdivideGreen', () => {
       const toCentre = (Math.atan2(-l.front.x, l.front.y) * 180) / Math.PI;
       const want = (toCentre + 360) % 360;
       const diff = Math.abs(((l.bearingDeg - want + 540) % 360) - 180);
-      expect(diff).toBeLessThan(15);
+      expect(diff).toBeLessThan(2);
     }
   });
 
@@ -44,5 +44,49 @@ describe('subdivideGreen', () => {
   it('is deterministic for a seed', () => {
     const mk = () => subdivideGreen(green, 10, 22, new SeededRandom(9));
     expect(JSON.stringify(mk())).toBe(JSON.stringify(mk()));
+  });
+
+  describe('with a green off the origin', () => {
+    // A green anywhere but (0,0) — a coastal green pinned to a shoreline,
+    // say — is the case a naive implementation gets wrong by placing the
+    // ring around the world origin instead of the green's own centre.
+    const offCentre = new Point(50, -30);
+    const offGreen: Green = { ...green, centre: offCentre };
+
+    it('sits at radius from the green\'s own centre, not the origin', () => {
+      const lots = subdivideGreen(offGreen, 10, 22, new SeededRandom(1));
+      const radius = offGreen.diameter / 2 + 3; // RING_SETBACK_M
+      for (const l of lots) {
+        const d = Math.hypot(l.front.x - offCentre.x, l.front.y - offCentre.y);
+        expect(d).toBeCloseTo(radius, 1);
+      }
+    });
+
+    it('faces every ring lot inward at the offset centre', () => {
+      const lots = subdivideGreen(offGreen, 10, 22, new SeededRandom(1));
+      for (const l of lots) {
+        const toCentre = (Math.atan2(
+          offCentre.x - l.front.x,
+          -(offCentre.y - l.front.y),
+        ) * 180) / Math.PI;
+        const want = (toCentre + 360) % 360;
+        const diff = Math.abs(((l.bearingDeg - want + 540) % 360) - 180);
+        expect(diff).toBeLessThan(2);
+      }
+    });
+
+    it('surrounds the offset centre rather than the origin', () => {
+      const lots = subdivideGreen(offGreen, 10, 22, new SeededRandom(1));
+      // No lot lies within the green's own radius of the offset centre.
+      for (const l of lots) {
+        const d = Math.hypot(l.front.x - offCentre.x, l.front.y - offCentre.y);
+        expect(d).toBeGreaterThan(offGreen.diameter / 2);
+      }
+      // The mean of the ring's fronts lands near the offset centre, not (0,0).
+      const meanX = lots.reduce((s, l) => s + l.front.x, 0) / lots.length;
+      const meanY = lots.reduce((s, l) => s + l.front.y, 0) / lots.length;
+      expect(Math.hypot(meanX - offCentre.x, meanY - offCentre.y)).toBeLessThan(2);
+      expect(Math.hypot(meanX, meanY)).toBeGreaterThan(40);
+    });
   });
 });

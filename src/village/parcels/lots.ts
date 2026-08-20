@@ -111,7 +111,7 @@ export function subdivideGreen(
     // Face back at the centre.
     const bearingDeg = bearingOf(front, green.centre);
     lots.push({
-      id: `green:R${i}`,
+      id: lotId('green', 1, i),
       laneId: 'green',
       side: 1,
       front,
