@@ -97,11 +97,30 @@ export function seat(entry: DeckEntry, lot: Lot, rng: SeededRandom): Building {
 /**
  * Ink extents, not art boxes. Several glyphs deliberately overhang their
  * footprint, and integration.md forbids clipping to it.
+ *
+ * Each building is approximated by the circle that CIRCUMSCRIBES its ink
+ * rectangle (radius = half the diagonal), not the circle inscribed in its
+ * longer side (radius = half the longer side). The inscribed-circle version
+ * under-covers any non-square footprint: it can report two rectangles as
+ * clear when they genuinely overlap near their corners, at any orientation,
+ * because it never accounts for the rectangle's short axis at all. A
+ * concrete case: two sm-longhouse footprints ([10, 5]) offset by
+ * (dx=9.9, dy=4.9) — well inside both the 10 m and 5 m sides, i.e. a real
+ * collision — sit distance ~11.05 apart, which the old
+ * `max(w, d) / 2` radii (5 + 5 = 10) missed entirely.
+ *
+ * The circumscribed circle is deliberately conservative and rotation-
+ * agnostic: since we don't track a building's actual paint orientation
+ * here, using the largest circle that could ever contain the ink rectangle
+ * at any rotation means this can never miss a genuine collision, only
+ * reject some placements slightly further apart than strictly necessary
+ * (worst case for near-square footprints) — the correct direction to err
+ * for a collision gate.
  */
 export function overlaps(a: Building, b: Building): boolean {
   const ea = inkExtent(a.glyph, a.footprint);
   const eb = inkExtent(b.glyph, b.footprint);
-  const ra = Math.max(ea.width, ea.depth) / 2;
-  const rb = Math.max(eb.width, eb.depth) / 2;
+  const ra = Math.hypot(ea.width, ea.depth) / 2;
+  const rb = Math.hypot(eb.width, eb.depth) / 2;
   return dist(a.position, b.position) < ra + rb;
 }

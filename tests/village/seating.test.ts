@@ -6,7 +6,8 @@ import { FIT_MAX, FIT_MIN, SIZE_JITTER } from '../../src/village/constants.js';
 import { TEMPERATE_VILLAGE_DECK } from '../../src/village/deck.js';
 import type { DeckEntry } from '../../src/village/deck.js';
 import type { Lot } from '../../src/village/types.js';
-import { nominalFootprint } from '../../src/village/glyphs.js';
+import { HOUSE_INK_RATIO, nominalFootprint } from '../../src/village/glyphs.js';
+import type { Building } from '../../src/village/types.js';
 
 const house = TEMPERATE_VILLAGE_DECK.find((e) => e.glyph === 'sm-house')!;
 const inn = TEMPERATE_VILLAGE_DECK.find((e) => e.glyph === 'sm-inn')!;
@@ -167,6 +168,33 @@ describe('overlaps', () => {
   it('rejects a genuine collision', () => {
     const a = seat(house, lot(12, 0, 0), new SeededRandom(1));
     const b = seat(house, lot(12, 1, 0), new SeededRandom(1));
+    expect(overlaps(a, b)).toBe(true);
+  });
+
+  // Review finding: overlaps() approximated each building by the circle
+  // INSCRIBED against its longer side (max(w, d) / 2). For a non-square
+  // footprint that under-covers real corner-to-corner collisions, because
+  // it never accounts for the rectangle's short axis. sm-longhouse ([10, 5],
+  // a live deck entry at weight 6) is the concrete case: offset by 99% of
+  // its width and 98% of its depth — genuinely overlapping, well inside
+  // both axes — the old formula still reported them clear.
+  //
+  // overlaps() tests INK extents, not raw footprint, so the offset here is
+  // expressed as a fraction of the glyph's ink box (footprint x
+  // HOUSE_INK_RATIO), not the raw footprint: the review's own dx=9.9,
+  // dy=4.9 were fractions of the raw [10, 5] footprint, and applying them
+  // unscaled against the ink-shrunk box (post-0.68 ratio) would put the
+  // offset outside the ink box entirely and not exercise the bug at all.
+  it('reports a genuine corner-to-corner collision for a non-square footprint (sm-longhouse)', () => {
+    const footprint: [number, number] = [10, 5];
+    const [w, d] = footprint;
+    const a: Building = {
+      id: 'bld:test:a', lotId: 'test:a', glyph: 'sm-longhouse',
+      position: new Point(0, 0), bearingDeg: 0, footprint, occupancy: 12,
+    };
+    const dx = w * HOUSE_INK_RATIO * 0.99;
+    const dy = d * HOUSE_INK_RATIO * 0.98;
+    const b: Building = { ...a, id: 'bld:test:b', lotId: 'test:b', position: new Point(dx, dy) };
     expect(overlaps(a, b)).toBe(true);
   });
 });
