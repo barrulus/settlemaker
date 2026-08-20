@@ -56,32 +56,70 @@ export function relaxLanes(lanes: Lane[], buildings: Building[]): Lane[] {
 }
 
 /**
- * A lane tail that acquired no dwelling is the straggle at the edge of the
- * fabric: a road running 200 m past the last cottage looks like a mistake,
- * a road stopping dead at the last cottage looks unnatural. Trim each lane
- * back to its furthest-out building plus a TAIL_STUB_M stub.
+ * Ruling R15: trim by provenance. Lanes in this engine come from two
+ * different places, and trimming means something different for each:
  *
+ *  - `arm-*` lanes are FMG's roads — the route to the next town, arriving
+ *    at this village. They exist whether or not anyone builds on them
+ *    (the empty-site wireframe is precisely an arm with zero buildings), so
+ *    housing is irrelevant to their length: an arm is never trimmed, full
+ *    stop, whether it has zero buildings or buildings that stop short of
+ *    the map edge.
+ *  - Everything else — `lane-*` (invented lanes) and any `.../bNN` branch,
+ *    including a branch off an arm — was invented by the frontage budget
+ *    purely to supply frontage. If it earned no dwelling, it should not be
+ *    drawn at all; if it earned some, it is trimmed to the last one plus a
+ *    TAIL_STUB_M stub.
+ *
+ * A branch id such as `arm-090/b50` starts with `arm-` but is NOT exempt —
+ * the `/b` marks it as an invented branch, checked before the arm test.
+ */
+function isFmgArm(laneId: string): boolean {
+  return laneId.startsWith('arm-') && !laneId.includes('/b');
+}
+
+/**
  * A building belongs to a lane only when its lotId's lane-id segment is an
  * exact match — `arm-090:R3` belongs to `arm-090`, but `arm-090/b50:R3`
  * (a branch lane with its own separate id) must not be claimed by
  * `arm-090`'s prefix test. Matching on `${lane.id}:` rather than a bare
  * `startsWith(lane.id)` is what keeps that boundary honest.
  */
+function buildingsOf(lane: Lane, buildings: Building[]): Building[] {
+  const prefix = `${lane.id}:`;
+  return buildings.filter((b) => b.lotId.startsWith(prefix));
+}
+
+/**
+ * A lane tail that acquired no dwelling is the straggle at the edge of the
+ * fabric: a road running 200 m past the last cottage looks like a mistake,
+ * a road stopping dead at the last cottage looks unnatural. Trims invented
+ * lanes back to their furthest-out building plus a TAIL_STUB_M stub, drops
+ * invented lanes that earned no building at all, and leaves FMG's `arm-`
+ * roads untouched regardless of what they did or didn't acquire (R15).
+ *
+ * The output may contain fewer lanes than the input — a dropped invented
+ * lane is simply absent. That is fine: this runs after dwellings are
+ * placed, and its output only feeds rendering and the model.
+ */
 export function trimTails(lanes: Lane[], buildings: Building[]): Lane[] {
-  const prefixOf = (laneId: string) => `${laneId}:`;
+  const result: Lane[] = [];
 
-  return lanes.map((lane) => {
-    const prefix = prefixOf(lane.id);
-    const mine = buildings.filter((b) => b.lotId.startsWith(prefix));
+  for (const lane of lanes) {
+    if (isFmgArm(lane.id)) {
+      result.push(lane);
+      continue;
+    }
 
-    // A lane with no dwellings of its own has no "last building" to trim
-    // back to — the whole thing is tail, so it is treated the same as a
-    // lane whose furthest dwelling sits right at the green (furthest = 0):
-    // trimmed down to a bare stub, not left at full length.
+    const mine = buildingsOf(lane, buildings);
+    if (mine.length === 0) {
+      // Invented purely to supply frontage; none was used, so it is not drawn.
+      continue;
+    }
+
     const start = lane.points[0];
     const furthest = mine.reduce((best, b) => Math.max(best, dist(b.position, start)), 0);
     const cutoff = furthest + TAIL_STUB_M;
-
     const keep = lane.points.filter((p) => dist(p, start) <= cutoff);
 
     // A lane must always keep at least two points — a single point is not
@@ -89,8 +127,8 @@ export function trimTails(lanes: Lane[], buildings: Building[]): Lane[] {
     // sits well inside the first segment), fall back to the lane's own
     // first two points, which is the shortest possible stub this lane can
     // honestly offer.
-    if (keep.length < 2) return { ...lane, points: lane.points.slice(0, 2) };
+    result.push({ ...lane, points: keep.length < 2 ? lane.points.slice(0, 2) : keep });
+  }
 
-    return { ...lane, points: keep };
-  });
+  return result;
 }
