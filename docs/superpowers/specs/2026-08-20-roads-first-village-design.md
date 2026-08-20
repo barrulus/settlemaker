@@ -252,6 +252,18 @@ maximum displacement, so determinism holds and geometry cannot wander.
 Lane tails that acquired no dwelling are trimmed back to the last building plus a short
 stub. That trimming is the straggle at the edge of the fabric.
 
+**Trimming goes by provenance** (ruling R15, 2026-08-20), because the two kinds of lane
+mean different things:
+
+- An **`arm-` lane is FMG's road** — the route to the next town, which exists whether or
+  not anyone builds along it. It is never trimmed, with or without dwellings. Trimming
+  one would delete the village's connection to the world, which is the subject of the
+  reference wireframe's first frame.
+- An **invented lane with dwellings** is trimmed back to its last building plus the stub.
+- An **invented lane with no dwellings is dropped entirely.** It exists only to supply
+  frontage the census turned out not to need; stubbed it reads as an error, and
+  full-length it reads as a road to nothing.
+
 ### 4.6 Rule versus dice
 
 **Rules:** green position, shape, size; arm bearings and classes; lane count; where an
