@@ -194,8 +194,14 @@ The `-a` / `-b` seed variant is a die roll. The shape is not.
 ### 4.3 Green size
 
 ```
-diameter = clamp( floor(class) × √(pop / 300), floor(class), min(40 m, builtRadius / 1.5) )
+diameter = min( max( floor(class) × √(pop / 300), floor(class) ), min(40 m, builtRadius / 1.5) )
 ```
+
+**The cap beats the floor when they conflict** (ruling R8, 2026-08-20). Written as a
+plain `clamp(value, floor, cap)` this is ambiguous whenever `cap < floor`, and the two
+readings disagree: floor-wins would give a hamlet of 30 m built radius a 26 m green on a
+royal road — a green nearly as wide as the village. The class floor is a minimum for a
+green that has room, not a licence to exceed the settlement.
 
 `floor(class)` by highest road class present: royal 26 m, main 22, market 20, town 16,
 local 12.
