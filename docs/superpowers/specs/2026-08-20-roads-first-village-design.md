@@ -73,6 +73,16 @@ village-model.ts             orchestrates the five passes
   wanted, is render-time formatting only.
 - **Seeded determinism.** Every pass receives the RNG as a parameter; no globals. Same
   seed → identical bytes, as today.
+- **Stable ids.** Every generated object carries an id derived from its *structural
+  position*, never from an array index or iteration order:
+  - lane — its origin (green arm bearing, or parent lane) plus its branch path;
+  - lot — its lane id, side, and ordinal measured from the green end;
+  - building — its lot id;
+  - field — its wedge id and strip ordinal.
+
+  Cheap now, expensive to retrofit. It is what will let a future editor store a manual
+  edit against an object and have that edit survive regeneration; with index-based ids,
+  any upstream change silently reassigns every stored edit to the wrong object. See §10.
 - **Zero runtime dependencies**, unchanged.
 - **External contract unchanged**: `AzgaarBurgInput` in, deterministic SVG + GeoJSON out,
   `data-bg="paper"` tiler contract, library served as `/lib/settlemaker.js`.
@@ -520,6 +530,14 @@ green unit tests substitutes for looking at the picture.
   commit `e4fd30f`) remain worth cherry-picking regardless of engine.
 - **Piers beyond a single placement**, harbours, and anything in a `route` band beyond
   lanes.
+- **Manual editing** (watabou-style handles: bend a lane, drag the green, nudge a house).
+  Not designed here, but deliberately not foreclosed. Two shapes are anticipated: edits as
+  **constraints on the skeleton**, where passes 1–2 are frozen with the edit applied and
+  passes 3–5 re-solve — which is what makes a stretched settlement stay coherent instead
+  of smearing — and edits as an **override patch** applied to leaf objects after
+  generation. Both depend on the stable-id invariant in §2 and on the passes staying pure;
+  both are otherwise a settlemaker-web project (hit-testing, handles, undo, a persistence
+  format for the constraint set), not a library one.
 
 ---
 
