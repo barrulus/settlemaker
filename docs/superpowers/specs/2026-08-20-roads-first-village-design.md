@@ -417,10 +417,10 @@ face the nearest road. Glyphs marked `invariant` (the round huts) are not rotate
 | Instance jitter | ±10% | footprint only | Aesthetic: stops a row reading as stamped copies. |
 | Fit sizing | 0.85–1.15× | footprint only | Practical: shrink into a slightly narrow lot rather than abandoning it; grow into a generously wide fringe lot so a cottage is not lost in its plot. |
 
-**The bound applies to the non-semantic multipliers only.** Jitter × fit lands in
-**[0.765, 1.3225]**, and that combined factor is applied on top of the entry's
-`sizeFactor`. So an ordinary dwelling stays within roughly 0.77–1.32× nominal, while an
-inn at `sizeFactor` 1.5 reaches roughly 1.15–1.98×.
+**The bound applies to the non-semantic multipliers only.** Jitter is ±10% (0.9–1.1) and
+fit is 0.85–1.15, so their product lands in **[0.765, 1.265]**, and that combined factor
+is applied on top of the entry's `sizeFactor`. So an ordinary dwelling stays within
+roughly 0.77–1.27× nominal, while an inn at `sizeFactor` 1.5 reaches roughly 1.15–1.9×.
 
 `sizeFactor` is deliberately outside the bound: it is a statement about *what the
 building is*, not variation applied to it. Clamping it would squash the very distinction
