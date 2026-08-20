@@ -38,9 +38,23 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
   let lots: Lot[] = [];
   // Annotated, not inferred: an empty literal would infer `never[]`.
   let spend: SpendResult = { buildings: [], housed: 0, unhoused: site.population };
+  // Round 1 has no cut lots yet to measure, so it still guesses f0 x 1.8 as
+  // the mean frontage (R16). Every later round replaces this with the
+  // ACTUAL mean frontage of the lane lots the previous round produced,
+  // because `frontageAt`'s gradient widens fringe lots to several times
+  // f0 — a flat f0 x 1.8 guess is only ever right for round 1.
+  let measuredMeanFrontage = f0 * 1.8;
 
   for (let round = 0; round <= MAX_FEEDBACK_ROUNDS; round++) {
-    const required = requiredFrontage(site.population, occupancy, f0 * 1.8);
+    // R16: after round 1, requiredFrontage's flat per-capita estimate is
+    // not what makes the loop escalate — the loop already satisfied that
+    // estimate and still came up short, which means the estimate itself
+    // was wrong. From round 2 on, ask for what's actually missing: the
+    // frontage already available, plus enough (at the measured mean lot
+    // width) to house the shortfall the previous round reported.
+    const required = round === 0
+      ? requiredFrontage(site.population, occupancy, measuredMeanFrontage)
+      : availableFrontage(lanes) + (spend.unhoused / occupancy) * measuredMeanFrontage;
     lanes = addInventedLanes(lanes, green, required, builtRadius * 2, rng);
 
     const laneTypes = new Map<string, RouteType>(lanes.map((l) => [l.id, l.type]));
@@ -51,6 +65,16 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
       ...lanes.flatMap((l) => subdivideLane(l, green, builtRadius, f0, LOT_DEPTH_M, rng)),
     ];
     lots = orderLots(scoreLots(clipLots(lots, green, site.water), green, laneTypes));
+
+    // Measure this round's actual lane-lot frontage for the next round's
+    // estimate. The green ring is excluded: its lots are always cut at a
+    // flat f0, not the lane gradient, so mixing them in would bias the
+    // mean toward the green's narrower frontage and understate what a new
+    // lane actually needs to supply.
+    const laneLots = lots.filter((l) => l.laneId !== 'green');
+    if (laneLots.length > 0) {
+      measuredMeanFrontage = laneLots.reduce((s, l) => s + l.frontageM, 0) / laneLots.length;
+    }
 
     spend = spendCensus(lots, deck, site, rng);
     if (spend.unhoused === 0) break;

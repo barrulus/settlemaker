@@ -56,3 +56,35 @@ describe('generateVillage', () => {
     expect(VILLAGE_POP_CEILING).toBe(1000);
   });
 });
+
+// R16: the loop must escalate on the measured shortfall rather than
+// re-running an already-satisfied frontage budget. A single terminating
+// road at the top of the served population band is exactly the case that
+// exposed the no-op loop.
+describe('generateVillage: frontage feedback loop escalation (R16)', () => {
+  it('houses at least 95% of a 900-population census with no overflow diagnostic', () => {
+    const m = generateVillage({ ...base, population: 900 }, 1);
+    const housed = m.buildings.reduce((s, b) => s + b.occupancy, 0);
+    expect(housed).toBeGreaterThanOrEqual(900 * 0.95);
+    expect(m.diagnostics).toEqual([]);
+  });
+
+  it('adds materially more lanes at pop 900 than at pop 150 (the loop actually added lanes)', () => {
+    const small = generateVillage({ ...base, population: 150 }, 1);
+    const big = generateVillage({ ...base, population: 900 }, 1);
+    expect(big.lanes.length).toBeGreaterThan(small.lanes.length * 1.5);
+  });
+
+  it('still reports an honest overflow diagnostic when the census genuinely cannot fit', () => {
+    const m = generateVillage({ ...base, population: 20000 }, 1);
+    const housed = m.buildings.reduce((s, b) => s + b.occupancy, 0);
+    expect(m.diagnostics.length).toBeGreaterThan(0);
+    expect(housed).toBeLessThan(20000);
+  }, 20000);
+
+  it('stays deterministic across a multi-round escalation: same seed, identical model', () => {
+    const a = generateVillage({ ...base, population: 900 }, 11);
+    const b = generateVillage({ ...base, population: 900 }, 11);
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+});
