@@ -94,4 +94,36 @@ describe('drawEntry', () => {
     const b = drawEntry(TEMPERATE_VILLAGE_DECK, site(), 20, new Set(), new SeededRandom(3));
     expect(a?.glyph).toBe(b?.glyph);
   });
+
+  // The production deck happens to give every capped entry weight 0, so
+  // "never draws a capped entry twice" above passes even if the `!e.cap`
+  // rule were deleted from drawEntry's pool filter — the weight>0 clause
+  // alone would exclude it. That collapses two different meanings (a data
+  // fact about today's weights vs. the rule that capped entries are placed
+  // by the landmark pass, never the ordinary draw) into one coincidence.
+  // This fixture pins the RULE: a capped entry with a nonzero weight must
+  // still never be drawn.
+  it('never draws a capped entry even when it carries a nonzero weight', () => {
+    const fixtureDeck = [
+      { ...TEMPERATE_VILLAGE_DECK.find((e) => e.glyph === 'sm-house')! },
+      {
+        ...TEMPERATE_VILLAGE_DECK.find((e) => e.glyph === 'sm-inn')!,
+        weight: 1000, // dominates the pool if the cap check is skipped
+      },
+    ];
+    for (let i = 0; i < 50; i++) {
+      // SeededRandom's LCG output for its very first draw is near-zero for
+      // small seeds (seed * 48271 stays tiny relative to the modulus), so
+      // an un-warmed small seed would always land in the low, house-sized
+      // slice of the roll regardless of whether the cap guard exists —
+      // that would make this test pass by construction rather than by
+      // actually exercising the guard. Burning a few draws first spreads
+      // the seed across the roll range so the fixture's 1000-weight inn
+      // would dominate if `!e.cap` were removed.
+      const rng = new SeededRandom(i * 7919 + 12345);
+      rng.float(); rng.float(); rng.float();
+      const e = drawEntry(fixtureDeck, site({ population: 400 }), 40, new Set(), rng);
+      expect(e?.glyph).not.toBe('sm-inn');
+    }
+  });
 });

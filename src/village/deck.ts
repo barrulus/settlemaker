@@ -72,6 +72,11 @@ function resolveGlyphFor(biome: string, glyph: string): string {
   const suffix = BIOME_SUFFIX[biome] ?? '';
   if (suffix === '') return glyph;
   const suffixed = `${glyph}${suffix}`;
+  // UNEXERCISED (2026-08-20): the currently loaded manifest (batch001) has
+  // no `--`-suffixed ids at all, so `hasGlyph(suffixed)` is false for every
+  // call and this branch never returns `suffixed` in any test today — every
+  // path takes the fallback below. Verify this leg explicitly once the
+  // refined symbol set (with real biome variants) is ingested.
   return hasGlyph(suffixed) ? suffixed : glyph;
 }
 
