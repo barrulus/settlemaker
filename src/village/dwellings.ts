@@ -11,10 +11,30 @@ import { buildingId, type Building, type Lot } from './types.js';
 import type { DeckEntry } from './deck.js';
 
 /**
- * Three multipliers, deliberately separate: sizeFactor is semantic (an inn
- * is bigger because an inn is bigger), jitter is aesthetic, fit is
- * practical. Total bound 0.85-1.65x nominal. `minScale` in the manifest is
- * a legibility floor and is NOT one of these.
+ * Three multipliers, deliberately separate and NOT all bounded together:
+ *
+ * - `sizeFactor` (semantic) — a statement about what the building IS. An
+ *   inn is bigger because an inn is bigger, and its occupancy scales with
+ *   it too (see `seat` below). This is deliberately outside any variation
+ *   bound: squashing it to fit a bound would be squashing the very thing
+ *   the deck uses to make an inn read as an inn.
+ * - `jitter` (aesthetic) — ±`SIZE_JITTER` on footprint only, so a row does
+ *   not read as stamped copies.
+ * - `fit` (practical) — shrinks into a narrow lot, grows into a generous
+ *   fringe one, clamped to [`FIT_MIN`, `FIT_MAX`].
+ *
+ * `jitter x fit` — the variation applied ON TOP OF `sizeFactor` — is bounded
+ * to roughly [0.765, 1.265] ([`FIT_MIN`, `FIT_MAX`] x [1-`SIZE_JITTER`,
+ * 1+`SIZE_JITTER`]). So an ordinary dwelling (`sizeFactor` 1) lands within
+ * roughly 0.77-1.27x nominal, and an inn (`sizeFactor` 1.5) within roughly
+ * 1.15-1.9x nominal — NOT within some single bound shared by every deck
+ * entry regardless of what it is. `minScale` in the manifest is a
+ * legibility floor and is NOT one of these three.
+ *
+ * (Ruling R13: an earlier draft of this comment stated a single "total
+ * bound 0.85-1.65x nominal" covering every entry including the inn. That
+ * number was an arithmetic slip — `sizeFactor x jitter` with the `fit`
+ * term dropped — and is corrected here; nothing in this function changed.)
  */
 export function sizeFor(
   entry: DeckEntry, lot: Lot, rng: SeededRandom,

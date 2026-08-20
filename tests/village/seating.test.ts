@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Point } from '../../src/types/point.js';
 import { SeededRandom } from '../../src/utils/random.js';
 import { overlaps, seat, sizeFor } from '../../src/village/dwellings.js';
-import { FIT_MAX, FIT_MIN } from '../../src/village/constants.js';
+import { FIT_MAX, FIT_MIN, SIZE_JITTER } from '../../src/village/constants.js';
 import { TEMPERATE_VILLAGE_DECK } from '../../src/village/deck.js';
 import type { DeckEntry } from '../../src/village/deck.js';
 import type { Lot } from '../../src/village/types.js';
@@ -37,12 +37,47 @@ describe('sizeFor', () => {
     expect(innW).toBeGreaterThan(houseW);
   });
 
-  it('never leaves the total bound of 0.85-1.65x nominal', () => {
-    for (let s = 1; s < 40; s++) {
-      const [w] = sizeFor(house, lot(40), new SeededRandom(s));
-      expect(w).toBeGreaterThanOrEqual(houseNominalW * FIT_MIN * 0.9 - 1e-9);
-      expect(w).toBeLessThanOrEqual(houseNominalW * 1.65 + 1e-9);
+  // Ruling R13: the brief's "total bound 0.85-1.65x nominal" was an
+  // arithmetic slip (sizeFactor x jitter, with the fit term dropped) and
+  // does not hold for sizeFactor > 1 (an inn at max jitter and max fit
+  // reaches ~1.9x). The bound that actually means something is the
+  // NON-SEMANTIC factor — jitter x fit, i.e. the variation applied ON TOP
+  // OF sizeFactor. For a sizeFactor-1 entry that is exactly footprint /
+  // nominal, so this test pins it directly: [FIT_MIN, FIT_MAX] x
+  // [1-SIZE_JITTER, 1+SIZE_JITTER] = [0.765, 1.265], across many seeds and
+  // a range of lot frontages (narrow, typical, generous — so both the
+  // shrink-to-fit and grow-to-fit legs of `fit` get exercised).
+  it('keeps the non-semantic (jitter x fit) factor within [0.765, 1.265] for a sizeFactor-1 entry', () => {
+    const nonSemanticMin = FIT_MIN * (1 - SIZE_JITTER);
+    const nonSemanticMax = FIT_MAX * (1 + SIZE_JITTER);
+    expect(nonSemanticMin).toBeCloseTo(0.765, 9);
+    expect(nonSemanticMax).toBeCloseTo(1.265, 9);
+    for (const frontageM of [4, 8, 40]) {
+      for (let s = 1; s < 40; s++) {
+        const [w] = sizeFor(house, lot(frontageM), new SeededRandom(s));
+        const factor = w / houseNominalW;
+        expect(factor).toBeGreaterThanOrEqual(nonSemanticMin - 1e-9);
+        expect(factor).toBeLessThanOrEqual(nonSemanticMax + 1e-9);
+      }
     }
+  });
+
+  // sizeFactor must genuinely carry through rather than being clamped away
+  // by fit. Compared as a ratio of (footprint / nominal footprint) rather
+  // than of raw footprint widths, because sm-house and sm-inn have
+  // different nominal footprints (6 vs 7) — a raw-width comparison would
+  // be muddied by that difference and would not isolate sizeFactor. On a
+  // lot generous enough that `fit` saturates at FIT_MAX for both entries,
+  // and with jitter drawn identically (same seed, same first rng.float()
+  // call in sizeFor), the two entries' non-semantic factors are equal, so
+  // this isolates sizeFactor cleanly.
+  it('carries sizeFactor through to the footprint: an inn scales ~1.5x a house', () => {
+    const innW = sizeFor(inn, lot(200), new SeededRandom(3))[0];
+    const houseW = sizeFor(house, lot(200), new SeededRandom(3))[0];
+    const innNominalW = nominalFootprint(inn.glyph)[0];
+    const innFactor = innW / innNominalW;
+    const houseFactor = houseW / houseNominalW;
+    expect(innFactor / houseFactor).toBeCloseTo(1.5, 5);
   });
 
   it('grows into a generous fringe lot and shrinks into a tight one', () => {
