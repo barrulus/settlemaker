@@ -32,6 +32,14 @@ describe('clipLots', () => {
   it('keeps everything else', () => {
     expect(clipLots([lot('a', 100, 0)], green, [])).toHaveLength(1);
   });
+
+  it('keeps a green ring lot even when its frontage falls inside the green radius', () => {
+    // Both lots sit at the same point, inside the green's 10m radius. The
+    // ring lot must survive by construction of the exception; the
+    // non-ring lot at the same spot must still be dropped.
+    const out = clipLots([lot('g', 5, 0, 'green'), lot('r', 5, 0, 'arm-090')], green, []);
+    expect(out.map((l) => l.id)).toEqual(['g']);
+  });
 });
 
 describe('scoreLots', () => {

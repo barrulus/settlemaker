@@ -60,6 +60,12 @@ export const FIT_MAX = 1.15;
 export const SEATING_SETBACK_MAX_M = 1.5;
 export const DECK_GAP_M = 1.5;
 
+// --- Lot scoring ---------------------------------------------------------
+export const SCORE_BASE = 100;
+export const SCORE_DISTANCE_PENALTY_PER_M = 0.5;
+export const SCORE_CLASS_WEIGHT = 3;
+export const SCORE_RING_BONUS = 40;
+
 // --- Feedback loop -----------------------------------------------------
 export const MAX_FEEDBACK_ROUNDS = 3;
 export const GAP_TIGHTEN = 0.85;

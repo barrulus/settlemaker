@@ -4,6 +4,7 @@ import { arcLengths, bearingOf, dist, inAnyWater, sampleAt } from '../geometry.j
 import {
   FRONTAGE_JITTER, GAP_LOOSE_M, GAP_POP_HIGH, GAP_POP_LOW, GAP_TIGHT_M,
   GRADIENT_EXPONENT, GRADIENT_K, GRADIENT_RATIO_CAP, LANE_SETBACK_M, RING_SETBACK_M,
+  SCORE_BASE, SCORE_CLASS_WEIGHT, SCORE_DISTANCE_PENALTY_PER_M, SCORE_RING_BONUS,
 } from '../constants.js';
 import { Point } from '../../types/point.js';
 import { lotId, type Green, type Lane, type Lot } from '../types.js';
@@ -136,8 +137,6 @@ export function clipLots(lots: Lot[], green: Green, water: Point[][]): Lot[] {
   });
 }
 
-const SCORE_RING_BONUS = 40;
-
 /**
  * Nearer the green is better; a higher lane class is better; the green's
  * own ring beats everything. Pass 4 fills the best first, so an
@@ -149,9 +148,9 @@ export function scoreLots(
   return lots.map((l) => {
     const d = dist(l.front, green.centre);
     const type = laneTypeById.get(l.laneId);
-    const classBonus = type ? (7 - classRank(type)) * 3 : 0;
+    const classBonus = type ? (7 - classRank(type)) * SCORE_CLASS_WEIGHT : 0;
     const ring = l.laneId === 'green' ? SCORE_RING_BONUS : 0;
-    return { ...l, score: 100 - d * 0.5 + classBonus + ring };
+    return { ...l, score: SCORE_BASE - d * SCORE_DISTANCE_PENALTY_PER_M + classBonus + ring };
   });
 }
 
