@@ -14,6 +14,13 @@ import type { Building, Lane } from '../types.js';
  * RELAX_MAX_DISPLACEMENT_M total displacement from its original position so
  * the geometry cannot wander and determinism holds.
  *
+ * The 1.5 m cap is a hard ceiling, not a promise of full clearance: for a
+ * building close enough that clearing it would need more than 1.5 m of
+ * push, the clamp still applies, and the point is left short of the
+ * keep-out radius — still intruding on the building's ink extent. That is
+ * the accepted trade for a bounded, deterministic pass: bounded beats
+ * convergent here.
+ *
  * Pure function of its inputs: no RNG, no mutation of the input lanes.
  */
 export function relaxLanes(lanes: Lane[], buildings: Building[]): Lane[] {
@@ -28,7 +35,7 @@ export function relaxLanes(lanes: Lane[], buildings: Building[]): Lane[] {
           const keepOut = lane.widthM / 2 + RELAX_CLEARANCE_M + Math.max(ink.width, ink.depth) / 2;
           const dx = points[i].x - b.position.x;
           const dy = points[i].y - b.position.y;
-          const d = Math.hypot(dx, dy);
+          const d = dist(points[i], b.position);
           if (d === 0 || d >= keepOut) continue;
           const push = (keepOut - d) / RELAX_ITERATIONS;
           points[i] = new Point(points[i].x + (dx / d) * push, points[i].y + (dy / d) * push);
@@ -42,7 +49,7 @@ export function relaxLanes(lanes: Lane[], buildings: Building[]): Lane[] {
     for (let i = 0; i < points.length; i++) {
       const dx = points[i].x - origin[i].x;
       const dy = points[i].y - origin[i].y;
-      const d = Math.hypot(dx, dy);
+      const d = dist(points[i], origin[i]);
       if (d > RELAX_MAX_DISPLACEMENT_M) {
         points[i] = new Point(
           origin[i].x + (dx / d) * RELAX_MAX_DISPLACEMENT_M,
@@ -101,6 +108,13 @@ function buildingsOf(lane: Lane, buildings: Building[]): Building[] {
  * The output may contain fewer lanes than the input — a dropped invented
  * lane is simply absent. That is fine: this runs after dwellings are
  * placed, and its output only feeds rendering and the model.
+ *
+ * The keep-filter below assumes a lane's points increase roughly
+ * monotonically in distance from its own start point. That holds for this
+ * engine because every lane — arm or invented — is built outward from the
+ * green, so a point further along the array is, by construction, further
+ * from the start; a lane that wandered back toward its own beginning would
+ * break the assumption, but no pass in this engine produces one.
  */
 export function trimTails(lanes: Lane[], buildings: Building[]): Lane[] {
   const result: Lane[] = [];

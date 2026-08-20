@@ -61,6 +61,25 @@ describe('relaxLanes', () => {
     relaxLanes([before], [building(20, 0.5)]);
     expect(before.points.map((p) => [p.x, p.y])).toEqual(originalPoints);
   });
+
+  it('stays bounded and deterministic when a lane point is squeezed between buildings on opposite sides', () => {
+    // Two houses, one on each side of the same lane point, close enough
+    // that clearing either alone would already need more than the 1.5 m
+    // cap. Their pushes conflict rather than agree — this is the ordinary
+    // case for a real village, not an edge case.
+    const before = lane();
+    const squeeze = [building(20, 0.4, 'bld:north'), building(20, -0.4, 'bld:south')];
+
+    const a = relaxLanes([before], squeeze);
+    const b = relaxLanes([before], squeeze);
+
+    const originalPoint = before.points[1];
+    const movedA = a[0].points[1];
+    const d = Math.hypot(movedA.x - originalPoint.x, movedA.y - originalPoint.y);
+    expect(d).toBeLessThanOrEqual(1.5 + 1e-9);
+
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
 });
 
 describe('trimTails', () => {
