@@ -96,4 +96,35 @@ describe('spendCensus', () => {
     // rejected as an overlap, so both can never be occupied at once.
     expect(used.has('arm-090:R0') && used.has('arm-090:R1')).toBe(false);
   });
+
+  // Ruling R14: Pass A must retry the next eligible lot when a capped
+  // landmark's first-choice seating collides with one already placed, not
+  // give up on the landmark for the whole village. The manor (deck order:
+  // first) takes R0; the inn's first choice, R1, sits 0.5 m away and must
+  // collide with the manor, so the inn has to fall through to R2 — far
+  // enough away to clear. Population 300 satisfies both landmarks' minPop
+  // (manor 250, inn 180). Against the old find-then-continue version, the
+  // inn would be abandoned entirely once its first choice collided.
+  it('retries the next eligible lot when a capped landmark collides on its first choice', () => {
+    const contestedLots: Lot[] = [
+      {
+        id: 'arm-090:R0', laneId: 'arm-090', side: 1, front: new Point(0, 0),
+        bearingDeg: 0, frontageM: 18, depthM: 25, score: 100,
+      },
+      {
+        id: 'arm-090:R1', laneId: 'arm-090', side: 1, front: new Point(0.5, 0),
+        bearingDeg: 0, frontageM: 18, depthM: 25, score: 99,
+      },
+      {
+        id: 'arm-090:R2', laneId: 'arm-090', side: 1, front: new Point(40, 0),
+        bearingDeg: 0, frontageM: 18, depthM: 25, score: 98,
+      },
+    ];
+    const out = spendCensus(contestedLots, TEMPERATE_VILLAGE_DECK, site(300), new SeededRandom(1));
+    const manor = out.buildings.find((b) => b.glyph === 'sm-house-large-tiled');
+    const inn = out.buildings.find((b) => b.glyph === 'sm-inn');
+    expect(manor).toBeDefined();
+    expect(inn).toBeDefined();
+    expect(manor!.lotId).not.toBe(inn!.lotId);
+  });
 });

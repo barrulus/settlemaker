@@ -146,15 +146,23 @@ export function spendCensus(
   const buildings: Building[] = [];
   let housed = 0;
 
+  // R14: a rejected seating must not abandon the landmark — walk the
+  // eligible lots in score order and take the first whose seating clears
+  // every already-placed building. Only when none clears is the landmark
+  // genuinely skipped. Adjacent green-ring lots run close enough together
+  // (~1 frontage apart) that a later landmark colliding with an earlier
+  // one on its first choice is a realistic outcome, not a corner case.
   for (const capped of deck.filter((e) => e.cap === 'one')) {
-    const lot = ordered.find((l) => !taken.has(l.id) && eligible(capped, site, l.frontageM));
-    if (!lot) continue;
-    const b = seat(capped, lot, rng);
-    if (buildings.some((other) => overlaps(b, other))) continue;
-    buildings.push(b);
-    taken.add(lot.id);
-    placedGlyphs.add(capped.glyph);
-    housed += b.occupancy;
+    for (const lot of ordered) {
+      if (taken.has(lot.id) || !eligible(capped, site, lot.frontageM)) continue;
+      const b = seat(capped, lot, rng);
+      if (buildings.some((other) => overlaps(b, other))) continue;
+      buildings.push(b);
+      taken.add(lot.id);
+      placedGlyphs.add(capped.glyph);
+      housed += b.occupancy;
+      break;
+    }
   }
 
   for (const lot of ordered) {
