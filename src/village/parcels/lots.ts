@@ -1,10 +1,11 @@
 import { SeededRandom } from '../../utils/random.js';
 import { offsetPolyline } from './strip.js';
-import { arcLengths, dist, sampleAt } from '../geometry.js';
+import { arcLengths, bearingOf, dist, sampleAt } from '../geometry.js';
 import {
   FRONTAGE_JITTER, GAP_LOOSE_M, GAP_POP_HIGH, GAP_POP_LOW, GAP_TIGHT_M,
-  GRADIENT_EXPONENT, GRADIENT_K, GRADIENT_RATIO_CAP, LANE_SETBACK_M,
+  GRADIENT_EXPONENT, GRADIENT_K, GRADIENT_RATIO_CAP, LANE_SETBACK_M, RING_SETBACK_M,
 } from '../constants.js';
+import { Point } from '../../types/point.js';
 import { lotId, type Green, type Lane, type Lot } from '../types.js';
 
 /**
@@ -81,6 +82,44 @@ export function subdivideLane(
       s += frontage;
       ordinal++;
     }
+  }
+  return lots;
+}
+
+/**
+ * The green's perimeter is frontage too — the most valuable in the
+ * settlement, so it takes the tightest frontages. The ring of buildings
+ * around the green is this subdivision, not a placement rule.
+ */
+export function subdivideGreen(
+  green: Green, f0: number, depthM: number, rng: SeededRandom,
+): Lot[] {
+  const radius = green.diameter / 2 + RING_SETBACK_M;
+  const circumference = 2 * Math.PI * radius;
+  const count = Math.max(4, Math.floor(circumference / f0));
+  const step = (Math.PI * 2) / count;
+  // Rotate the ring by a seeded offset so two villages do not share a seam.
+  const phase = rng.float() * step;
+
+  const lots: Lot[] = [];
+  for (let i = 0; i < count; i++) {
+    const a = phase + i * step;
+    const front = new Point(
+      green.centre.x + radius * Math.sin(a),
+      green.centre.y - radius * Math.cos(a),
+    );
+    // Face back at the centre.
+    const bearingDeg = bearingOf(front, green.centre);
+    lots.push({
+      id: `green:R${i}`,
+      laneId: 'green',
+      side: 1,
+      front,
+      bearingDeg,
+      frontageM: circumference / count,
+      depthM,
+      score: 0,
+    });
   }
   return lots;
 }
