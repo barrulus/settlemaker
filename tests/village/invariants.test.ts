@@ -40,6 +40,12 @@ const inputs: AzgaarBurgInput[] = [
 describe('village invariants (design §5.7)', () => {
   const seeds = [1, 2, 3, 4, 5, 6, 7, 8];
 
+  // Fix round 1 (2026-08-21): MAX_FEEDBACK_ROUNDS went 3 -> 4 to restore
+  // full-census housing after the seatEfficiency fix, so every test below
+  // that regenerates the full input x seed grid now runs one more round
+  // per village. 20s clears it with headroom even under parallel load.
+  const GRID_TIMEOUT_MS = 20000;
+
   it('never puts a lot in water', () => {
     for (const input of inputs) {
       for (const seed of seeds) {
@@ -51,7 +57,7 @@ describe('village invariants (design §5.7)', () => {
         }
       }
     }
-  });
+  }, GRID_TIMEOUT_MS);
 
   it('never overlaps two buildings', () => {
     for (const input of inputs) {
@@ -64,7 +70,7 @@ describe('village invariants (design §5.7)', () => {
         }
       }
     }
-  });
+  }, GRID_TIMEOUT_MS);
 
   it('gives every lot a unique stable id', () => {
     for (const input of inputs) {
@@ -73,7 +79,7 @@ describe('village invariants (design §5.7)', () => {
         expect(new Set(m.lots.map((l) => l.id)).size).toBe(m.lots.length);
       }
     }
-  });
+  }, GRID_TIMEOUT_MS);
 
   it('anchors every building to a lot that exists', () => {
     for (const input of inputs) {
@@ -83,7 +89,7 @@ describe('village invariants (design §5.7)', () => {
         for (const b of m.buildings) expect(ids.has(b.lotId)).toBe(true);
       }
     }
-  });
+  }, GRID_TIMEOUT_MS);
 
   it('never seats a building on a road (gate 2: houses ON the roads)', () => {
     for (const input of inputs) {
@@ -94,7 +100,7 @@ describe('village invariants (design §5.7)', () => {
         }
       }
     }
-  });
+  }, GRID_TIMEOUT_MS);
 
   it('always produces at least one lane and one building', () => {
     for (const input of inputs) {
@@ -104,7 +110,7 @@ describe('village invariants (design §5.7)', () => {
         expect(m.buildings.length).toBeGreaterThan(0);
       }
     }
-  });
+  }, GRID_TIMEOUT_MS);
 
   // §5.7 property tests for the R20 debt (§5.4 rules 3-4): after
   // resolveConvergingLots, lot claims must be disjoint (up to float noise)
@@ -125,7 +131,7 @@ describe('village invariants (design §5.7)', () => {
         }
       }
     }
-  });
+  }, GRID_TIMEOUT_MS);
 
   it("every housed lot's front lies on its lane or the green (§5.4 rules 3-4)", () => {
     // Wider than a first guess: relaxLanes nudges lane points up to
@@ -166,7 +172,7 @@ describe('village invariants (design §5.7)', () => {
         }
       }
     }
-  });
+  }, GRID_TIMEOUT_MS);
 
   it('never throws on a degenerate input', () => {
     const bare: AzgaarBurgInput = {

@@ -208,7 +208,11 @@ export const SCORE_CLASS_WEIGHT = 3;
 export const SCORE_RING_BONUS = 40;
 
 // --- Feedback loop -----------------------------------------------------
-export const MAX_FEEDBACK_ROUNDS = 3;
+// Fix round 1 (2026-08-21): the §5.4 rules-3-4 lot-claim clipping counts
+// a resolved-away claim as a conversion failure in seatEfficiency, which
+// is more honest but needs one more rung of escalation to still fully
+// house a few small-population fixtures within the probe grid.
+export const MAX_FEEDBACK_ROUNDS = 4;
 export const GAP_TIGHTEN = 0.85;
 
 /**

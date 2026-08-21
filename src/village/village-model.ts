@@ -82,6 +82,15 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
   // replaces this with the ACTUAL mean frontage of the lane lots the
   // previous round produced.
   let measuredMeanFrontage = f0 * INITIAL_MEAN_FRONTAGE_FACTOR;
+  // Fix round 1: seatEfficiency must be measured against the lot supply
+  // BEFORE resolveConvergingLots removes converging claims, not after.
+  // A lot dropped by resolution is a conversion failure exactly like one
+  // rejected at seat time (a lane intrusion or building overlap) — both
+  // mean a metre of frontage did not become a house. Measuring against
+  // the POST-resolution count made the ratio look artificially healthy,
+  // so the escalator under-asked for frontage and the loop settled short
+  // of the full census instead of growing another rung.
+  let preResolutionLotCount = 0;
 
   for (let round = 0; round <= MAX_FEEDBACK_ROUNDS; round++) {
     // R16: after round 1, requiredFrontage's flat per-capita estimate is
@@ -98,9 +107,9 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
     // term is scaled by it, or a dense fabric asks for exactly the frontage
     // it will then reject. Floored so one pathological round cannot demand
     // unbounded lanes.
-    const seatEfficiency = round === 0 || lots.length === 0
+    const seatEfficiency = round === 0 || preResolutionLotCount === 0
       ? 1
-      : Math.max(0.25, spend.buildings.length / lots.length);
+      : Math.max(0.25, spend.buildings.length / preResolutionLotCount);
     const required = round === 0
       ? requiredFrontage(site.population, occupancy, measuredMeanFrontage)
       : availableFrontage(lanes)
@@ -118,7 +127,9 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
     // green-interior lots, so cross-strip claims still overlapped where
     // lanes converge. resolveConvergingLots makes the surviving claims
     // disjoint before scoring/ordering ever sees them.
-    lots = resolveConvergingLots(clipLots(lots, green, site.water), lanes, green);
+    const clipped = clipLots(lots, green, site.water);
+    preResolutionLotCount = clipped.length;
+    lots = resolveConvergingLots(clipped, lanes, green);
     lots = orderLots(scoreLots(lots, green, laneTypes));
 
     // Measure this round's actual lane-lot frontage for the next round's
