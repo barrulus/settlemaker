@@ -47,37 +47,51 @@ describe('renderVillage', () => {
 
   // --- R17: standalone output ---
 
-  it('embeds a <defs> block with a <symbol> for every glyph actually used, plus its -sil twin', () => {
+  it('embeds a <defs> block with a <g id> for every glyph actually used, plus its -sil twin', () => {
     const usedGlyphs = Array.from(new Set(model.buildings.map((b) => b.glyph)));
     expect(usedGlyphs.length).toBeGreaterThan(0);
     const defsMatch = svg.match(/<defs>([\s\S]*?)<\/defs>/);
     expect(defsMatch).not.toBeNull();
     const defs = defsMatch![1];
     for (const glyph of usedGlyphs) {
-      expect(defs).toContain(`<symbol id="${glyph}"`);
-      expect(defs).toContain(`<symbol id="${glyph}-sil"`);
+      expect(defs).toContain(`<g id="${glyph}"`);
+      expect(defs).toContain(`<g id="${glyph}-sil"`);
     }
   });
 
   it('does not dump every glyph in the asset library into defs — only the ones used', () => {
-    const symbolIds = Array.from(svg.matchAll(/<symbol id="([^"]+)"/g)).map((m) => m[1]);
+    const defsMatch = svg.match(/<defs>([\s\S]*?)<\/defs>/);
+    const defIds = Array.from(defsMatch![1].matchAll(/<g id="([^"]+)"/g)).map((m) => m[1]);
     const usedGlyphs = new Set(model.buildings.map((b) => b.glyph));
-    for (const id of symbolIds) {
+    for (const id of defIds) {
       const base = id.endsWith('-sil') ? id.slice(0, -4) : id;
-      // every symbol id must trace back either to a used building glyph or the green fallback glyph
+      // every def id must trace back either to a used building glyph or the green fallback glyph
       if (base !== `${model.green.shape}-${model.green.variant}`) {
         expect(usedGlyphs.has(base)).toBe(true);
       }
     }
   });
 
-  it('every <use> in the document resolves to a <symbol> defined in the same document (standalone)', () => {
-    const symbolIds = new Set(Array.from(svg.matchAll(/<symbol id="([^"]+)"/g)).map((m) => m[1]));
+  it('every <use> in the document resolves to a <g id> defined in <defs> (standalone)', () => {
+    const defsMatch = svg.match(/<defs>([\s\S]*?)<\/defs>/);
+    const defIds = new Set(Array.from(defsMatch![1].matchAll(/<g id="([^"]+)"/g)).map((m) => m[1]));
     const useHrefs = Array.from(svg.matchAll(/<use[^>]*href="#([^"]+)"/g)).map((m) => m[1]);
     expect(useHrefs.length).toBeGreaterThan(0);
     for (const href of useHrefs) {
-      expect(symbolIds.has(href)).toBe(true);
+      expect(defIds.has(href)).toBe(true);
     }
+  });
+
+  // --- Regression: <symbol> viewport-scaling footgun ---
+  // A <use> of a <symbol viewBox="..."> with no explicit width/height on
+  // the <use> defaults to 100% of the outer viewport before the use's own
+  // transform applies — every glyph rendered as a canvas-filling
+  // silhouette (a solid black mass), because our <use> elements carry only
+  // a transform, no width/height. Fixed by emitting <g id> instead of
+  // <symbol> in defs, which has no viewport semantics at all. Pinned here
+  // so a future edit cannot reintroduce <symbol> without this failing.
+  it('never emits an SVG <symbol> element — <g id> has no viewport semantics to trip over', () => {
+    expect(svg).not.toContain('<symbol');
   });
 
   // --- R17: green fallback ---

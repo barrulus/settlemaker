@@ -22,8 +22,20 @@ function n(v: number): string {
   return (Math.round(v * 100) / 100).toString();
 }
 
-function symbolBlock(id: string, viewBox: string, markup: string): string {
-  return `<symbol id="${id}" viewBox="${viewBox}">${markup}</symbol>`;
+/**
+ * Emits a plain <g id="..."> rather than an SVG <symbol viewBox="...">.
+ *
+ * A <symbol> has viewport semantics: a <use> of it with no explicit
+ * width/height defaults to 100% of the *outer* viewport before the use's
+ * own transform is applied, silently scaling every glyph to fill the whole
+ * canvas and only then multiplying by our translate/rotate/scale — which
+ * is what turned every rendered village into a solid black mass. A <g> has
+ * no viewport of its own, so a <use> of it applies our transform directly
+ * and unchanged. This is deliberate, not an oversight — see
+ * tests/village/render.test.ts's "no <symbol> elements" regression test.
+ */
+function defBlock(id: string, markup: string): string {
+  return `<g id="${id}">${markup}</g>`;
 }
 
 /**
@@ -31,10 +43,11 @@ function symbolBlock(id: string, viewBox: string, markup: string): string {
  * green and the fabric. Bands are parcel -> route -> structure; pass 5's
  * canopy band arrives with the dressing work.
  *
- * The output is standalone (ruling R17): a <defs> block carries a <symbol>
- * for every glyph the model actually uses (plus its -sil shadow twin),
- * sourced from BATCH001_GLYPHS, so the file opens as a complete village
- * without a sprite sheet being injected by anything else.
+ * The output is standalone (ruling R17): a <defs> block carries a plain
+ * <g id="..."> for every glyph the model actually uses (plus its -sil
+ * shadow twin), sourced from BATCH001_GLYPHS, so the file opens as a
+ * complete village without a sprite sheet being injected by anything else.
+ * <g>, not <symbol> — see defBlock() for why.
  */
 export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
   const xs = model.buildings.map((b) => b.position.x).concat(model.green.centre.x);
@@ -57,12 +70,12 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
   for (const glyph of usedGlyphs) {
     const markup = BATCH001_GLYPHS[glyph];
     if (markup) {
-      defs.push(symbolBlock(glyph, '0 0 64 64', markup.body));
-      defs.push(symbolBlock(`${glyph}-sil`, '0 0 64 64', markup.sil));
+      defs.push(defBlock(glyph, markup.body));
+      defs.push(defBlock(`${glyph}-sil`, markup.sil));
     }
   }
   if (greenGlyphAvailable) {
-    defs.push(symbolBlock(greenGlyphId, '0 0 64 64', BATCH001_GLYPHS[greenGlyphId].body));
+    defs.push(defBlock(greenGlyphId, BATCH001_GLYPHS[greenGlyphId].body));
   }
 
   const out: string[] = [];
