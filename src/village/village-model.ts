@@ -14,6 +14,7 @@ import {
   buildDeck, meanOccupancy, minDwellingFrontageM, widestDwellingWidthM,
 } from './deck.js';
 import { spendCensus, type SpendResult } from './dwellings.js';
+import { dressVillage } from './dressing/index.js';
 import { closestPointOnSegment, dist } from './geometry.js';
 import {
   BRANCH_SPACING_M, FRONT_ON_LANE_EPS_M, GAP_TIGHTEN, GREEN_JOIN_RATIO, GROWTH_RADIUS_FACTOR,
@@ -185,7 +186,15 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
     return frontLiesOnLane(l, lane);
   });
 
-  return { site, green, lanes: relaxed, lots: survivingLots, buildings: spend.buildings, diagnostics };
+  const dressing = dressVillage({
+    site, green, lanes: relaxed, lots: survivingLots, buildings: spend.buildings,
+    builtRadiusM: builtRadius, f0, rng,
+  });
+
+  return {
+    site, green, lanes: relaxed, lots: survivingLots, buildings: spend.buildings,
+    edgeStyle: dressing.edgeStyle, crofts: dressing.crofts, diagnostics,
+  };
 }
 
 /**

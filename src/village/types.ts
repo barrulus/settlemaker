@@ -85,12 +85,34 @@ export interface Building {
   occupancy: number;
 }
 
+/**
+ * §5.6/§7.1: the enclosed garden strip behind a BUILT lot — toft -> croft ->
+ * furlong is one continuous depth axis running back from the lane. Only a
+ * lot with a dwelling seated on it gets a croft; an empty lot's straggle
+ * stays absence, not a croft nobody tends.
+ */
+export interface Croft {
+  id: string;
+  lotId: string;
+  /** 4 corners: near-flank, near-flank, far-flank, far-flank (lot-facing
+   * edge first, matching the lot's own claim orientation). */
+  polygon: Point[];
+  depthM: number;
+  /** The three open sides (two flanks + back) stamped with the settlement
+   * edge style; the lot-facing side carries no boundary. */
+  boundary: EdgeStamp[];
+}
+
 export interface VillageModel {
   site: Site;
   green: Green;
   lanes: Lane[];
   lots: Lot[];
   buildings: Building[];
+  /** §7.1: drawn ONCE per village by `dressVillage`, held constant for
+   * every boundary consumer (crofts now; fields/vegetation later). */
+  edgeStyle: EdgeStyle;
+  crofts: Croft[];
   diagnostics: string[];
 }
 

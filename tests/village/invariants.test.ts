@@ -168,6 +168,37 @@ describe('village invariants (design §5.7)', () => {
     }
   }, GRID_TIMEOUT_MS);
 
+  // Task 3 (§5.6/§7.1): a croft never overlaps ANY lot's claim -- not just
+  // the lot it belongs to -- across the same probe grid the other §5.4
+  // invariants use.
+  it('never overlaps a croft with a lot claim', () => {
+    const OVERLAP_EPS_M = 0.25;
+    for (const input of inputs) {
+      for (const seed of seeds) {
+        const m = generateVillage(input, seed);
+        if (m.crofts.length === 0) continue;
+        const lotObbs = m.lots.map((l) => lotObb(l));
+        for (const croft of m.crofts) {
+          const [near1, near2, far2, far1] = croft.polygon;
+          const center = new Point(
+            (near1.x + near2.x + far1.x + far2.x) / 4,
+            (near1.y + near2.y + far1.y + far2.y) / 4,
+          );
+          const tangent = new Point(near2.x - near1.x, near2.y - near1.y);
+          const tLen = Math.hypot(tangent.x, tangent.y) || 1;
+          tangent.x /= tLen; tangent.y /= tLen;
+          const normal = new Point(-tangent.y, tangent.x);
+          const croftObb = {
+            center, tangent, normal, halfW: tLen / 2, halfD: croft.depthM / 2,
+          };
+          for (const other of lotObbs) {
+            expect(obbOverlap(croftObb, other, OVERLAP_EPS_M)).toBe(false);
+          }
+        }
+      }
+    }
+  }, GRID_TIMEOUT_MS);
+
   it('never throws on a degenerate input', () => {
     const bare: AzgaarBurgInput = {
       name: 'Bare', population: 12, port: false, citadel: false, walls: false,

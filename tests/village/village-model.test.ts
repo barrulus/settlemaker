@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { generateVillage, VILLAGE_POP_CEILING } from '../../src/village/village-model.js';
+import { EDGE_STYLE_ORDER } from '../../src/village/constants.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 
 const base: AzgaarBurgInput = {
@@ -15,6 +16,15 @@ describe('generateVillage', () => {
     expect(m.lanes.length).toBeGreaterThan(0);
     expect(m.lots.length).toBeGreaterThan(0);
     expect(m.buildings.length).toBeGreaterThan(0);
+  });
+
+  it('produces a village-wide edge style and a crofts array, both deterministic', () => {
+    const a = generateVillage(base, 2);
+    const b = generateVillage(base, 2);
+    expect(EDGE_STYLE_ORDER).toContain(a.edgeStyle);
+    expect(Array.isArray(a.crofts)).toBe(true);
+    expect(a.edgeStyle).toBe(b.edgeStyle);
+    expect(JSON.stringify(a.crofts)).toBe(JSON.stringify(b.crofts));
   });
 
   // Refined-ingest note (2026-08-21): this threshold was 0.9 against the

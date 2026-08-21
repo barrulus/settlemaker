@@ -269,3 +269,19 @@ export const EDGE_STYLE_WEIGHTS: Record<string, Record<string, number>> = {
   desert: { hedge: 0, wall: 0.4, fence: 0.3, ditch: 0.1, none: 0.2 },
   tundra: { hedge: 0, wall: 0.3, fence: 0.4, ditch: 0.1, none: 0.2 },
 };
+
+// --- Crofts (pass 5 dressing, §5.6/§7.1) --------------------------------
+/**
+ * §11: "Croft depth 0 m tight -> 15-30 m fringe". The ramp runs in the same
+ * ratio space as `frontageAt`'s own gradient (frontageAt(d)/f0): 0 at
+ * CROFT_TIGHT_FRONTAGE_RATIO, rising LINEARLY to CROFT_DEPTH_MAX_M at the
+ * gradient's own ceiling (frontageAt's ratio when d/R hits
+ * GRADIENT_RATIO_CAP) -- reusing the frontage gradient's own shape rather
+ * than inventing a second curve, so the two read as one system.
+ */
+export const CROFT_DEPTH_MAX_M = 25;
+/** Frontage within this fraction of f0 counts as "tight" -- no garden. */
+export const CROFT_TIGHT_FRONTAGE_RATIO = 1.1;
+/** Truncation (lane/green/water/claim clipping) below this depth means no
+ * croft at all for that lot -- a sliver strip nobody would fence. */
+export const CROFT_MIN_DEPTH_M = 2;
