@@ -24,7 +24,6 @@ describe('renderVillage', () => {
     // Gate 2: "roads should go under the green". Route band paints first,
     // the green's parcel band paints over it — lane geometry runs into the
     // green's interior, so each road visibly disappears beneath the turf.
-    // (Pass-5 fields will paint UNDER routes; only the green rides above.)
     const route = svg.indexOf('data-band="route"');
     const parcel = svg.indexOf('data-band="parcel"');
     const structure = svg.indexOf('data-band="structure"');
@@ -33,15 +32,51 @@ describe('renderVillage', () => {
     expect(parcel).toBeLessThan(structure);
   });
 
-  it('draws every shadow in the structure band before any ink', () => {
-    const lastShadow = svg.lastIndexOf('data-shadow="1"');
-    const firstInk = svg.indexOf('data-ink="1"');
+  it('pass 5: parcel-fields band (fields/crofts/edges) paints before the route band, canopy after structure', () => {
+    const parcelFields = svg.indexOf('data-band="parcel-fields"');
+    const route = svg.indexOf('data-band="route"');
+    const structure = svg.indexOf('data-band="structure"');
+    const canopy = svg.indexOf('data-band="canopy"');
+    expect(parcelFields).toBeGreaterThan(-1);
+    expect(canopy).toBeGreaterThan(-1);
+    expect(parcelFields).toBeLessThan(route);
+    expect(structure).toBeLessThan(canopy);
+  });
+
+  it('draws every shadow in the structure band before any ink IN THAT BAND', () => {
+    const structureStart = svg.indexOf('data-band="structure"');
+    const structureEnd = svg.indexOf('data-band="canopy"');
+    const structureBand = svg.slice(structureStart, structureEnd);
+    const lastShadow = structureBand.lastIndexOf('data-shadow="1"');
+    const firstInk = structureBand.indexOf('data-ink="1"');
+    expect(lastShadow).toBeGreaterThan(-1);
     expect(lastShadow).toBeLessThan(firstInk);
   });
 
-  it('places one use per building', () => {
-    const inks = svg.match(/data-ink="1"/g) ?? [];
+  it('draws every canopy shadow before any canopy ink, after the structure band', () => {
+    const canopyBand = svg.slice(svg.indexOf('data-band="canopy"'));
+    const lastShadow = canopyBand.lastIndexOf('data-shadow="1"');
+    const firstInk = canopyBand.indexOf('data-ink="1"');
+    if (model.vegetation.length > 0) {
+      expect(lastShadow).toBeGreaterThan(-1);
+      expect(lastShadow).toBeLessThan(firstInk);
+    }
+  });
+
+  it('places one building-ink use per building', () => {
+    const inks = svg.match(/data-ink="1" data-kind="building"/g) ?? [];
     expect(inks).toHaveLength(model.buildings.length);
+  });
+
+  it('places one poi-ink use per POI, inside the structure band', () => {
+    const structureStart = svg.indexOf('data-band="structure"');
+    const structureEnd = svg.indexOf('data-band="canopy"');
+    const structureBand = svg.slice(structureStart, structureEnd);
+    const inks = structureBand.match(/data-ink="1" data-kind="poi"/g) ?? [];
+    expect(inks).toHaveLength(model.pois.length);
+    for (const poi of model.pois) {
+      expect(structureBand).toContain(`data-id="${poi.id}"`);
+    }
   });
 
   it('is deterministic', () => {
@@ -66,10 +101,19 @@ describe('renderVillage', () => {
   it('does not dump every glyph in the asset library into defs — only the ones used', () => {
     const defsMatch = svg.match(/<defs>([\s\S]*?)<\/defs>/);
     const defIds = Array.from(defsMatch![1].matchAll(/<g id="([^"]+)"/g)).map((m) => m[1]);
-    const usedGlyphs = new Set(model.buildings.map((b) => b.glyph));
+    // Pass 5 widens "used" to every category the renderer can place: buildings,
+    // POIs, edge stamps, field-tile pattern content, and trees.
+    const usedGlyphs = new Set([
+      ...model.buildings.map((b) => b.glyph),
+      ...model.pois.map((p) => p.glyph),
+      ...model.crofts.flatMap((c) => c.boundary).map((e) => e.glyph),
+      ...model.fields.flatMap((f) => f.boundary).map((e) => e.glyph),
+      ...model.fields.map((f) => f.glyph),
+      ...model.vegetation.map((v) => v.glyph),
+    ]);
     for (const id of defIds) {
       const base = id.endsWith('-sil') ? id.slice(0, -4) : id;
-      // every def id must trace back either to a used building glyph or the green fallback glyph
+      // every def id must trace back either to a used glyph above or the green fallback glyph
       if (base !== `${model.green.shape}-${model.green.variant}`) {
         expect(usedGlyphs.has(base)).toBe(true);
       }
@@ -143,6 +187,65 @@ describe('renderVillage', () => {
       const silMatch = svg.match(new RegExp(`<g id="${glyph}-sil">([\\s\\S]*?)</g>`));
       expect(silMatch).not.toBeNull();
       expect(silMatch![1]).toContain('fill="currentColor"');
+    }
+  });
+
+  // --- Pass 5: parcel dressing (fields, crofts, edge stamps, trees) ---
+
+  it('emits a <pattern> def with explicit width/height/patternUnits for every field strip, and the strip references it', () => {
+    if (model.fields.length === 0) return;
+    const defsMatch = svg.match(/<defs>([\s\S]*?)<\/defs>/);
+    const defs = defsMatch![1];
+    const patternIds = new Set(
+      Array.from(defs.matchAll(/<pattern id="([^"]+)"[^>]*>/g)).map((m) => m[1]),
+    );
+    expect(patternIds.size).toBeGreaterThan(0);
+    for (const patternMarkup of defs.matchAll(/<pattern [^>]*>/g)) {
+      const tag = patternMarkup[0];
+      expect(tag).toMatch(/width="[\d.]+"/);
+      expect(tag).toMatch(/height="[\d.]+"/);
+      expect(tag).toContain('patternUnits="userSpaceOnUse"');
+    }
+    for (const field of model.fields) {
+      const fieldMarkup = svg.match(new RegExp(`data-field="${field.id}"[^>]*fill="url\\(#([^)]+)\\)"`));
+      expect(fieldMarkup).not.toBeNull();
+      expect(patternIds.has(fieldMarkup![1])).toBe(true);
+    }
+  });
+
+  it('paints crofts with the flat tint class, no field pattern', () => {
+    for (const croft of model.crofts) {
+      const croftMarkup = svg.match(new RegExp(`data-croft="${croft.id}"[^>]*class="sm-croft"`));
+      expect(croftMarkup).not.toBeNull();
+    }
+  });
+
+  it('places every edge stamp in the parcel-fields band with no shadow', () => {
+    const parcelFieldsBand = svg.slice(
+      svg.indexOf('data-band="parcel-fields"'), svg.indexOf('</g>', svg.indexOf('data-band="parcel-fields"')),
+    );
+    const edgeStamps = [...model.crofts.flatMap((c) => c.boundary), ...model.fields.flatMap((f) => f.boundary)];
+    for (const stamp of edgeStamps) {
+      expect(parcelFieldsBand).toContain(`data-edge="${stamp.id}"`);
+    }
+    expect(parcelFieldsBand).not.toContain('data-shadow');
+  });
+
+  it('scales a tree by its footprint AND its per-tree scale jitter', () => {
+    const scaledTree = model.vegetation.find((v) => v.scale !== undefined && v.scale !== 1);
+    if (!scaledTree) return; // no jittered tree in this fixture/seed — nothing to pin
+    const inkMatch = svg.match(new RegExp(`data-id="${scaledTree.id}"[^>]*transform="([^"]+)"`));
+    expect(inkMatch).not.toBeNull();
+    const scaleMatch = inkMatch![1].match(/scale\(([\d.]+)\)/);
+    expect(scaleMatch).not.toBeNull();
+    // Not scale(1) exactly (footprint-normalised) unless the jitter and
+    // footprint ratio happen to cancel out — assert it differs from the
+    // un-jittered (scale=1) tree's own factor when one exists for contrast.
+    const plainTree = model.vegetation.find((v) => v.glyph === scaledTree.glyph && (v.scale ?? 1) === 1);
+    if (plainTree) {
+      const plainInk = svg.match(new RegExp(`data-id="${plainTree.id}"[^>]*transform="([^"]+)"`));
+      const plainScale = plainInk![1].match(/scale\(([\d.]+)\)/);
+      expect(scaleMatch![1]).not.toBe(plainScale![1]);
     }
   });
 

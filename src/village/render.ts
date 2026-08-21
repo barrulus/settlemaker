@@ -1,12 +1,18 @@
-import type { VillageModel } from './types.js';
-import { hasGlyph } from './glyphs.js';
+import type { EdgeStamp, VillageModel } from './types.js';
+import type { Point } from '../types/point.js';
+import { hasGlyph, nominalFootprint } from './glyphs.js';
 import { REFINED_GLYPHS } from '../assets/refined-glyphs.js';
+import { FURROW_PATTERN_STEP_DEG } from './constants.js';
 
 /** integration.md's shadow contract: one light, never rotated with the mark. */
 const SHADOW_OFFSET: [number, number] = [2.6, 3.6];
 const SHADOW_OPACITY = 0.2;
 const SHADOW_COLOR = '#46303c';
 const GROUND = '#a3c98d';
+/** Croft interior tint: a flat, low-contrast fill a touch darker/more
+ * saturated than GROUND — not a field tile, just enough to read the
+ * enclosure without competing with the crop patterns around it. */
+const CROFT_TINT = '#8fb877';
 
 /**
  * The refined set's own token values (symbols/refined/symbols.json →
@@ -65,6 +71,25 @@ const SM_STYLE = [
   `:root{${Object.entries(SM_TOKENS).map(([k, v]) => `${k}:${v}`).join(';')}}`,
   ...SM_FILL_INK_CLASSES.map((c) => `.${c}{stroke:var(--sm-ink,#33262e);stroke-linejoin:round;stroke-linecap:round}`),
   ...SM_LINE_INK_CLASSES.map((c) => `.${c}{fill:none;stroke:var(--sm-ink,#33262e);stroke-linecap:round}`),
+  // Pass 5: field furrow and edge-stamp line strokes carry no class of
+  // their own (bare `fill="none" stroke-width="..."` paths, unlike the
+  // sm-hatch/sm-ridge family above) — their colour comes entirely from
+  // CSS, so without these rules they render invisible (default SVG stroke
+  // is `none`, not black — still wrong, just a different failure than the
+  // classed lines' flat-black one). Scoped by the def id prefix this
+  // renderer itself assigns (defBlock's `<g id="${glyph}">`) since the
+  // vendored markup gives no class to hook a selector to. Canopy glyphs
+  // already carry inline fill+stroke like the greens do (nothing to add).
+  `g[id^="sm-field-"] path[fill="none"]{stroke:var(--sm-furrow,#c2a37c);stroke-linecap:round}`,
+  `g[id^="sm-edge-"] path[fill="none"]{stroke:var(--sm-ink,#33262e);stroke-linecap:round}`,
+  // Edge stamps' FILLED shapes (hedge foliage, wall stones, fence posts)
+  // carry `fill="var(--sm-x, #hex)"` inline but no stroke, same gap
+  // SM_FILL_INK_CLASSES closes for buildings — same fix, scoped the same
+  // way since these paths carry no class either.
+  `g[id^="sm-edge-"] path[fill^="var(--sm-"]{stroke:var(--sm-ink,#33262e);stroke-linejoin:round;stroke-linecap:round}`,
+  // Croft interior: flat tint, no stroke (parcel band casts/receives no
+  // shadow and the strip boundary is the edge stamp, not an outline).
+  `.sm-croft{fill:${CROFT_TINT};stroke:none}`,
 ].join('');
 
 function n(v: number): string {
@@ -87,16 +112,36 @@ function defBlock(id: string, markup: string): string {
   return `<g id="${id}">${markup}</g>`;
 }
 
+/** M...L...L...Z closed polygon path in already-projected pixel space. */
+function polygonPath(points: Point[], X: (x: number) => number, Y: (y: number) => number): string {
+  return `${points.map((p, i) => `${i === 0 ? 'M' : 'L'}${n(X(p.x))},${n(Y(p.y))}`).join(' ')} Z`;
+}
+
+/** Bearing rounded to the nearest FURROW_PATTERN_STEP_DEG step, wrapped to [0, 360). */
+function quantiseBearing(bearingDeg: number): number {
+  const q = Math.round(bearingDeg / FURROW_PATTERN_STEP_DEG) * FURROW_PATTERN_STEP_DEG;
+  return ((q % 360) + 360) % 360;
+}
+
+function fieldPatternId(glyph: string, furrowBearingDeg: number): string {
+  return `pat-${glyph}-r${quantiseBearing(furrowBearingDeg)}`;
+}
+
 /**
  * Minimal renderer: enough for a render gate to judge the skeleton, the
- * green and the fabric. Bands are parcel -> route -> structure; pass 5's
- * canopy band arrives with the dressing work.
+ * green and the fabric. Band order (§8.2 + gate 2, after pass 5): parcel
+ * fields/crofts/edges -> route -> parcel green (over the routes) ->
+ * structure (buildings + POIs) -> canopy (trees).
  *
  * The output is standalone (ruling R17): a <defs> block carries a plain
  * <g id="..."> for every glyph the model actually uses (plus its -sil
- * shadow twin), sourced from BATCH001_GLYPHS, so the file opens as a
- * complete village without a sprite sheet being injected by anything else.
- * <g>, not <symbol> — see defBlock() for why.
+ * shadow twin where one applies), sourced from REFINED_GLYPHS, so the file
+ * opens as a complete village without a sprite sheet being injected by
+ * anything else. <g>, not <symbol> — see defBlock() for why. Field tiles
+ * are painted via SVG <pattern> defs that themselves <use> a glyph def
+ * rather than re-embedding the glyph's markup per rotation, so an internal
+ * id the vendored artwork carries (e.g. a field tile's own <clipPath id>)
+ * is never duplicated across two pattern instances of the same glyph.
  */
 export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
   // Bounds must cover every lane point, not just buildings and the green:
@@ -104,12 +149,25 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
   // roughly builtRadius * 2 past the green whether or not anything is
   // built along them, so a lane can run well outside the built footprint.
   // All points, not just endpoints — a lane can wander outside the box
-  // between them.
+  // between them. Pass 5 extends this the same way: fields, crofts,
+  // vegetation and POIs can all sit further out than the buildings/green.
   const lanePoints = model.lanes.flatMap((lane) => lane.points);
+  const fieldPoints = model.fields.flatMap((f) => f.polygon);
+  const croftPoints = model.crofts.flatMap((c) => c.polygon);
+  const edgeStamps: EdgeStamp[] = [
+    ...model.crofts.flatMap((c) => c.boundary),
+    ...model.fields.flatMap((f) => f.boundary),
+  ];
+  const dressingPoints = [
+    ...fieldPoints, ...croftPoints,
+    ...edgeStamps.map((e) => e.position),
+    ...model.vegetation.map((v) => v.position),
+    ...model.pois.map((p) => p.position),
+  ];
   const xs = model.buildings.map((b) => b.position.x)
-    .concat(model.green.centre.x, lanePoints.map((p) => p.x));
+    .concat(model.green.centre.x, lanePoints.map((p) => p.x), dressingPoints.map((p) => p.x));
   const ys = model.buildings.map((b) => b.position.y)
-    .concat(model.green.centre.y, lanePoints.map((p) => p.y));
+    .concat(model.green.centre.y, lanePoints.map((p) => p.y), dressingPoints.map((p) => p.y));
   const pad = 40;
   const minX = Math.min(...xs) - pad;
   const minY = Math.min(...ys) - pad;
@@ -118,8 +176,34 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
   const X = (x: number): number => (x - minX) * pxPerMetre;
   const Y = (y: number): number => (y - minY) * pxPerMetre;
 
+  // --- structure-band items: buildings AND the capped POIs (well, stone
+  // circle, boathouse) share one placement convention (shadow-then-ink,
+  // footprint-scaled, shadow offset outside rotation) so they are merged
+  // into one list rather than duplicating the loop.
+  interface StructureItem {
+    id: string; glyph: string; position: Point; bearingDeg: number; footprint: [number, number]; kind: 'building' | 'poi';
+  }
+  const structureItems: StructureItem[] = [
+    ...model.buildings.map((b): StructureItem => (
+      { id: b.id, glyph: b.glyph, position: b.position, bearingDeg: b.bearingDeg, footprint: b.footprint, kind: 'building' }
+    )),
+    ...model.pois.map((p): StructureItem => (
+      { id: p.id, glyph: p.glyph, position: p.position, bearingDeg: p.bearingDeg, footprint: nominalFootprint(p.glyph), kind: 'poi' }
+    )),
+  ];
+
   // --- defs: only the glyphs this model actually uses, never the full library ---
-  const usedGlyphs = Array.from(new Set(model.buildings.map((b) => b.glyph)));
+  const shadowGlyphs = Array.from(new Set(structureItems.map((s) => s.glyph)));
+  const edgeGlyphs = Array.from(new Set(edgeStamps.map((e) => e.glyph)));
+  const fieldGlyphs = Array.from(new Set(model.fields.map((f) => f.glyph)));
+  const treeGlyphs = Array.from(new Set(model.vegetation.map((v) => v.glyph)));
+  // Every glyph placed as a plain <use> (structure items, edge stamps,
+  // trees) plus every glyph a pattern def <use>s as its tile content.
+  const usedGlyphs = Array.from(new Set([...shadowGlyphs, ...edgeGlyphs, ...fieldGlyphs, ...treeGlyphs]));
+  // -sil shadow twins: structure items and trees cast a shadow; parcel
+  // items (fields, crofts, edge stamps) do not (§8.2).
+  const silGlyphs = Array.from(new Set([...shadowGlyphs, ...treeGlyphs]));
+
   const greenGlyphId = `${model.green.shape}-${model.green.variant}`;
   // R17 retired: the refined set's greens (sm-green-round-a and friends)
   // are ingested now, so hasGlyph(greenGlyphId) is true for every shape the
@@ -132,10 +216,7 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
     const markup = REFINED_GLYPHS[glyph];
     if (markup) {
       defs.push(defBlock(glyph, markup.body));
-      // Every dwelling/civic glyph the deck can place is zBand "structure",
-      // which extract-refined-glyphs.ts guarantees carries a -sil twin —
-      // only parcel/canopy ids (never placed as a building) may lack one.
-      if (markup.sil) defs.push(defBlock(`${glyph}-sil`, markup.sil));
+      if (silGlyphs.includes(glyph) && markup.sil) defs.push(defBlock(`${glyph}-sil`, markup.sil));
     }
   }
   if (greenGlyphAvailable) {
@@ -143,18 +224,64 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
     defs.push(defBlock(greenGlyphId, REFINED_GLYPHS[greenGlyphId].body));
   }
 
+  // --- field pattern defs: one per (glyph, quantised furrow bearing) pair
+  // actually used, so the def count stays bounded rather than one per strip.
+  // Anchored to the world origin: patternUnits="userSpaceOnUse" with no x/y
+  // and patternTransform="rotate(deg)" with no cx/cy both pivot on (0,0) of
+  // the painted element's user space, which every field/croft polygon
+  // shares — this <svg>'s single coordinate system, never re-based per
+  // polygon — so neighbouring strips never visibly seam-shift.
+  const patternIds = new Set<string>();
+  const patternDefs: string[] = [];
+  const tileSizePx = 16 * pxPerMetre;
+  for (const field of model.fields) {
+    if (!REFINED_GLYPHS[field.glyph]) continue;
+    const pid = fieldPatternId(field.glyph, field.furrowBearingDeg);
+    if (patternIds.has(pid)) continue;
+    patternIds.add(pid);
+    const scale = tileSizePx / 64;
+    patternDefs.push(
+      `<pattern id="${pid}" patternUnits="userSpaceOnUse" width="${n(tileSizePx)}" height="${n(tileSizePx)}" ` +
+      `patternTransform="rotate(${n(quantiseBearing(field.furrowBearingDeg))})">` +
+      `<use href="#${field.glyph}" transform="scale(${n(scale)})"/></pattern>`,
+    );
+  }
+
   const out: string[] = [];
   out.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${n(w)}" height="${n(h)}" viewBox="0 0 ${n(w)} ${n(h)}">`);
   out.push(`<style>${SM_STYLE}</style>`);
-  out.push(`<defs>${defs.join('')}</defs>`);
+  out.push(`<defs>${defs.join('')}${patternDefs.join('')}</defs>`);
   out.push(`<rect data-bg="paper" width="${n(w)}" height="${n(h)}" fill="${GROUND}"/>`);
+
+  // parcel-fields band — §7.2/§7.1: fields and crofts UNDER the route
+  // band, cast/receive no shadow. Strip boundaries are the edge stamps
+  // (hedge/wall/fence/ditch glyphs), not strokes on the polygon itself.
+  out.push('<g data-band="parcel-fields">');
+  for (const field of model.fields) {
+    if (!REFINED_GLYPHS[field.glyph]) continue;
+    const pid = fieldPatternId(field.glyph, field.furrowBearingDeg);
+    out.push(`<path data-field="${field.id}" d="${polygonPath(field.polygon, X, Y)}" fill="url(#${pid})" stroke="none"/>`);
+  }
+  for (const croft of model.crofts) {
+    out.push(`<path data-croft="${croft.id}" class="sm-croft" d="${polygonPath(croft.polygon, X, Y)}"/>`);
+  }
+  for (const stamp of edgeStamps) {
+    if (!REFINED_GLYPHS[stamp.glyph]) continue;
+    const fp = nominalFootprint(stamp.glyph);
+    const k = (fp[0] * pxPerMetre) / 64;
+    out.push(
+      `<use data-edge="${stamp.id}" href="#${stamp.glyph}" transform="translate(${n(X(stamp.position.x))},` +
+      `${n(Y(stamp.position.y))}) rotate(${n(stamp.bearingDeg)}) scale(${n(k)}) translate(-32,-32)"/>`,
+    );
+  }
+  out.push('</g>');
 
   // Gate 2 band order: "roads should go under the green rather than next
   // to it". Lanes paint FIRST — widest class at the bottom so narrow paths
   // sit over broad roads at junctions — and the green paints over them, so
   // every lane visibly disappears beneath the turf (their geometry runs to
-  // GREEN_UNDERLAP_RATIO x radius inside it). When pass 5 adds fields,
-  // those go UNDER the routes; only the green rides above them.
+  // GREEN_UNDERLAP_RATIO x radius inside it). Fields/crofts painted above
+  // go UNDER the routes; only the green rides above them.
   out.push('<g data-band="route" fill="none" stroke="#8a6f4a" stroke-linecap="round">');
   const byWidth = [...model.lanes].sort((a, b) => (b.widthM - a.widthM) || a.id.localeCompare(b.id));
   for (const lane of byWidth) {
@@ -181,28 +308,62 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
   // engine has never produced fails silently-absent rather than throwing.
   out.push('</g>');
 
-  // structure band — every shadow, then every ink
+  // structure band — every shadow, then every ink; buildings and POIs
+  // (well, stone circle, boathouse) share this convention.
   out.push('<g data-band="structure">');
   out.push(
     `<g transform="translate(${n(SHADOW_OFFSET[0])},${n(SHADOW_OFFSET[1])})" ` +
     `opacity="${SHADOW_OPACITY}" color="${SHADOW_COLOR}">`,
   );
-  for (const b of model.buildings) {
-    const k = (b.footprint[0] * pxPerMetre) / 64;
+  for (const item of structureItems) {
+    if (!REFINED_GLYPHS[item.glyph]?.sil) continue;
+    const k = (item.footprint[0] * pxPerMetre) / 64;
     out.push(
-      `<use data-shadow="1" href="#${b.glyph}-sil" transform="translate(${n(X(b.position.x))},` +
-      `${n(Y(b.position.y))}) rotate(${n(b.bearingDeg)}) scale(${n(k)}) translate(-32,-32)"/>`,
+      `<use data-shadow="1" data-kind="${item.kind}" href="#${item.glyph}-sil" transform="translate(${n(X(item.position.x))},` +
+      `${n(Y(item.position.y))}) rotate(${n(item.bearingDeg)}) scale(${n(k)}) translate(-32,-32)"/>`,
     );
   }
   out.push('</g>');
-  for (const b of model.buildings) {
-    const k = (b.footprint[0] * pxPerMetre) / 64;
+  for (const item of structureItems) {
+    if (!REFINED_GLYPHS[item.glyph]) continue;
+    const k = (item.footprint[0] * pxPerMetre) / 64;
     out.push(
-      `<use data-ink="1" data-id="${b.id}" href="#${b.glyph}" transform="translate(${n(X(b.position.x))},` +
-      `${n(Y(b.position.y))}) rotate(${n(b.bearingDeg)}) scale(${n(k)}) translate(-32,-32)"/>`,
+      `<use data-ink="1" data-kind="${item.kind}" data-id="${item.id}" href="#${item.glyph}" transform="translate(${n(X(item.position.x))},` +
+      `${n(Y(item.position.y))}) rotate(${n(item.bearingDeg)}) scale(${n(k)}) translate(-32,-32)"/>`,
     );
   }
   out.push('</g>');
+
+  // canopy band — LAST: every tree shadow, then every tree ink, shadow
+  // offset outside the (absent — trees have no bearing) rotation, same
+  // convention as the structure band. Trees scale by their own footprint
+  // AND their per-tree `scale` jitter.
+  out.push('<g data-band="canopy">');
+  out.push(
+    `<g transform="translate(${n(SHADOW_OFFSET[0])},${n(SHADOW_OFFSET[1])})" ` +
+    `opacity="${SHADOW_OPACITY}" color="${SHADOW_COLOR}">`,
+  );
+  for (const veg of model.vegetation) {
+    if (!REFINED_GLYPHS[veg.glyph]?.sil) continue;
+    const fp = nominalFootprint(veg.glyph);
+    const k = ((fp[0] * pxPerMetre) / 64) * (veg.scale ?? 1);
+    out.push(
+      `<use data-shadow="1" data-kind="tree" href="#${veg.glyph}-sil" transform="translate(${n(X(veg.position.x))},` +
+      `${n(Y(veg.position.y))}) scale(${n(k)}) translate(-32,-32)"/>`,
+    );
+  }
+  out.push('</g>');
+  for (const veg of model.vegetation) {
+    if (!REFINED_GLYPHS[veg.glyph]) continue;
+    const fp = nominalFootprint(veg.glyph);
+    const k = ((fp[0] * pxPerMetre) / 64) * (veg.scale ?? 1);
+    out.push(
+      `<use data-ink="1" data-kind="tree" data-id="${veg.id}" href="#${veg.glyph}" transform="translate(${n(X(veg.position.x))},` +
+      `${n(Y(veg.position.y))}) scale(${n(k)}) translate(-32,-32)"/>`,
+    );
+  }
+  out.push('</g>');
+
   out.push('</svg>');
   return out.join('\n');
 }

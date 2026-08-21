@@ -322,6 +322,12 @@ export const FIELD_CROPS: Record<string, string[]> = {
   steppe: ['sm-field-pasture'],
 };
 
+// --- Render (pass 5 dressing, §8.2) -------------------------------------
+/** A field-pattern `<pattern>` def is keyed by (glyph, quantised furrow
+ * bearing) so defs stay bounded (24 rotations x a few glyphs, only the
+ * combinations actually used) instead of one def per strip. */
+export const FURROW_PATTERN_STEP_DEG = 15;
+
 // --- Vegetation (pass 5 dressing, §7.3) ---------------------------------
 /** Grid cell edge, metres. A deterministic square grid stands in for
  * Poisson dart-throwing: exactly one rng draw per cell decides survival,

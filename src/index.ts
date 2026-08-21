@@ -168,7 +168,11 @@ export { generateVillage, VILLAGE_POP_CEILING } from './village/village-model.js
 export { renderVillage } from './village/render.js';
 export type {
   Site, SiteRoute, Green, GreenShape, Lane, Lot, Building, Croft, EdgeStyle, EdgeStamp,
+  FieldStrip, Vegetation,
   VillageModel,
 } from './village/types.js';
+// The village's own `Poi` collides with the generator's existing `Poi`
+// (./poi/poi-kinds.js) exported above — aliased so both can be named.
+export type { Poi as VillagePoi } from './village/types.js';
 export type { RouteType } from './village/route-class.js';
 export type { DeckEntry } from './village/deck.js';
