@@ -6,11 +6,12 @@ import { resolveGlyphFor } from '../deck.js';
 import { hasGlyph, nominalFootprint } from '../glyphs.js';
 import { lotObb, type Obb } from '../parcels/overlap.js';
 import {
-  arcLengths, bearingOf, bearingVector, closestPointOnSegment, dist, inAnyWater, sampleAt, unit,
+  arcLengths, bearingOf, bearingVector, closestPointOnSegment, dist, greenDrawnRadius,
+  inAnyWater, sampleAt, unit,
 } from '../geometry.js';
 import {
-  BOATHOUSE_SLIDE_RANGE_M, BOATHOUSE_SLIDE_STEP_M, GREEN_JOIN_RATIO, RING_SETBACK_M,
-  SHOREFRONT_REACH_FACTOR, STONE_CIRCLE_BEARING_TRIES, STONE_CIRCLE_CHANCE,
+  BOATHOUSE_SLIDE_RANGE_M, BOATHOUSE_SLIDE_STEP_M,
+  STONE_CIRCLE_BEARING_TRIES, STONE_CIRCLE_CHANCE,
   STONE_CIRCLE_FOOTPRINT_RADIUS_M, STONE_CIRCLE_RADIUS_FACTOR, STONE_CIRCLE_VEG_CLEAR_M,
   WELL_LANE_CLEAR_M, WELL_MIN_POP, WELL_NUDGE_CAP_RATIO, WELL_NUDGE_STEP_M,
 } from '../constants.js';
@@ -32,10 +33,6 @@ import type {
  *      branch -- gated deterministically by the bool already drawn).
  *   3. boathouse -- draws NO rng (a deterministic nearest-first shore slide).
  */
-
-function greenDrawnRadius(green: Green): number {
-  return (green.diameter / 2) * GREEN_JOIN_RATIO + RING_SETBACK_M;
-}
 
 function distanceToLane(p: Point, lane: Lane): number {
   let best = Infinity;
@@ -157,22 +154,30 @@ function circleClearOfClaims(
 /**
  * §7.4/§8.3: stone circle -- biome-agnostic (re-tinted, never substituted),
  * so no `resolveGlyphFor` here, unlike the well. Rolled ONCE, always. On a
- * true roll, up to STONE_CIRCLE_BEARING_TRIES bearings are tried at
- * STONE_CIRCLE_RADIUS_FACTOR x builtRadius from the green; the first whose
- * 15 m-radius footprint clears every lane corridor, lot claim, croft, field
- * strip, water polygon, and vegetation position (within
+ * true roll, up to STONE_CIRCLE_BEARING_TRIES bearings are tried on a ring
+ * of `dressedRadiusM x STONE_CIRCLE_RADIUS_FACTOR` from the green; the
+ * first whose 15 m-radius footprint clears every lane corridor, lot claim,
+ * croft, field strip, water polygon, and vegetation position (within
  * STONE_CIRCLE_VEG_CLEAR_M) wins. No bearing clears -> no stone circle
  * (fail soft, §8.5) -- trees are never removed to make room.
+ *
+ * Fix wave (2026-08-21, C1): `dressedRadiusM` is the MEASURED outer edge of
+ * everything already on the ground -- max(fields' outer radius, the fabric
+ * radius `computeInnerRadius` measures) -- not the PREDICTED built radius.
+ * Keyed off the prediction, the ring landed 2.5-3x inside the real fabric
+ * and fields, so all 12 bearings were rejected in 29 of 30 measured
+ * placements: the stone circle effectively never placed. The factor is a
+ * modest step OUTSIDE that measured edge, not a multiple of a prediction.
  */
 export function placeStoneCircle(
-  green: Green, builtRadiusM: number, lanes: Lane[], lots: Lot[], crofts: Croft[],
+  green: Green, dressedRadiusM: number, lanes: Lane[], lots: Lot[], crofts: Croft[],
   fields: FieldStrip[], water: Point[][], vegetation: Vegetation[], rng: SeededRandom,
 ): Poi | null {
   if (!rng.bool(STONE_CIRCLE_CHANCE)) return null;
   const glyph = 'sm-stone-circle';
   if (!hasGlyph(glyph)) return null;
 
-  const radius = builtRadiusM * STONE_CIRCLE_RADIUS_FACTOR;
+  const radius = dressedRadiusM * STONE_CIRCLE_RADIUS_FACTOR;
   for (let i = 0; i < STONE_CIRCLE_BEARING_TRIES; i++) {
     const bearingDeg = rng.int(0, 360);
     const dir = bearingVector(bearingDeg);
@@ -239,7 +244,10 @@ function slideOffsets(range: number, step: number): number[] {
 
 /**
  * §7.4/§8.4: boathouse -- only when a water polygon edge comes within
- * builtRadius x SHOREFRONT_REACH_FACTOR of the green centre. Positioned on
+ * `shorefrontReachM` of the green centre. That reach is the MEASURED fabric
+ * radius x SHOREFRONT_REACH_FACTOR (fix wave, C2: the constant is kept, what
+ * it multiplies changed -- the predicted built radius under-reports the real
+ * fabric 2.5-3x). Positioned on
  * the shore point nearest the green, offset inland by half the footprint
  * depth plus 0.5 m, facing the water. If that intrudes on a lane/lot/croft/
  * field, slides along the shore (nearest-first, +/-BOATHOUSE_SLIDE_RANGE_M
@@ -255,13 +263,13 @@ function slideOffsets(range: number, step: number): number[] {
  * `renderBearingFor` then flips it so the door lands on the water side.
  */
 export function placeBoathouse(
-  site: Site, green: Green, builtRadiusM: number,
+  site: Site, green: Green, shorefrontReachM: number,
   lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldStrip[],
 ): Poi | null {
   if (site.water.length === 0) return null;
   const nearest = nearestShorePoint(green.centre, site.water);
   if (!nearest) return null;
-  if (nearest.distance > builtRadiusM * SHOREFRONT_REACH_FACTOR) return null;
+  if (nearest.distance > shorefrontReachM) return null;
 
   const glyph = 'sm-boathouse--coastal';
   if (!hasGlyph(glyph)) return null;
@@ -300,10 +308,15 @@ export function placeBoathouse(
  * §7.4: the whole POI stage for one village. Called LAST among dressing
  * stages -- after edgeStyle/crofts/fields/vegetation -- so every rng draw
  * here comes after all of theirs, never reordered or interleaved.
+ *
+ * Both radii are MEASURED, never predicted (fix wave, C1/C2):
+ * `dressedRadiusM` = max(fields' outer radius, measured fabric radius) is
+ * the stone circle's ring; `shorefrontReachM` = measured fabric radius x
+ * SHOREFRONT_REACH_FACTOR is the boathouse's shore reach.
  */
 export function buildPois(
   site: Site, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldStrip[],
-  vegetation: Vegetation[], builtRadiusM: number, rng: SeededRandom,
+  vegetation: Vegetation[], dressedRadiusM: number, shorefrontReachM: number, rng: SeededRandom,
 ): Poi[] {
   const pois: Poi[] = [];
 
@@ -313,11 +326,11 @@ export function buildPois(
   }
 
   const stoneCircle = placeStoneCircle(
-    green, builtRadiusM, lanes, lots, crofts, fields, site.water, vegetation, rng,
+    green, dressedRadiusM, lanes, lots, crofts, fields, site.water, vegetation, rng,
   );
   if (stoneCircle) pois.push(stoneCircle);
 
-  const boathouse = placeBoathouse(site, green, builtRadiusM, lanes, lots, crofts, fields);
+  const boathouse = placeBoathouse(site, green, shorefrontReachM, lanes, lots, crofts, fields);
   if (boathouse) pois.push(boathouse);
 
   return pois;

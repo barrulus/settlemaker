@@ -135,7 +135,7 @@ describe('renderVillage', () => {
       ...model.buildings.map((b) => b.glyph),
       ...model.pois.map((p) => p.glyph),
       ...model.crofts.flatMap((c) => c.boundary).map((e) => e.glyph),
-      ...model.fields.flatMap((f) => f.boundary).map((e) => e.glyph),
+      ...model.fieldEdges.map((e) => e.glyph),
       ...model.fields.map((f) => f.glyph),
       ...model.vegetation.map((v) => v.glyph),
     ]);
@@ -252,7 +252,7 @@ describe('renderVillage', () => {
     const parcelFieldsBand = svg.slice(
       svg.indexOf('data-band="parcel-fields"'), svg.indexOf('</g>', svg.indexOf('data-band="parcel-fields"')),
     );
-    const edgeStamps = [...model.crofts.flatMap((c) => c.boundary), ...model.fields.flatMap((f) => f.boundary)];
+    const edgeStamps = [...model.crofts.flatMap((c) => c.boundary), ...model.fieldEdges];
     for (const stamp of edgeStamps) {
       expect(parcelFieldsBand).toContain(`data-edge="${stamp.id}"`);
     }

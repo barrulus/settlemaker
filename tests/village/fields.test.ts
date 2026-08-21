@@ -7,7 +7,7 @@ import { generateVillage } from '../../src/village/village-model.js';
 import { lotObb, obbOverlap } from '../../src/village/parcels/overlap.js';
 import { closestPointOnSegment, dist, angularGap } from '../../src/village/geometry.js';
 import {
-  FIELD_BAND_DEPTH_MAX_M, FIELD_CROPS, FIELD_M2_PER_CAPITA, FURROW_MIN_LENGTH_M,
+  FIELD_BAND_DEPTH_MAX_M, FIELD_BAND_DEPTH_MIN_M, FIELD_CROPS, FIELD_M2_PER_CAPITA, FURROW_MIN_LENGTH_M,
   FURROW_WIDTH_M, GREEN_JOIN_RATIO, LANE_SETBACK_M, RING_SETBACK_M,
 } from '../../src/village/constants.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
@@ -76,8 +76,8 @@ describe('buildWedges', () => {
 });
 
 describe('fieldOuterRadius (fix round 1: census/fabric-driven band)', () => {
-  it('gives a depth of exactly FURROW_WIDTH_M for zero population (the floor)', () => {
-    expect(fieldOuterRadius(50, 0)).toBeCloseTo(50 + FURROW_WIDTH_M, 6);
+  it('gives a depth of exactly FIELD_BAND_DEPTH_MIN_M for zero population (the floor)', () => {
+    expect(fieldOuterRadius(50, 0)).toBeCloseTo(50 + FIELD_BAND_DEPTH_MIN_M, 6);
   });
 
   it('depth grows with population, area matching the census demand', () => {
@@ -98,9 +98,9 @@ describe('fieldOuterRadius (fix round 1: census/fabric-driven band)', () => {
     expect(outer - inner).toBeCloseTo(FIELD_BAND_DEPTH_MAX_M, 6);
   });
 
-  it('never returns less than innerRadius + FURROW_WIDTH_M (never a negative or zero-width band)', () => {
+  it('never returns less than innerRadius + FIELD_BAND_DEPTH_MIN_M (never a negative or zero-width band)', () => {
     for (const pop of [0, 1, 50, 300, 900, 5000]) {
-      expect(fieldOuterRadius(80, pop)).toBeGreaterThanOrEqual(80 + FURROW_WIDTH_M - 1e-9);
+      expect(fieldOuterRadius(80, pop)).toBeGreaterThanOrEqual(80 + FIELD_BAND_DEPTH_MIN_M - 1e-9);
     }
   });
 });

@@ -1,11 +1,12 @@
 import { SeededRandom } from '../../utils/random.js';
 import { buildCrofts } from './crofts.js';
 import { settlementEdgeStyle } from './edges.js';
-import { buildFields } from './fields.js';
+import { buildFields, computeInnerRadius } from './fields.js';
 import { buildVegetation } from './vegetation.js';
 import { buildPois } from './pois.js';
+import { SHOREFRONT_REACH_FACTOR } from '../constants.js';
 import type {
-  Building, Croft, EdgeStyle, FieldStrip, Green, Lane, Lot, Poi, Site, Vegetation,
+  Building, Croft, EdgeStamp, EdgeStyle, FieldStrip, Green, Lane, Lot, Poi, Site, Vegetation,
 } from '../types.js';
 
 export interface DressingInput {
@@ -23,6 +24,7 @@ export interface DressingResult {
   edgeStyle: EdgeStyle;
   crofts: Croft[];
   fields: FieldStrip[];
+  fieldEdges: EdgeStamp[];
   vegetation: Vegetation[];
   pois: Poi[];
 }
@@ -47,18 +49,29 @@ export function dressVillage(input: DressingInput): DressingResult {
 
   const edgeStyle = settlementEdgeStyle(site.biome, site.population, rng);
   const crofts = buildCrofts(lots, buildings, green, lanes, site.water, builtRadiusM, f0, edgeStyle);
-  const { strips: fields, outerRadius: fieldsOuterRadius } = buildFields(
-    site, green, lanes, lots, crofts, edgeStyle, rng,
+  const {
+    strips: fields, edges: fieldEdges, outerRadius: fieldsOuterRadius,
+  } = buildFields(site, green, lanes, lots, crofts, edgeStyle, rng);
+
+  // THE fix-wave rule (2026-08-21): after pass 3, nothing keys off
+  // `builtRadiusM` -- the PREDICTED built radius under-reports the real
+  // fabric by 2.5-3x, because the escalation loop keeps adding lanes the
+  // prediction never saw. Everything below threads MEASURED radii instead.
+  // `builtRadiusM` survives only as crofts' frontage-gradient reference
+  // (pass 3's own prediction, which is the right input there) and is
+  // deliberately not passed any further.
+  const fabricRadiusM = computeInnerRadius(green, lots, crofts);
+  const vegInnerEdgeM = fields.length > 0 ? fieldsOuterRadius : fabricRadiusM;
+  const shorefrontReachM = fabricRadiusM * SHOREFRONT_REACH_FACTOR;
+  const vegetation = buildVegetation(
+    site, green, lanes, lots, crofts, fields, vegInnerEdgeM, shorefrontReachM, rng,
   );
-  // Fix round 1 (2026-08-21): vegetation's density ramp starts at the field
-  // system's ACTUAL outer radius when fields exist, not a stale prediction
-  // -- see `fieldOuterRadius`'s doc comment in fields.ts for why a fixed
-  // builtRadiusM multiple closed the fields gate in the real pipeline.
-  const vegInnerEdgeM = fields.length > 0 ? fieldsOuterRadius : builtRadiusM;
-  const vegetation = buildVegetation(site, green, lanes, lots, crofts, fields, builtRadiusM, vegInnerEdgeM, rng);
-  const pois = buildPois(site, green, lanes, lots, crofts, fields, vegetation, builtRadiusM, rng);
+  const dressedRadiusM = Math.max(fieldsOuterRadius, fabricRadiusM);
+  const pois = buildPois(
+    site, green, lanes, lots, crofts, fields, vegetation, dressedRadiusM, shorefrontReachM, rng,
+  );
 
   return {
-    edgeStyle, crofts, fields, vegetation, pois,
+    edgeStyle, crofts, fields, fieldEdges, vegetation, pois,
   };
 }

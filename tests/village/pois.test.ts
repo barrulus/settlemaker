@@ -244,15 +244,19 @@ describe('placeBoathouse', () => {
 });
 
 describe('buildPois', () => {
+  // The two MEASURED radii the caller threads in (fix wave, C1/C2): the
+  // dressed radius the stone circle rings, and the shorefront reach.
+  const SHOREFRONT_REACH = 40 * SHOREFRONT_REACH_FACTOR;
+
   it('every village at or above WELL_MIN_POP gets exactly one well; below it, none', () => {
     const withWell = buildPois(
-      site({ population: WELL_MIN_POP }), green, [], emptyLots, emptyCrofts, emptyFields, [], 40,
+      site({ population: WELL_MIN_POP }), green, [], emptyLots, emptyCrofts, emptyFields, [], 40, SHOREFRONT_REACH,
       new SeededRandom(2),
     );
     expect(withWell.filter((p) => p.kind === 'well')).toHaveLength(1);
 
     const withoutWell = buildPois(
-      site({ population: WELL_MIN_POP - 1 }), green, [], emptyLots, emptyCrofts, emptyFields, [], 40,
+      site({ population: WELL_MIN_POP - 1 }), green, [], emptyLots, emptyCrofts, emptyFields, [], 40, SHOREFRONT_REACH,
       new SeededRandom(2),
     );
     expect(withoutWell.filter((p) => p.kind === 'well')).toHaveLength(0);
@@ -264,7 +268,7 @@ describe('buildPois', () => {
     ].map((p) => new Point(p.x, p.y))];
     const pois = buildPois(
       site({ population: 400, water, biome: 'coastal' }), green, [], emptyLots, emptyCrofts, emptyFields,
-      [], 40, new SeededRandom(1),
+      [], 40, SHOREFRONT_REACH, new SeededRandom(1),
     );
     for (const poi of pois) {
       expect(['poi:well', 'poi:stone-circle', 'poi:boathouse']).toContain(poi.id);
@@ -276,8 +280,8 @@ describe('buildPois', () => {
 
   it('is deterministic: same inputs and seed produce identical output', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0)];
-    const a = buildPois(site(), green, lanes, emptyLots, emptyCrofts, emptyFields, [], 40, new SeededRandom(7));
-    const b = buildPois(site(), green, lanes, emptyLots, emptyCrofts, emptyFields, [], 40, new SeededRandom(7));
+    const a = buildPois(site(), green, lanes, emptyLots, emptyCrofts, emptyFields, [], 40, SHOREFRONT_REACH, new SeededRandom(7));
+    const b = buildPois(site(), green, lanes, emptyLots, emptyCrofts, emptyFields, [], 40, SHOREFRONT_REACH, new SeededRandom(7));
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 
@@ -286,9 +290,9 @@ describe('buildPois', () => {
     // still land the same stone-circle/boathouse verdict for a shared seed,
     // because the well draws no rng.
     const rngA = new SeededRandom(1);
-    const a = buildPois(site({ population: 400 }), green, [], emptyLots, emptyCrofts, emptyFields, [], 40, rngA);
+    const a = buildPois(site({ population: 400 }), green, [], emptyLots, emptyCrofts, emptyFields, [], 40, SHOREFRONT_REACH, rngA);
     const rngB = new SeededRandom(1);
-    const b = buildPois(site({ population: 1 }), green, [], emptyLots, emptyCrofts, emptyFields, [], 40, rngB);
+    const b = buildPois(site({ population: 1 }), green, [], emptyLots, emptyCrofts, emptyFields, [], 40, SHOREFRONT_REACH, rngB);
     const aCircle = a.find((p) => p.kind === 'stone-circle');
     const bCircle = b.find((p) => p.kind === 'stone-circle');
     expect(aCircle?.position).toEqual(bCircle?.position);

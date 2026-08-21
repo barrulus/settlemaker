@@ -2,13 +2,13 @@ import { Point } from '../../types/point.js';
 import { pointInPolygon } from '../../geom/point-in-polygon.js';
 import { SeededRandom } from '../../utils/random.js';
 import {
-  closestPointOnSegment, dist, inAnyWater,
+  closestPointOnSegment, dist, greenDrawnRadius, inAnyWater, withinLaneCorridor,
 } from '../geometry.js';
-import { lotObb, type Obb } from '../parcels/overlap.js';
+import { lotObb, pointInObb } from '../parcels/overlap.js';
 import {
-  CLUMP_RADIUS_M, GREEN_JOIN_RATIO,
-  RING_SETBACK_M, SHOREFRONT_BAND_M, SHOREFRONT_REACH_FACTOR, VEG_BASE_DENSITY, VEG_CELL_M,
-  VEG_GLYPHS, VEG_INFILL_SHARE, VEG_LANE_CLEAR_M, VEG_RADIUS_FACTOR, VEG_SCALE_MAX, VEG_SCALE_MIN,
+  CLUMP_RADIUS_M, SHOREFRONT_BAND_M, VEG_BASE_DENSITY, VEG_CELL_M,
+  VEG_GLYPHS, VEG_INFILL_SHARE, VEG_LANE_CLEAR_M, VEG_RADIUS_FACTOR, VEG_RAMP_PEAK_SHARE,
+  VEG_SCALE_MAX, VEG_SCALE_MIN,
 } from '../constants.js';
 import type {
   Croft, FieldStrip, Green, Lane, Lot, Site, Vegetation,
@@ -34,27 +34,6 @@ import type {
  *   7-8. per clump neighbour: 2 offset floats (glyph/scale reused from parent)
  */
 
-function greenDrawnRadius(green: Green): number {
-  return (green.diameter / 2) * GREEN_JOIN_RATIO + RING_SETBACK_M;
-}
-
-function pointInObb(p: Point, obb: Obb): boolean {
-  const d = new Point(p.x - obb.center.x, p.y - obb.center.y);
-  const alongT = Math.abs(d.x * obb.tangent.x + d.y * obb.tangent.y);
-  const alongN = Math.abs(d.x * obb.normal.x + d.y * obb.normal.y);
-  return alongT <= obb.halfW && alongN <= obb.halfD;
-}
-
-function withinLaneCorridor(p: Point, lane: Lane): boolean {
-  if (lane.points.length < 2) return false;
-  const clearance = lane.widthM / 2 + VEG_LANE_CLEAR_M;
-  for (let i = 1; i < lane.points.length; i++) {
-    const q = closestPointOnSegment(p, lane.points[i - 1], lane.points[i]);
-    if (dist(p, q) <= clearance) return true;
-  }
-  return false;
-}
-
 /** Closest distance from `p` to any edge of any water ring -- used only by
  * the shorefront band test (§8.4); ordinary water avoidance uses
  * `inAnyWater` (point-in-polygon), not this. */
@@ -79,29 +58,43 @@ function distToWaterEdge(p: Point, water: Point[][]): number {
  */
 function isRejected(
   p: Point, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldStrip[],
-  water: Point[][], builtRadiusM: number,
+  water: Point[][], shorefrontReachM: number,
 ): boolean {
   if (dist(p, green.centre) < greenDrawnRadius(green)) return true;
   if (inAnyWater(p, water)) return true;
-  for (const lane of lanes) if (withinLaneCorridor(p, lane)) return true;
+  for (const lane of lanes) if (withinLaneCorridor(p, lane, VEG_LANE_CLEAR_M)) return true;
   for (const lot of lots) if (pointInObb(p, lotObb(lot))) return true;
   for (const croft of crofts) if (pointInPolygon(p, croft.polygon)) return true;
   for (const field of fields) if (pointInPolygon(p, field.polygon)) return true;
-  if (water.length > 0 && dist(p, green.centre) <= builtRadiusM * SHOREFRONT_REACH_FACTOR) {
+  if (water.length > 0 && dist(p, green.centre) <= shorefrontReachM) {
     if (distToWaterEdge(p, water) <= SHOREFRONT_BAND_M) return true;
   }
   return false;
 }
 
-/** Density(d): 0 outside [0, rim]; a flat "leftover ground" share inside
- * the fabric edge (VEG_INFILL_SHARE -- the rejection tests above are what
- * actually confine this to genuinely unclaimed ground); ramping linearly
- * from VEG_BASE_DENSITY at the fabric edge down to 0 at the scatter rim
- * beyond it. */
+/**
+ * Density(d): 0 beyond `rim`; a flat "leftover ground" share inside
+ * `innerEdge` (VEG_INFILL_SHARE -- the rejection tests above are what
+ * actually confine this to genuinely unclaimed ground); and, per §7.3's
+ * "thinning outward from the fabric", a full-strength PLATEAU just outside
+ * `innerEdge` (the first VEG_RAMP_PEAK_SHARE of the band, where a real
+ * village's scrub and copses crowd the field backs) that then thins
+ * linearly to 0 at `rim`.
+ *
+ * Fix wave (2026-08-21, C2): `rim` used to be `builtRadius x
+ * VEG_RADIUS_FACTOR`, which -- once fields were re-keyed off the MEASURED
+ * fabric -- was always BELOW `innerEdge`, so this function collapsed to its
+ * first line and the whole ramp was dead code: not one tree could land
+ * beyond the field band. `rim` is now keyed off `innerEdge` itself.
+ */
 function densityAt(d: number, innerEdge: number, rim: number): number {
   if (d < innerEdge) return VEG_BASE_DENSITY * VEG_INFILL_SHARE;
   if (!(rim > innerEdge)) return 0;
-  const t = (d - innerEdge) / (rim - innerEdge);
+  if (d > rim) return 0;
+  const band = rim - innerEdge;
+  const peakEnd = innerEdge + band * VEG_RAMP_PEAK_SHARE;
+  if (d <= peakEnd) return VEG_BASE_DENSITY;
+  const t = (d - peakEnd) / (rim - peakEnd);
   return VEG_BASE_DENSITY * Math.max(0, 1 - t);
 }
 
@@ -121,20 +114,22 @@ function pickGlyph(biome: string, rng: SeededRandom): string {
  * dressing stages (after edgeStyle/crofts/fields), so every rng draw here
  * comes after all of theirs -- never reordered or interleaved.
  *
- * `innerEdgeM` is the fabric edge density ramps down from: the field
- * system's own outer radius when fields exist (fix round 1, 2026-08-21 --
- * previously a fixed builtRadiusM multiple, which no longer means anything
- * once fields are keyed off the census/fabric instead), or `builtRadiusM`
- * itself when there are no fields at all. The caller (`dressing/index.ts`)
- * decides which, since it is the one that knows whether `fields` is empty
- * because there was no room, or because the wedges genuinely produced
- * nothing.
+ * `innerEdgeM` is the MEASURED fabric edge the density ramp starts at: the
+ * field system's own outer radius when fields exist, or the measured fabric
+ * radius (lot claims + crofts) when there are none. Never a prediction --
+ * see the fix-wave rule: after pass 3 nothing keys off `predictedBuiltRadius`.
+ * The scatter rim, and with it the grid's own extent, is
+ * `innerEdgeM x VEG_RADIUS_FACTOR`, so the grid always reaches past the
+ * fields it is supposed to thin out beyond.
+ *
+ * `shorefrontReachM` is §8.4's suppression reach, likewise measured
+ * (fabric radius x SHOREFRONT_REACH_FACTOR), passed in rather than derived.
  */
 export function buildVegetation(
   site: Site, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldStrip[],
-  builtRadiusM: number, innerEdgeM: number, rng: SeededRandom,
+  innerEdgeM: number, shorefrontReachM: number, rng: SeededRandom,
 ): Vegetation[] {
-  const rim = builtRadiusM * VEG_RADIUS_FACTOR;
+  const rim = innerEdgeM * VEG_RADIUS_FACTOR;
   if (!(rim > 0)) return [];
 
   const halfCells = Math.max(0, Math.ceil(rim / VEG_CELL_M));
@@ -165,7 +160,7 @@ export function buildVegetation(
       const scale = VEG_SCALE_MIN + rng.float() * (VEG_SCALE_MAX - VEG_SCALE_MIN);
 
       const id = `veg:${cellX}x${cellY}`;
-      if (isRejected(position, green, lanes, lots, crofts, fields, site.water, builtRadiusM)) {
+      if (isRejected(position, green, lanes, lots, crofts, fields, site.water, shorefrontReachM)) {
         continue;
       }
       trees.push({
@@ -186,7 +181,7 @@ export function buildVegetation(
         const dx = r * Math.sin(theta);
         const dy = -r * Math.cos(theta);
         const neighbourPos = new Point(position.x + dx, position.y + dy);
-        if (isRejected(neighbourPos, green, lanes, lots, crofts, fields, site.water, builtRadiusM)) {
+        if (isRejected(neighbourPos, green, lanes, lots, crofts, fields, site.water, shorefrontReachM)) {
           continue;
         }
         trees.push({

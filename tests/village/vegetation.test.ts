@@ -9,7 +9,8 @@ import { lotObb, obbOverlap } from '../../src/village/parcels/overlap.js';
 import { closestPointOnSegment, dist } from '../../src/village/geometry.js';
 import {
   CLUMP_RADIUS_M, GREEN_JOIN_RATIO, RING_SETBACK_M, SHOREFRONT_BAND_M,
-  SHOREFRONT_REACH_FACTOR, VEG_GLYPHS, VEG_LANE_CLEAR_M, VEG_SCALE_MAX, VEG_SCALE_MIN,
+  SHOREFRONT_REACH_FACTOR, VEG_GLYPHS, VEG_LANE_CLEAR_M, VEG_RADIUS_FACTOR,
+  VEG_SCALE_MAX, VEG_SCALE_MIN,
 } from '../../src/village/constants.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 import type {
@@ -124,20 +125,19 @@ describe('buildVegetation', () => {
   });
 
   it('density falls with distance from the fabric edge (binned counts, generous tolerance)', () => {
-    const builtRadiusM = 40;
-    // No lanes/fields: fabric edge (innerEdge) == builtRadiusM, scatter rim
-    // == builtRadiusM * VEG_RADIUS_FACTOR (1.8). §7.3: densest at the
+    // No lanes/fields: fabric edge (innerEdge) is passed directly, scatter
+    // rim == innerEdge * VEG_RADIUS_FACTOR. §7.3: densest just outside the
     // fabric edge, thinning to the rim -- so the half of the scatter band
     // closer to the fabric edge should carry noticeably more trees than
     // the half closer to the rim.
-    const innerEdge = builtRadiusM;
-    const rim = builtRadiusM * 1.8; // VEG_RADIUS_FACTOR
+    const innerEdge = 60;
+    const rim = innerEdge * VEG_RADIUS_FACTOR;
     const mid = (innerEdge + rim) / 2;
     let near = 0;
     let far = 0;
-    for (const seed of [1, 2, 3, 55]) {
+    for (const seed of [1, 2, 3, 55, 91, 104]) {
       const trees = buildVegetation(
-        site(), green, [], emptyLots, emptyCrofts, emptyFields, builtRadiusM, builtRadiusM, new SeededRandom(seed),
+        site(), green, [], emptyLots, emptyCrofts, emptyFields, innerEdge, innerEdge, new SeededRandom(seed),
       );
       for (const t of trees) {
         const d = dist(t.position, green.centre);
@@ -246,6 +246,12 @@ describe('shorefront suppression (§8.4, coastal fixture)', () => {
   const coastalSite = site({ water, biome: 'coastal' });
   const builtRadiusM = 30;
   const reach = builtRadiusM * SHOREFRONT_REACH_FACTOR;
+  // The scatter's own inner edge is independent of the shorefront reach
+  // (fix wave, C2: they are two separate MEASURED radii now), and must be
+  // large enough that the rim -- innerEdgeM x VEG_RADIUS_FACTOR -- reaches
+  // past `reach`, or "beyond the reach, scatter resumes" has no band to
+  // resume in.
+  const innerEdgeM = 60;
 
   const nearestWaterEdge = (p: Point): number => {
     let best = Infinity;
@@ -263,7 +269,7 @@ describe('shorefront suppression (§8.4, coastal fixture)', () => {
     let checked = 0;
     for (let seed = 1; seed <= 10; seed++) {
       const trees = buildVegetation(
-        coastalSite, green, [], emptyLots, emptyCrofts, emptyFields, builtRadiusM, builtRadiusM, new SeededRandom(seed),
+        coastalSite, green, [], emptyLots, emptyCrofts, emptyFields, innerEdgeM, reach, new SeededRandom(seed),
       );
       for (const tree of trees) {
         const d = dist(tree.position, green.centre);
@@ -279,7 +285,7 @@ describe('shorefront suppression (§8.4, coastal fixture)', () => {
     let allowedNearWater = 0;
     for (let seed = 1; seed <= 10; seed++) {
       const trees = buildVegetation(
-        coastalSite, green, [], emptyLots, emptyCrofts, emptyFields, builtRadiusM, builtRadiusM, new SeededRandom(seed),
+        coastalSite, green, [], emptyLots, emptyCrofts, emptyFields, innerEdgeM, reach, new SeededRandom(seed),
       );
       for (const tree of trees) {
         const d = dist(tree.position, green.centre);
