@@ -287,9 +287,22 @@ export const CROFT_TIGHT_FRONTAGE_RATIO = 1.1;
 export const CROFT_MIN_DEPTH_M = 2;
 
 // --- Fields (pass 5 dressing, §7.2) -------------------------------------
-/** §7.2 rule 1 (the census-eating cap): fields never reach further than
- * builtRadius x this. */
-export const FIELD_RADIUS_FACTOR = 1.6;
+/**
+ * §7.2 rule 1 ("a maximum radius set by how much land the census needs to
+ * eat"): the field band's OUTER edge is keyed off the census and the
+ * MEASURED fabric, not a fixed multiple of the PREDICTED built radius.
+ * Fix round 1 (2026-08-21): the escalation loop routinely grows the real
+ * fabric (lots + crofts) well past the prediction, so a factor on
+ * builtRadiusM alone closed the gate in every real-pipeline fixture --
+ * `computeInnerRadius`'s global max always exceeded it. `FIELD_RADIUS_
+ * FACTOR` retired; see `fieldOuterRadius` in `dressing/fields.ts`.
+ */
+export const FIELD_M2_PER_CAPITA = 150;
+/** The field band's depth (outerRadius - innerRadius) is clamped to
+ * [FURROW_WIDTH_M, this] -- floored so a tiny census still gets a strip
+ * wide enough for one furrow, capped so a huge census doesn't run fields
+ * out to the horizon. */
+export const FIELD_BAND_DEPTH_MAX_M = 90;
 /** Furlong strip width, metres. */
 export const FURROW_WIDTH_M = 12;
 /** A clipped strip fragment shorter than this (along its furrow direction)

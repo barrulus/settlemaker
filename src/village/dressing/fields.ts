@@ -7,9 +7,9 @@ import {
 import { lotObb, type Obb } from '../parcels/overlap.js';
 import { stampEdge } from './edges.js';
 import {
-  FIELD_CROPS, FIELD_JITTER_RANGE_DEG, FIELD_ORCHARD_VINE_CHANCE, FIELD_RADIUS_FACTOR,
-  FIELD_SAMPLE_STEP_M, FURROW_MIN_LENGTH_M, FURROW_WIDTH_M, GREEN_JOIN_RATIO,
-  LANE_SETBACK_M, RING_SETBACK_M,
+  FIELD_BAND_DEPTH_MAX_M, FIELD_CROPS, FIELD_JITTER_RANGE_DEG, FIELD_M2_PER_CAPITA,
+  FIELD_ORCHARD_VINE_CHANCE, FIELD_SAMPLE_STEP_M, FURROW_MIN_LENGTH_M, FURROW_WIDTH_M,
+  GREEN_JOIN_RATIO, LANE_SETBACK_M, RING_SETBACK_M,
 } from '../constants.js';
 import type {
   Croft, EdgeStyle, FieldStrip, Green, Lane, Lot, Site,
@@ -126,6 +126,24 @@ function computeInnerRadius(green: Green, lots: Lot[], crofts: Croft[]): number 
     }
   }
   return maxR;
+}
+
+/**
+ * §7.2 rule 1: the field band's outer radius, as the annulus (centred on
+ * the green, inner radius `innerRadius`) whose AREA equals the census's
+ * field demand (`population * FIELD_M2_PER_CAPITA`). Solving
+ * pi*(outer^2 - inner^2) = demand for outer gives the sqrt below. The
+ * resulting depth (outer - inner) is clamped to [FURROW_WIDTH_M,
+ * FIELD_BAND_DEPTH_MAX_M] so a tiny census still gets room for one furrow
+ * and a huge one doesn't run fields out to the horizon. Exported so
+ * `dressing/index.ts` can hand vegetation's `innerEdge` the field system's
+ * ACTUAL outer radius (not a stale prediction) once fields exist.
+ */
+export function fieldOuterRadius(innerRadius: number, population: number): number {
+  const demand = Math.max(0, population) * FIELD_M2_PER_CAPITA;
+  const rawOuter = Math.sqrt(innerRadius * innerRadius + demand / Math.PI);
+  const depth = Math.min(FIELD_BAND_DEPTH_MAX_M, Math.max(FURROW_WIDTH_M, rawOuter - innerRadius));
+  return innerRadius + depth;
 }
 
 function pointInObb(p: Point, obb: Obb): boolean {
@@ -274,22 +292,32 @@ function buildWedgeStrips(
   return strips;
 }
 
+export interface FieldsResult {
+  strips: FieldStrip[];
+  /** The field band's actual outer radius (from the green centre) --
+   * `innerRadius` when no strip was kept at all. Vegetation's `innerEdge`
+   * uses this, not a stale prediction, once fields exist. */
+  outerRadius: number;
+}
+
 /**
  * §7.2: the whole field system for one village. Draws (in order, after any
  * caller-side draws): one jitter float per wedge (wedge-id-sorted order),
  * plus -- only when that wedge produces a kept first-ring strip AND its
  * biome resolves to the temperate crop table -- one orchard/vine bool.
  * Never throws: a village with fewer than 2 green-attached lanes gets one
- * full-circle wedge (§8.5), and a village whose built-up edge already
- * reaches FIELD_RADIUS gets no fields at all.
+ * full-circle wedge (§8.5); a village whose census demand rounds down to
+ * less than one furrow-wide band still gets the FURROW_WIDTH_M floor (see
+ * `fieldOuterRadius`), so an empty result only happens when every sampled
+ * point in that band is genuinely claimed (water/lanes/claims wall it off).
  */
 export function buildFields(
   site: Site, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[],
-  builtRadiusM: number, style: EdgeStyle, rng: SeededRandom,
-): FieldStrip[] {
+  style: EdgeStyle, rng: SeededRandom,
+): FieldsResult {
   const innerRadius = computeInnerRadius(green, lots, crofts);
-  const fieldRadius = builtRadiusM * FIELD_RADIUS_FACTOR;
-  if (!(fieldRadius > innerRadius)) return [];
+  const fieldRadius = fieldOuterRadius(innerRadius, site.population);
+  if (!(fieldRadius > innerRadius)) return { strips: [], outerRadius: innerRadius };
 
   const wedges = buildWedges(green, lanes)
     .slice()
@@ -309,5 +337,5 @@ export function buildFields(
       lots, crofts, lanes, site.water, style, crops, allowOrchardVine, rng, toggle,
     ));
   });
-  return strips;
+  return { strips, outerRadius: fieldRadius };
 }

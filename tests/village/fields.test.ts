@@ -2,12 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { Point } from '../../src/types/point.js';
 import { pointInPolygon } from '../../src/geom/point-in-polygon.js';
 import { SeededRandom } from '../../src/utils/random.js';
-import { buildFields, buildWedges } from '../../src/village/dressing/fields.js';
+import { buildFields, buildWedges, fieldOuterRadius } from '../../src/village/dressing/fields.js';
 import { generateVillage } from '../../src/village/village-model.js';
 import { lotObb, obbOverlap } from '../../src/village/parcels/overlap.js';
 import { closestPointOnSegment, dist, angularGap } from '../../src/village/geometry.js';
 import {
-  FIELD_CROPS, FURROW_MIN_LENGTH_M, GREEN_JOIN_RATIO, LANE_SETBACK_M, RING_SETBACK_M,
+  FIELD_BAND_DEPTH_MAX_M, FIELD_CROPS, FIELD_M2_PER_CAPITA, FURROW_MIN_LENGTH_M,
+  FURROW_WIDTH_M, GREEN_JOIN_RATIO, LANE_SETBACK_M, RING_SETBACK_M,
 } from '../../src/village/constants.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 import type { Croft, Green, Lane, Lot, Site } from '../../src/village/types.js';
@@ -74,6 +75,36 @@ describe('buildWedges', () => {
   });
 });
 
+describe('fieldOuterRadius (fix round 1: census/fabric-driven band)', () => {
+  it('gives a depth of exactly FURROW_WIDTH_M for zero population (the floor)', () => {
+    expect(fieldOuterRadius(50, 0)).toBeCloseTo(50 + FURROW_WIDTH_M, 6);
+  });
+
+  it('depth grows with population, area matching the census demand', () => {
+    const inner = 50;
+    // Population chosen so the resulting depth stays under
+    // FIELD_BAND_DEPTH_MAX_M (uncapped) -- otherwise the clamp, not the
+    // area formula, would be what the assertion measures.
+    const population = 200;
+    const outer = fieldOuterRadius(inner, population);
+    expect(outer - inner).toBeLessThan(FIELD_BAND_DEPTH_MAX_M);
+    const area = Math.PI * (outer * outer - inner * inner);
+    expect(area).toBeCloseTo(population * FIELD_M2_PER_CAPITA, 0);
+  });
+
+  it('clamps depth at FIELD_BAND_DEPTH_MAX_M for a huge census', () => {
+    const inner = 50;
+    const outer = fieldOuterRadius(inner, 10_000_000);
+    expect(outer - inner).toBeCloseTo(FIELD_BAND_DEPTH_MAX_M, 6);
+  });
+
+  it('never returns less than innerRadius + FURROW_WIDTH_M (never a negative or zero-width band)', () => {
+    for (const pop of [0, 1, 50, 300, 900, 5000]) {
+      expect(fieldOuterRadius(80, pop)).toBeGreaterThanOrEqual(80 + FURROW_WIDTH_M - 1e-9);
+    }
+  });
+});
+
 describe('buildFields', () => {
   const emptyLots: Lot[] = [];
   const emptyCrofts: Croft[] = [];
@@ -81,7 +112,7 @@ describe('buildFields', () => {
   it('strips within one wedge (bundle) all share the same furrow direction', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
     const rng = new SeededRandom(1);
-    const strips = buildFields(site(), green, lanes, emptyLots, emptyCrofts, 40, 'hedge', rng);
+    const { strips } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, 'hedge', rng);
     const byWedge = new Map<string, number[]>();
     for (const s of strips) {
       const arr = byWedge.get(s.wedgeId) ?? [];
@@ -100,7 +131,7 @@ describe('buildFields', () => {
     // 360). The two base directions are exactly 90deg apart before jitter.
     const lanes = [lane('arm-000', 0), lane('arm-180', 180)];
     const rng = new SeededRandom(3);
-    const strips = buildFields(site(), green, lanes, emptyLots, emptyCrofts, 40, 'hedge', rng);
+    const { strips } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, 'hedge', rng);
     const byWedge = new Map<string, number>();
     for (const s of strips) byWedge.set(s.wedgeId, s.furrowBearingDeg);
     expect(byWedge.size).toBe(2);
@@ -115,7 +146,7 @@ describe('buildFields', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
     const wedges = buildWedges(green, lanes).slice().sort((x, y) => x.id.localeCompare(y.id));
     const rng = new SeededRandom(9);
-    const strips = buildFields(site(), green, lanes, emptyLots, emptyCrofts, 40, 'hedge', rng);
+    const { strips } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, 'hedge', rng);
     const byWedge = new Map<string, number>();
     for (const s of strips) byWedge.set(s.wedgeId, s.furrowBearingDeg);
     wedges.forEach((w, idx) => {
@@ -129,7 +160,7 @@ describe('buildFields', () => {
   it('emits ids as field:<wedgeId>:S<i>', () => {
     const lanes = [lane('arm-090', 90), lane('arm-270', 270)];
     const rng = new SeededRandom(5);
-    const strips = buildFields(site(), green, lanes, emptyLots, emptyCrofts, 40, 'hedge', rng);
+    const { strips } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, 'hedge', rng);
     expect(strips.length).toBeGreaterThan(0);
     for (const s of strips) {
       expect(s.id).toBe(`field:${s.wedgeId}:S${s.id.split(':S')[1]}`);
@@ -141,7 +172,7 @@ describe('buildFields', () => {
   it('drops fragments shorter than FURROW_MIN_LENGTH_M (no strip is a sliver)', () => {
     const lanes = [lane('arm-090', 90), lane('arm-270', 270)];
     const rng = new SeededRandom(11);
-    const strips = buildFields(site(), green, lanes, emptyLots, emptyCrofts, 40, 'hedge', rng);
+    const { strips } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, 'hedge', rng);
     for (const s of strips) {
       // Rough check: opposite polygon edges (the strip's length axis) must
       // clear the minimum length.
@@ -150,25 +181,33 @@ describe('buildFields', () => {
     }
   });
 
-  it('is empty (fails soft) when the built-up edge already reaches the field radius', () => {
+  // Fix round 1 (2026-08-21): the gate used to be `builtRadiusM *
+  // FIELD_RADIUS_FACTOR > innerRadius`, which the real pipeline's frontage
+  // escalation loop closed in EVERY fixture (the actual fabric routinely
+  // outgrows the prediction). The band now floors at FURROW_WIDTH_M deep
+  // regardless of population, so the only genuine "no fields" case left is
+  // the whole band being walled off -- exercised here with water covering
+  // every sampled point.
+  it('is empty (fails soft) when the field band is entirely walled off', () => {
+    const bigWater = [[
+      new Point(-1000, -1000), new Point(1000, -1000), new Point(1000, 1000), new Point(-1000, 1000),
+    ]];
     const lanes = [lane('arm-090', 90), lane('arm-270', 270)];
     const rng = new SeededRandom(1);
-    // builtRadiusM tiny -> FIELD_RADIUS_FACTOR * builtRadiusM is inside the
-    // green itself, so no room for any field band.
-    const strips = buildFields(site(), green, lanes, emptyLots, emptyCrofts, 1, 'hedge', rng);
+    const { strips } = buildFields(site({ water: bigWater }), green, lanes, emptyLots, emptyCrofts, 'hedge', rng);
     expect(strips).toEqual([]);
   });
 
   it('never throws with zero lanes, zero lots, zero crofts', () => {
     const rng = new SeededRandom(1);
-    expect(() => buildFields(site(), green, [], [], [], 40, 'hedge', rng)).not.toThrow();
+    expect(() => buildFields(site(), green, [], [], [], 'hedge', rng)).not.toThrow();
   });
 
   it('tundra biome only ever uses pasture crops', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
     const rng = new SeededRandom(2);
-    const strips = buildFields(
-      site({ biome: 'tundra' }), green, lanes, emptyLots, emptyCrofts, 40, 'hedge', rng,
+    const { strips } = buildFields(
+      site({ biome: 'tundra' }), green, lanes, emptyLots, emptyCrofts, 'hedge', rng,
     );
     expect(strips.length).toBeGreaterThan(0);
     for (const s of strips) expect(s.glyph).toBe('sm-field-pasture');
@@ -177,15 +216,15 @@ describe('buildFields', () => {
   it('temperate biome only cycles the temperate crop table (plus orchard/vine)', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
     const rng = new SeededRandom(2);
-    const strips = buildFields(site(), green, lanes, emptyLots, emptyCrofts, 40, 'hedge', rng);
+    const { strips } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, 'hedge', rng);
     const allowed = new Set([...FIELD_CROPS.temperate, 'sm-field-orchard', 'sm-field-vine']);
     for (const s of strips) expect(allowed.has(s.glyph)).toBe(true);
   });
 
   it('is deterministic: same inputs and seed produce identical output', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
-    const a = buildFields(site(), green, lanes, emptyLots, emptyCrofts, 40, 'hedge', new SeededRandom(77));
-    const b = buildFields(site(), green, lanes, emptyLots, emptyCrofts, 40, 'hedge', new SeededRandom(77));
+    const a = buildFields(site(), green, lanes, emptyLots, emptyCrofts, 'hedge', new SeededRandom(77));
+    const b = buildFields(site(), green, lanes, emptyLots, emptyCrofts, 'hedge', new SeededRandom(77));
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 });
@@ -260,5 +299,22 @@ describe('buildFields geometric invariants (real village fixtures)', () => {
     expect(() => generateVillage(bare, 1)).not.toThrow();
     const m = generateVillage(bare, 1);
     expect(Array.isArray(m.fields)).toBe(true);
+  });
+
+  // Fix round 1 regression net (2026-08-21): a post-completion probe over
+  // the real pipeline found `fields` empty in every one of 14 fixtures --
+  // the gate closed because the escalation loop routinely grows the real
+  // fabric past the PREDICTED builtRadius. This is the guard that would
+  // have caught it: a plausible village of real size must produce at
+  // least one field strip through the actual generateVillage pipeline,
+  // not just the hand-built unit fixtures above.
+  it('produces at least one field strip through the real pipeline (pop 300 and pop 900)', () => {
+    const popInput = (population: number): AzgaarBurgInput => ({
+      name: 'Regression', population, port: false, citadel: false, walls: false,
+      plaza: false, temple: false, shanty: false, capital: false,
+      roadBearings: [{ bearing_deg: 225, kind: 'road' }],
+    });
+    expect(generateVillage(popInput(300), 1).fields.length).toBeGreaterThan(0);
+    expect(generateVillage(popInput(900), 1).fields.length).toBeGreaterThan(0);
   });
 });

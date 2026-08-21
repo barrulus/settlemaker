@@ -48,10 +48,10 @@ describe('buildVegetation', () => {
   it('is deterministic: same inputs and seed produce identical output', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
     const a = buildVegetation(
-      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, new SeededRandom(77),
+      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, new SeededRandom(77),
     );
     const b = buildVegetation(
-      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, new SeededRandom(77),
+      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, new SeededRandom(77),
     );
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
@@ -59,14 +59,14 @@ describe('buildVegetation', () => {
   it('never throws with zero lanes, zero lots, zero crofts, zero fields', () => {
     const rng = new SeededRandom(1);
     expect(() => buildVegetation(
-      site(), green, [], [], [], [], 40, rng,
+      site(), green, [], [], [], [], 40, 40, rng,
     )).not.toThrow();
   });
 
   it('produces some trees for a plausible built radius', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
     const trees = buildVegetation(
-      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, new SeededRandom(5),
+      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, new SeededRandom(5),
     );
     expect(trees.length).toBeGreaterThan(0);
   });
@@ -74,7 +74,7 @@ describe('buildVegetation', () => {
   it('emits ids as veg:<cellX>x<cellY>, and clump children as veg:<cellX>x<cellY>:<j>', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
     const trees = buildVegetation(
-      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, new SeededRandom(5),
+      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, new SeededRandom(5),
     );
     expect(trees.length).toBeGreaterThan(0);
     const parentIds = new Set<string>();
@@ -96,7 +96,7 @@ describe('buildVegetation', () => {
     let checkedAny = false;
     for (let seed = 1; seed <= 10; seed++) {
       const trees = buildVegetation(
-        site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, new SeededRandom(seed),
+        site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, new SeededRandom(seed),
       );
       const byId = new Map(trees.map((t) => [t.id, t]));
       for (const t of trees) {
@@ -114,7 +114,7 @@ describe('buildVegetation', () => {
   it('scale jitter stays within VEG_SCALE_MIN..VEG_SCALE_MAX', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
     const trees = buildVegetation(
-      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, new SeededRandom(9),
+      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, new SeededRandom(9),
     );
     expect(trees.length).toBeGreaterThan(0);
     for (const t of trees) {
@@ -137,7 +137,7 @@ describe('buildVegetation', () => {
     let far = 0;
     for (const seed of [1, 2, 3, 55]) {
       const trees = buildVegetation(
-        site(), green, [], emptyLots, emptyCrofts, emptyFields, builtRadiusM, new SeededRandom(seed),
+        site(), green, [], emptyLots, emptyCrofts, emptyFields, builtRadiusM, builtRadiusM, new SeededRandom(seed),
       );
       for (const t of trees) {
         const d = dist(t.position, green.centre);
@@ -263,7 +263,7 @@ describe('shorefront suppression (§8.4, coastal fixture)', () => {
     let checked = 0;
     for (let seed = 1; seed <= 10; seed++) {
       const trees = buildVegetation(
-        coastalSite, green, [], emptyLots, emptyCrofts, emptyFields, builtRadiusM, new SeededRandom(seed),
+        coastalSite, green, [], emptyLots, emptyCrofts, emptyFields, builtRadiusM, builtRadiusM, new SeededRandom(seed),
       );
       for (const tree of trees) {
         const d = dist(tree.position, green.centre);
@@ -279,7 +279,7 @@ describe('shorefront suppression (§8.4, coastal fixture)', () => {
     let allowedNearWater = 0;
     for (let seed = 1; seed <= 10; seed++) {
       const trees = buildVegetation(
-        coastalSite, green, [], emptyLots, emptyCrofts, emptyFields, builtRadiusM, new SeededRandom(seed),
+        coastalSite, green, [], emptyLots, emptyCrofts, emptyFields, builtRadiusM, builtRadiusM, new SeededRandom(seed),
       );
       for (const tree of trees) {
         const d = dist(tree.position, green.centre);

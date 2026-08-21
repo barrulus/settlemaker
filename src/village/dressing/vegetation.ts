@@ -6,7 +6,7 @@ import {
 } from '../geometry.js';
 import { lotObb, type Obb } from '../parcels/overlap.js';
 import {
-  CLUMP_RADIUS_M, FIELD_RADIUS_FACTOR, GREEN_JOIN_RATIO,
+  CLUMP_RADIUS_M, GREEN_JOIN_RATIO,
   RING_SETBACK_M, SHOREFRONT_BAND_M, SHOREFRONT_REACH_FACTOR, VEG_BASE_DENSITY, VEG_CELL_M,
   VEG_GLYPHS, VEG_INFILL_SHARE, VEG_LANE_CLEAR_M, VEG_RADIUS_FACTOR, VEG_SCALE_MAX, VEG_SCALE_MIN,
 } from '../constants.js';
@@ -120,12 +120,20 @@ function pickGlyph(biome: string, rng: SeededRandom): string {
  * §7.3: the whole vegetation scatter for one village. Called LAST among
  * dressing stages (after edgeStyle/crofts/fields), so every rng draw here
  * comes after all of theirs -- never reordered or interleaved.
+ *
+ * `innerEdgeM` is the fabric edge density ramps down from: the field
+ * system's own outer radius when fields exist (fix round 1, 2026-08-21 --
+ * previously a fixed builtRadiusM multiple, which no longer means anything
+ * once fields are keyed off the census/fabric instead), or `builtRadiusM`
+ * itself when there are no fields at all. The caller (`dressing/index.ts`)
+ * decides which, since it is the one that knows whether `fields` is empty
+ * because there was no room, or because the wedges genuinely produced
+ * nothing.
  */
 export function buildVegetation(
   site: Site, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldStrip[],
-  builtRadiusM: number, rng: SeededRandom,
+  builtRadiusM: number, innerEdgeM: number, rng: SeededRandom,
 ): Vegetation[] {
-  const innerEdge = fields.length > 0 ? builtRadiusM * FIELD_RADIUS_FACTOR : builtRadiusM;
   const rim = builtRadiusM * VEG_RADIUS_FACTOR;
   if (!(rim > 0)) return [];
 
@@ -142,7 +150,7 @@ export function buildVegetation(
         cellOrigin.x + VEG_CELL_M / 2,
         cellOrigin.y + VEG_CELL_M / 2,
       );
-      const density = densityAt(dist(cellCentre, green.centre), innerEdge, rim);
+      const density = densityAt(dist(cellCentre, green.centre), innerEdgeM, rim);
 
       const survives = rng.float() < density;
       if (!survives) continue;

@@ -4,6 +4,15 @@ import { renderVillage } from '../../src/village/render.js';
 import { hasGlyph } from '../../src/village/glyphs.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 
+// Fix round 1 (2026-08-21): field/wedge ids can legitimately carry regex
+// metacharacters (`wedge:<laneIdA>|<laneIdB>`'s `|`, per the fields design
+// brief -- not a bug in the id scheme). Every id interpolated into
+// `new RegExp(...)` below must be escaped, or a `|` reads as alternation
+// and silently matches the wrong markup instead of failing to compile.
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 const input: AzgaarBurgInput = {
   name: 'Wick', population: 300, port: false, citadel: false, walls: false,
   plaza: false, temple: false, shanty: false, capital: false,
@@ -110,7 +119,16 @@ describe('renderVillage', () => {
 
   it('does not dump every glyph in the asset library into defs — only the ones used', () => {
     const defsMatch = svg.match(/<defs>([\s\S]*?)<\/defs>/);
-    const defIds = Array.from(defsMatch![1].matchAll(/<g id="([^"]+)"/g)).map((m) => m[1]);
+    // Field crop glyphs' own vendored artwork embeds a nested content id
+    // (e.g. `<g id="c-sm-field-plough">`, wrapping the tile's clipped
+    // content) INSIDE the glyph's own <g id> body -- an implementation
+    // detail of that glyph's markup, not a second top-level def. Only
+    // field glyphs carry this `c-` prefix convention; excluded here so the
+    // "every def traces to something used" check isn't tripped by a glyph
+    // reaching into its own body.
+    const defIds = Array.from(defsMatch![1].matchAll(/<g id="([^"]+)"/g))
+      .map((m) => m[1])
+      .filter((id) => !id.startsWith('c-'));
     // Pass 5 widens "used" to every category the renderer can place: buildings,
     // POIs, edge stamps, field-tile pattern content, and trees.
     const usedGlyphs = new Set([
@@ -194,7 +212,7 @@ describe('renderVillage', () => {
     const style = styleMatch![1];
     expect(style).not.toContain('.sm-sil');
     for (const glyph of Array.from(new Set(model.buildings.map((b) => b.glyph)))) {
-      const silMatch = svg.match(new RegExp(`<g id="${glyph}-sil">([\\s\\S]*?)</g>`));
+      const silMatch = svg.match(new RegExp(`<g id="${escapeRegExp(glyph)}-sil">([\\s\\S]*?)</g>`));
       expect(silMatch).not.toBeNull();
       expect(silMatch![1]).toContain('fill="currentColor"');
     }
@@ -217,7 +235,7 @@ describe('renderVillage', () => {
       expect(tag).toContain('patternUnits="userSpaceOnUse"');
     }
     for (const field of model.fields) {
-      const fieldMarkup = svg.match(new RegExp(`data-field="${field.id}"[^>]*fill="url\\(#([^)]+)\\)"`));
+      const fieldMarkup = svg.match(new RegExp(`data-field="${escapeRegExp(field.id)}"[^>]*fill="url\\(#([^)]+)\\)"`));
       expect(fieldMarkup).not.toBeNull();
       expect(patternIds.has(fieldMarkup![1])).toBe(true);
     }
@@ -225,7 +243,7 @@ describe('renderVillage', () => {
 
   it('paints crofts with the flat tint class, no field pattern', () => {
     for (const croft of model.crofts) {
-      const croftMarkup = svg.match(new RegExp(`data-croft="${croft.id}"[^>]*class="sm-croft"`));
+      const croftMarkup = svg.match(new RegExp(`data-croft="${escapeRegExp(croft.id)}"[^>]*class="sm-croft"`));
       expect(croftMarkup).not.toBeNull();
     }
   });
@@ -244,7 +262,7 @@ describe('renderVillage', () => {
   it('scales a tree by its footprint AND its per-tree scale jitter', () => {
     const scaledTree = model.vegetation.find((v) => v.scale !== undefined && v.scale !== 1);
     if (!scaledTree) return; // no jittered tree in this fixture/seed — nothing to pin
-    const inkMatch = svg.match(new RegExp(`data-id="${scaledTree.id}"[^>]*transform="([^"]+)"`));
+    const inkMatch = svg.match(new RegExp(`data-id="${escapeRegExp(scaledTree.id)}"[^>]*transform="([^"]+)"`));
     expect(inkMatch).not.toBeNull();
     const scaleMatch = inkMatch![1].match(/scale\(([\d.]+)\)/);
     expect(scaleMatch).not.toBeNull();
@@ -253,7 +271,7 @@ describe('renderVillage', () => {
     // un-jittered (scale=1) tree's own factor when one exists for contrast.
     const plainTree = model.vegetation.find((v) => v.glyph === scaledTree.glyph && (v.scale ?? 1) === 1);
     if (plainTree) {
-      const plainInk = svg.match(new RegExp(`data-id="${plainTree.id}"[^>]*transform="([^"]+)"`));
+      const plainInk = svg.match(new RegExp(`data-id="${escapeRegExp(plainTree.id)}"[^>]*transform="([^"]+)"`));
       const plainScale = plainInk![1].match(/scale\(([\d.]+)\)/);
       expect(scaleMatch![1]).not.toBe(plainScale![1]);
     }

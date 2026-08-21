@@ -47,8 +47,15 @@ export function dressVillage(input: DressingInput): DressingResult {
 
   const edgeStyle = settlementEdgeStyle(site.biome, site.population, rng);
   const crofts = buildCrofts(lots, buildings, green, lanes, site.water, builtRadiusM, f0, edgeStyle);
-  const fields = buildFields(site, green, lanes, lots, crofts, builtRadiusM, edgeStyle, rng);
-  const vegetation = buildVegetation(site, green, lanes, lots, crofts, fields, builtRadiusM, rng);
+  const { strips: fields, outerRadius: fieldsOuterRadius } = buildFields(
+    site, green, lanes, lots, crofts, edgeStyle, rng,
+  );
+  // Fix round 1 (2026-08-21): vegetation's density ramp starts at the field
+  // system's ACTUAL outer radius when fields exist, not a stale prediction
+  // -- see `fieldOuterRadius`'s doc comment in fields.ts for why a fixed
+  // builtRadiusM multiple closed the fields gate in the real pipeline.
+  const vegInnerEdgeM = fields.length > 0 ? fieldsOuterRadius : builtRadiusM;
+  const vegetation = buildVegetation(site, green, lanes, lots, crofts, fields, builtRadiusM, vegInnerEdgeM, rng);
   const pois = buildPois(site, green, lanes, lots, crofts, fields, vegetation, builtRadiusM, rng);
 
   return {
