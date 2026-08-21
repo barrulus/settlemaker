@@ -103,6 +103,23 @@ export interface Croft {
   boundary: EdgeStamp[];
 }
 
+/**
+ * §7.2: one furlong strip within a wedge (the angular sector between two
+ * adjacent green-attached lanes). `wedgeId` groups strips that share a
+ * furrow direction; `id` is `field:<wedgeId>:S<i>`, `i` the strip's ordinal
+ * within its wedge (ordinals may skip where a band was clipped away
+ * entirely -- same convention as `EdgeStamp` ids in edges.ts).
+ */
+export interface FieldStrip {
+  id: string;
+  wedgeId: string;
+  glyph: string;
+  /** Quad corners, already clipped to the wedge sector and field band. */
+  polygon: Point[];
+  furrowBearingDeg: number;
+  boundary: EdgeStamp[];
+}
+
 export interface VillageModel {
   site: Site;
   green: Green;
@@ -110,9 +127,10 @@ export interface VillageModel {
   lots: Lot[];
   buildings: Building[];
   /** §7.1: drawn ONCE per village by `dressVillage`, held constant for
-   * every boundary consumer (crofts now; fields/vegetation later). */
+   * every boundary consumer (crofts, fields; vegetation/POIs later). */
   edgeStyle: EdgeStyle;
   crofts: Croft[];
+  fields: FieldStrip[];
   diagnostics: string[];
 }
 

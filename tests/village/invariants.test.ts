@@ -199,6 +199,35 @@ describe('village invariants (design §5.7)', () => {
     }
   }, GRID_TIMEOUT_MS);
 
+  // Task 4 (§7.2): a field strip never overlaps a croft or a lot claim,
+  // across the same probe grid the crofts invariant above uses. Checks
+  // only the strip polygon's corners (cheap, and by construction they are
+  // exactly the sample points `buildFields` already validated when it
+  // decided the strip's clipped extent).
+  it('never overlaps a field strip with a croft or a lot claim', () => {
+    const OVERLAP_EPS_M = 0.25;
+    for (const input of inputs) {
+      for (const seed of seeds) {
+        const m = generateVillage(input, seed);
+        if (m.fields.length === 0) continue;
+        const lotObbs = m.lots.map((l) => lotObb(l));
+        for (const strip of m.fields) {
+          for (const p of strip.polygon) {
+            const pointObb = {
+              center: p, tangent: new Point(1, 0), normal: new Point(0, 1), halfW: 0, halfD: 0,
+            };
+            for (const obb of lotObbs) {
+              expect(obbOverlap(pointObb, obb, OVERLAP_EPS_M)).toBe(false);
+            }
+            for (const croft of m.crofts) {
+              expect(pointInPolygon(p, croft.polygon)).toBe(false);
+            }
+          }
+        }
+      }
+    }
+  }, GRID_TIMEOUT_MS);
+
   it('never throws on a degenerate input', () => {
     const bare: AzgaarBurgInput = {
       name: 'Bare', population: 12, port: false, citadel: false, walls: false,

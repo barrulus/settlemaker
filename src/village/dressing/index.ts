@@ -1,8 +1,9 @@
 import { SeededRandom } from '../../utils/random.js';
 import { buildCrofts } from './crofts.js';
 import { settlementEdgeStyle } from './edges.js';
+import { buildFields } from './fields.js';
 import type {
-  Building, Croft, EdgeStyle, Green, Lane, Lot, Site,
+  Building, Croft, EdgeStyle, FieldStrip, Green, Lane, Lot, Site,
 } from '../types.js';
 
 export interface DressingInput {
@@ -19,7 +20,8 @@ export interface DressingInput {
 export interface DressingResult {
   edgeStyle: EdgeStyle;
   crofts: Croft[];
-  // Room for fields/vegetation/pois (Tasks 4-6).
+  fields: FieldStrip[];
+  // Room for vegetation/pois (Tasks 5-6).
 }
 
 /**
@@ -29,7 +31,9 @@ export interface DressingResult {
  * here, FIRST -- before any croft/field/vegetation/POI work -- so later
  * dressing stages appending their own rng draws never shift this one. The
  * resulting style is passed down to every consumer; no other module may
- * call `settlementEdgeStyle`.
+ * call `settlementEdgeStyle`. Draw order after that: crofts (currently
+ * draws none), then fields (one jitter float per wedge, plus an
+ * occasional orchard/vine bool) -- fixed, never reordered.
  */
 export function dressVillage(input: DressingInput): DressingResult {
   const {
@@ -38,6 +42,7 @@ export function dressVillage(input: DressingInput): DressingResult {
 
   const edgeStyle = settlementEdgeStyle(site.biome, site.population, rng);
   const crofts = buildCrofts(lots, buildings, green, lanes, site.water, builtRadiusM, f0, edgeStyle);
+  const fields = buildFields(site, green, lanes, lots, crofts, builtRadiusM, edgeStyle, rng);
 
-  return { edgeStyle, crofts };
+  return { edgeStyle, crofts, fields };
 }

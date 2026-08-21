@@ -285,3 +285,39 @@ export const CROFT_TIGHT_FRONTAGE_RATIO = 1.1;
 /** Truncation (lane/green/water/claim clipping) below this depth means no
  * croft at all for that lot -- a sliver strip nobody would fence. */
 export const CROFT_MIN_DEPTH_M = 2;
+
+// --- Fields (pass 5 dressing, §7.2) -------------------------------------
+/** §7.2 rule 1 (the census-eating cap): fields never reach further than
+ * builtRadius x this. */
+export const FIELD_RADIUS_FACTOR = 1.6;
+/** Furlong strip width, metres. */
+export const FURROW_WIDTH_M = 12;
+/** A clipped strip fragment shorter than this (along its furrow direction)
+ * is dropped rather than kept as a sliver. */
+export const FURROW_MIN_LENGTH_M = 10;
+/** Sampling pitch for the strip-clipping walk, matching the codebase's
+ * ~2 m sampling convention (edges.ts's lane-corridor breaks, crofts.ts's
+ * lane-within-obb walk). */
+export const FIELD_SAMPLE_STEP_M = 2;
+/** Jitter range (degrees) added to a wedge's furrow bearing: rng.float() *
+ * this - this/2, one draw per wedge. */
+export const FIELD_JITTER_RANGE_DEG = 30;
+/** §7.2 rule 4: chance a wedge's FIRST (innermost) strip ring swaps its
+ * cycled crop for an orchard/vine tile instead -- only rolled for biomes
+ * whose crop table is the temperate one (desert/tropical/pasture tables
+ * never roll this). */
+export const FIELD_ORCHARD_VINE_CHANCE = 0.15;
+/**
+ * Per-biome crop cycle, walked by strip ordinal (`i % length`). Keys not
+ * listed fall back to `temperate` (coastal reads the same as temperate,
+ * per the brief) -- this is also how the orchard/vine roll knows whether
+ * it applies: it is gated on the resolved table being THIS temperate
+ * array, not on the biome string itself.
+ */
+export const FIELD_CROPS: Record<string, string[]> = {
+  temperate: ['sm-field-plough', 'sm-field-stubble', 'sm-field-fallow'],
+  desert: ['sm-field-irrigated--desert', 'sm-field-fallow'],
+  tropical: ['sm-field-paddy--tropical', 'sm-field-fallow'],
+  tundra: ['sm-field-pasture'],
+  steppe: ['sm-field-pasture'],
+};
