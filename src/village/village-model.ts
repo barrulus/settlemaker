@@ -9,11 +9,13 @@ import { relaxLanes, trimTails } from './skeleton/relax.js';
 import {
   clipLots, gapForPopulation, orderLots, scoreLots, subdivideGreen, subdivideLane,
 } from './parcels/lots.js';
-import { buildDeck, meanOccupancy, widestDwellingWidthM } from './deck.js';
+import {
+  buildDeck, meanOccupancy, minDwellingFrontageM, widestDwellingWidthM,
+} from './deck.js';
 import { spendCensus, type SpendResult } from './dwellings.js';
 import {
-  GAP_TIGHTEN, INITIAL_MEAN_FRONTAGE_FACTOR, LANE_EXTENT_FACTOR, LOT_DEPTH_M,
-  MAX_FEEDBACK_ROUNDS, MEAN_LOT_AREA_M2,
+  BRANCH_SPACING_M, GAP_TIGHTEN, GROWTH_RADIUS_FACTOR, INITIAL_MEAN_FRONTAGE_FACTOR,
+  LANE_EXTENT_FACTOR, LOT_DEPTH_M, MAX_FEEDBACK_ROUNDS, MEAN_LOT_AREA_M2,
 } from './constants.js';
 import type { Lot, VillageModel } from './types.js';
 import type { RouteType } from './route-class.js';
@@ -40,12 +42,26 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
   const builtRadius = predictedBuiltRadius(site.population, occupancy, MEAN_LOT_AREA_M2);
   const green = siteGreen(site, builtRadius, rng);
   const laneExtentM = builtRadius * LANE_EXTENT_FACTOR;
+  // Gate 3: growth is confined to a circle around the green, so the fabric
+  // clusters instead of streaming along a long road. Floored so the FIRST
+  // branch-slot ring (BRANCH_SPACING_M from the green edge) plus a lot's
+  // depth always fits: a hamlet's builtRadius can undercut the slot
+  // spacing, and a radius that excludes every slot freezes growth
+  // entirely — the escalation loop then cannot house the census at all.
+  const growthRadiusM = Math.max(
+    builtRadius * GROWTH_RADIUS_FACTOR,
+    green.diameter / 2 + BRANCH_SPACING_M + LOT_DEPTH_M,
+  );
 
   // Finding 5: f0 is spec §5.2's "widest common dwelling in the deck" plus
   // the population gap term — not an unrelated literal. widestDwellingM is
   // held constant across rounds so the round-3 tighten step (finding 4)
   // compounds only the gap term, never the dwelling-width part of f0.
   const widestDwellingM = widestDwellingWidthM(deck);
+  // Lots narrower than the deck's narrowest usable dwelling are dead on
+  // arrival; the cutter floors at this so tightening the gap can never
+  // manufacture unusable frontage.
+  const lotFloorM = minDwellingFrontageM(deck);
   // Finding 4: the gap term is tracked separately from f0 itself so that
   // tightening it each round compounds — GAP_TIGHTEN applied to the gap
   // left over from the PREVIOUS round, not recomputed fresh from the
@@ -73,17 +89,29 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
     // was wrong. From round 2 on, ask for what's actually missing: the
     // frontage already available, plus enough (at the measured mean lot
     // width) to house the shortfall the previous round reported.
+    // A metre of frontage does not always convert to housing: seatings die
+    // on lane intrusions (a branch corridor crossing its parent's strips
+    // near the junction) and building overlaps. The previous round measured
+    // that conversion directly — buildings seated per lot offered (valid
+    // because an unhoused round attempted EVERY lot) — so the shortfall
+    // term is scaled by it, or a dense fabric asks for exactly the frontage
+    // it will then reject. Floored so one pathological round cannot demand
+    // unbounded lanes.
+    const seatEfficiency = round === 0 || lots.length === 0
+      ? 1
+      : Math.max(0.25, spend.buildings.length / lots.length);
     const required = round === 0
       ? requiredFrontage(site.population, occupancy, measuredMeanFrontage)
-      : availableFrontage(lanes) + (spend.unhoused / occupancy) * measuredMeanFrontage;
-    lanes = addInventedLanes(lanes, green, required, measuredMeanFrontage, rng);
+      : availableFrontage(lanes)
+        + ((spend.unhoused / occupancy) * measuredMeanFrontage) / seatEfficiency;
+    lanes = addInventedLanes(lanes, green, required, measuredMeanFrontage, growthRadiusM, rng);
 
     const laneTypes = new Map<string, RouteType>(lanes.map((l) => [l.id, l.type]));
     laneTypes.set('green', 'main');
 
     lots = [
       ...subdivideGreen(green, f0, LOT_DEPTH_M, rng),
-      ...lanes.flatMap((l) => subdivideLane(l, green, builtRadius, f0, LOT_DEPTH_M, rng)),
+      ...lanes.flatMap((l) => subdivideLane(l, green, builtRadius, f0, LOT_DEPTH_M, rng, lotFloorM)),
     ];
     lots = orderLots(scoreLots(clipLots(lots, green, site.water), green, laneTypes));
 

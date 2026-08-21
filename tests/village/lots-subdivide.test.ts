@@ -17,15 +17,15 @@ const straightLane: Lane = {
 
 describe('gapForPopulation', () => {
   it('is loose in a hamlet and tight in a big village', () => {
-    // Gate-2 density verdict: gaps tightened from 2.4/1.0.
-    expect(gapForPopulation(100)).toBeCloseTo(1.6, 1);
-    expect(gapForPopulation(900)).toBeCloseTo(0.6, 1);
+    // Gate-3 density verdict: gaps tightened again (2.4/1.0 -> 1.6/0.6 -> 1.2/0.4).
+    expect(gapForPopulation(100)).toBeCloseTo(1.2, 1);
+    expect(gapForPopulation(900)).toBeCloseTo(0.4, 1);
     expect(gapForPopulation(900)).toBeLessThan(gapForPopulation(100));
   });
 
   it('clamps outside the village band', () => {
-    expect(gapForPopulation(10)).toBeCloseTo(1.6, 1);
-    expect(gapForPopulation(5000)).toBeCloseTo(0.6, 1);
+    expect(gapForPopulation(10)).toBeCloseTo(1.2, 1);
+    expect(gapForPopulation(5000)).toBeCloseTo(0.4, 1);
   });
 });
 

@@ -165,6 +165,17 @@ export function widestDwellingWidthM(deck: DeckEntry[]): number {
   return Math.max(...qualifying.map((e) => nominalFootprint(e.glyph)[0] * e.sizeFactor));
 }
 
+/**
+ * The narrowest frontage at which the ordinary draw can still place
+ * SOMETHING. Lots cut below this are dead on arrival — eligible() rejects
+ * every uncapped entry — so the parcel cutter uses it as a hard floor.
+ */
+export function minDwellingFrontageM(deck: DeckEntry[]): number {
+  const pool = deck.filter((e) => !e.cap && e.weight > 0);
+  if (pool.length === 0) return 8;
+  return Math.min(...pool.map((e) => e.minFrontage));
+}
+
 /** Weighted mean occupancy over the uncapped entries. */
 export function meanOccupancy(deck: DeckEntry[]): number {
   const pool = deck.filter((e) => !e.cap);

@@ -92,13 +92,20 @@ export function seat(entry: DeckEntry, lot: Lot, rng: SeededRandom): Building {
   // in the road.
   const facing = bearingVector(lot.bearingDeg);
   const inward = new Point(-facing.x, -facing.y);
+  // Gate 3: seat by the INK, not the box. A glyph's painted walls fill only
+  // ~68-85% of its footprint box, so offsetting by footprint/2 parked every
+  // house ~1 m further from its lane than the lot maths intended. Pull the
+  // building forward by the ink margin so the PAINTED front face sits at
+  // front + setback.
+  const inkMarginM = (footprint[1] - inkExtent(entry.glyph, footprint).depth) / 2;
+  const offset = setback + footprint[1] / 2 - inkMarginM;
   return {
     id: buildingId(lot.id),
     lotId: lot.id,
     glyph: entry.glyph,
     position: new Point(
-      lot.front.x + inward.x * (setback + footprint[1] / 2),
-      lot.front.y + inward.y * (setback + footprint[1] / 2),
+      lot.front.x + inward.x * offset,
+      lot.front.y + inward.y * offset,
     ),
     bearingDeg: renderBearingFor(entry.glyph, lot.bearingDeg),
     footprint,

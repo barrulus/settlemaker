@@ -32,7 +32,14 @@ export function relaxLanes(lanes: Lane[], buildings: Building[]): Lane[] {
       for (let i = 0; i < points.length; i++) {
         for (const b of buildings) {
           const ink = inkExtent(b.glyph, b.footprint);
-          const keepOut = lane.widthM / 2 + RELAX_CLEARANCE_M + Math.max(ink.width, ink.depth) / 2;
+          // Gate 3: use the SHORT ink half-axis, matching the seat-time
+          // corridor rule. The long-axis radius treated every legally
+          // seated house as an intruder and shoved its lane sideways —
+          // AFTER the crossing checks had run — quietly re-creating the
+          // untidy crossings the growth rules had just eliminated. With
+          // seat-time clearance guaranteed, relaxation now only fires for
+          // genuine intrusions.
+          const keepOut = lane.widthM / 2 + RELAX_CLEARANCE_M + Math.min(ink.width, ink.depth) / 2;
           const dx = points[i].x - b.position.x;
           const dy = points[i].y - b.position.y;
           const d = dist(points[i], b.position);

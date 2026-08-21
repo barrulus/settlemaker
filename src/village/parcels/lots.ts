@@ -46,7 +46,7 @@ export function frontageAt(distanceM: number, builtRadiusM: number, f0: number):
  */
 export function subdivideLane(
   lane: Lane, green: Green, builtRadiusM: number, f0: number, depthM: number,
-  rng: SeededRandom,
+  rng: SeededRandom, floorM: number = 0,
 ): Lot[] {
   const lots: Lot[] = [];
   const setback = lane.widthM / 2 + (LANE_SETBACK_M[lane.type] ?? 2);
@@ -68,7 +68,12 @@ export function subdivideLane(
       // neighbours actually TOUCH — the owner's density rule ("not
       // everything uniformly separated; touching is ok"). The rectangle
       // overlap test keeps touching from becoming interpenetration.
-      const frontage = Math.max(f0 * F0_FLOOR_RATIO, frontageAt(d, builtRadiusM, f0) * jitter);
+      // `floorM` (the deck's narrowest usable dwelling frontage, when the
+      // caller knows it) is the harder floor: below it a lot is dead on
+      // arrival — no deck entry can ever seat there, so cutting it just
+      // burns frontage the census needed.
+      const frontage = Math.max(floorM, f0 * F0_FLOOR_RATIO,
+        frontageAt(d, builtRadiusM, f0) * jitter);
       if (s + frontage > edgeTotal) break;
       const mid = sampleAt(edge, edgeAcc, s + frontage / 2);
       // Inward normal: the lot faces back across the strip to its lane.

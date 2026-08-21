@@ -59,6 +59,24 @@ export const INVENTED_ARM_LENGTH_FACTOR = 2;
  * between two streets), per the owner's rule that loops are made at a
  * lower class than the lanes they join. */
 export const LOOP_SNAP_M = 12;
+/** Crossing checks ignore intersections with a branch's own PARENT this
+ * close to the branch's start — that is the junction the branch exists to
+ * make, not an untidy crossing. (Gate 4: crossings with any OTHER lane are
+ * never exempt, at any distance — the old any-lane exemption let a branch
+ * starting near an unrelated lane paint straight over it.) */
+export const JUNCTION_CLEAR_M = 6;
+/** Gate 3: "sprawl should be clustered around the green". Growth may only
+ * attach or extend within this multiple of the predicted built radius —
+ * distant slots on a long FMG road no longer sprout satellite webs; the
+ * ladder tightens density inside the circle instead. */
+export const GROWTH_RADIUS_FACTOR = 1.2;
+/** When the growth circle is FULL (arm cap reached, every slot taken,
+ * every street's end outside the circle) but the census still needs
+ * frontage, the circle itself grows by this factor and growth retries —
+ * a village fills its circle, then the circle widens. Without this the
+ * confinement deadlocks small sites, which cannot house their census at
+ * any density. */
+export const GROWTH_RADIUS_STEP = 1.15;
 /** Round-0 estimate of mean lot frontage as a multiple of f0, before the
  * loop has cut real lots to measure. The gradient tops out at ~2x f0, so
  * the mean sits well under the old 1.8. */
@@ -93,8 +111,8 @@ export const RELAX_CLEARANCE_M = 0.5;
 export const TAIL_STUB_M = 12;
 
 // --- Parcels -----------------------------------------------------------
-export const GAP_LOOSE_M = 1.6;
-export const GAP_TIGHT_M = 0.6;
+export const GAP_LOOSE_M = 1.2;
+export const GAP_TIGHT_M = 0.4;
 export const GAP_POP_LOW = 100;
 export const GAP_POP_HIGH = 900;
 export const GRADIENT_EXPONENT = 1.5;
@@ -130,9 +148,8 @@ export const LANE_SETBACK_M: Record<string, number> = {
 export const SIZE_JITTER = 0.1;
 export const FIT_MIN = 0.85;
 export const FIT_MAX = 1.15;
-/** Gate 2: houses sat too far off their roads; the settlement wants to be
- * denser as a whole. Was 1.5. */
-export const SEATING_SETBACK_MAX_M = 0.5;
+/** Gate 3: houses still read as set back too far. Was 1.5, then 0.5. */
+export const SEATING_SETBACK_MAX_M = 0.3;
 export const DECK_GAP_M = 1.5;
 
 /** One dwelling family per village (the village-rows rule, restored at the
