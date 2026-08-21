@@ -7,7 +7,7 @@ import {
 import { generateVillage } from '../../src/village/village-model.js';
 import { hasGlyph, nominalFootprint } from '../../src/village/glyphs.js';
 import { closestPointOnSegment, dist } from '../../src/village/geometry.js';
-import { computeInnerRadius } from '../../src/village/dressing/fields.js';
+import { computeFabricRadius } from '../../src/village/dressing/fields.js';
 import {
   SHOREFRONT_REACH_FACTOR, STONE_CIRCLE_FOOTPRINT_RADIUS_M, STONE_CIRCLE_RADIUS_FACTOR,
   WELL_MIN_POP,
@@ -398,7 +398,7 @@ describe('POIs through the full generateVillage pipeline', () => {
       const m = generateVillage(input, 1);
       // The same MEASURED ring radius dressVillage threads in: the outer
       // edge of everything already on the ground.
-      const fabricRadius = computeInnerRadius(m.green, m.lots, m.crofts);
+      const fabricRadius = computeFabricRadius(m.green, m.lots, m.crofts);
       let fieldsOuter = 0;
       for (const strip of m.fields) {
         for (const p of strip.polygon) fieldsOuter = Math.max(fieldsOuter, dist(p, m.green.centre));

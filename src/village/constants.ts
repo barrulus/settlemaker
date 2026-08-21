@@ -298,7 +298,7 @@ export const CROFT_BEHIND_INK_M = 1;
  * Fix round 1 (2026-08-21): the escalation loop routinely grows the real
  * fabric (lots + crofts) well past the prediction, so a factor on
  * builtRadiusM alone closed the gate in every real-pipeline fixture --
- * `computeInnerRadius`'s global max always exceeded it. `FIELD_RADIUS_
+ * `computeFabricRadius`'s global max always exceeded it. `FIELD_RADIUS_
  * FACTOR` retired; see `fieldOuterRadius` in `dressing/fields.ts`.
  */
 export const FIELD_M2_PER_CAPITA = 150;
@@ -328,11 +328,43 @@ export const FURROW_WIDTH_M = 12;
  */
 export const FIELD_WEDGE_CLAIM_MARGIN_DEG = 10;
 /**
+ * W3: a wedge's field band starts at THIS percentile of the back-edge
+ * distances of the claims the wedge contains -- not at their max.
+ *
+ * The max exiles the band past the sector's single deepest ribbon lot: a
+ * wedge flanking a long FMG arm carries lots out to ~300 m, so its band
+ * started out there and floated remotely, and since that band set the
+ * global fields-outer it dragged the vegetation edge and the canvas with
+ * it. Real villages do the reverse -- fields fill the ground BESIDE the
+ * road ribbons and BETWEEN the fabric arms, close in. A low percentile puts
+ * the inner edge just past the BULK of the fabric and leaves the strip
+ * walk's existing sampled clipping to carve around the minority of claims
+ * reaching further, so strips nestle into those gaps instead of clearing
+ * them.
+ */
+export const FIELD_INNER_PERCENTILE = 0.35;
+/** Clearance added on top of the green's drawn radius plus RING_SETBACK_M
+ * when a wedge has no claims at all (or a percentile below the turf) --
+ * the floor a field band may start at. */
+export const FIELD_INNER_FLOOR_PAD_M = 2;
+/**
  * V4: a wedge's whole field block is culled when its strips together cover
  * less than this. Below it the block reads as a dropped rug -- a couple of
  * disconnected slivers floating in open ground -- rather than as farmland.
+ *
+ * LOOSENED at W3 (2026-08-22), 600 -> 400, deliberately and not silently.
+ * 600 was calibrated when bands were laid OUTSIDE the fabric, where even a
+ * hamlet's block was large. W3 starts them at a low percentile INSIDE it,
+ * so the same village legitimately yields smaller blocks carved around its
+ * own claims -- measured on the probe, pop 40 seed 2's three wedges came
+ * out at 578, 414 and 404 m2 and ALL THREE were culled, leaving the hamlet
+ * with no fields at all. Keeping the number while changing what it measures
+ * would not have been keeping the rule the same. 400 m2 is still a bit over
+ * three minimum-length furrows (FURROW_MIN_LENGTH_M x FURROW_WIDTH_M =
+ * 120 m2), so a block of one or two slivers -- the dropped rug V4 named --
+ * still dies.
  */
-export const FIELD_MIN_BUNDLE_AREA_M2 = 600;
+export const FIELD_MIN_BUNDLE_AREA_M2 = 400;
 /** A clipped strip fragment shorter than this (along its furrow direction)
  * is dropped rather than kept as a sliver. */
 export const FURROW_MIN_LENGTH_M = 10;

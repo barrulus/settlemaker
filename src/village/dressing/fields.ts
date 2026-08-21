@@ -9,9 +9,10 @@ import { lotObb, pointInObb, type Obb } from '../parcels/overlap.js';
 import { stampEdge } from './edges.js';
 import {
   FIELD_BAND_DEPTH_MAX_M, FIELD_BAND_DEPTH_MIN_M, FIELD_CROPS, FIELD_JITTER_RANGE_DEG,
-  FIELD_FURROW_MIN_SEPARATION_DEG, FIELD_M2_PER_CAPITA, FIELD_MIN_BUNDLE_AREA_M2,
-  FIELD_ORCHARD_VINE_CHANCE, FIELD_SAMPLE_STEP_M,
-  FIELD_WEDGE_CLAIM_MARGIN_DEG, FURROW_MIN_LENGTH_M, FURROW_WIDTH_M, LANE_SETBACK_M,
+  FIELD_FURROW_MIN_SEPARATION_DEG, FIELD_INNER_FLOOR_PAD_M, FIELD_INNER_PERCENTILE,
+  FIELD_M2_PER_CAPITA, FIELD_MIN_BUNDLE_AREA_M2, FIELD_ORCHARD_VINE_CHANCE,
+  FIELD_SAMPLE_STEP_M, FIELD_WEDGE_CLAIM_MARGIN_DEG, FURROW_MIN_LENGTH_M, FURROW_WIDTH_M,
+  LANE_SETBACK_M, RING_SETBACK_M,
 } from '../constants.js';
 import type {
   Croft, EdgeStamp, EdgeStyle, FieldStrip, Green, Lane, Lot, Site,
@@ -122,45 +123,88 @@ function bearingInWedge(p: Point, green: Green, wedge: Wedge): boolean {
 }
 
 /**
- * "The croft line": how far the built-up edge already reaches IN THIS
- * DIRECTION, so fields never start closer in than that but also never start
- * further out than the fabric they are supposed to hug.
- *
- * The max, over every lot claim and croft the wedge contains, of its
- * farthest corner from the green centre; floored at the green's drawn
- * radius. A claim belongs to a wedge when the bearing of its own centre
- * (the claim OBB's centre, a croft's polygon centroid) from the green falls
- * inside the wedge's span widened by FIELD_WEDGE_CLAIM_MARGIN_DEG.
- *
- * Fix wave (2026-08-21, V1): this used to be a GLOBAL max over the whole
- * village, which pushed every wedge's band out past the single deepest lane
- * in the settlement -- fields then read as a detached annulus floating
- * clear of the fabric, most obviously over empty quadrants, where the band
- * started a hundred metres from anything built. Per-wedge, an empty quadrant
- * starts its band just outside the green ring, where it belongs.
- *
- * Called with no `wedge` it still returns the global measured fabric radius,
- * which is what the POI stage keys the stone circle's ring off (C1).
+ * How far a claim's BACK EDGE reaches from the green: the farthest of its
+ * own corners (a lot claim) or vertices (a croft). One number per claim,
+ * which is what the percentile below ranks.
  */
-export function computeInnerRadius(
+function claimBackEdgeDistances(
   green: Green, lots: Lot[], crofts: Croft[], wedge?: Wedge,
-): number {
-  let maxR = greenDrawnRadius(green);
+): number[] {
+  const out: number[] = [];
   for (const lot of lots) {
     const obb = lotObb(lot);
     if (wedge && !bearingInWedge(obb.center, green, wedge)) continue;
-    for (const c of obbCorners(obb)) {
-      maxR = Math.max(maxR, dist(green.centre, c));
-    }
+    let far = 0;
+    for (const c of obbCorners(obb)) far = Math.max(far, dist(green.centre, c));
+    out.push(far);
   }
   for (const croft of crofts) {
     if (croft.polygon.length === 0) continue;
     if (wedge && !bearingInWedge(centroid(croft.polygon), green, wedge)) continue;
-    for (const p of croft.polygon) {
-      maxR = Math.max(maxR, dist(green.centre, p));
-    }
+    let far = 0;
+    for (const p of croft.polygon) far = Math.max(far, dist(green.centre, p));
+    out.push(far);
   }
+  return out;
+}
+
+/**
+ * The MEASURED fabric radius: how far the built-up edge reaches anywhere in
+ * the village -- the max over every lot claim's and croft's back edge,
+ * floored at the green's drawn radius.
+ *
+ * This is the "everything is inside here" number, and only stages that need
+ * that use it: the vegetation ramp's fallback when there are no fields at
+ * all, §8.4's shorefront reach, and the stone circle's ring (C1). It is
+ * explicitly NOT what a wedge's field band starts at -- see
+ * `wedgeInnerRadius`.
+ */
+export function computeFabricRadius(green: Green, lots: Lot[], crofts: Croft[]): number {
+  let maxR = greenDrawnRadius(green);
+  for (const d of claimBackEdgeDistances(green, lots, crofts)) maxR = Math.max(maxR, d);
   return maxR;
+}
+
+/**
+ * Where THIS wedge's field band starts: a LOW percentile
+ * (FIELD_INNER_PERCENTILE) of the back-edge distances of the claims the
+ * wedge contains, floored just outside the green ring. A claim belongs to a
+ * wedge when the bearing of its own centre (the claim OBB's centre, a
+ * croft's polygon centroid) from the green falls inside the wedge's span
+ * widened by FIELD_WEDGE_CLAIM_MARGIN_DEG.
+ *
+ * Fix wave history, both rounds, because the two are easy to conflate:
+ *
+ * V1 (2026-08-21) replaced a GLOBAL max with a per-wedge one. That stopped
+ * every wedge being exiled past the single deepest lane in the village, but
+ * it left each wedge exiled past its OWN deepest lane.
+ *
+ * W3 (2026-08-22) is the rest of the fix. A sector flanking a long FMG arm
+ * carries ribbon lots out to ~300 m, so a per-wedge MAX started that
+ * sector's band out there too -- a remote floating band, which then set the
+ * global fields-outer, which set the vegetation edge, which blew the canvas
+ * out again. Real villages do the opposite: fields fill the ground BESIDE
+ * the road ribbons and BETWEEN the fabric arms, close in. A low percentile
+ * puts the band's inner edge just past the bulk of the fabric and lets the
+ * strip walk's existing sampled clipping carve around the minority of
+ * claims that reach further -- so strips nestle into the gaps beside arm
+ * ribbons and between fabric fingers, which is the look wanted.
+ *
+ * Nearest-rank on the sorted distances (`round(p x (n-1))`), so a single
+ * claim gives that claim and an empty sector falls through to the floor.
+ */
+function wedgeInnerRadius(
+  green: Green, lots: Lot[], crofts: Croft[], wedge: Wedge,
+): number {
+  const floor = greenDrawnRadius(green) + RING_SETBACK_M + FIELD_INNER_FLOOR_PAD_M;
+  const distances = claimBackEdgeDistances(green, lots, crofts, wedge);
+  if (distances.length === 0) return floor;
+  distances.sort((a, b) => a - b);
+  const idx = Math.min(
+    distances.length - 1,
+    Math.max(0, Math.round(FIELD_INNER_PERCENTILE * (distances.length - 1))),
+  );
+  return Math.max(floor, distances[idx]);
 }
 
 /**
@@ -266,31 +310,41 @@ export interface FieldBundle {
 interface StripBox { band: number; uStart: number; uEnd: number; vLo: number; vHi: number }
 
 /**
- * The rectilinear outline of one contiguous run of strips: up the far (uEnd)
+ * The rectilinear outlines of a wedge's block: one closed ring per COLUMN
+ * of strips -- a maximal chain of fragments running band to consecutive
+ * band that actually overlap along u. Each ring walks up the far (uEnd)
  * side band by band, then back down the near (uStart) side, closing on the
- * first point. Runs are split on a gap in band index so a block broken in
- * two by water or a lane never gets an outline spanning the hole.
+ * first point.
+ *
+ * A block can hold several columns since W3, because a band can now keep
+ * several fragments (see `buildWedgeStrips`): the ground beside an arm
+ * ribbon and the ground on its other side are both kept, and they are two
+ * separate blocks of farmland that must not share one outline spanning the
+ * ribbon between them. Chaining requires BOTH band contiguity and u-overlap
+ * for exactly that reason.
  */
 function bundleOutlines(boxes: StripBox[], toXY: (u: number, v: number) => Point): Point[][] {
-  const rings: Point[][] = [];
-  let run: StripBox[] = [];
-  const flush = (): void => {
-    if (run.length === 0) return;
+  const ringOf = (run: StripBox[]): Point[] => {
     const pts: Point[] = [];
     for (const b of run) pts.push(toXY(b.uEnd, b.vLo), toXY(b.uEnd, b.vHi));
     for (let i = run.length - 1; i >= 0; i--) {
       pts.push(toXY(run[i].uStart, run[i].vHi), toXY(run[i].uStart, run[i].vLo));
     }
     pts.push(pts[0]);
-    rings.push(pts);
-    run = [];
+    return pts;
   };
+
+  // Boxes arrive band-ascending, and within a band u-ascending, so a greedy
+  // walk over open columns is deterministic without re-sorting.
+  const columns: StripBox[][] = [];
   for (const box of boxes) {
-    if (run.length > 0 && box.band !== run[run.length - 1].band + 1) flush();
-    run.push(box);
+    const column = columns.find((c) => {
+      const last = c[c.length - 1];
+      return last.band === box.band - 1 && box.uStart < last.uEnd && box.uEnd > last.uStart;
+    });
+    if (column) column.push(box); else columns.push([box]);
   }
-  flush();
-  return rings;
+  return columns.map(ringOf);
 }
 
 function buildWedgeStrips(
@@ -344,37 +398,51 @@ function buildWedgeStrips(
       toXY(u, v), green, wedge, innerRadius, fieldRadius, lots, crofts, lanes, water,
     ));
 
-    // Largest contiguous run of valid u samples -- "keep the largest
-    // fragment per strip" when water/lanes/claims split the band.
-    let bestStart = -1;
-    let bestLen = 0;
+    // EVERY contiguous run of valid u samples that is long enough, not just
+    // the longest (W3 follow-on). A band is now cut by the claims INSIDE
+    // the band -- that is the whole point of starting at a low percentile --
+    // so the ground beside an arm ribbon and the ground on its far side are
+    // two legitimate fragments of the same furlong. Keeping only the
+    // longest threw the others away, which is what emptied whole wedges:
+    // measured on the probe, pop-40 seed 2 lost every strip and pop 900
+    // seed 1 kept 54 of the ~100 it should. Nothing here is loosened --
+    // FURROW_MIN_LENGTH_M still rejects slivers, one run at a time.
+    const runs: Array<{ uStart: number; uEnd: number }> = [];
     let curStart = -1;
     let prevValid = false;
+    const closeRun = (endExclusive: number): void => {
+      const uStart = uMin + ((uMax - uMin) * curStart) / uSteps;
+      const uEnd = uMin + ((uMax - uMin) * (endExclusive - 1)) / uSteps;
+      if (uEnd - uStart >= FURROW_MIN_LENGTH_M) runs.push({ uStart, uEnd });
+    };
     for (let i = 0; i <= uSteps; i++) {
       const u = uMin + ((uMax - uMin) * i) / uSteps;
       const ok = validAt(u);
       if (ok && !prevValid) curStart = i;
-      if (!ok && prevValid && i - curStart > bestLen) { bestLen = i - curStart; bestStart = curStart; }
+      if (!ok && prevValid) closeRun(i);
       prevValid = ok;
     }
-    if (prevValid && uSteps + 1 - curStart > bestLen) { bestLen = uSteps + 1 - curStart; bestStart = curStart; }
+    if (prevValid) closeRun(uSteps + 1);
 
-    if (bestStart >= 0) {
-      const uStart = uMin + ((uMax - uMin) * bestStart) / uSteps;
-      const uEnd = uMin + ((uMax - uMin) * (bestStart + bestLen - 1)) / uSteps;
-      if (uEnd - uStart >= FURROW_MIN_LENGTH_M) {
-        const isFirstStrip = createdIndex === 0;
-        const glyph = pickCropGlyph(crops, createdIndex, isFirstStrip, allowOrchardVine, rng, toggle);
-        const polygon = [toXY(uStart, vLo), toXY(uEnd, vLo), toXY(uEnd, vHi), toXY(uStart, vHi)];
-        const id = `field:${wedge.id}:S${ordinal}`;
-        strips.push({
-          id, wedgeId: wedge.id, glyph, polygon, furrowBearingDeg,
-        });
-        boxes.push({ band: ordinal, uStart, uEnd, vLo, vHi });
-        areaM2 += (uEnd - uStart) * (vHi - vLo);
-        createdIndex += 1;
-      }
-    }
+    runs.forEach((run, fragment) => {
+      const isFirstStrip = createdIndex === 0;
+      const glyph = pickCropGlyph(crops, createdIndex, isFirstStrip, allowOrchardVine, rng, toggle);
+      const polygon = [
+        toXY(run.uStart, vLo), toXY(run.uEnd, vLo), toXY(run.uEnd, vHi), toXY(run.uStart, vHi),
+      ];
+      // `S<band>F<fragment>`: the band ordinal still skips where a whole
+      // band was clipped away, and the fragment index distinguishes two
+      // pieces of the same furlong either side of a ribbon.
+      const id = `field:${wedge.id}:S${ordinal}F${fragment}`;
+      strips.push({
+        id, wedgeId: wedge.id, glyph, polygon, furrowBearingDeg,
+      });
+      boxes.push({
+        band: ordinal, uStart: run.uStart, uEnd: run.uEnd, vLo, vHi,
+      });
+      areaM2 += (run.uEnd - run.uStart) * (vHi - vLo);
+      createdIndex += 1;
+    });
     ordinal += 1;
   }
 
@@ -434,7 +502,7 @@ export function buildFields(
   site: Site, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[],
   style: EdgeStyle, rng: SeededRandom,
 ): FieldsResult {
-  const fabricRadius = computeInnerRadius(green, lots, crofts);
+  const fabricRadius = computeFabricRadius(green, lots, crofts);
 
   const byBearing = buildWedges(green, lanes);
   const wedges = byBearing.slice().sort((a, b) => a.id.localeCompare(b.id));
@@ -478,9 +546,10 @@ export function buildFields(
   const edges: EdgeStamp[] = [];
   let outerRadius = fabricRadius;
   for (const wedge of wedges) {
-    // V1: this wedge's OWN inner radius -- the fabric it must hug, not the
-    // village's deepest lane. An empty quadrant starts at the green ring.
-    const innerRadius = computeInnerRadius(green, lots, crofts, wedge);
+    // V1/W3: this wedge's OWN inner radius, and a LOW percentile of it --
+    // the bulk of the fabric it must hug, not the deepest ribbon lot in the
+    // sector. An empty quadrant starts just outside the green ring.
+    const innerRadius = wedgeInnerRadius(green, lots, crofts, wedge);
     const fieldRadius = fieldOuterRadius(innerRadius, site.population);
     if (!(fieldRadius > innerRadius)) continue;
 

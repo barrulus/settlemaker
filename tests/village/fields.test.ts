@@ -157,16 +157,20 @@ describe('buildFields', () => {
     });
   });
 
-  it('emits ids as field:<wedgeId>:S<i>', () => {
+  // W3: a band keeps EVERY long-enough fragment, not just the longest, so a
+  // furlong cut in two by an arm ribbon is two strips -- hence the fragment
+  // index. Ids are `field:<wedgeId>:S<band>F<fragment>`, band ordinals still
+  // skipping where a whole band was clipped away.
+  it('emits ids as field:<wedgeId>:S<band>F<fragment>, unique within a wedge', () => {
     const lanes = [lane('arm-090', 90), lane('arm-270', 270)];
     const rng = new SeededRandom(5);
     const { strips } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, 'hedge', rng);
     expect(strips.length).toBeGreaterThan(0);
     for (const s of strips) {
-      expect(s.id).toBe(`field:${s.wedgeId}:S${s.id.split(':S')[1]}`);
       expect(s.id.startsWith(`field:${s.wedgeId}:S`)).toBe(true);
-      expect(/^field:.+:S\d+$/.test(s.id)).toBe(true);
+      expect(/^field:.+:S\d+F\d+$/.test(s.id)).toBe(true);
     }
+    expect(new Set(strips.map((s) => s.id)).size).toBe(strips.length);
   });
 
   it('drops fragments shorter than FURROW_MIN_LENGTH_M (no strip is a sliver)', () => {

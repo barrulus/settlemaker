@@ -106,9 +106,12 @@ export interface Croft {
 /**
  * §7.2: one furlong strip within a wedge (the angular sector between two
  * adjacent green-attached lanes). `wedgeId` groups strips that share a
- * furrow direction; `id` is `field:<wedgeId>:S<i>`, `i` the strip's ordinal
- * within its wedge (ordinals may skip where a band was clipped away
- * entirely -- same convention as `EdgeStamp` ids in edges.ts).
+ * furrow direction; `id` is `field:<wedgeId>:S<i>F<k>` -- `i` the band's
+ * ordinal within its wedge (ordinals may skip where a band was clipped away
+ * entirely, the same convention as `EdgeStamp` ids in edges.ts), `k` the
+ * fragment's index within that band. A band keeps EVERY fragment long
+ * enough to survive FURROW_MIN_LENGTH_M, so one furlong cut in two by an
+ * arm ribbon yields two strips (W3).
  *
  * A strip carries NO boundary of its own (fix wave, V2): outlining every
  * 12 m strip turned the render into caterpillar chains of hedge glyphs.

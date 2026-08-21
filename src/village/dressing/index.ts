@@ -1,7 +1,7 @@
 import { SeededRandom } from '../../utils/random.js';
 import { buildCrofts } from './crofts.js';
 import { settlementEdgeStyle } from './edges.js';
-import { buildFields, computeInnerRadius } from './fields.js';
+import { buildFields, computeFabricRadius } from './fields.js';
 import { buildVegetation } from './vegetation.js';
 import { buildPois } from './pois.js';
 import { SHOREFRONT_REACH_FACTOR } from '../constants.js';
@@ -60,7 +60,7 @@ export function dressVillage(input: DressingInput): DressingResult {
   // `builtRadiusM` survives only as crofts' frontage-gradient reference
   // (pass 3's own prediction, which is the right input there) and is
   // deliberately not passed any further.
-  const fabricRadiusM = computeInnerRadius(green, lots, crofts);
+  const fabricRadiusM = computeFabricRadius(green, lots, crofts);
   const vegInnerEdgeM = fields.length > 0 ? fieldsOuterRadius : fabricRadiusM;
   const shorefrontReachM = fabricRadiusM * SHOREFRONT_REACH_FACTOR;
   const vegetation = buildVegetation(

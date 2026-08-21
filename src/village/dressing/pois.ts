@@ -163,7 +163,7 @@ function circleClearOfClaims(
  *
  * Fix wave (2026-08-21, C1): `dressedRadiusM` is the MEASURED outer edge of
  * everything already on the ground -- max(fields' outer radius, the fabric
- * radius `computeInnerRadius` measures) -- not the PREDICTED built radius.
+ * radius `computeFabricRadius` measures) -- not the PREDICTED built radius.
  * Keyed off the prediction, the ring landed 2.5-3x inside the real fabric
  * and fields, so all 12 bearings were rejected in 29 of 30 measured
  * placements: the stone circle effectively never placed. The factor is a
