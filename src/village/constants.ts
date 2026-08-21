@@ -158,6 +158,17 @@ export const LANE_SETBACK_M: Record<string, number> = {
   royal: 1.5, main: 1.5, market: 1.2, town: 1.2, local: 1, trail: 0.8, footpath: 0.6,
 };
 
+// --- Lot claim resolution (§5.4 rules 3-4) ------------------------------
+/** Within one lane+side strip, a tight bend can fold the offset strip so
+ * consecutive lots' fronts land closer together than this fraction of the
+ * group's mean frontage. That is the fold signature: drop the later
+ * ordinal rather than let the claims interpenetrate. */
+export const INNER_CURVE_FRONT_RATIO = 0.8;
+/** A lot truncated by a higher-class neighbour's claim (§5.4 rule 3) is
+ * dropped once truncation would shrink it below this depth — a sliver lot
+ * no dwelling could ever seat on is worse than no lot at all. */
+export const MIN_LOT_DEPTH_M = 4;
+
 // --- Dwellings ---------------------------------------------------------
 export const SIZE_JITTER = 0.1;
 export const FIT_MIN = 0.85;

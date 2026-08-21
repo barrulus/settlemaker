@@ -9,6 +9,7 @@ import { relaxLanes, trimTails } from './skeleton/relax.js';
 import {
   clipLots, gapForPopulation, orderLots, scoreLots, subdivideGreen, subdivideLane,
 } from './parcels/lots.js';
+import { resolveConvergingLots } from './parcels/overlap.js';
 import {
   buildDeck, meanOccupancy, minDwellingFrontageM, widestDwellingWidthM,
 } from './deck.js';
@@ -113,7 +114,12 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
       ...subdivideGreen(green, f0, LOT_DEPTH_M, rng, lanes),
       ...lanes.flatMap((l) => subdivideLane(l, green, builtRadius, f0, LOT_DEPTH_M, rng, lotFloorM)),
     ];
-    lots = orderLots(scoreLots(clipLots(lots, green, site.water), green, laneTypes));
+    // §5.4 rules 3-4 (the R20 debt): clipLots only ever dropped water/
+    // green-interior lots, so cross-strip claims still overlapped where
+    // lanes converge. resolveConvergingLots makes the surviving claims
+    // disjoint before scoring/ordering ever sees them.
+    lots = resolveConvergingLots(clipLots(lots, green, site.water), lanes, green);
+    lots = orderLots(scoreLots(lots, green, laneTypes));
 
     // Measure this round's actual lane-lot frontage for the next round's
     // estimate. The green ring is excluded: its lots are always cut at a

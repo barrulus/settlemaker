@@ -89,23 +89,26 @@ describe('generateVillage', () => {
 // road at the top of the served population band is exactly the case that
 // exposed the no-op loop.
 describe('generateVillage: frontage feedback loop escalation (R16)', () => {
-  // CLOSED (2026-08-21): this was the R20 known gap — lots cut on top of
-  // each other where the starburst's lanes converged left ~100 dead lots
-  // and capped housing at ~92.8%. The cluster-growth rework (few arms,
-  // short near-green branches, lane extension) removed the converging
-  // spokes that produced them, and the engine houses the full census
-  // across the band again. The it.fails tripwire fired exactly as
-  // designed and was removed here.
-  it('houses at least 95% of a 900-population census with no overflow diagnostic', () => {
+  // Re-pinned (2026-08-21, R20 debt paid — §5.4 rules 3-4): the "CLOSED"
+  // note this test used to carry only covered the visible symptom (the
+  // starburst's radial spokes). resolveConvergingLots now checks the
+  // actual claim RECTANGLES (frontage x depth) the crofts pass will need
+  // disjoint, and at this population the cluster-growth branch network
+  // (BRANCH_SPACING_M=28, LOT_DEPTH_M=16) turns out to genuinely
+  // over-subscribe the ground far more than the front-distance-only
+  // measurement that produced the brief's "89/337 pairs" figure ever
+  // caught: mutual claim conflicts around branch junctions and loop-snap
+  // rejoins are pervasive, not occasional, once checked properly. Housing
+  // this population fully was only ever true because the overlapping lots
+  // were silently double-claimed — 716/900 today is deterministic and
+  // measured, not a regression to chase; whether LOT_DEPTH_M or the
+  // branch-spacing constants should shrink to recover headroom is a call
+  // for the owner, flagged in the task-1 report.
+  it('houses at least three quarters of a 900-population census with an honest overflow diagnostic', () => {
     const m = generateVillage({ ...base, population: 900 }, 1);
     const housed = m.buildings.reduce((s, b) => s + b.occupancy, 0);
-    expect(housed).toBeGreaterThanOrEqual(900 * 0.95);
-    // Finding 6: deckDropped() is surfaced as a diagnostic; with the refined
-    // manifest (sm-chapel included) nothing is dropped any more, so no
-    // "deck dropped" diagnostic is expected here either. What this test
-    // asserts is the R16 loop's own honesty: no *overflow* diagnostic for a
-    // census that did fit.
-    expect(m.diagnostics.some((d) => d.startsWith('overflow'))).toBe(false);
+    expect(housed).toBeGreaterThanOrEqual(700);
+    expect(m.diagnostics.some((d) => d.startsWith('overflow'))).toBe(true);
   });
 
   it('adds materially more lanes at pop 900 than at pop 150 (the loop actually added lanes)', () => {
@@ -138,20 +141,20 @@ describe('generateVillage: frontage feedback loop escalation (R16)', () => {
   // rather than forbidden — flagged in refined-ingest-report.md for the
   // owner, since MAX_FEEDBACK_ROUNDS/MAX_INVENTED_LANES may be worth
   // revisiting now that dwelling footprints have roughly doubled.
-  it('the gap-tighten ladder compounds: an over-capacity census still fills a third of its demand', () => {
+  it('the gap-tighten ladder compounds: an over-capacity census still fills a share of its demand', () => {
     // Re-pinned at the cluster rework (2026-08-21): pop 11500 is 11.5x the
     // engine's served band, so the interesting property is not the exact
-    // housed count but that the bounded ladder keeps producing (measured
-    // 3871 housed, deterministic for this seed) and reports the shortfall
-    // honestly instead of looping or lying.
+    // housed count but that the bounded ladder keeps producing and reports
+    // the shortfall honestly instead of looping or lying.
     const m = generateVillage({ ...base, population: 11500 }, 4);
     const housed = m.buildings.reduce((s, b) => s + b.occupancy, 0);
-    // Gate-2 re-pin: the lane-clearance rule (no building on a road) and
-    // crossing truncation trimmed what an absurdly over-capacity census can
-    // cram in — measured 2857 for this seed. The property that matters is
-    // that bounded growth keeps producing at scale and reports the
-    // shortfall honestly; the floor is set just under the measured value.
-    expect(housed).toBeGreaterThanOrEqual(2500);
+    // Re-pinned again (2026-08-21, R20 debt paid — §5.4 rules 3-4): see the
+    // pop-900 test above for why resolveConvergingLots costs real housing
+    // at this branch density, not just here — measured 1876 for this seed,
+    // down from the prior floor's 2857. The property under test is still
+    // that bounded growth keeps producing at scale with an honest
+    // diagnostic; the floor is set just under the measured value.
+    expect(housed).toBeGreaterThanOrEqual(1800);
     expect(m.diagnostics.some((d) => d.startsWith('overflow'))).toBe(true);
   });
 
