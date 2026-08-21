@@ -63,12 +63,17 @@ export function obbOverlap(a: Obb, b: Obb, eps = 0): boolean {
   return true;
 }
 
-/** True when `p` lies inside (or on) `obb`. */
-function pointInObb(p: Point, obb: Obb): boolean {
+/**
+ * True when `p` lies inside (or on) `obb` expanded by `margin` on both axes.
+ * `margin` defaults to 0 (plain containment). Exported (I3) as the one copy
+ * of this test: crofts/fields/vegetation each carried their own before, one
+ * of them margin-parameterised and the rest not.
+ */
+export function pointInObb(p: Point, obb: Obb, margin = 0): boolean {
   const d = new Point(p.x - obb.center.x, p.y - obb.center.y);
   const alongT = Math.abs(d.x * obb.tangent.x + d.y * obb.tangent.y);
   const alongN = Math.abs(d.x * obb.normal.x + d.y * obb.normal.y);
-  return alongT <= obb.halfW && alongN <= obb.halfD;
+  return alongT <= obb.halfW + margin && alongN <= obb.halfD + margin;
 }
 
 /**

@@ -1,7 +1,7 @@
 import { Point } from '../../types/point.js';
 import { SeededRandom } from '../../utils/random.js';
 import { nominalFootprint } from '../glyphs.js';
-import { arcLengths, sampleAt, closestPointOnSegment, dist } from '../geometry.js';
+import { arcLengths, sampleAt, withinLaneCorridor } from '../geometry.js';
 import {
   EDGE_LANE_CLEAR_M, EDGE_NONE_POP_THRESHOLD, EDGE_NONE_POOR_BONUS,
   EDGE_STYLE_ORDER, EDGE_STYLE_WEIGHTS,
@@ -47,25 +47,10 @@ export function settlementEdgeStyle(
   return EDGE_STYLE_ORDER[EDGE_STYLE_ORDER.length - 1] as EdgeStyle;
 }
 
-/** Shortest distance from `p` to any segment of `points`. */
-function distanceToPolyline(p: Point, points: Point[]): number {
-  let best = Infinity;
-  for (let i = 1; i < points.length; i++) {
-    const closest = closestPointOnSegment(p, points[i - 1], points[i]);
-    const d = dist(p, closest);
-    if (d < best) best = d;
-  }
-  return best;
-}
-
 /** Whether `p` falls inside any lane's corridor (its half-width plus the
  * fixed clearance) — the "no stamp across a lane" rule. */
 function withinAnyLaneCorridor(p: Point, lanes: Lane[]): boolean {
-  return lanes.some((lane) => {
-    if (lane.points.length < 2) return false;
-    const clear = lane.widthM / 2 + EDGE_LANE_CLEAR_M;
-    return distanceToPolyline(p, lane.points) <= clear;
-  });
+  return lanes.some((lane) => withinLaneCorridor(p, lane, EDGE_LANE_CLEAR_M));
 }
 
 /**

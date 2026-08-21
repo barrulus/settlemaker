@@ -1,5 +1,7 @@
 import { Point } from '../types/point.js';
 import { pointInPolygon } from '../geom/point-in-polygon.js';
+import { GREEN_JOIN_RATIO, RING_SETBACK_M } from './constants.js';
+import type { Green, Lane } from './types.js';
 
 /**
  * Bearings are degrees, 0 = North, clockwise, wrapped to [0, 360).
@@ -80,6 +82,34 @@ export function closestPointOnSegment(p: Point, a: Point, b: Point): Point {
   if (len2 === 0) return new Point(a.x, a.y);
   const t = Math.max(0, Math.min(1, ((p.x - a.x) * abx + (p.y - a.y) * aby) / len2));
   return new Point(a.x + abx * t, a.y + aby * t);
+}
+
+/**
+ * The green's DRAWN edge (the art fills ~GREEN_JOIN_RATIO of its box), plus
+ * the ring setback — the same radius `subdivideGreen` seats the green ring's
+ * lot fronts against, and the radius every dressing stage treats as "the
+ * turf, keep off". Shared here (I3) because crofts, fields, vegetation and
+ * POIs each had a private copy of this two-term expression.
+ */
+export function greenDrawnRadius(green: Green): number {
+  return (green.diameter / 2) * GREEN_JOIN_RATIO + RING_SETBACK_M;
+}
+
+/**
+ * Whether `p` falls inside `lane`'s corridor: its own half-width plus
+ * `marginM`. Callers own the margin — the clearance a hedge stamp needs
+ * (EDGE_LANE_CLEAR_M), a tree needs (VEG_LANE_CLEAR_M) and a field strip
+ * needs (LANE_SETBACK_M by class) are deliberately different numbers, so
+ * only the geometry is shared, never the constant.
+ */
+export function withinLaneCorridor(p: Point, lane: Lane, marginM: number): boolean {
+  if (lane.points.length < 2) return false;
+  const clearance = lane.widthM / 2 + marginM;
+  for (let i = 1; i < lane.points.length; i++) {
+    const q = closestPointOnSegment(p, lane.points[i - 1], lane.points[i]);
+    if (dist(p, q) <= clearance) return true;
+  }
+  return false;
 }
 
 /**
