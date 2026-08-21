@@ -34,11 +34,13 @@ export const FRONTAGE_MARGIN = 1.15;
 /** One green-attached arm per this many metres of green circumference. A
  * 22 m green earns ~3 arms, a 38 m green ~5. FMG's own routes always join
  * regardless; this only governs how many extra arms the village may add. */
-export const GREEN_ARM_SPACING_M = 20;
+export const GREEN_ARM_SPACING_M = 30;
 export const GREEN_ARM_MIN = 2;
 /** "Never more than a handful" — the hard ceiling on green-attached lanes
- * beyond what FMG's routes demand. */
-export const GREEN_ARM_MAX = 5;
+ * beyond what FMG's routes demand. Gate 2 tightened this from 5: the even
+ * radial fan around the green read as contrived, so fewer lanes touch the
+ * green and more of the fabric hangs off branches. */
+export const GREEN_ARM_MAX = 3;
 
 /** Pitch between branch slots along a parent lane. Every lane — arms and
  * branches alike — offers an attach point this often, so branches branch
@@ -62,10 +64,14 @@ export const LOOP_SNAP_M = 12;
  * the mean sits well under the old 1.8. */
 export const INITIAL_MEAN_FRONTAGE_FACTOR = 1.3;
 
-/** Arms and branches overshoot to the green's DRAWN edge: the green art
- * fills ~87% of its box, so lanes aimed at the nominal radius stop ~1.4 m
- * short of visible turf. Joins must be ink, not near-misses. */
+/** Where the green's DRAWN edge sits: the art fills ~87% of its box, so
+ * geometry that must meet visible turf targets nominalRadius x this. */
 export const GREEN_JOIN_RATIO = 0.82;
+/** Gate 2: "roads should go under the green rather than next to it". Lanes
+ * run INTO the green's interior — to this fraction of its radius — and the
+ * green is painted over them, so each road visibly disappears beneath the
+ * turf instead of kissing its rim. */
+export const GREEN_UNDERLAP_RATIO = 0.35;
 /**
  * How far a green-attached invented lane reaches out, as a fraction of the
  * arm extent (`builtRadius * 2`, see LANE_EXTENT_FACTOR below). A gate
@@ -87,12 +93,12 @@ export const RELAX_CLEARANCE_M = 0.5;
 export const TAIL_STUB_M = 12;
 
 // --- Parcels -----------------------------------------------------------
-export const GAP_LOOSE_M = 2.4;
-export const GAP_TIGHT_M = 1.0;
+export const GAP_LOOSE_M = 1.6;
+export const GAP_TIGHT_M = 0.6;
 export const GAP_POP_LOW = 100;
 export const GAP_POP_HIGH = 900;
 export const GRADIENT_EXPONENT = 1.5;
-export const GRADIENT_K = 1.0;
+export const GRADIENT_K = 0.6;
 /** Caps how wide a plot can get past the built radius: ratio d/R clamps here before the exponent. */
 export const GRADIENT_RATIO_CAP = 1.2;
 export const FRONTAGE_JITTER = 0.25;
@@ -103,8 +109,10 @@ export const FRONTAGE_JITTER = 0.25;
  * is what keeps touching from becoming interpenetration. */
 export const F0_FLOOR_RATIO = 0.85;
 export const LOT_DEPTH_M = 16;
-export const RING_SETBACK_M = 3;
-export const MEAN_LOT_AREA_M2 = 160;
+/** Gate 2: "green frontage means right at the green" — the ring's fronts
+ * sit at the DRAWN edge plus this sliver, not metres out. Was 3. */
+export const RING_SETBACK_M = 0.5;
+export const MEAN_LOT_AREA_M2 = 130;
 /**
  * Metres between the edge of the carriageway and the house fronts, by lane
  * class. The spec's range is 1.5-3 m: a royal road keeps its buildings back,
@@ -112,14 +120,19 @@ export const MEAN_LOT_AREA_M2 = 160;
  * `widthM / 2 + LANE_SETBACK_M[type]` gives the frontage line.
  */
 export const LANE_SETBACK_M: Record<string, number> = {
-  royal: 3, main: 3, market: 2.5, town: 2.5, local: 2, trail: 1.5, footpath: 1.5,
+  // Gate 2 halved these: the fabric read as massively sprawled, and the
+  // spec's 1.5-3 m band described the carriageway-to-frontage gap of a far
+  // looser draft. Buildings now sit close against their lanes.
+  royal: 1.5, main: 1.5, market: 1.2, town: 1.2, local: 1, trail: 0.8, footpath: 0.6,
 };
 
 // --- Dwellings ---------------------------------------------------------
 export const SIZE_JITTER = 0.1;
 export const FIT_MIN = 0.85;
 export const FIT_MAX = 1.15;
-export const SEATING_SETBACK_MAX_M = 1.5;
+/** Gate 2: houses sat too far off their roads; the settlement wants to be
+ * denser as a whole. Was 1.5. */
+export const SEATING_SETBACK_MAX_M = 0.5;
 export const DECK_GAP_M = 1.5;
 
 /** One dwelling family per village (the village-rows rule, restored at the

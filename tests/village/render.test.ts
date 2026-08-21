@@ -20,13 +20,17 @@ describe('renderVillage', () => {
     expect(svg.trimEnd().endsWith('</svg>')).toBe(true);
   });
 
-  it('paints bands in order: parcel, route, structure', () => {
-    const parcel = svg.indexOf('data-band="parcel"');
+  it('paints roads first and the green over them (gate-2 band order)', () => {
+    // Gate 2: "roads should go under the green". Route band paints first,
+    // the green's parcel band paints over it — lane geometry runs into the
+    // green's interior, so each road visibly disappears beneath the turf.
+    // (Pass-5 fields will paint UNDER routes; only the green rides above.)
     const route = svg.indexOf('data-band="route"');
+    const parcel = svg.indexOf('data-band="parcel"');
     const structure = svg.indexOf('data-band="structure"');
-    expect(parcel).toBeGreaterThan(-1);
-    expect(parcel).toBeLessThan(route);
-    expect(route).toBeLessThan(structure);
+    expect(route).toBeGreaterThan(-1);
+    expect(route).toBeLessThan(parcel);
+    expect(parcel).toBeLessThan(structure);
   });
 
   it('draws every shadow in the structure band before any ink', () => {

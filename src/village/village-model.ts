@@ -97,7 +97,7 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
       measuredMeanFrontage = laneLots.reduce((s, l) => s + l.frontageM, 0) / laneLots.length;
     }
 
-    spend = spendCensus(lots, deck, site, rng);
+    spend = spendCensus(lots, deck, site, rng, lanes);
     if (spend.unhoused === 0) break;
 
     if (round === MAX_FEEDBACK_ROUNDS) {

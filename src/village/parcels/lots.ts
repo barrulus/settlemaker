@@ -3,7 +3,7 @@ import { offsetPolyline } from './strip.js';
 import { arcLengths, bearingOf, dist, inAnyWater, sampleAt } from '../geometry.js';
 import {
   F0_FLOOR_RATIO, FRONTAGE_JITTER, GAP_LOOSE_M, GAP_POP_HIGH, GAP_POP_LOW, GAP_TIGHT_M,
-  GRADIENT_EXPONENT, GRADIENT_K, GRADIENT_RATIO_CAP, LANE_SETBACK_M, RING_SETBACK_M,
+  GRADIENT_EXPONENT, GRADIENT_K, GRADIENT_RATIO_CAP, GREEN_JOIN_RATIO, LANE_SETBACK_M, RING_SETBACK_M,
   SCORE_BASE, SCORE_CLASS_WEIGHT, SCORE_DISTANCE_PENALTY_PER_M, SCORE_RING_BONUS,
 } from '../constants.js';
 import { Point } from '../../types/point.js';
@@ -101,7 +101,10 @@ export function subdivideLane(
 export function subdivideGreen(
   green: Green, f0: number, depthM: number, rng: SeededRandom,
 ): Lot[] {
-  const radius = green.diameter / 2 + RING_SETBACK_M;
+  // Gate 2: green frontage means RIGHT AT the green — the ring's fronts
+  // sit on the drawn edge (art fills ~87% of the box) plus a sliver, not
+  // metres of empty grass out.
+  const radius = (green.diameter / 2) * GREEN_JOIN_RATIO + RING_SETBACK_M;
   const circumference = 2 * Math.PI * radius;
   const count = Math.max(4, Math.floor(circumference / f0));
   const step = (Math.PI * 2) / count;

@@ -149,7 +149,23 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
   out.push(`<defs>${defs.join('')}</defs>`);
   out.push(`<rect data-bg="paper" width="${n(w)}" height="${n(h)}" fill="${GROUND}"/>`);
 
-  // parcel band — the green's ground
+  // Gate 2 band order: "roads should go under the green rather than next
+  // to it". Lanes paint FIRST — widest class at the bottom so narrow paths
+  // sit over broad roads at junctions — and the green paints over them, so
+  // every lane visibly disappears beneath the turf (their geometry runs to
+  // GREEN_UNDERLAP_RATIO x radius inside it). When pass 5 adds fields,
+  // those go UNDER the routes; only the green rides above them.
+  out.push('<g data-band="route" fill="none" stroke="#8a6f4a" stroke-linecap="round">');
+  const byWidth = [...model.lanes].sort((a, b) => (b.widthM - a.widthM) || a.id.localeCompare(b.id));
+  for (const lane of byWidth) {
+    const d = lane.points
+      .map((p, i) => `${i === 0 ? 'M' : 'L'}${n(X(p.x))},${n(Y(p.y))}`)
+      .join(' ');
+    out.push(`<path data-lane="${lane.id}" d="${d}" stroke-width="${n(lane.widthM * pxPerMetre)}"/>`);
+  }
+  out.push('</g>');
+
+  // parcel band — the green's ground, over the roads that run beneath it
   out.push('<g data-band="parcel">');
   const r = (model.green.diameter / 2) * pxPerMetre;
   if (greenGlyphAvailable) {
@@ -163,16 +179,6 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
   // exists in the refined manifest, so greenGlyphAvailable is always true
   // in practice. Left as a guard (rather than asserted) so an id this
   // engine has never produced fails silently-absent rather than throwing.
-  out.push('</g>');
-
-  // route band
-  out.push('<g data-band="route" fill="none" stroke="#8a6f4a" stroke-linecap="round">');
-  for (const lane of model.lanes) {
-    const d = lane.points
-      .map((p, i) => `${i === 0 ? 'M' : 'L'}${n(X(p.x))},${n(Y(p.y))}`)
-      .join(' ');
-    out.push(`<path data-lane="${lane.id}" d="${d}" stroke-width="${n(lane.widthM * pxPerMetre)}"/>`);
-  }
   out.push('</g>');
 
   // structure band — every shadow, then every ink

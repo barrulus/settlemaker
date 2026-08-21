@@ -1,13 +1,13 @@
 import { Point } from '../types/point.js';
 import { SeededRandom } from '../utils/random.js';
 import {
-  bearingVector, dist, wrapDeg,
+  bearingVector, closestPointOnSegment, dist, wrapDeg,
 } from './geometry.js';
 import { inkExtent, nominalFootprint, rotationOf } from './glyphs.js';
 import {
   FIT_MAX, FIT_MIN, SEATING_SETBACK_MAX_M, SIZE_JITTER,
 } from './constants.js';
-import { buildingId, type Building, type Lot, type Site } from './types.js';
+import { buildingId, type Building, type Lane, type Lot, type Site } from './types.js';
 import { drawEntry, eligible, type DeckEntry } from './deck.js';
 import { orderLots } from './parcels/lots.js';
 
@@ -169,6 +169,31 @@ export function overlaps(a: Building, b: Building): boolean {
   return true;
 }
 
+/**
+ * Gate 2: "lots of houses ON the roads". A building's ink rectangle may not
+ * intrude on any lane's corridor (centreline widened to the lane's half-
+ * width). Rect-vs-capsule via the closest centreline point in the OBB's
+ * local frame — slightly generous at rectangle corners, which errs the
+ * right way for keeping buildings off carriageways. This also naturally
+ * breaks the green's ring where a road passes under the green: a house
+ * cannot sit over the road's exit.
+ */
+export function intrudesOnLane(b: Building, lanes: Lane[]): boolean {
+  const o = obbOf(b);
+  for (const lane of lanes) {
+    const r = lane.widthM / 2;
+    for (let i = 1; i < lane.points.length; i++) {
+      const q = closestPointOnSegment(b.position, lane.points[i - 1], lane.points[i]);
+      const dx = q.x - b.position.x;
+      const dy = q.y - b.position.y;
+      const alongW = Math.abs(dx * o.tangent.x + dy * o.tangent.y);
+      const alongD = Math.abs(dx * o.normal.x + dy * o.normal.y);
+      if (alongW < o.halfW + r - TOUCH_EPS_M && alongD < o.halfD + r - TOUCH_EPS_M) return true;
+    }
+  }
+  return false;
+}
+
 export interface SpendResult {
   buildings: Building[];
   housed: number;
@@ -181,7 +206,7 @@ export interface SpendResult {
  * Remaining lots stay empty — that absence is the straggle.
  */
 export function spendCensus(
-  lots: Lot[], deck: DeckEntry[], site: Site, rng: SeededRandom,
+  lots: Lot[], deck: DeckEntry[], site: Site, rng: SeededRandom, lanes: Lane[] = [],
 ): SpendResult {
   const ordered = orderLots(lots);
   const taken = new Set<string>();
@@ -199,6 +224,7 @@ export function spendCensus(
     for (const lot of ordered) {
       if (taken.has(lot.id) || !eligible(capped, site, lot.frontageM)) continue;
       const b = seat(capped, lot, rng);
+      if (intrudesOnLane(b, lanes)) continue;
       if (buildings.some((other) => overlaps(b, other))) continue;
       buildings.push(b);
       taken.add(lot.id);
@@ -214,6 +240,7 @@ export function spendCensus(
     const entry = drawEntry(deck, site, lot.frontageM, placedGlyphs, rng);
     if (!entry) continue;
     const b = seat(entry, lot, rng);
+    if (intrudesOnLane(b, lanes)) continue;
     if (buildings.some((other) => overlaps(b, other))) continue;
     buildings.push(b);
     taken.add(lot.id);

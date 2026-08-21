@@ -17,14 +17,15 @@ const straightLane: Lane = {
 
 describe('gapForPopulation', () => {
   it('is loose in a hamlet and tight in a big village', () => {
-    expect(gapForPopulation(100)).toBeCloseTo(2.4, 1);
-    expect(gapForPopulation(900)).toBeCloseTo(1.0, 1);
+    // Gate-2 density verdict: gaps tightened from 2.4/1.0.
+    expect(gapForPopulation(100)).toBeCloseTo(1.6, 1);
+    expect(gapForPopulation(900)).toBeCloseTo(0.6, 1);
     expect(gapForPopulation(900)).toBeLessThan(gapForPopulation(100));
   });
 
   it('clamps outside the village band', () => {
-    expect(gapForPopulation(10)).toBeCloseTo(2.4, 1);
-    expect(gapForPopulation(5000)).toBeCloseTo(1.0, 1);
+    expect(gapForPopulation(10)).toBeCloseTo(1.6, 1);
+    expect(gapForPopulation(5000)).toBeCloseTo(0.6, 1);
   });
 });
 
@@ -33,12 +34,12 @@ describe('frontageAt', () => {
     expect(frontageAt(0, 100, 10)).toBeCloseTo(10, 5);
   });
 
-  it('grows to roughly 2x f0 at the fringe (cluster gradient)', () => {
-    // 2026-08-21 gate: the 3-4x gradient spread the fabric; the cluster
-    // rework flattened GRADIENT_K so the fringe sits around twice f0.
+  it('grows gently toward the fringe (gate-2 density: ~1.6x f0)', () => {
+    // Gate 2 flattened the gradient again — the settlement must be denser
+    // as a whole, so even fringe plots stay near their dwellings' width.
     const fringe = frontageAt(100, 100, 10);
-    expect(fringe).toBeGreaterThan(17);
-    expect(fringe).toBeLessThan(25);
+    expect(fringe).toBeGreaterThan(14);
+    expect(fringe).toBeLessThan(18);
   });
 
   it('grows monotonically outward', () => {

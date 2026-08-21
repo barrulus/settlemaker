@@ -81,3 +81,24 @@ export function closestPointOnSegment(p: Point, a: Point, b: Point): Point {
   const t = Math.max(0, Math.min(1, ((p.x - a.x) * abx + (p.y - a.y) * aby) / len2));
   return new Point(a.x + abx * t, a.y + aby * t);
 }
+
+/**
+ * The intersection point of segments a1—a2 and b1—b2, or null when they do
+ * not cross. Touching at a shared endpoint does not count — a branch that
+ * STARTS on its parent's centreline must not read as crossing it.
+ */
+export function segmentIntersection(
+  a1: Point, a2: Point, b1: Point, b2: Point,
+): Point | null {
+  const d1x = a2.x - a1.x;
+  const d1y = a2.y - a1.y;
+  const d2x = b2.x - b1.x;
+  const d2y = b2.y - b1.y;
+  const denom = d1x * d2y - d1y * d2x;
+  if (Math.abs(denom) < 1e-12) return null;
+  const t = ((b1.x - a1.x) * d2y - (b1.y - a1.y) * d2x) / denom;
+  const u = ((b1.x - a1.x) * d1y - (b1.y - a1.y) * d1x) / denom;
+  const EPS = 1e-6;
+  if (t <= EPS || t >= 1 - EPS || u <= EPS || u >= 1 - EPS) return null;
+  return new Point(a1.x + d1x * t, a1.y + d1y * t);
+}

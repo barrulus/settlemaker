@@ -3,11 +3,11 @@ import { SeededRandom } from '../../utils/random.js';
 import { classRank, laneWidth, stepDown, type RouteType } from '../route-class.js';
 import {
   angularGap, arcLengths, bearingOf, bearingVector, closestPointOnSegment, dist,
-  polylineLength, sampleAt,
+  polylineLength, sampleAt, segmentIntersection,
 } from '../geometry.js';
 import {
   BRANCH_LOTS_TARGET, BRANCH_MAX_M, BRANCH_MIN_M, BRANCH_SPACING_M, FRONTAGE_MARGIN,
-  GREEN_ARM_MAX, GREEN_ARM_MIN, GREEN_ARM_SPACING_M, GREEN_JOIN_RATIO,
+  GREEN_ARM_MAX, GREEN_ARM_MIN, GREEN_ARM_SPACING_M, GREEN_UNDERLAP_RATIO,
   INVENTED_ARM_LENGTH_FACTOR, LANE_SAMPLE_STEP_M, LANE_WANDER_M, LOOP_SNAP_M,
   MAX_INVENTED_LANES, MIN_ARM_SEPARATION_DEG,
 } from '../constants.js';
@@ -34,11 +34,11 @@ function runArm(
 ): Point[] {
   const dir = bearingVector(bearingDeg);
   const normal = new Point(-dir.y, dir.x);
-  // Junction rule: overshoot to the green's DRAWN edge, not its nominal
-  // radius — the green art fills ~87% of its box, so a lane aimed at the
-  // nominal rim stops ~1.4 m short of visible turf and the road appears
-  // to end before the green it feeds.
-  const start = (green.diameter / 2) * GREEN_JOIN_RATIO;
+  // Gate 2 junction rule: roads go UNDER the green. The lane starts deep
+  // inside the green's interior and the green is painted over it, so the
+  // road visibly disappears beneath the turf rather than stopping at (or
+  // worse, just short of) the rim.
+  const start = (green.diameter / 2) * GREEN_UNDERLAP_RATIO;
   const points: Point[] = [];
   let drift = 0;
   for (let d = start; d <= start + extentM; d += LANE_SAMPLE_STEP_M) {
@@ -279,6 +279,33 @@ function loopSnap(
   return best;
 }
 
+/**
+ * Gate 2: "too chaotic, many roads crossing over each other in nonsensical
+ * manners". A growing lane's BODY may not cross an existing lane: it is cut
+ * at the first intersection and joined there, turning a paint-over into a
+ * T-junction. (loopSnap already handled the near-miss END; this handles the
+ * genuine crossing.) The caller decides whether a cut implies a class drop.
+ */
+function truncateAtFirstCrossing(
+  points: Point[], out: Lane[], excludeIds: Set<string>,
+): Point[] {
+  for (let i = 1; i < points.length; i++) {
+    let best: { q: Point; t: number } | null = null;
+    for (const lane of out) {
+      if (excludeIds.has(lane.id)) continue;
+      for (let j = 1; j < lane.points.length; j++) {
+        const q = segmentIntersection(points[i - 1], points[i], lane.points[j - 1], lane.points[j]);
+        if (q) {
+          const t = dist(points[i - 1], q);
+          if (!best || t < best.t) best = { q, t };
+        }
+      }
+    }
+    if (best) return [...points.slice(0, i), best.q];
+  }
+  return points;
+}
+
 /** One growth step. Returns false when there is nowhere left to grow. */
 function growOne(
   out: Lane[], green: Green, meanFrontageM: number, rng: SeededRandom,
@@ -295,15 +322,22 @@ function growOne(
         || out.some((l) => l.id === armLaneId(candidate) || l.id === inventedLaneId(candidate));
       if (collides) continue;
       const dir = bearingVector(candidate);
+      // Under-green join, as for FMG arms: start inside the turf.
       const start = new Point(
-        green.centre.x + dir.x * (green.diameter / 2) * GREEN_JOIN_RATIO,
-        green.centre.y + dir.y * (green.diameter / 2) * GREEN_JOIN_RATIO,
+        green.centre.x + dir.x * (green.diameter / 2) * GREEN_UNDERLAP_RATIO,
+        green.centre.y + dir.y * (green.diameter / 2) * GREEN_UNDERLAP_RATIO,
       );
+      // Vary the street length (gate 2: identical radials read as
+      // contrived) — 0.7x to 1.3x around the nominal factor.
+      const lengthJitter = 0.7 + rng.float() * 0.6;
+      const points = truncateAtFirstCrossing(
+        runLine(start, candidate,
+          branchLengthM(meanFrontageM) * INVENTED_ARM_LENGTH_FACTOR * lengthJitter, rng),
+        out, new Set());
       out.push({
         id: inventedLaneId(candidate),
         type: 'local',
-        points: runLine(start, candidate,
-          branchLengthM(meanFrontageM) * INVENTED_ARM_LENGTH_FACTOR, rng),
+        points,
         widthM: laneWidth('local'),
       });
       return true;
@@ -329,13 +363,22 @@ function growOne(
     const branchBearing = (slot.dirDeg + side * (60 + rng.int(0, 51)) + 360) % 360;
     let cls = inventedChildClass(slot.parent.type);
     let points = runLine(slot.anchor, branchBearing, branchLengthM(meanFrontageM), rng);
-    // Loop rule: an end passing near another lane joins it, and the
-    // connector drops one further class — a path cut between two streets.
-    const snap = loopSnap(out, points[points.length - 1], new Set([slot.parent.id]));
-    if (snap) {
-      points = [...points, snap];
+    const raw = points;
+    points = truncateAtFirstCrossing(points, out, new Set([slot.parent.id]));
+    if (points.length < raw.length) {
+      // Cut at a crossing: the branch became a connector between two lanes,
+      // and a connector runs at one class lower, like a loop.
       cls = stepDown(cls, 'footpath');
+    } else {
+      // Loop rule: an end passing near another lane joins it, and the
+      // connector drops one further class — a path cut between two streets.
+      const snap = loopSnap(out, points[points.length - 1], new Set([slot.parent.id]));
+      if (snap) {
+        points = [...points, snap];
+        cls = stepDown(cls, 'footpath');
+      }
     }
+    if (points.length < 2) continue;
     out.push({
       id,
       type: cls,
@@ -360,7 +403,10 @@ function growOne(
   for (const lane of extendable) {
     const n = lane.points.length;
     const endDir = bearingOf(lane.points[n - 2], lane.points[n - 1]);
-    const extension = runLine(lane.points[n - 1], endDir, branchLengthM(meanFrontageM), rng);
+    const extension = truncateAtFirstCrossing(
+      runLine(lane.points[n - 1], endDir, branchLengthM(meanFrontageM), rng),
+      out, new Set([lane.id]));
+    if (extension.length < 2) continue;
     lane.points = [...lane.points, ...extension.slice(1)];
     return true;
   }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Point } from '../../src/types/point.js';
 import { SeededRandom } from '../../src/utils/random.js';
+import { GREEN_JOIN_RATIO, RING_SETBACK_M } from '../../src/village/constants.js';
 import { subdivideGreen } from '../../src/village/parcels/lots.js';
 import type { Green } from '../../src/village/types.js';
 
@@ -27,10 +28,13 @@ describe('subdivideGreen', () => {
     }
   });
 
-  it('places lots on the rim plus a setback, not inside the green', () => {
+  it('places lots right at the DRAWN edge — green frontage means at the green', () => {
+    // Gate 2: the ring's fronts sit on the drawn turf edge (the art fills
+    // ~87% of its box) plus a sliver — not metres of empty grass out.
     const lots = subdivideGreen(green, 10, 22, new SeededRandom(1));
+    const expected = (green.diameter / 2) * GREEN_JOIN_RATIO + RING_SETBACK_M;
     for (const l of lots) {
-      expect(Math.hypot(l.front.x, l.front.y)).toBeGreaterThan(green.diameter / 2);
+      expect(Math.hypot(l.front.x, l.front.y)).toBeCloseTo(expected, 5);
     }
   });
 
@@ -55,7 +59,8 @@ describe('subdivideGreen', () => {
 
     it('sits at radius from the green\'s own centre, not the origin', () => {
       const lots = subdivideGreen(offGreen, 10, 22, new SeededRandom(1));
-      const radius = offGreen.diameter / 2 + 3; // RING_SETBACK_M
+      // Gate 2: the ring sits at the DRAWN edge plus the sliver setback.
+      const radius = (offGreen.diameter / 2) * GREEN_JOIN_RATIO + RING_SETBACK_M;
       for (const l of lots) {
         const d = Math.hypot(l.front.x - offCentre.x, l.front.y - offCentre.y);
         expect(d).toBeCloseTo(radius, 1);
@@ -77,10 +82,12 @@ describe('subdivideGreen', () => {
 
     it('surrounds the offset centre rather than the origin', () => {
       const lots = subdivideGreen(offGreen, 10, 22, new SeededRandom(1));
-      // No lot lies within the green's own radius of the offset centre.
+      // Every lot lies at the drawn rim of the offset centre — outside the
+      // drawn turf, ringed around it (gate 2 moved the ring inside the
+      // NOMINAL radius, onto the drawn edge, so compare against that).
       for (const l of lots) {
         const d = Math.hypot(l.front.x - offCentre.x, l.front.y - offCentre.y);
-        expect(d).toBeGreaterThan(offGreen.diameter / 2);
+        expect(d).toBeGreaterThan((offGreen.diameter / 2) * GREEN_JOIN_RATIO);
       }
       // The mean of the ring's fronts lands near the offset centre, not (0,0).
       const meanX = lots.reduce((s, l) => s + l.front.x, 0) / lots.length;

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { generateVillage } from '../../src/village/village-model.js';
-import { overlaps } from '../../src/village/dwellings.js';
+import { intrudesOnLane, overlaps } from '../../src/village/dwellings.js';
 import { pointInPolygon } from '../../src/geom/point-in-polygon.js';
 import { Point } from '../../src/types/point.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
@@ -78,6 +78,17 @@ describe('village invariants (design §5.7)', () => {
         const m = generateVillage(input, seed);
         const ids = new Set(m.lots.map((l) => l.id));
         for (const b of m.buildings) expect(ids.has(b.lotId)).toBe(true);
+      }
+    }
+  });
+
+  it('never seats a building on a road (gate 2: houses ON the roads)', () => {
+    for (const input of inputs) {
+      for (const seed of seeds) {
+        const m = generateVillage(input, seed);
+        for (const b of m.buildings) {
+          expect(intrudesOnLane(b, m.lanes)).toBe(false);
+        }
       }
     }
   });
