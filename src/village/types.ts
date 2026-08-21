@@ -120,6 +120,20 @@ export interface FieldStrip {
   boundary: EdgeStamp[];
 }
 
+/**
+ * §7.3: one scattered tree (or clump neighbour). Placed by a deterministic
+ * grid scatter over what fields/crofts/lots/lanes/green/water leave open --
+ * see `dressing/vegetation.ts`. `id` is `veg:<cellX>x<cellY>` for a cell's
+ * own tree, `veg:<cellX>x<cellY>:<j>` for its j-th clump neighbour.
+ */
+export interface Vegetation {
+  id: string;
+  glyph: string;
+  position: Point;
+  /** Per-tree size jitter, VEG_SCALE_MIN..VEG_SCALE_MAX. */
+  scale?: number;
+}
+
 export interface VillageModel {
   site: Site;
   green: Green;
@@ -131,6 +145,7 @@ export interface VillageModel {
   edgeStyle: EdgeStyle;
   crofts: Croft[];
   fields: FieldStrip[];
+  vegetation: Vegetation[];
   diagnostics: string[];
 }
 

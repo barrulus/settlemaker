@@ -193,7 +193,8 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
 
   return {
     site, green, lanes: relaxed, lots: survivingLots, buildings: spend.buildings,
-    edgeStyle: dressing.edgeStyle, crofts: dressing.crofts, fields: dressing.fields, diagnostics,
+    edgeStyle: dressing.edgeStyle, crofts: dressing.crofts, fields: dressing.fields,
+    vegetation: dressing.vegetation, diagnostics,
   };
 }
 

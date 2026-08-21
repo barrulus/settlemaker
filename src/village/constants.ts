@@ -321,3 +321,73 @@ export const FIELD_CROPS: Record<string, string[]> = {
   tundra: ['sm-field-pasture'],
   steppe: ['sm-field-pasture'],
 };
+
+// --- Vegetation (pass 5 dressing, §7.3) ---------------------------------
+/** Grid cell edge, metres. A deterministic square grid stands in for
+ * Poisson dart-throwing: exactly one rng draw per cell decides survival,
+ * so the draw count never depends on how many darts land. */
+export const VEG_CELL_M = 9;
+/** Scatter rim, as a multiple of builtRadius -- the outer edge of the
+ * square grid (and of the density falloff below). */
+export const VEG_RADIUS_FACTOR = 1.8;
+/** Density ceiling: the survival chance a cell rolls against right at the
+ * fabric edge (the densest ring), before any per-cell reduction. */
+export const VEG_BASE_DENSITY = 0.55;
+/**
+ * Density-at-fabric-edge share from an earlier draft of the falloff curve
+ * (ramp 0.25 -> 1.0 outward toward the rim). Superseded during design by
+ * the corrected "densest at the fabric edge, thinning to the rim" curve
+ * `vegetation.ts` actually implements -- kept declared here, per the
+ * tunables convention, even though the current curve does not read it.
+ */
+export const VEG_INNER_DENSITY_SHARE = 0.25;
+/** Density share allowed on LEFTOVER wedge ground -- inside the fabric
+ * edge, but not claimed by any lot, croft, field strip, or lane corridor
+ * -- where §7.3 wants the odd clump of trees to land. */
+export const VEG_INFILL_SHARE = 0.35;
+/** Clearance added on top of a lane's own half-width for the vegetation
+ * rejection test (flat across every lane class, unlike LANE_SETBACK_M --
+ * a tree that close to any lane reads as blocking it). */
+export const VEG_LANE_CLEAR_M = 2;
+/** §8.4: a tree this close to a water polygon EDGE, within
+ * SHOREFRONT_REACH_FACTOR x builtRadius of the green, is suppressed --
+ * the shorefront stays open ground near the settlement; wooded banks
+ * further out (map-edge water) are unaffected. */
+export const SHOREFRONT_BAND_M = 12;
+/** A successful, non-rejected tree may spawn 0-3 clustered neighbours,
+ * each placed within this radius of the parent. */
+export const CLUMP_RADIUS_M = 7;
+export const VEG_SCALE_MIN = 0.8;
+export const VEG_SCALE_MAX = 1.15;
+
+export interface VegGlyphWeight { glyph: string; weight: number }
+/**
+ * Per-biome scatter mix, walked in array order (never object-key order)
+ * for a deterministic weighted pick. Keys not listed fall back to
+ * `temperate`.
+ */
+export const VEG_GLYPHS: Record<string, VegGlyphWeight[]> = {
+  temperate: [
+    { glyph: 'sm-tree-deciduous', weight: 0.5 },
+    { glyph: 'sm-tree-deciduous-small', weight: 0.3 },
+    { glyph: 'sm-tree-conifer', weight: 0.2 },
+  ],
+  desert: [
+    { glyph: 'sm-olive--desert', weight: 0.4 },
+    { glyph: 'sm-palm-date--desert', weight: 0.3 },
+    { glyph: 'sm-scrub--desert', weight: 0.3 },
+  ],
+  tundra: [
+    { glyph: 'sm-conifer--tundra', weight: 0.7 },
+    { glyph: 'sm-snag--tundra', weight: 0.3 },
+  ],
+  tropical: [
+    { glyph: 'sm-broadleaf--tropical', weight: 0.6 },
+    { glyph: 'sm-palm-fan--tropical', weight: 0.4 },
+  ],
+  coastal: [
+    { glyph: 'sm-dune-grass--coastal', weight: 0.4 },
+    { glyph: 'sm-tamarisk--coastal', weight: 0.3 },
+    { glyph: 'sm-tree-deciduous', weight: 0.3 },
+  ],
+};
