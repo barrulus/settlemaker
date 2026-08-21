@@ -1,6 +1,6 @@
 import type { VillageModel } from './types.js';
 import { hasGlyph } from './glyphs.js';
-import { BATCH001_GLYPHS } from '../assets/batch001.js';
+import { REFINED_GLYPHS } from '../assets/refined-glyphs.js';
 
 /** integration.md's shadow contract: one light, never rotated with the mark. */
 const SHADOW_OFFSET: [number, number] = [2.6, 3.6];
@@ -9,61 +9,62 @@ const SHADOW_COLOR = '#46303c';
 const GROUND = '#a3c98d';
 
 /**
- * R17 stand-in: batch-002 greens (`sm-green-round-a` and friends) have not
- * been ingested into this repo's symbol set yet, so their markup does not
- * exist. This is the turf tone the plain fallback shape paints in until
- * hasGlyph() starts returning true for the real asset, at which point the
- * branch below that draws it self-removes.
+ * The refined set's own token values (symbols/refined/symbols.json →
+ * tokens), so every fill class resolves without a stylesheet needing to
+ * guess a colour: the sprite markup already carries
+ * `fill="var(--sm-timber, #d9c39a)"` inline, and this block only has to
+ * supply the CSS variable to re-tint it. Values copied by hand from
+ * symbols.json (not imported — the manifest module carries placement
+ * metadata, not the token/colour table), matched 1:1 against the keys
+ * integration.md documents.
  */
-const GREEN_FALLBACK_FILL = '#8fbf72';
-const GREEN_FALLBACK_STROKE = '#5f8f4a';
+const SM_TOKENS: Record<string, string | number> = {
+  '--sm-ink': '#33262e', '--sm-sw': 2, '--sm-stone': '#e8dcc0', '--sm-timber': '#d9c39a',
+  '--sm-void': '#6b5460', '--sm-yard': '#dfd3b3', '--sm-lead': '#8d99a6', '--sm-lead-ink': '#5c6670',
+  '--sm-canopy-a': '#4f7f43', '--sm-canopy-b': '#74a552', '--sm-canopy-shade': '#3a6338',
+  '--sm-canopy-vein': '#2c5330', '--sm-portcullis': '#d8bd7e', '--sm-mud': '#c99a63',
+  '--sm-mud-dark': '#b3854f', '--sm-thatch': '#d8bd7e', '--sm-snow': '#f2f6f8',
+  '--sm-shingle': '#a89a86', '--sm-yard-sand': '#d9c48f', '--sm-dry': '#9aa86a', '--sm-dry-b': '#b8bf7e',
+  '--sm-olive': '#7f9463', '--sm-olive-b': '#9aac78', '--sm-needle': '#33613c', '--sm-needle-b': '#4a7c48',
+  '--sm-frond': '#3f7a3c', '--sm-leaf': '#2f6b34', '--sm-tamarisk': '#5d8a5e', '--sm-tamarisk-b': '#82a878',
+  '--sm-common': '#a8bf6d', '--sm-soil': '#dcc39e', '--sm-furrow': '#c2a37c', '--sm-crop': '#cbc190',
+  '--sm-paddy': '#a9c6c2', '--sm-common-band': '#8aa855',
+};
 
 /**
- * Ink and material tones for the `sm-*` classes BATCH001_GLYPHS' markup
- * carries (sm-stone, sm-timber, sm-void, sm-ridge, sm-hatch, sm-sil).
- * With no stylesheet these fall back to solid black fill / no stroke,
- * which is why an unstyled render reads as a field of black rectangles
- * rather than buildings. Values copied by hand from the old renderer's
- * theme (src/output/render-theme.ts / assemble-svg.ts:themeToCss — its
- * "parchment" default palette), NOT imported: the new engine shares no
- * code with the old one (see glyphs.ts's own note on the same boundary).
- * Both this palette and the class list will be revisited once the
- * refined symbol set (with its own tokens/CSS vars) lands and replaces
- * batch001 as the deck's source.
- */
-const SM_INK = '#33262e';
-const SM_STONE = '#e8dcc0';
-const SM_TIMBER = '#d9c39a';
-/** Door/window recesses — a dark-to-stone blend, not flat ink. */
-const SM_VOID = '#7a6a5c';
-
-/**
- * Only the classes BATCH001_GLYPHS' verified dwelling/civic glyphs
- * (sm-house, sm-hut-straw, sm-house-tiled, sm-longhouse, sm-inn,
- * sm-house-large-tiled, sm-well) actually use — not the old renderer's
- * whole stylesheet. sm-canopy-a/b and sm-mark exist in the wider batch001
- * set but none of these seven glyphs reference them, so they are left out.
+ * Class categories in the refined sprites, by what their markup already
+ * carries inline (checked against symbols/refined/{symbols,symbols-biomes,
+ * symbols-parcel}.svg):
  *
- * The `.sm-sil <class>` rules undo the colour/stroke rules for every
- * element nested under a `<g class="sm-sil">` shadow twin: five of these
- * six dwelling glyphs' -sil markup is a full copy of the body (stone
- * rect, ridge line, hatch texture) rather than a single flat currentColor
- * shape, so without this override the class rules above would paint each
- * shadow as a coloured, outlined replica of the building instead of a
- * flat silhouette — the one thing the shadow contract explicitly forbids.
- * (sm-well is the exception: its -sil is already a flat currentColor
- * shape with no classed children, so the override rule simply matches
- * nothing for it.)
+ * - FILL classes (sm-stone, sm-timber, ...) already carry
+ *   `fill="var(--sm-x, #hex)"` inline, so they render correctly with no
+ *   stylesheet at all — but never a stroke, so they need `stroke:
+ *   var(--sm-ink)` here or a building reads as an unbordered flat.
+ * - LINE classes (sm-hatch, sm-ridge, sm-spire) carry neither: their
+ *   markup is bare `<path d="M... L...">` strokes. Without `fill:none`
+ *   here, the SVG default (solid black fill) would paint the enclosed
+ *   area of a zigzag hatch line rather than leave it as a line.
+ * - Everything else used by the temperate deck (sm-yard, and every
+ *   canopy-* / green-* class) already carries BOTH fill and stroke inline
+ *   and needs no rule at all — left out deliberately, not missed.
+ *
+ * Unlike batch001, no `-sil` twin in this set duplicates the body's
+ * classed children: every one is a single flat
+ * `fill="currentColor" stroke="currentColor"` shape (see
+ * scripts/extract-refined-glyphs.ts's structure-band sil requirement), so
+ * there is no `.sm-sil .sm-x{...}` override to write here.
  */
+const SM_FILL_INK_CLASSES = [
+  'sm-stone', 'sm-timber', 'sm-void', 'sm-lead', 'sm-mud', 'sm-mud-dark', 'sm-shingle', 'sm-snow',
+  'sm-thatch', 'sm-tamarisk', 'sm-tamarisk-b', 'sm-leaf', 'sm-frond', 'sm-olive', 'sm-olive-b',
+  'sm-dry', 'sm-dry-b', 'sm-needle', 'sm-needle-b', 'sm-yard-sand',
+];
+const SM_LINE_INK_CLASSES = ['sm-hatch', 'sm-ridge', 'sm-spire'];
+
 const SM_STYLE = [
-  `.sm-stone{fill:${SM_STONE};stroke:${SM_INK};stroke-width:2;stroke-linejoin:round;stroke-linecap:round}`,
-  `.sm-timber{fill:${SM_TIMBER};stroke:${SM_INK};stroke-width:2;stroke-linejoin:round;stroke-linecap:round}`,
-  `.sm-void{fill:${SM_VOID};stroke:${SM_INK};stroke-width:2;stroke-linejoin:round;stroke-linecap:round}`,
-  `.sm-ridge{fill:none;stroke:${SM_INK};stroke-width:2;stroke-linecap:round}`,
-  `.sm-hatch{fill:none;stroke:${SM_INK};stroke-width:1;opacity:.45}`,
-  `.sm-sil{stroke-width:2;stroke-linejoin:round}`,
-  '.sm-sil .sm-stone,.sm-sil .sm-timber,.sm-sil .sm-void,.sm-sil .sm-ridge,.sm-sil .sm-hatch'
-    + '{fill:currentColor;stroke:none;opacity:1}',
+  `:root{${Object.entries(SM_TOKENS).map(([k, v]) => `${k}:${v}`).join(';')}}`,
+  ...SM_FILL_INK_CLASSES.map((c) => `.${c}{stroke:var(--sm-ink,#33262e);stroke-linejoin:round;stroke-linecap:round}`),
+  ...SM_LINE_INK_CLASSES.map((c) => `.${c}{fill:none;stroke:var(--sm-ink,#33262e);stroke-linecap:round}`),
 ].join('');
 
 function n(v: number): string {
@@ -120,19 +121,26 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
   // --- defs: only the glyphs this model actually uses, never the full library ---
   const usedGlyphs = Array.from(new Set(model.buildings.map((b) => b.glyph)));
   const greenGlyphId = `${model.green.shape}-${model.green.variant}`;
+  // R17 retired: the refined set's greens (sm-green-round-a and friends)
+  // are ingested now, so hasGlyph(greenGlyphId) is true for every shape the
+  // deck can produce and the stand-in ellipse branch below never fires.
   const greenGlyphAvailable = hasGlyph(greenGlyphId)
-    && Object.prototype.hasOwnProperty.call(BATCH001_GLYPHS, greenGlyphId);
+    && Object.prototype.hasOwnProperty.call(REFINED_GLYPHS, greenGlyphId);
 
   const defs: string[] = [];
   for (const glyph of usedGlyphs) {
-    const markup = BATCH001_GLYPHS[glyph];
+    const markup = REFINED_GLYPHS[glyph];
     if (markup) {
       defs.push(defBlock(glyph, markup.body));
-      defs.push(defBlock(`${glyph}-sil`, markup.sil));
+      // Every dwelling/civic glyph the deck can place is zBand "structure",
+      // which extract-refined-glyphs.ts guarantees carries a -sil twin —
+      // only parcel/canopy ids (never placed as a building) may lack one.
+      if (markup.sil) defs.push(defBlock(`${glyph}-sil`, markup.sil));
     }
   }
   if (greenGlyphAvailable) {
-    defs.push(defBlock(greenGlyphId, BATCH001_GLYPHS[greenGlyphId].body));
+    // Greens are parcel-band: no -sil twin, ground casts no shadow.
+    defs.push(defBlock(greenGlyphId, REFINED_GLYPHS[greenGlyphId].body));
   }
 
   const out: string[] = [];
@@ -150,27 +158,11 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
       `transform="translate(${n(X(model.green.centre.x))},${n(Y(model.green.centre.y))}) ` +
       `rotate(${n(model.green.bearingDeg)}) scale(${n((r * 2) / 64)}) translate(-32,-32)"/>`,
     );
-  } else {
-    // R17 stand-in: no batch-002 green asset ingested yet. Plain filled
-    // ellipse at the green's real footprint and bearing, so the gate can
-    // judge placement and size. Disappears once hasGlyph(greenGlyphId) is
-    // true and the branch above takes over.
-    out.push(
-      // Finding 8: an SVG ellipse's rx is its horizontal (east-west) radius
-      // and ry its vertical (north-south) one. bearingDeg 0 means north
-      // (geometry.ts's bearingVector), so the UNROTATED ellipse must
-      // already have its long axis vertical (ry = long) for
-      // `rotate(bearingDeg,...)` to land the long axis on the road it is
-      // supposed to be a swelling of — the real-asset branch above gets
-      // this right because the glyph's own up-vector is north; this
-      // stand-in had rx/ry backwards, so a lens green's long axis ended up
-      // perpendicular to its through road.
-      `<ellipse data-green-fallback="1" cx="${n(X(model.green.centre.x))}" cy="${n(Y(model.green.centre.y))}" ` +
-      `rx="${n(r * 0.72)}" ry="${n(r)}" fill="${GREEN_FALLBACK_FILL}" stroke="${GREEN_FALLBACK_STROKE}" ` +
-      `stroke-width="${n(0.3 * pxPerMetre)}" ` +
-      `transform="rotate(${n(model.green.bearingDeg)},${n(X(model.green.centre.x))},${n(Y(model.green.centre.y))})"/>`,
-    );
   }
+  // No stand-in branch: every green shape/variant the deck can produce
+  // exists in the refined manifest, so greenGlyphAvailable is always true
+  // in practice. Left as a guard (rather than asserted) so an id this
+  // engine has never produced fails silently-absent rather than throwing.
   out.push('</g>');
 
   // route band

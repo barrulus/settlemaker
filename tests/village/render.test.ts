@@ -94,28 +94,30 @@ describe('renderVillage', () => {
     expect(svg).not.toContain('<symbol');
   });
 
-  // --- R17: green fallback ---
+  // --- R17 retired: the refined greens are ingested ---
 
-  it('falls back to a plain stand-in shape for the green when its glyph is not ingested', () => {
-    // batch-002 greens are not in this repo's asset set yet
-    expect(hasGlyph(`${model.green.shape}-${model.green.variant}`)).toBe(false);
-    expect(svg).toContain('data-green-fallback="1"');
-    // and does not emit a <use> for a green glyph that doesn't exist
-    expect(svg).not.toContain(`href="#${model.green.shape}-${model.green.variant}"`);
+  it('draws the real green glyph, not a stand-in shape', () => {
+    // The refined manifest carries every green shape/variant the deck can
+    // produce (sm-green-round-a and friends), so hasGlyph is true and the
+    // renderer emits a real <use>, not the old plain-ellipse fallback.
+    expect(hasGlyph(`${model.green.shape}-${model.green.variant}`)).toBe(true);
+    expect(svg).not.toContain('data-green-fallback="1"');
+    expect(svg).toContain(`href="#${model.green.shape}-${model.green.variant}"`);
   });
 
-  it('places the green fallback in the parcel band', () => {
+  it('places the green use in the parcel band', () => {
     const parcelBand = svg.slice(svg.indexOf('data-band="parcel"'), svg.indexOf('</g>', svg.indexOf('data-band="parcel"')));
-    expect(parcelBand).toContain('data-green-fallback="1"');
+    expect(parcelBand).toContain(`href="#${model.green.shape}-${model.green.variant}"`);
   });
 
   // --- Regression: unstyled sm-* classes render as solid black rectangles ---
-  // BATCH001_GLYPHS markup uses bare class="sm-stone" / "sm-timber" / etc.
-  // with no stylesheet, so every fill/stroke falls back to SVG defaults
-  // (solid black fill, no stroke) — buildings read as a field of identical
-  // black blocks instead of buildings. A <style> block defining these
-  // classes fixes that; pinned here so it cannot silently disappear.
-  it('emits a <style> block defining the sm-* material classes the deck uses', () => {
+  // REFINED_GLYPHS markup uses bare class="sm-stone" / "sm-timber" / etc.
+  // Fill classes carry an inline `fill="var(--sm-x, #hex)"` fallback, but
+  // never a stroke, so without a <style> block a building would render
+  // filled but borderless, and a hatch/ridge line class (no fill attr at
+  // all) would default to a solid black SVG fill instead of a line. Pinned
+  // here so the stylesheet cannot silently disappear.
+  it('emits a <style> block defining the sm-* ink classes the deck uses', () => {
     const styleMatch = svg.match(/<style>([\s\S]*?)<\/style>/);
     expect(styleMatch).not.toBeNull();
     const style = styleMatch![1];
@@ -124,17 +126,20 @@ describe('renderVillage', () => {
     }
   });
 
-  it('does not let the sm-* style rules leak colour into shadow silhouettes', () => {
-    // The shadow contract requires flat, offset, single-colour silhouettes.
-    // Several of BATCH001_GLYPHS' -sil twins duplicate the body's classed
-    // elements (stone rect, ridge line, hatch texture) rather than being a
-    // single flat currentColor shape, so the style block must override
-    // fill/stroke back to currentColor for anything nested under .sm-sil —
-    // otherwise a shadow would render as a coloured, outlined replica of
-    // the building instead of a flat silhouette.
+  it('does not need a shadow colour override — every -sil twin is already a flat currentColor shape', () => {
+    // Unlike batch001, no -sil in the refined set duplicates the body's
+    // classed children (verified by extract-refined-glyphs's structure-band
+    // sil requirement), so there is nothing for the style block to
+    // override — this pins that the render still honours the shadow
+    // contract (flat, single-colour) with no override rule present.
     const styleMatch = svg.match(/<style>([\s\S]*?)<\/style>/);
     const style = styleMatch![1];
-    expect(style).toMatch(/\.sm-sil \.sm-stone[^}]*\{[^}]*fill:currentColor/);
+    expect(style).not.toContain('.sm-sil');
+    for (const glyph of Array.from(new Set(model.buildings.map((b) => b.glyph)))) {
+      const silMatch = svg.match(new RegExp(`<g id="${glyph}-sil">([\\s\\S]*?)</g>`));
+      expect(silMatch).not.toBeNull();
+      expect(silMatch![1]).toContain('fill="currentColor"');
+    }
   });
 
   // --- Regression: viewBox omitted lane geometry, so roads ran off-canvas ---

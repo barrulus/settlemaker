@@ -19,11 +19,14 @@ const model = generateVillage({
 process.stdout.write(renderVillage(model));
 
 const greenGlyphId = `${model.green.shape}-${model.green.variant}`;
+// The refined greens are ingested, so this should never fire any more — an
+// id it does fire for is a genuine bug (an unproduced green shape/variant
+// or a manifest regression), not an asset gap to wait on.
 const greenIsStandIn = !hasGlyph(greenGlyphId);
 
 process.stderr.write(
   `${model.buildings.length} buildings, ${model.lanes.length} lanes, ` +
   `green ${model.green.shape} ${Math.round(model.green.diameter)} m` +
-  `${greenIsStandIn ? ' (STAND-IN: batch-002 green asset not ingested, drawn as a plain fallback shape)' : ''}\n` +
+  `${greenIsStandIn ? ' (WARNING: green glyph missing from manifest, no ground drawn)' : ''}\n` +
   model.diagnostics.map((d) => `  ! ${d}\n`).join(''),
 );

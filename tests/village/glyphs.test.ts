@@ -1,16 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { SYMBOL_MANIFEST } from '../../src/assets/symbol-manifest.js';
+import { REFINED_MANIFEST as SYMBOL_MANIFEST } from '../../src/assets/refined-manifest.js';
 import {
   HOUSE_INK_RATIO, HUT_INK_RATIO, hasGlyph, inkExtent, minScaleOf, nominalFootprint,
   rotationOf,
 } from '../../src/village/glyphs.js';
 
-// This repo's src/assets/symbol-manifest.ts is the RETIRED batch001
-// generation: 38 ids, no biome variants, no sm-chapel, and every id claims
-// rotation "invariant". The newer symbol set the design brief was written
-// against has not been ingested here. These tests assert glyphs.ts
-// delegates correctly to whatever manifest IS loaded, rather than hard-
-// coding values from a manifest generation this repo doesn't have.
+// src/village/ is repointed at the refined 91-symbol manifest
+// (src/assets/refined-manifest.ts): 47 biome variants, real per-id
+// rotation values, sm-chapel included. The retired batch001 manifest
+// (src/assets/symbol-manifest.ts) still serves the OLD engine only.
 
 describe('glyph lookups', () => {
   it('knows which ids the manifest actually has', () => {
@@ -43,26 +41,18 @@ describe('glyph lookups', () => {
   });
 });
 
-describe('rotation shim (dated 2026-08-20, self-removing)', () => {
-  // The manifest currently loaded is batch001, where every id — including
-  // every dwelling — is hard-coded "invariant". Taken literally that would
-  // stop every dwelling from ever facing its lane, so rotationOf()
-  // overrides "invariant" to "free" for dwelling glyphs (house/longhouse)
-  // while this manifest generation is loaded. Round huts genuinely cannot
-  // face a street, so they keep "invariant" regardless.
-  //
-  // This pins the shim's behaviour both ways against today's manifest: it
-  // fires for a house, and it does not touch a round hut. Once the
-  // manifest is regenerated from the refined symbol set (biome variants
-  // appear, MANIFEST_HAS_BIOME_VARIANTS flips true), this override
-  // disables itself and rotationOf() reports the manifest's raw value
-  // unconditionally.
-  it('reports a house as free-rotating despite the manifest saying invariant', () => {
-    expect(SYMBOL_MANIFEST['sm-house'].rotation).toBe('invariant');
+// The dated rotation shim (glyphs.ts, deleted 2026-08-21) existed only to
+// paper over batch001's every-id-"invariant" data while this module read
+// that manifest. It is gone now that glyphs.ts is hard-wired to the
+// refined manifest — rotationOf() reports the manifest's own per-id value
+// unconditionally. These pin the REAL data, not an override.
+describe('rotation reads the manifest directly (shim retired)', () => {
+  it('reports sm-house as free-rotating because the manifest genuinely says so', () => {
+    expect(SYMBOL_MANIFEST['sm-house'].rotation).toBe('free');
     expect(rotationOf('sm-house')).toBe('free');
   });
 
-  it('leaves a round hut invariant — it genuinely cannot face a street', () => {
+  it('reports a round hut as invariant because it genuinely cannot face a street', () => {
     expect(SYMBOL_MANIFEST['sm-hut-round'].rotation).toBe('invariant');
     expect(rotationOf('sm-hut-round')).toBe('invariant');
   });

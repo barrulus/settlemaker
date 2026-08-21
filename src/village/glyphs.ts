@@ -1,4 +1,4 @@
-import { SYMBOL_MANIFEST } from '../assets/symbol-manifest.js';
+import { REFINED_MANIFEST as SYMBOL_MANIFEST } from '../assets/refined-manifest.js';
 
 /**
  * The ONLY module that reads SYMBOL_MANIFEST. Everything that needs a
@@ -28,45 +28,21 @@ export function nominalFootprint(glyph: string): [number, number] {
 }
 
 /**
- * DATED SHIM (2026-08-20): the manifest currently loaded is the retired
- * batch001 generation, where every single id — including every dwelling —
- * claims rotation "invariant". Taken at face value that would stop every
- * dwelling from facing its lane, which is the central rule of this whole
- * feature, for a data-generation reason rather than a real one (round huts
- * genuinely cannot face a street; houses and longhouses can and should).
- *
- * MANIFEST_HAS_BIOME_VARIANTS detects which manifest generation is loaded:
- * only the newer, refined symbol set (not yet ingested into this library)
- * has biome-suffixed ids such as "sm-house--tundra". While it is false —
- * i.e. while this is still the batch001 manifest — rotationOf() overrides
- * "invariant" to "free" for dwelling glyphs only.
- *
- * Removal condition: this disables itself automatically once the manifest
- * is regenerated from the refined symbol set (MANIFEST_HAS_BIOME_VARIANTS
- * becomes true), at which point the manifest's own per-id rotation value is
- * trusted unconditionally and this override becomes dead code worth
- * deleting outright.
+ * RETIRED SHIM (deleted 2026-08-21): while this module read the batch001
+ * manifest, every id there — including every dwelling — claimed rotation
+ * "invariant", so rotationOf() overrode it to "free" for dwelling glyphs
+ * (house/longhouse/inn) to let them face their lane. The manifest now
+ * loaded is the refined generation: it carries real per-id rotation values
+ * (`sm-house` is genuinely "free", `sm-hut-round` is genuinely "invariant"
+ * because a round hut has no front to turn), and 47 of its ids are
+ * biome-suffixed, so the override's own gate condition
+ * (`MANIFEST_HAS_BIOME_VARIANTS`) would already have disabled it on every
+ * call. Deleted rather than left disabled: this module is now hard-wired
+ * to the refined manifest, so the batch001 case the shim existed for can
+ * no longer occur here.
  */
-export const MANIFEST_HAS_BIOME_VARIANTS = Object.keys(SYMBOL_MANIFEST).some((id) => id.includes('--'));
-
-/**
- * Dwelling glyphs are the ones the rotation shim may override — anything
- * the deck places that genuinely has a front and should face its lane.
- * Finding 7: the inn was left out, so under this shim `sm-inn` stayed
- * `invariant` and rendered at bearing 0 while every house around it faced
- * its lane — a defect at any render gate. Round huts (`sm-hut-*`) stay out
- * deliberately: they have no front to turn.
- */
-export function isDwellingGlyph(glyph: string): boolean {
-  return glyph.includes('house') || glyph.includes('longhouse') || glyph.includes('inn');
-}
-
 export function rotationOf(glyph: string): 'invariant' | 'free' | 'locked' | 'snap-cardinal' {
-  const rotation = SYMBOL_MANIFEST[glyph]?.rotation ?? 'free';
-  if (!MANIFEST_HAS_BIOME_VARIANTS && rotation === 'invariant' && isDwellingGlyph(glyph)) {
-    return 'free';
-  }
-  return rotation;
+  return SYMBOL_MANIFEST[glyph]?.rotation ?? 'free';
 }
 
 export function minScaleOf(glyph: string): number {

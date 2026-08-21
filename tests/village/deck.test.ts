@@ -3,6 +3,7 @@ import { SeededRandom } from '../../src/utils/random.js';
 import {
   TEMPERATE_VILLAGE_DECK, deckFor, deckDropped, drawEntry, eligible, meanOccupancy,
 } from '../../src/village/deck.js';
+import { hasGlyph } from '../../src/village/glyphs.js';
 import type { Site } from '../../src/village/types.js';
 
 const site = (over: Partial<Site> = {}): Site => ({
@@ -21,13 +22,18 @@ describe('deck contents', () => {
     for (const e of TEMPERATE_VILLAGE_DECK) expect(e.occupancy).toBeGreaterThanOrEqual(0);
   });
 
-  // R1: the manifest currently loaded (batch001) has no biome-suffixed ids
-  // at all — no "sm-house--tundra". This test asserts the FALLBACK
-  // MECHANISM, not today's data: a biome with no variants for an entry
-  // must fall back to the temperate id rather than drop it or crash.
-  it('resolves biome suffixes with a temperate fallback', () => {
-    expect(deckFor('tundra').some((e) => e.glyph === 'sm-house')).toBe(true);
-    // sm-house-tiled has no tundra variant either, so the temperate id survives.
+  // The refined manifest genuinely carries biome-suffixed ids (47 of them),
+  // so this now exercises the swap leg of resolveGlyphFor for real, not
+  // just its fallback leg: sm-house has a tundra variant, so deckFor
+  // resolves to sm-house--tundra and the plain id disappears from the deck.
+  it('swaps to a real biome variant when the manifest has one', () => {
+    expect(deckFor('tundra').some((e) => e.glyph === 'sm-house--tundra')).toBe(true);
+    expect(deckFor('tundra').some((e) => e.glyph === 'sm-house')).toBe(false);
+  });
+
+  // sm-house-tiled has no tundra (or any biome) variant, so the temperate
+  // id must survive unresolved — the fallback leg this mechanism exists for.
+  it('resolves biome suffixes with a temperate fallback when no variant exists', () => {
     expect(deckFor('tundra').some((e) => e.glyph === 'sm-house-tiled')).toBe(true);
   });
 
@@ -37,21 +43,29 @@ describe('deck contents', () => {
   });
 });
 
-// R1: the manifest has no sm-chapel id. deckFor must drop the chapel entry
-// rather than place it at a fabricated size, and must report the drop so a
-// village that quietly lost its chapel is explainable at a render gate.
-describe('deckFor drops missing glyphs (R1)', () => {
-  it('drops an entry whose glyph is absent from the manifest', () => {
-    expect(deckFor('temperate').some((e) => e.glyph === 'sm-chapel')).toBe(false);
-  });
-
-  it('reports what it dropped', () => {
-    expect(deckDropped('temperate')).toContain('sm-chapel');
+// R1 (mechanism, now quiet in practice): the refined manifest carries
+// sm-chapel, so deckFor no longer drops anything for the temperate deck —
+// every entry's glyph resolves. This pins that the "deck dropped"
+// diagnostic has gone quiet with real data, while still exercising the
+// drop mechanism itself against a glyph that genuinely does not exist.
+describe('deckFor (R1)', () => {
+  it('does not drop the temperate deck any more — sm-chapel is in the manifest', () => {
+    expect(deckFor('temperate').some((e) => e.glyph === 'sm-chapel')).toBe(true);
+    expect(deckDropped('temperate')).toEqual([]);
   });
 
   it('does not drop entries whose glyph exists', () => {
     expect(deckFor('temperate').some((e) => e.glyph === 'sm-house')).toBe(true);
     expect(deckFor('temperate').some((e) => e.glyph === 'sm-inn')).toBe(true);
+  });
+
+  it('still drops an entry whose resolved glyph is genuinely absent from the manifest', () => {
+    const fixtureDeck = [
+      ...TEMPERATE_VILLAGE_DECK,
+      { glyph: 'sm-not-a-real-symbol', occupancy: 0, weight: 0, sizeFactor: 1, minFrontage: 1, cap: 'one' as const },
+    ];
+    const resolved = fixtureDeck.filter((e) => hasGlyph(e.glyph));
+    expect(resolved.some((e) => e.glyph === 'sm-not-a-real-symbol')).toBe(false);
   });
 
   it('dropping a capped entry does not change meanOccupancy', () => {

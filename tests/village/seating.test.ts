@@ -11,13 +11,13 @@ import type { Building } from '../../src/village/types.js';
 
 const house = TEMPERATE_VILLAGE_DECK.find((e) => e.glyph === 'sm-house')!;
 const inn = TEMPERATE_VILLAGE_DECK.find((e) => e.glyph === 'sm-inn')!;
-// The brief's original draft assumed sm-house's manifest footprint was
-// [8, 6.6] (that value is actually FALLBACK_FOOTPRINT, used only when a
-// glyph is missing from the manifest). The real, currently-loaded manifest
-// gives sm-house a footprint of [6, 6] — see glyphs.test.ts and the
-// "ART BOX, not of its painted walls" comment in village-rows.ts. Reading
-// it dynamically here keeps these bounds honest against whichever manifest
-// is actually loaded, rather than re-hardcoding a stale number.
+// Read dynamically rather than hardcoded so these bounds stay honest
+// against whichever manifest is actually loaded — sm-house's footprint has
+// already changed once across manifest generations (batch001 gave it
+// [6, 6]; the refined manifest now loaded gives it [8, 6.6], which
+// happens to equal glyphs.ts's own FALLBACK_FOOTPRINT by coincidence, not
+// by construction). See glyphs.test.ts and the "ART BOX, not of its
+// painted walls" comment in village-rows.ts.
 const houseNominalW = nominalFootprint(house.glyph)[0];
 
 const lot = (frontageM: number, x = 0, y = 0, bearingDeg = 0): Lot => ({
@@ -128,26 +128,31 @@ describe('seat', () => {
     });
 
     it('snap-cardinal glyphs snap the lot bearing to the nearest 90 degrees', () => {
-      const cross: DeckEntry = {
-        glyph: 'sm-market-cross', occupancy: 0, weight: 1, sizeFactor: 1, minFrontage: 8,
+      // sm-kit-gate is genuinely rotation "snap-cardinal" in the refined
+      // manifest (a fortification-kit tile, not a dwelling deck entry —
+      // used here purely as a real snap-cardinal fixture).
+      const gate: DeckEntry = {
+        glyph: 'sm-kit-gate', occupancy: 0, weight: 1, sizeFactor: 1, minFrontage: 8,
       };
-      const b = seat(cross, lot(12, 0, 0, 100), new SeededRandom(1));
+      const b = seat(gate, lot(12, 0, 0, 100), new SeededRandom(1));
       expect(b.bearingDeg).toBe(90);
     });
 
     it('snap-cardinal wraps 350 degrees to 0, not 360', () => {
-      const cross: DeckEntry = {
-        glyph: 'sm-market-cross', occupancy: 0, weight: 1, sizeFactor: 1, minFrontage: 8,
+      const gate: DeckEntry = {
+        glyph: 'sm-kit-gate', occupancy: 0, weight: 1, sizeFactor: 1, minFrontage: 8,
       };
-      const b = seat(cross, lot(12, 0, 0, 350), new SeededRandom(1));
+      const b = seat(gate, lot(12, 0, 0, 350), new SeededRandom(1));
       expect(b.bearingDeg).toBe(0);
     });
 
     it('free/locked glyphs use the lot bearing unmodified (the normal case)', () => {
-      // sm-house resolves to 'free' under the R2 shim (dwelling id, batch001
-      // manifest claims invariant). Without honouring the rotation class
-      // this would still pass by accident for 'free' glyphs, so this test
-      // exists mainly to pin the normal path alongside the two special ones.
+      // sm-house is genuinely rotation "free" in the refined manifest —
+      // the dated shim that used to override batch001's blanket
+      // "invariant" for dwellings is gone (see glyphs.ts / glyphs.test.ts).
+      // Without honouring the rotation class this would still pass by
+      // accident for 'free' glyphs, so this test exists mainly to pin the
+      // normal path alongside the two special ones.
       const b = seat(house, lot(12, 0, 0, 137), new SeededRandom(1));
       expect(b.bearingDeg).toBeCloseTo(137, 5);
     });

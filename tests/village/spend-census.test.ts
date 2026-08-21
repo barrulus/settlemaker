@@ -10,10 +10,14 @@ const site = (population: number): Site => ({
   flags: { port: false, temple: false, trade: false, walls: false },
 });
 
-// A line of well-separated lots, best-scoring first.
+// A line of well-separated lots, best-scoring first. frontageM 30 (bumped
+// from 18): the refined manifest's sm-inn is [17, 15] with sizeFactor 1.5
+// (minFrontage 27 m), far wider than batch001's [7, 6] inn — a fixed
+// 18 m lot no longer fits it at all, which is exactly the f0-widening
+// effect the ingest report measures.
 const lots = (n: number): Lot[] => Array.from({ length: n }, (_, i) => ({
   id: `arm-090:R${i}`, laneId: i === 0 ? 'green' : 'arm-090', side: 1 as const,
-  front: new Point(i * 20, 0), bearingDeg: 0, frontageM: 18, depthM: 25,
+  front: new Point(i * 20, 0), bearingDeg: 0, frontageM: 30, depthM: 25,
   score: 100 - i,
 }));
 
@@ -79,15 +83,15 @@ describe('spendCensus', () => {
     const closeLots: Lot[] = [
       {
         id: 'arm-090:R0', laneId: 'arm-090', side: 1, front: new Point(0, 0),
-        bearingDeg: 0, frontageM: 18, depthM: 25, score: 100,
+        bearingDeg: 0, frontageM: 30, depthM: 25, score: 100,
       },
       {
         id: 'arm-090:R1', laneId: 'arm-090', side: 1, front: new Point(0.5, 0),
-        bearingDeg: 0, frontageM: 18, depthM: 25, score: 99,
+        bearingDeg: 0, frontageM: 30, depthM: 25, score: 99,
       },
       {
         id: 'arm-090:R2', laneId: 'arm-090', side: 1, front: new Point(40, 0),
-        bearingDeg: 0, frontageM: 18, depthM: 25, score: 98,
+        bearingDeg: 0, frontageM: 30, depthM: 25, score: 98,
       },
     ];
     const out = spendCensus(closeLots, TEMPERATE_VILLAGE_DECK, site(20), new SeededRandom(3));
@@ -109,15 +113,15 @@ describe('spendCensus', () => {
     const contestedLots: Lot[] = [
       {
         id: 'arm-090:R0', laneId: 'arm-090', side: 1, front: new Point(0, 0),
-        bearingDeg: 0, frontageM: 18, depthM: 25, score: 100,
+        bearingDeg: 0, frontageM: 30, depthM: 25, score: 100,
       },
       {
         id: 'arm-090:R1', laneId: 'arm-090', side: 1, front: new Point(0.5, 0),
-        bearingDeg: 0, frontageM: 18, depthM: 25, score: 99,
+        bearingDeg: 0, frontageM: 30, depthM: 25, score: 99,
       },
       {
         id: 'arm-090:R2', laneId: 'arm-090', side: 1, front: new Point(40, 0),
-        bearingDeg: 0, frontageM: 18, depthM: 25, score: 98,
+        bearingDeg: 0, frontageM: 30, depthM: 25, score: 98,
       },
     ];
     const out = spendCensus(contestedLots, TEMPERATE_VILLAGE_DECK, site(300), new SeededRandom(1));
