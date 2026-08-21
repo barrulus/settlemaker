@@ -333,14 +333,6 @@ export const VEG_RADIUS_FACTOR = 1.8;
 /** Density ceiling: the survival chance a cell rolls against right at the
  * fabric edge (the densest ring), before any per-cell reduction. */
 export const VEG_BASE_DENSITY = 0.55;
-/**
- * Density-at-fabric-edge share from an earlier draft of the falloff curve
- * (ramp 0.25 -> 1.0 outward toward the rim). Superseded during design by
- * the corrected "densest at the fabric edge, thinning to the rim" curve
- * `vegetation.ts` actually implements -- kept declared here, per the
- * tunables convention, even though the current curve does not read it.
- */
-export const VEG_INNER_DENSITY_SHARE = 0.25;
 /** Density share allowed on LEFTOVER wedge ground -- inside the fabric
  * edge, but not claimed by any lot, croft, field strip, or lane corridor
  * -- where §7.3 wants the odd clump of trees to land. */

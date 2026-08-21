@@ -8,7 +8,7 @@ import { hasGlyph } from '../../src/village/glyphs.js';
 import { lotObb, obbOverlap } from '../../src/village/parcels/overlap.js';
 import { closestPointOnSegment, dist } from '../../src/village/geometry.js';
 import {
-  GREEN_JOIN_RATIO, RING_SETBACK_M, SHOREFRONT_BAND_M,
+  CLUMP_RADIUS_M, GREEN_JOIN_RATIO, RING_SETBACK_M, SHOREFRONT_BAND_M,
   SHOREFRONT_REACH_FACTOR, VEG_GLYPHS, VEG_LANE_CLEAR_M, VEG_SCALE_MAX, VEG_SCALE_MIN,
 } from '../../src/village/constants.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
@@ -89,6 +89,26 @@ describe('buildVegetation', () => {
       const parentId = c.id.slice(0, c.id.lastIndexOf(':'));
       expect(trees.some((t) => t.id === parentId)).toBe(true);
     }
+  });
+
+  it('every clump child lies within CLUMP_RADIUS_M of its parent (uniform-in-disc, not a square)', () => {
+    const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
+    let checkedAny = false;
+    for (let seed = 1; seed <= 10; seed++) {
+      const trees = buildVegetation(
+        site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, new SeededRandom(seed),
+      );
+      const byId = new Map(trees.map((t) => [t.id, t]));
+      for (const t of trees) {
+        const isChild = /^veg:-?\d+x-?\d+:\d+$/.test(t.id);
+        if (!isChild) continue;
+        const parent = byId.get(t.id.slice(0, t.id.lastIndexOf(':')));
+        expect(parent).toBeDefined();
+        checkedAny = true;
+        expect(dist(t.position, parent!.position)).toBeLessThanOrEqual(CLUMP_RADIUS_M + 1e-9);
+      }
+    }
+    expect(checkedAny).toBe(true);
   });
 
   it('scale jitter stays within VEG_SCALE_MIN..VEG_SCALE_MAX', () => {

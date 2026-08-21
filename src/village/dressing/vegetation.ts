@@ -166,8 +166,17 @@ export function buildVegetation(
 
       const clumpCount = rng.int(0, 3);
       for (let j = 1; j <= clumpCount; j++) {
-        const dx = (rng.float() * 2 - 1) * CLUMP_RADIUS_M;
-        const dy = (rng.float() * 2 - 1) * CLUMP_RADIUS_M;
+        // Uniform-in-disc placement, not a square: r is NOT scaled by
+        // sqrt(rng.float()) (which would bias toward the rim) -- a slight
+        // bias toward the parent is fine for a "clustered neighbours"
+        // effect and keeps the two-draw budget exact. theta uses the
+        // bearingVector convention (0 = north, clockwise) purely for
+        // consistency with the rest of the module; any orientation is
+        // equally valid since the offset is isotropic.
+        const r = rng.float() * CLUMP_RADIUS_M;
+        const theta = rng.float() * 2 * Math.PI;
+        const dx = r * Math.sin(theta);
+        const dy = -r * Math.cos(theta);
         const neighbourPos = new Point(position.x + dx, position.y + dy);
         if (isRejected(neighbourPos, green, lanes, lots, crofts, fields, site.water, builtRadiusM)) {
           continue;
