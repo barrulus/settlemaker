@@ -386,18 +386,22 @@ export const FURROW_PATTERN_STEP_DEG = 15;
  * so the draw count never depends on how many darts land. */
 export const VEG_CELL_M = 9;
 /**
- * Scatter rim, as a multiple of the MEASURED inner edge the ramp starts at
- * (the field band's outer radius where fields exist, else the measured
- * fabric radius) -- the outer edge of the square grid and of the density
- * falloff below.
+ * Scatter band DEPTH, metres, measured outward from the inner edge the ramp
+ * starts at (the field band's outer radius where fields exist, else the
+ * measured fabric radius). `rim = innerEdgeM + this` is the outer edge of
+ * the square grid and of the density falloff below.
  *
- * Fix wave (2026-08-21, C2): this used to multiply the PREDICTED
- * builtRadius, which put the rim permanently INSIDE the inner edge, so the
- * ramp was unreachable and not one tree landed beyond the fields. Retuned
- * from 1.8 to 1.5 at the same time: 1.8 of the field band's outer radius is
- * a far wider scatter than 1.8 of a built radius ever was.
+ * Fix wave (2026-08-22, W1): this replaces `VEG_RADIUS_FACTOR`, a MULTIPLE
+ * of the inner edge. A multiple compounds: at pop 900 the measured inner
+ * edge is already ~430 m, so a 1.5x rim threw trees out to ~645 m and the
+ * renderer -- whose bounds include every tree -- framed a village of ~580 m
+ * inside a canvas of ~1300 m, crushing the settlement into a corner of
+ * mostly empty grass. A scatter band is a fringe of countryside around the
+ * fields; its depth does not grow with the village's size, so it is a
+ * distance, not a ratio. Same shape as FIELD_BAND_DEPTH_MAX_M, which caps
+ * the field band for the same reason.
  */
-export const VEG_RADIUS_FACTOR = 1.5;
+export const VEG_BAND_DEPTH_M = 70;
 /** §7.3 "thinning outward from the fabric": the first share of the scatter
  * band beyond the inner edge holds full VEG_BASE_DENSITY (the peak sits
  * just OUTSIDE the fields, where a village's scrub actually crowds), and

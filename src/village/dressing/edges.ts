@@ -1,7 +1,7 @@
 import { Point } from '../../types/point.js';
 import { SeededRandom } from '../../utils/random.js';
 import { nominalFootprint } from '../glyphs.js';
-import { arcLengths, sampleAt, withinLaneCorridor } from '../geometry.js';
+import { arcLengths, sampleAt, withinLaneCorridor, wrapDeg } from '../geometry.js';
 import {
   EDGE_LANE_CLEAR_M, EDGE_NONE_POP_THRESHOLD, EDGE_NONE_POOR_BONUS,
   EDGE_STYLE_ORDER, EDGE_STYLE_WEIGHTS,
@@ -67,6 +67,23 @@ function withinAnyLaneCorridor(p: Point, lanes: Lane[]): boolean {
  * `i` in each stamp's id (`edge:<ownerId>:<i>`) is the ordinal of its
  * position along the walk — including positions skipped for lane
  * clearance, which is why emitted ids may skip numbers at a break.
+ *
+ * ORIENTATION CONVENTION (W2, fix wave 2026-08-22): `bearingDeg` is the
+ * glyph's RENDER bearing — what the renderer feeds `rotate()` — not the
+ * path's own bearing, matching `Poi.bearingDeg` and `Building.bearingDeg`,
+ * which are likewise render bearings rather than world ones.
+ *
+ * The two differ by exactly -90 for this glyph family. An `sm-edge-*` tile
+ * is drawn with its LONG axis along the art box's +x (footprints are
+ * [8, 2], [6, 1.4], ... — wide by shallow), whereas a bearing of 0 means
+ * north, which is -y. The renderer applies `rotate(bearingDeg)`, under
+ * which the glyph's long axis (1, 0) lands on (cos, sin); the path segment
+ * at bearing β runs along (sin β, -cos β); equating them gives
+ * `bearingDeg = β - 90`. Emitting β raw — as this did — left every stamp
+ * crosswise, so hedges and walls rendered as ladder rungs sticking out of
+ * the boundary instead of chains running along it. Dwellings need no such
+ * correction: their door is at glyph-SOUTH (+y), so `renderBearingFor`'s
+ * +180 is already the right correction for a +y-aligned feature.
  */
 export function stampEdge(
   ownerId: string, polyline: Point[], style: EdgeStyle, lanes: Lane[],
@@ -86,7 +103,12 @@ export function stampEdge(
   for (let s = step / 2; s < total; s += step, i++) {
     const { p, dirDeg } = sampleAt(polyline, acc, s);
     if (withinAnyLaneCorridor(p, lanes)) continue;
-    stamps.push({ id: `edge:${ownerId}:${i}`, glyph, position: p, bearingDeg: dirDeg });
+    stamps.push({
+      id: `edge:${ownerId}:${i}`,
+      glyph,
+      position: p,
+      bearingDeg: wrapDeg(dirDeg - 90),
+    });
   }
   return stamps;
 }

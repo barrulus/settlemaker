@@ -9,7 +9,7 @@ import { lotObb, obbOverlap } from '../../src/village/parcels/overlap.js';
 import { closestPointOnSegment, dist } from '../../src/village/geometry.js';
 import {
   CLUMP_RADIUS_M, GREEN_JOIN_RATIO, RING_SETBACK_M, SHOREFRONT_BAND_M,
-  SHOREFRONT_REACH_FACTOR, VEG_GLYPHS, VEG_LANE_CLEAR_M, VEG_RADIUS_FACTOR,
+  SHOREFRONT_REACH_FACTOR, VEG_BAND_DEPTH_M, VEG_GLYPHS, VEG_LANE_CLEAR_M,
   VEG_SCALE_MAX, VEG_SCALE_MIN,
 } from '../../src/village/constants.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
@@ -126,12 +126,12 @@ describe('buildVegetation', () => {
 
   it('density falls with distance from the fabric edge (binned counts, generous tolerance)', () => {
     // No lanes/fields: fabric edge (innerEdge) is passed directly, scatter
-    // rim == innerEdge * VEG_RADIUS_FACTOR. §7.3: densest just outside the
+    // rim == innerEdge + VEG_BAND_DEPTH_M. §7.3: densest just outside the
     // fabric edge, thinning to the rim -- so the half of the scatter band
     // closer to the fabric edge should carry noticeably more trees than
     // the half closer to the rim.
     const innerEdge = 60;
-    const rim = innerEdge * VEG_RADIUS_FACTOR;
+    const rim = innerEdge + VEG_BAND_DEPTH_M;
     const mid = (innerEdge + rim) / 2;
     let near = 0;
     let far = 0;
@@ -237,7 +237,8 @@ describe('vegetation geometric invariants (real village fixtures)', () => {
   // Fix wave regression net (2026-08-21, I1a): the previous net asserted
   // only ABSENCE -- no tree on a claim -- which an empty scatter satisfies
   // trivially and a dead density ramp satisfied for real. The C2 defect was
-  // that `rim = builtRadius x VEG_RADIUS_FACTOR` always fell BELOW the field
+  // that `rim = builtRadius x VEG_RADIUS_FACTOR` (the retired constant)
+  // always fell BELOW the field
   // band's outer edge, so densityAt collapsed to flat infill and NOT ONE
   // tree could land beyond the fields; the grid did not even reach that far.
   // This is the positive guard: real villages must put trees out past their
@@ -269,7 +270,7 @@ describe('vegetation geometric invariants (real village fixtures)', () => {
 describe('shorefront suppression (§8.4, coastal fixture)', () => {
   // Water starts 15 m east of the green -- close enough that the ordinary
   // scatter band overlaps it, so this fixture actually exercises the rule
-  // rather than the water sitting harmlessly outside VEG_RADIUS_FACTOR.
+  // rather than the water sitting harmlessly outside the scatter band.
   const water = [[
     { x: 15, y: -200 }, { x: 200, y: -200 }, { x: 200, y: 200 }, { x: 15, y: 200 },
   ].map((p) => new Point(p.x, p.y))];
@@ -278,7 +279,7 @@ describe('shorefront suppression (§8.4, coastal fixture)', () => {
   const reach = builtRadiusM * SHOREFRONT_REACH_FACTOR;
   // The scatter's own inner edge is independent of the shorefront reach
   // (fix wave, C2: they are two separate MEASURED radii now), and must be
-  // large enough that the rim -- innerEdgeM x VEG_RADIUS_FACTOR -- reaches
+  // large enough that the rim -- innerEdgeM + VEG_BAND_DEPTH_M -- reaches
   // past `reach`, or "beyond the reach, scatter resumes" has no band to
   // resume in.
   const innerEdgeM = 60;

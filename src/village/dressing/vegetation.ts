@@ -7,7 +7,7 @@ import {
 import { lotObb, pointInObb } from '../parcels/overlap.js';
 import {
   CLUMP_RADIUS_M, SHOREFRONT_BAND_M, VEG_BASE_DENSITY, VEG_CELL_M,
-  VEG_GLYPHS, VEG_INFILL_SHARE, VEG_LANE_CLEAR_M, VEG_RADIUS_FACTOR, VEG_RAMP_PEAK_SHARE,
+  VEG_BAND_DEPTH_M, VEG_GLYPHS, VEG_INFILL_SHARE, VEG_LANE_CLEAR_M, VEG_RAMP_PEAK_SHARE,
   VEG_SCALE_MAX, VEG_SCALE_MIN,
 } from '../constants.js';
 import type {
@@ -85,7 +85,8 @@ function isRejected(
  * VEG_RADIUS_FACTOR`, which -- once fields were re-keyed off the MEASURED
  * fabric -- was always BELOW `innerEdge`, so this function collapsed to its
  * first line and the whole ramp was dead code: not one tree could land
- * beyond the field band. `rim` is now keyed off `innerEdge` itself.
+ * beyond the field band. `rim` is now keyed off `innerEdge` itself, as a
+ * fixed depth beyond it (W1) rather than a multiple of it.
  */
 function densityAt(d: number, innerEdge: number, rim: number): number {
   if (d < innerEdge) return VEG_BASE_DENSITY * VEG_INFILL_SHARE;
@@ -119,8 +120,10 @@ function pickGlyph(biome: string, rng: SeededRandom): string {
  * radius (lot claims + crofts) when there are none. Never a prediction --
  * see the fix-wave rule: after pass 3 nothing keys off `predictedBuiltRadius`.
  * The scatter rim, and with it the grid's own extent, is
- * `innerEdgeM x VEG_RADIUS_FACTOR`, so the grid always reaches past the
- * fields it is supposed to thin out beyond.
+ * `innerEdgeM + VEG_BAND_DEPTH_M`, so the grid always reaches past the
+ * fields it is supposed to thin out beyond -- by a fixed depth, so the
+ * scatter (and with it the renderer's bounds, which include every tree)
+ * cannot outgrow the village it surrounds (W1).
  *
  * `shorefrontReachM` is §8.4's suppression reach, likewise measured
  * (fabric radius x SHOREFRONT_REACH_FACTOR), passed in rather than derived.
@@ -129,7 +132,7 @@ export function buildVegetation(
   site: Site, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldStrip[],
   innerEdgeM: number, shorefrontReachM: number, rng: SeededRandom,
 ): Vegetation[] {
-  const rim = innerEdgeM * VEG_RADIUS_FACTOR;
+  const rim = innerEdgeM + VEG_BAND_DEPTH_M;
   if (!(rim > 0)) return [];
 
   const halfCells = Math.max(0, Math.ceil(rim / VEG_CELL_M));

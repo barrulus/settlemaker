@@ -115,10 +115,45 @@ describe('stampEdge', () => {
     stamps.forEach((s, idx) => {
       expect(s.id).toBe(`edge:owner:${idx}`);
       expect(s.glyph).toBe('sm-edge-hedge');
-      expect(s.bearingDeg).toBeCloseTo(90); // +x direction = east = 90deg
+      // W2: bearingDeg is the glyph's RENDER bearing, not the path's own.
+      // An sm-edge-* tile's long axis lies along the art box's +x, so the
+      // renderer's rotate() must turn it by (path bearing - 90) to lay it
+      // ALONG the path. This polyline runs east (bearing 90), so a stamp
+      // rendered at rotate(0) already lies east-west, along it.
+      expect(s.bearingDeg).toBeCloseTo(0);
     });
     expect(stamps[0].position.x).toBeCloseTo(4);
     expect(stamps[1].position.x).toBeCloseTo(12);
+  });
+
+  // W2 regression net (fix wave 2026-08-22): stamps used to carry the
+  // path's own bearing, which the renderer fed straight to rotate(). An
+  // sm-edge-* tile's long axis lies along the art box's +x, so that left
+  // every stamp CROSSWISE -- hedges and walls rendered as ladder rungs
+  // sticking out of the boundary instead of chains running along it. This
+  // pins the invariant rather than a magic number: apply the renderer's own
+  // rotate() to the glyph's long axis and it must land on the segment.
+  it('orients every stamp so its LONG axis lies along the path segment', () => {
+    // The renderer emits `rotate(bearingDeg)`, under which a glyph-space
+    // vector (1, 0) maps to (cos, sin) in degrees-clockwise screen space.
+    const longAxisAfterRotate = (bearingDeg: number): Point => {
+      const r = (bearingDeg * Math.PI) / 180;
+      return new Point(Math.cos(r), Math.sin(r));
+    };
+    // A polyline per compass direction, plus two obliques.
+    for (const bearing of [0, 45, 90, 135, 180, 225, 270, 315, 20, 200]) {
+      const r = (bearing * Math.PI) / 180;
+      const dir = new Point(Math.sin(r), -Math.cos(r)); // 0 = north = -y
+      const line = [new Point(0, 0), new Point(dir.x * 60, dir.y * 60)];
+      const stamps = stampEdge('o', line, 'wall', []);
+      expect(stamps.length).toBeGreaterThan(0);
+      for (const s of stamps) {
+        const axis = longAxisAfterRotate(s.bearingDeg);
+        // Undirected: the tile is symmetric end to end, so |dot| == 1.
+        const dot = axis.x * dir.x + axis.y * dir.y;
+        expect(Math.abs(dot)).toBeCloseTo(1, 6);
+      }
+    }
   });
 
   it('uses the correct glyph per style', () => {
