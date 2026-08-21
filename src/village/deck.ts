@@ -96,7 +96,7 @@ const BIOME_SUFFIX: Record<string, string> = {
  * covers dwellings and wells per biome but not every id — so the fallback
  * leg is ordinary behaviour, not an error path.
  */
-function resolveGlyphFor(biome: string, glyph: string): string {
+export function resolveGlyphFor(biome: string, glyph: string): string {
   const suffix = BIOME_SUFFIX[biome] ?? '';
   if (suffix === '') return glyph;
   const suffixed = `${glyph}${suffix}`;

@@ -134,6 +134,22 @@ export interface Vegetation {
   scale?: number;
 }
 
+/**
+ * §7.4: a capped, rule-gated placement -- well, stone circle, boathouse --
+ * as opposed to the density scatter in `Vegetation`. `id` is one of
+ * `poi:well` / `poi:stone-circle` / `poi:boathouse` (each kind is placed at
+ * most once per village). `bearingDeg` is the glyph's RENDER bearing (0 for
+ * the invariant well/stone-circle; the door-flip convention for the
+ * boathouse, matching `dwellings.ts`'s `renderBearingFor`).
+ */
+export interface Poi {
+  id: string;
+  kind: 'well' | 'stone-circle' | 'boathouse';
+  glyph: string;
+  position: Point;
+  bearingDeg: number;
+}
+
 export interface VillageModel {
   site: Site;
   green: Green;
@@ -141,11 +157,12 @@ export interface VillageModel {
   lots: Lot[];
   buildings: Building[];
   /** §7.1: drawn ONCE per village by `dressVillage`, held constant for
-   * every boundary consumer (crofts, fields; vegetation/POIs later). */
+   * every boundary consumer (crofts, fields, vegetation, POIs). */
   edgeStyle: EdgeStyle;
   crofts: Croft[];
   fields: FieldStrip[];
   vegetation: Vegetation[];
+  pois: Poi[];
   diagnostics: string[];
 }
 

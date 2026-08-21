@@ -352,6 +352,41 @@ export const CLUMP_RADIUS_M = 7;
 export const VEG_SCALE_MIN = 0.8;
 export const VEG_SCALE_MAX = 1.15;
 
+// --- POIs (pass 5 dressing, §7.4/§8.5) ----------------------------------
+/** §7.4: every village at or above this population gets a well, at the
+ * green's centre. Below it a hamlet has no communal water point worth
+ * marking. */
+export const WELL_MIN_POP = 40;
+/** Added to a lane's own half-width (plus the well footprint's own half
+ * extent) when deciding whether the well, sitting at the green centre, is
+ * too close to a lane running under the green. */
+export const WELL_LANE_CLEAR_M = 0.5;
+/** The well's off-centre nudge (perpendicular to the offending lane) is
+ * capped at this fraction of the green's DRAWN radius, so it can never
+ * wander off the turf it is allowed to sit on. */
+export const WELL_NUDGE_CAP_RATIO = 0.6;
+/** March step, metres, while searching outward for a clear nudge position. */
+export const WELL_NUDGE_STEP_M = 0.25;
+
+/** §7.4/§8.3: chance a village earns a stone circle at all -- rolled ONCE,
+ * always, so the draw order never shifts on whether it lands. */
+export const STONE_CIRCLE_CHANCE = 0.08;
+/** How far outside the fabric the stone circle sits, as a multiple of
+ * builtRadius. */
+export const STONE_CIRCLE_RADIUS_FACTOR = 1.7;
+/** Its footprint: a 30 m stone ring, i.e. a 15 m radius disc. */
+export const STONE_CIRCLE_FOOTPRINT_RADIUS_M = 15;
+/** Bearings tried (rng.int(0,360) each) before giving up on a stone circle. */
+export const STONE_CIRCLE_BEARING_TRIES = 12;
+/** A vegetation position this close to the stone circle's footprint counts
+ * as a conflict -- the tree is not removed, the bearing is rejected. */
+export const STONE_CIRCLE_VEG_CLEAR_M = 4;
+
+/** §8.4: how far (metres, each direction) the boathouse search slides along
+ * the shore looking for a clear spot, once the nearest point is claimed. */
+export const BOATHOUSE_SLIDE_RANGE_M = 40;
+export const BOATHOUSE_SLIDE_STEP_M = 4;
+
 export interface VegGlyphWeight { glyph: string; weight: number }
 /**
  * Per-biome scatter mix, walked in array order (never object-key order)

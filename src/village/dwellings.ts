@@ -74,7 +74,7 @@ export function sizeFor(
  * `upVector`; the durable fix is regenerating it with upVector per its
  * own integration notes, at which point this becomes data-driven.
  */
-function renderBearingFor(glyph: string, lotBearingDeg: number): number {
+export function renderBearingFor(glyph: string, lotBearingDeg: number): number {
   const rotation = rotationOf(glyph);
   if (rotation === 'invariant') return 0;
   if (rotation === 'snap-cardinal') return wrapDeg(Math.round((lotBearingDeg + 180) / 90) * 90);
