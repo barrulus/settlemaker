@@ -1,12 +1,16 @@
 import { Point } from '../../types/point.js';
-import { bearingVector, dist, inAnyWater } from '../geometry.js';
+import {
+  bearingVector, dist, greenDrawnRadius, inAnyWater,
+} from '../geometry.js';
+import { inkExtent } from '../glyphs.js';
 import { frontageAt, orderLots } from '../parcels/lots.js';
-import { lotObb, obbOverlap, type Obb } from '../parcels/overlap.js';
+import {
+  lotObb, obbOverlap, pointInObb, type Obb,
+} from '../parcels/overlap.js';
 import { stampEdge } from './edges.js';
 import {
-  CROFT_DEPTH_MAX_M, CROFT_MIN_DEPTH_M, CROFT_TIGHT_FRONTAGE_RATIO,
-  GRADIENT_EXPONENT, GRADIENT_K, GRADIENT_RATIO_CAP, GREEN_JOIN_RATIO,
-  LANE_SETBACK_M, RING_SETBACK_M,
+  CROFT_BEHIND_INK_M, CROFT_DEPTH_MAX_M, CROFT_MIN_DEPTH_M, CROFT_TIGHT_FRONTAGE_RATIO,
+  GRADIENT_EXPONENT, GRADIENT_K, GRADIENT_RATIO_CAP, LANE_SETBACK_M,
 } from '../constants.js';
 import type {
   Building, Croft, EdgeStyle, Green, Lane, Lot,
@@ -45,12 +49,39 @@ function lotAxes(lot: Lot): { tangent: Point; normal: Point } {
   return { tangent, normal };
 }
 
-/** The croft's OBB for a trial `depth`: same width as the lot, sitting
- * immediately behind the lot's claim (which is already `lot.depthM` deep). */
-function croftObbAt(lot: Lot, depth: number): Obb {
+/**
+ * §5.6/V3: where the croft BEGINS, as a distance from `lot.front` along the
+ * lot's inward normal -- just behind the dwelling's painted back wall
+ * (`building position + ink depth / 2 + CROFT_BEHIND_INK_M`), not at the
+ * abstract back of the lot.
+ *
+ * Fix wave (2026-08-21, V3): starting at `lot.depthM` left every garden
+ * floating ~16 m clear of its own house with bare ground between them, so
+ * crofts read as unattached rugs rather than as the plot's own back yard.
+ * The unused ground is the lot's OWN, which is why the croft is allowed to
+ * overlap its own lot's claim (same owner) and only that one -- see
+ * `maxValidCroftDepth`, which already skips `lot.id` in the claim loop.
+ *
+ * Falls back to `lot.depthM` (the old behaviour) for a lot with no building,
+ * which `buildCrofts` never asks about since it only walks BUILT lots.
+ */
+function croftNearOffset(lot: Lot, building: Building | undefined): number {
+  if (!building) return lot.depthM;
+  const { normal } = lotAxes(lot);
+  const alongNormal = (building.position.x - lot.front.x) * normal.x
+    + (building.position.y - lot.front.y) * normal.y;
+  const back = alongNormal + inkExtent(building.glyph, building.footprint).depth / 2
+    + CROFT_BEHIND_INK_M;
+  return Math.min(lot.depthM, Math.max(0, back));
+}
+
+/** The croft's OBB for a trial `depth`: same width as the lot, running from
+ * `nearOffset` (just behind the dwelling's ink) back to `lot.depthM + depth`
+ * -- so it fills the lot's own unused ground AND the extension beyond it. */
+function croftObbAt(lot: Lot, nearOffset: number, depth: number): Obb {
   const { tangent, normal } = lotAxes(lot);
-  const halfD = depth / 2;
-  const centerDist = lot.depthM + halfD;
+  const halfD = (lot.depthM + depth - nearOffset) / 2;
+  const centerDist = nearOffset + halfD;
   return {
     center: new Point(lot.front.x + normal.x * centerDist, lot.front.y + normal.y * centerDist),
     tangent,
@@ -77,14 +108,6 @@ function obbSamplePoints(obb: Obb): Point[] {
   return pts;
 }
 
-/** True when `p` lies inside `obb` expanded by `margin` on both axes. */
-function pointNearObb(p: Point, obb: Obb, margin: number): boolean {
-  const d = new Point(p.x - obb.center.x, p.y - obb.center.y);
-  const alongT = Math.abs(d.x * obb.tangent.x + d.y * obb.tangent.y);
-  const alongN = Math.abs(d.x * obb.normal.x + d.y * obb.normal.y);
-  return alongT <= obb.halfW + margin && alongN <= obb.halfD + margin;
-}
-
 function laneClearance(lane: Lane): number {
   return lane.widthM / 2 + (LANE_SETBACK_M[lane.type] ?? 2);
 }
@@ -101,16 +124,10 @@ function laneWithinObb(obb: Obb, lane: Lane): boolean {
     const steps = Math.max(1, Math.ceil(segLen / 2));
     for (let k = 0; k <= steps; k++) {
       const p = new Point(a.x + ((b.x - a.x) * k) / steps, a.y + ((b.y - a.y) * k) / steps);
-      if (pointNearObb(p, obb, clearance)) return true;
+      if (pointInObb(p, obb, clearance)) return true;
     }
   }
   return false;
-}
-
-/** The green's DRAWN edge (art fills ~87% of the box, per GREEN_JOIN_RATIO),
- * same radius `subdivideGreen` seats the ring's fronts against. */
-function greenDrawnRadius(green: Green): number {
-  return (green.diameter / 2) * GREEN_JOIN_RATIO + RING_SETBACK_M;
 }
 
 function obbNearGreen(obb: Obb, green: Green): boolean {
@@ -131,12 +148,12 @@ function obbHitsWater(obb: Obb, water: Point[][]): boolean {
  * `maxDepthClearOf`.
  */
 function maxValidCroftDepth(
-  lot: Lot, target: number, lanes: Lane[], green: Green, water: Point[][],
+  lot: Lot, nearOffset: number, target: number, lanes: Lane[], green: Green, water: Point[][],
   otherLots: Lot[], priorObbs: Obb[],
 ): number {
   const valid = (depth: number): boolean => {
-    if (depth <= 0) return true;
-    const obb = croftObbAt(lot, depth);
+    const obb = croftObbAt(lot, nearOffset, depth);
+    if (!(obb.halfD > 0)) return true;
     if (lanes.some((lane) => laneWithinObb(obb, lane))) return false;
     if (obbNearGreen(obb, green)) return false;
     if (obbHitsWater(obb, water)) return false;
@@ -161,15 +178,16 @@ function maxValidCroftDepth(
 }
 
 /** 4 corners: [near-flank1, near-flank2, far-flank2, far-flank1] -- the
- * lot-facing edge (near1-near2) is the polygon's first edge. */
-function croftPolygon(lot: Lot, depth: number): Point[] {
+ * house-facing edge (near1-near2) is the polygon's first edge. */
+function croftPolygon(lot: Lot, nearOffset: number, depth: number): Point[] {
   const { tangent, normal } = lotAxes(lot);
   const halfW = lot.frontageM / 2;
   const near = new Point(
-    lot.front.x + normal.x * lot.depthM,
-    lot.front.y + normal.y * lot.depthM,
+    lot.front.x + normal.x * nearOffset,
+    lot.front.y + normal.y * nearOffset,
   );
-  const far = new Point(near.x + normal.x * depth, near.y + normal.y * depth);
+  const farDist = lot.depthM + depth;
+  const far = new Point(lot.front.x + normal.x * farDist, lot.front.y + normal.y * farDist);
   const near1 = new Point(near.x - tangent.x * halfW, near.y - tangent.y * halfW);
   const near2 = new Point(near.x + tangent.x * halfW, near.y + tangent.y * halfW);
   const far1 = new Point(far.x - tangent.x * halfW, far.y - tangent.y * halfW);
@@ -178,10 +196,10 @@ function croftPolygon(lot: Lot, depth: number): Point[] {
 }
 
 /** The three open sides -- both flanks plus the back -- as one polyline.
- * The lot-facing side (near1-near2) is excluded: it borders the lot's own
- * claim, not the settlement's edge. */
-function croftBoundary(lot: Lot, depth: number): Point[] {
-  const [near1, near2, far2, far1] = croftPolygon(lot, depth);
+ * The house-facing side (near1-near2) is excluded: it runs across the
+ * dwelling's own back door, not along the settlement's edge. */
+function croftBoundary(lot: Lot, nearOffset: number, depth: number): Point[] {
+  const [near1, near2, far2, far1] = croftPolygon(lot, nearOffset, depth);
   return [near1, far1, far2, near2];
 }
 
@@ -195,22 +213,28 @@ export function buildCrofts(
   lots: Lot[], buildings: Building[], green: Green, lanes: Lane[], water: Point[][],
   builtRadiusM: number, f0: number, style: EdgeStyle,
 ): Croft[] {
-  const builtLotIds = new Set(buildings.map((b) => b.lotId));
-  const ordered = orderLots(lots).filter((l) => builtLotIds.has(l.id));
+  const buildingByLot = new Map(buildings.map((b) => [b.lotId, b]));
+  const ordered = orderLots(lots).filter((l) => buildingByLot.has(l.id));
 
   const crofts: Croft[] = [];
   const priorObbs: Obb[] = [];
   for (const lot of ordered) {
     const target = croftDepthTarget(lot, green, builtRadiusM, f0);
     if (target <= 0) continue;
-    const depth = maxValidCroftDepth(lot, target, lanes, green, water, lots, priorObbs);
+    const nearOffset = croftNearOffset(lot, buildingByLot.get(lot.id));
+    const depth = maxValidCroftDepth(
+      lot, nearOffset, target, lanes, green, water, lots, priorObbs,
+    );
     if (depth < CROFT_MIN_DEPTH_M) continue;
 
     const id = `croft:${lot.id}`;
-    const polygon = croftPolygon(lot, depth);
-    const boundary = stampEdge(id, croftBoundary(lot, depth), style, lanes);
+    const polygon = croftPolygon(lot, nearOffset, depth);
+    const boundary = stampEdge(id, croftBoundary(lot, nearOffset, depth), style, lanes);
+    // `depthM` stays the depth BEYOND the lot's claim -- the quantity
+    // CROFT_MIN_DEPTH_M gates and the gradient targets. The polygon is
+    // deeper than that by the lot's own unused back ground (V3).
     crofts.push({ id, lotId: lot.id, polygon, depthM: depth, boundary });
-    priorObbs.push(croftObbAt(lot, depth));
+    priorObbs.push(croftObbAt(lot, nearOffset, depth));
   }
   return crofts;
 }

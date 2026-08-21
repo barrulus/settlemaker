@@ -168,16 +168,20 @@ describe('village invariants (design §5.7)', () => {
     }
   }, GRID_TIMEOUT_MS);
 
-  // Task 3 (§5.6/§7.1): a croft never overlaps ANY lot's claim -- not just
-  // the lot it belongs to -- across the same probe grid the other §5.4
-  // invariants use.
-  it('never overlaps a croft with a lot claim', () => {
+  // Task 3 (§5.6/§7.1): a croft never overlaps any OTHER lot's claim,
+  // across the same probe grid the other §5.4 invariants use.
+  //
+  // Fix wave (2026-08-21, V3): its OWN lot is now excluded, deliberately.
+  // The croft starts just behind the dwelling's ink rather than at the
+  // abstract back of the lot, so it fills the lot's own unused ground --
+  // same owner, no conflict. Every other claim stays off limits.
+  it('never overlaps a croft with another lot\'s claim', () => {
     const OVERLAP_EPS_M = 0.25;
     for (const input of inputs) {
       for (const seed of seeds) {
         const m = generateVillage(input, seed);
         if (m.crofts.length === 0) continue;
-        const lotObbs = m.lots.map((l) => lotObb(l));
+        const lotObbs = m.lots.map((l) => ({ id: l.id, obb: lotObb(l) }));
         for (const croft of m.crofts) {
           const [near1, near2, far2, far1] = croft.polygon;
           const center = new Point(
@@ -188,11 +192,16 @@ describe('village invariants (design §5.7)', () => {
           const tLen = Math.hypot(tangent.x, tangent.y) || 1;
           tangent.x /= tLen; tangent.y /= tLen;
           const normal = new Point(-tangent.y, tangent.x);
+          // Depth measured from the polygon itself: `croft.depthM` is the
+          // extension BEYOND the lot claim, which is no longer the quad's
+          // full depth (V3).
+          const halfD = Math.hypot(far1.x - near1.x, far1.y - near1.y) / 2;
           const croftObb = {
-            center, tangent, normal, halfW: tLen / 2, halfD: croft.depthM / 2,
+            center, tangent, normal, halfW: tLen / 2, halfD,
           };
           for (const other of lotObbs) {
-            expect(obbOverlap(croftObb, other, OVERLAP_EPS_M)).toBe(false);
+            if (other.id === croft.lotId) continue;
+            expect(obbOverlap(croftObb, other.obb, OVERLAP_EPS_M)).toBe(false);
           }
         }
       }
