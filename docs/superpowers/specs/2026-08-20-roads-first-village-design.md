@@ -405,7 +405,9 @@ Ties in lot score are broken by lot id, so the draw order is deterministic.
 Pass 2 *predicted* the frontage the census needs; this pass discovers the truth. If lots
 run out before the population is housed:
 
-- return to pass 2 for another lane, up to **three** rounds;
+- return to pass 2 for another lane, up to **four** rounds (`MAX_FEEDBACK_ROUNDS`; raised
+  from three at the gate-4 fixes, to restore full-census housing after the `seatEfficiency`
+  fix — the bound itself is unchanged in kind, only its value);
 - if it still does not fit, tighten `f0`'s gap term by 15% and re-cut the lots;
 - if it still does not fit after that, house the remainder in the highest-occupancy deck
   entry that fits the remaining lots, and record an overflow diagnostic.

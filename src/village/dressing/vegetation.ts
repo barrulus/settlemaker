@@ -169,10 +169,10 @@ export function buildVegetation(
 
       const clumpCount = rng.int(0, 3);
       for (let j = 1; j <= clumpCount; j++) {
-        // Uniform-in-disc placement, not a square: r is NOT scaled by
-        // sqrt(rng.float()) (which would bias toward the rim) -- a slight
-        // bias toward the parent is fine for a "clustered neighbours"
-        // effect and keeps the two-draw budget exact. theta uses the
+        // r is NOT scaled by sqrt(rng.float()), so this is NOT uniform in
+        // the disc -- it is deliberately biased toward the parent, which is
+        // what a "clustered neighbours" effect wants, and it keeps the
+        // two-draw budget exact. theta uses the
         // bearingVector convention (0 = north, clockwise) purely for
         // consistency with the rest of the module; any orientation is
         // equally valid since the offset is isotropic.

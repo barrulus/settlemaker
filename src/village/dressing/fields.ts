@@ -216,17 +216,27 @@ function isFieldPoint(
   return true;
 }
 
-/** `crops[ordinal % crops.length]`, unless this is the wedge's first
- * (innermost) strip ring and the roll (only made for the temperate crop
- * table -- desert/tropical/pasture tables never swap) hits: then an
- * orchard/vine tile instead, alternating by a per-wedge-run counter shared
- * across the whole village so consecutive swaps read as orchard, vine,
- * orchard, vine rather than always the same tile. */
+/**
+ * `crops[ordinal % crops.length]`, unless this is the wedge's first KEPT
+ * strip and the roll (only made for the temperate crop table --
+ * desert/tropical/pasture tables never swap) hits: then an orchard/vine
+ * tile instead, alternating by a per-wedge-run counter shared across the
+ * whole village so consecutive swaps read as orchard, vine, orchard, vine
+ * rather than always the same tile.
+ *
+ * M1: "first" here means first in the strip walk, which runs ACROSS the
+ * furrow direction -- it is a lateral edge of the block, NOT the ring
+ * nearest the settlement, as this used to claim ("isFirstRing"). One strip
+ * per wedge carrying the swap is the point; no proximity is asserted,
+ * because none is measured. Gating the swap on genuine proximity to the
+ * fabric would need a second pass over the kept strips and is a design
+ * question for a render gate, not a rename.
+ */
 function pickCropGlyph(
-  crops: string[], ordinal: number, isFirstRing: boolean, allowOrchardVine: boolean,
+  crops: string[], ordinal: number, isFirstStrip: boolean, allowOrchardVine: boolean,
   rng: SeededRandom, toggle: { n: number },
 ): string {
-  if (isFirstRing && allowOrchardVine && rng.bool(FIELD_ORCHARD_VINE_CHANCE)) {
+  if (isFirstStrip && allowOrchardVine && rng.bool(FIELD_ORCHARD_VINE_CHANCE)) {
     const glyph = toggle.n % 2 === 0 ? 'sm-field-orchard' : 'sm-field-vine';
     toggle.n += 1;
     return glyph;
@@ -353,8 +363,8 @@ function buildWedgeStrips(
       const uStart = uMin + ((uMax - uMin) * bestStart) / uSteps;
       const uEnd = uMin + ((uMax - uMin) * (bestStart + bestLen - 1)) / uSteps;
       if (uEnd - uStart >= FURROW_MIN_LENGTH_M) {
-        const isFirstRing = createdIndex === 0;
-        const glyph = pickCropGlyph(crops, createdIndex, isFirstRing, allowOrchardVine, rng, toggle);
+        const isFirstStrip = createdIndex === 0;
+        const glyph = pickCropGlyph(crops, createdIndex, isFirstStrip, allowOrchardVine, rng, toggle);
         const polygon = [toXY(uStart, vLo), toXY(uEnd, vLo), toXY(uEnd, vHi), toXY(uStart, vHi)];
         const id = `field:${wedge.id}:S${ordinal}`;
         strips.push({

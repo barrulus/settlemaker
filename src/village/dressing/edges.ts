@@ -11,7 +11,10 @@ import type { EdgeStyle, EdgeStamp, Lane } from '../types.js';
 /**
  * §7.1: the boundary asset choice is by biome (and culture) and held
  * CONSTANT across the whole settlement. Glyph per style — the `sm-edge-*`
- * family, all footprint [8, 2] m, cls "pattern", zBand "parcel".
+ * family, all cls "pattern", zBand "parcel". Their footprints DIFFER
+ * (hedge [8, 2], wall [8, 1.4], fence [6, 1.4], ditch [10, 2.4] m), which
+ * is why `stampEdge` reads the stamp pitch from the manifest per glyph
+ * rather than assuming one.
  */
 const EDGE_GLYPHS: Record<Exclude<EdgeStyle, 'none'>, string> = {
   hedge: 'sm-edge-hedge',
