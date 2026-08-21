@@ -23,6 +23,21 @@ export const LANE_WANDER_M = 3.5;
 export const MIN_ARM_SEPARATION_DEG = 35;
 export const MAX_INVENTED_LANES = 24;
 export const FRONTAGE_MARGIN = 1.15;
+/**
+ * How far a green-attached invented lane reaches out, as a fraction of the
+ * arm extent (`builtRadius * 2`, see LANE_EXTENT_FACTOR below). A gate
+ * verdict of "the invented streets run too far past the built-up edge"
+ * lowers this; "invented lanes read stubby/cramped against real arms"
+ * raises it toward 1.0.
+ */
+export const INVENTED_LANE_LENGTH_FACTOR = 0.6;
+/**
+ * How far a lane BRANCH (off another lane, once the green itself has no
+ * free bearing left) reaches out, as a fraction of the arm extent. A gate
+ * verdict of "branches read as short dead-end nubs" raises this; "branches
+ * sprawl further than the lane they're hanging off" lowers it.
+ */
+export const BRANCH_LENGTH_FACTOR = 0.5;
 
 // --- Relaxation --------------------------------------------------------
 export const RELAX_ITERATIONS = 3;
@@ -69,6 +84,14 @@ export const SCORE_RING_BONUS = 40;
 // --- Feedback loop -----------------------------------------------------
 export const MAX_FEEDBACK_ROUNDS = 3;
 export const GAP_TIGHTEN = 0.85;
+
+/**
+ * How far an arm/lane extends past the green, as a multiple of the
+ * predicted built radius. A gate verdict of "the village reads too tight,
+ * roads stop short of the fabric" raises this; "lanes run out into empty
+ * ground past the houses" lowers it.
+ */
+export const LANE_EXTENT_FACTOR = 2;
 
 // --- Shorefront (pass 5, declared here so it is not lost) ---------------
 export const SHOREFRONT_REACH_FACTOR = 1.5;

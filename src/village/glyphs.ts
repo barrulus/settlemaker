@@ -49,9 +49,16 @@ export function nominalFootprint(glyph: string): [number, number] {
  */
 export const MANIFEST_HAS_BIOME_VARIANTS = Object.keys(SYMBOL_MANIFEST).some((id) => id.includes('--'));
 
-/** Dwelling glyphs are the ones the rotation shim may override. */
+/**
+ * Dwelling glyphs are the ones the rotation shim may override — anything
+ * the deck places that genuinely has a front and should face its lane.
+ * Finding 7: the inn was left out, so under this shim `sm-inn` stayed
+ * `invariant` and rendered at bearing 0 while every house around it faced
+ * its lane — a defect at any render gate. Round huts (`sm-hut-*`) stay out
+ * deliberately: they have no front to turn.
+ */
 export function isDwellingGlyph(glyph: string): boolean {
-  return glyph.includes('house') || glyph.includes('longhouse');
+  return glyph.includes('house') || glyph.includes('longhouse') || glyph.includes('inn');
 }
 
 export function rotationOf(glyph: string): 'invariant' | 'free' | 'locked' | 'snap-cardinal' {

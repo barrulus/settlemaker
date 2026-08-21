@@ -103,6 +103,20 @@ export function deckDropped(biome: string): string[] {
     .filter((glyph) => !hasGlyph(glyph));
 }
 
+/**
+ * Spec §5.2: `f0` (the frontage cut width) is "the widest common dwelling
+ * in the deck" plus a gap term. "Common" means an uncapped entry — the
+ * ordinary draw, not a one-off landmark such as the chapel or inn — and
+ * "widest" is its resolved footprint width times its size factor. Finding
+ * 5: this used to be a bare literal `8` in village-model.ts, unrelated to
+ * the deck it claimed to describe (sm-house is 6 wide, sm-longhouse is 10).
+ */
+export function widestDwellingWidthM(deck: DeckEntry[]): number {
+  const pool = deck.filter((e) => !e.cap && e.weight > 0);
+  if (pool.length === 0) return 8;
+  return Math.max(...pool.map((e) => nominalFootprint(e.glyph)[0] * e.sizeFactor));
+}
+
 /** Weighted mean occupancy over the uncapped entries. */
 export function meanOccupancy(deck: DeckEntry[]): number {
   const pool = deck.filter((e) => !e.cap);

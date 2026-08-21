@@ -156,8 +156,17 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
     // judge placement and size. Disappears once hasGlyph(greenGlyphId) is
     // true and the branch above takes over.
     out.push(
+      // Finding 8: an SVG ellipse's rx is its horizontal (east-west) radius
+      // and ry its vertical (north-south) one. bearingDeg 0 means north
+      // (geometry.ts's bearingVector), so the UNROTATED ellipse must
+      // already have its long axis vertical (ry = long) for
+      // `rotate(bearingDeg,...)` to land the long axis on the road it is
+      // supposed to be a swelling of — the real-asset branch above gets
+      // this right because the glyph's own up-vector is north; this
+      // stand-in had rx/ry backwards, so a lens green's long axis ended up
+      // perpendicular to its through road.
       `<ellipse data-green-fallback="1" cx="${n(X(model.green.centre.x))}" cy="${n(Y(model.green.centre.y))}" ` +
-      `rx="${n(r)}" ry="${n(r * 0.72)}" fill="${GREEN_FALLBACK_FILL}" stroke="${GREEN_FALLBACK_STROKE}" ` +
+      `rx="${n(r * 0.72)}" ry="${n(r)}" fill="${GREEN_FALLBACK_FILL}" stroke="${GREEN_FALLBACK_STROKE}" ` +
       `stroke-width="${n(0.3 * pxPerMetre)}" ` +
       `transform="rotate(${n(model.green.bearingDeg)},${n(X(model.green.centre.x))},${n(Y(model.green.centre.y))})"/>`,
     );

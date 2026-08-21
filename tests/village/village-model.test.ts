@@ -52,6 +52,20 @@ describe('generateVillage', () => {
     }
   });
 
+  // Finding 3: trimTails (R15) can drop an invented lane that earned no
+  // dwelling AFTER `lots` was already finalised, orphaning that lane's
+  // lots. Every returned lot must name a lane that survived, or the
+  // 'green' pseudo-lane.
+  it('never returns a lot whose laneId names a lane that was trimmed away', () => {
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const m = generateVillage({ ...base, population: 600 }, seed);
+      const laneIds = new Set(m.lanes.map((l) => l.id));
+      for (const lot of m.lots) {
+        expect(lot.laneId === 'green' || laneIds.has(lot.laneId)).toBe(true);
+      }
+    }
+  });
+
   it('declares the population band it serves', () => {
     expect(VILLAGE_POP_CEILING).toBe(1000);
   });
@@ -66,13 +80,36 @@ describe('generateVillage: frontage feedback loop escalation (R16)', () => {
     const m = generateVillage({ ...base, population: 900 }, 1);
     const housed = m.buildings.reduce((s, b) => s + b.occupancy, 0);
     expect(housed).toBeGreaterThanOrEqual(900 * 0.95);
-    expect(m.diagnostics).toEqual([]);
+    // Finding 6: deckDropped() is now surfaced as a diagnostic, and the
+    // manifest currently loaded (batch001) is missing sm-chapel, so a
+    // "deck dropped" diagnostic is expected here regardless of population —
+    // that's not what this test is about. What this test asserts is the
+    // R16 loop's own honesty: no *overflow* diagnostic for a census that
+    // did fit.
+    expect(m.diagnostics.some((d) => d.startsWith('overflow'))).toBe(false);
   });
 
   it('adds materially more lanes at pop 900 than at pop 150 (the loop actually added lanes)', () => {
     const small = generateVillage({ ...base, population: 150 }, 1);
     const big = generateVillage({ ...base, population: 900 }, 1);
     expect(big.lanes.length).toBeGreaterThan(small.lanes.length * 1.5);
+  });
+
+  // Finding 4: f0 must tighten cumulatively round over round, not reset
+  // to the same value every time. Verified empirically against a scratch
+  // copy of the pre-fix formula (`f0 = widest + gapForPopulation(pop) *
+  // GAP_TIGHTEN`, recomputed from scratch on every tighten instead of
+  // compounding): at population 11500 with this single-road input, the
+  // pre-fix formula undershoots (only ~11053 of 11500 housed, an overflow
+  // diagnostic), because round 3's tighten is a no-op duplicate of round
+  // 2's. The fixed, compounding formula houses the full census in the same
+  // 3-round budget. This is an observable-behaviour check (housed count /
+  // absence of an overflow diagnostic), not a reach into f0 itself.
+  it('the gap-tighten ladder compounds: a population needing all 3 rounds still houses fully', () => {
+    const m = generateVillage({ ...base, population: 11500 }, 4);
+    const housed = m.buildings.reduce((s, b) => s + b.occupancy, 0);
+    expect(housed).toBeGreaterThanOrEqual(11500 * 0.999);
+    expect(m.diagnostics.some((d) => d.startsWith('overflow'))).toBe(false);
   });
 
   it('still reports an honest overflow diagnostic when the census genuinely cannot fit', () => {

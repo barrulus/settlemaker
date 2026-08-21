@@ -9,10 +9,10 @@ import { relaxLanes, trimTails } from './skeleton/relax.js';
 import {
   clipLots, gapForPopulation, orderLots, scoreLots, subdivideGreen, subdivideLane,
 } from './parcels/lots.js';
-import { deckFor, meanOccupancy } from './deck.js';
+import { deckDropped, deckFor, meanOccupancy, widestDwellingWidthM } from './deck.js';
 import { spendCensus, type SpendResult } from './dwellings.js';
 import {
-  GAP_TIGHTEN, LOT_DEPTH_M, MAX_FEEDBACK_ROUNDS, MEAN_LOT_AREA_M2,
+  GAP_TIGHTEN, LANE_EXTENT_FACTOR, LOT_DEPTH_M, MAX_FEEDBACK_ROUNDS, MEAN_LOT_AREA_M2,
 } from './constants.js';
 import type { Lot, VillageModel } from './types.js';
 import type { RouteType } from './route-class.js';
@@ -29,12 +29,32 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
   const diagnostics: string[] = [];
 
   const deck = deckFor(site.biome);
+  const dropped = deckDropped(site.biome);
+  if (dropped.length > 0) {
+    // Finding 6: deckDropped() existed but nothing called it, so a village
+    // silently missing e.g. its chapel gave no clue why.
+    diagnostics.push(`deck dropped (no manifest entry): ${dropped.join(', ')}`);
+  }
   const occupancy = meanOccupancy(deck);
   const builtRadius = predictedBuiltRadius(site.population, occupancy, MEAN_LOT_AREA_M2);
   const green = siteGreen(site, builtRadius, rng);
+  const laneExtentM = builtRadius * LANE_EXTENT_FACTOR;
 
-  let f0 = 8 + gapForPopulation(site.population);
-  let lanes = buildArms(site, green, builtRadius * 2, rng);
+  // Finding 5: f0 is spec §5.2's "widest common dwelling in the deck" plus
+  // the population gap term — not an unrelated literal. widestDwellingM is
+  // held constant across rounds so the round-3 tighten step (finding 4)
+  // compounds only the gap term, never the dwelling-width part of f0.
+  const widestDwellingM = widestDwellingWidthM(deck);
+  // Finding 4: the gap term is tracked separately from f0 itself so that
+  // tightening it each round compounds — GAP_TIGHTEN applied to the gap
+  // left over from the PREVIOUS round, not recomputed fresh from the
+  // population every time. Previously f0 was rebuilt from scratch as
+  // `8 + gapForPopulation(pop) * GAP_TIGHTEN` on every tighten, so rounds 2
+  // and 3 produced an identical f0 — one rung of the bounded ladder was a
+  // no-op.
+  let gapTerm = gapForPopulation(site.population);
+  let f0 = widestDwellingM + gapTerm;
+  let lanes = buildArms(site, green, laneExtentM, rng);
   let lots: Lot[] = [];
   // Annotated, not inferred: an empty literal would infer `never[]`.
   let spend: SpendResult = { buildings: [], housed: 0, unhoused: site.population };
@@ -55,7 +75,7 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
     const required = round === 0
       ? requiredFrontage(site.population, occupancy, measuredMeanFrontage)
       : availableFrontage(lanes) + (spend.unhoused / occupancy) * measuredMeanFrontage;
-    lanes = addInventedLanes(lanes, green, required, builtRadius * 2, rng);
+    lanes = addInventedLanes(lanes, green, required, laneExtentM, rng);
 
     const laneTypes = new Map<string, RouteType>(lanes.map((l) => [l.id, l.type]));
     laneTypes.set('green', 'main');
@@ -88,10 +108,18 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
       break;
     }
     // Not enough room: tighten the gap and re-cut.
-    f0 = 8 + gapForPopulation(site.population) * GAP_TIGHTEN;
+    gapTerm *= GAP_TIGHTEN;
+    f0 = widestDwellingM + gapTerm;
   }
 
   const relaxed = trimTails(relaxLanes(lanes, spend.buildings), spend.buildings);
+  // Finding 3: trimTails (R15) may drop an invented lane that earned no
+  // dwelling. Its lots are then orphaned — surviving in `lots` but naming
+  // a laneId no lane in the model carries any more. Filter them out so
+  // every lot's laneId is either the 'green' pseudo-lane or a lane that
+  // actually made it into the returned model.
+  const survivingLaneIds = new Set(relaxed.map((l) => l.id));
+  const survivingLots = lots.filter((l) => l.laneId === 'green' || survivingLaneIds.has(l.laneId));
 
-  return { site, green, lanes: relaxed, lots, buildings: spend.buildings, diagnostics };
+  return { site, green, lanes: relaxed, lots: survivingLots, buildings: spend.buildings, diagnostics };
 }

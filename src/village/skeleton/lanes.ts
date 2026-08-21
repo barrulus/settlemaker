@@ -3,7 +3,8 @@ import { SeededRandom } from '../../utils/random.js';
 import { classRank, laneWidth, stepDown, type RouteType } from '../route-class.js';
 import { angularGap, bearingOf, bearingVector, polylineLength } from '../geometry.js';
 import {
-  FRONTAGE_MARGIN, LANE_SAMPLE_STEP_M, LANE_WANDER_M, MAX_INVENTED_LANES, MIN_ARM_SEPARATION_DEG,
+  BRANCH_LENGTH_FACTOR, FRONTAGE_MARGIN, INVENTED_LANE_LENGTH_FACTOR, LANE_SAMPLE_STEP_M,
+  LANE_WANDER_M, MAX_INVENTED_LANES, MIN_ARM_SEPARATION_DEG,
 } from '../constants.js';
 import {
   armLaneId, branchLaneId, inventedLaneId, type Green, type Lane, type Site, type SiteRoute,
@@ -41,30 +42,106 @@ function runArm(
   return points;
 }
 
+interface ArmEmission {
+  route: SiteRoute;
+  bearingDeg: number;
+  /** True for a `through` route's far-side echo, not the route itself. */
+  isFarSide: boolean;
+}
+
 /**
  * Every incoming route becomes an arm leaving the green at its bearing.
  * A `through` route also leaves on the far side — it passes across the
  * green rather than stopping at it, which is what later makes a single
  * through route swell into the lens-shaped green: the road passes through
  * and the green is a swelling of it.
+ *
+ * FINDING 1 fix: `armLaneId` rounds its bearing to the nearest degree, so
+ * two routes at nearly the same bearing (e.g. 90.0 and 90.2), or a
+ * `through` route's far side landing on a bearing another route already
+ * occupies (e.g. a route in at 0° through, another out at 180°), can both
+ * want `arm-090` or `arm-180` — and lot ids are built from lane ids, so a
+ * collision here becomes a duplicate lot id downstream, breaking the
+ * stable-id invariant.
+ *
+ * Every emission (a route's near side, and a through route's far side) is
+ * grouped by its rounded bearing bucket. A bucket with only one member is
+ * unaffected. A bucket with more than one is resolved deterministically by
+ * CONTENT, never by array position, so the same input always resolves the
+ * same way regardless of route ordering:
+ *   1. the highest road class present keeps the bare `arm-NNN` id — the
+ *      lowest classRank wins, matching the intuition that the more
+ *      important road is the "real" one at that bearing;
+ *   2. ties (equal class) prefer the near side over a through route's far
+ *      side, since an arriving route is more "itself" than an echo of one;
+ *   3. every loser gets a suffix built from something stable about IT:
+ *      its own `route_id` when FMG supplied one, else its own unrounded
+ *      bearing (so `90.2` doesn't collide with `90.0`'s bare id), and a
+ *      through route's far side specifically gets a `~far` marker — it is
+ *      genuinely a different lane from any route that happens to arrive on
+ *      that reciprocal bearing, not a coincidental duplicate of it.
+ * All suffixed ids still start with `arm-` and never contain `/b`, so
+ * `trimTails`'s `isFmgArm` check (which relies on exactly that) keeps
+ * treating them as untrimmed FMG roads, which is what they are.
  */
 export function buildArms(
   site: Site, green: Green, extentM: number, rng: SeededRandom,
 ): Lane[] {
-  const lanes: Lane[] = [];
-  const emit = (r: SiteRoute, bearingDeg: number): void => {
-    lanes.push({
-      id: armLaneId(bearingDeg),
-      type: r.type,
-      points: runArm(green, bearingDeg, extentM, rng),
-      widthM: laneWidth(r.type),
-    });
-  };
+  const emissions: ArmEmission[] = [];
   for (const r of site.routes) {
-    emit(r, r.bearingDeg);
-    if (r.through) emit(r, (r.bearingDeg + 180) % 360);
+    emissions.push({ route: r, bearingDeg: r.bearingDeg, isFarSide: false });
+    if (r.through) emissions.push({ route: r, bearingDeg: (r.bearingDeg + 180) % 360, isFarSide: true });
   }
-  return lanes;
+
+  const groups = new Map<string, ArmEmission[]>();
+  for (const e of emissions) {
+    const base = armLaneId(e.bearingDeg);
+    const arr = groups.get(base);
+    if (arr) arr.push(e); else groups.set(base, [e]);
+  }
+
+  const idOf = new Map<ArmEmission, string>();
+  for (const [base, group] of groups) {
+    if (group.length === 1) {
+      idOf.set(group[0], base);
+      continue;
+    }
+    const sorted = [...group].sort((a, b) => {
+      const rankDiff = classRank(a.route.type) - classRank(b.route.type);
+      if (rankDiff !== 0) return rankDiff;
+      if (a.isFarSide !== b.isFarSide) return a.isFarSide ? 1 : -1;
+      const aKey = a.route.routeId ?? String(a.bearingDeg);
+      const bKey = b.route.routeId ?? String(b.bearingDeg);
+      return aKey < bKey ? -1 : aKey > bKey ? 1 : 0;
+    });
+    idOf.set(sorted[0], base);
+    const used = new Set<string>([base]);
+    for (let i = 1; i < sorted.length; i++) {
+      const e = sorted[i];
+      let id = e.isFarSide
+        ? `${base}~far`
+        : e.route.routeId
+          ? `${base}~${e.route.routeId}`
+          : `${base}~${e.bearingDeg.toFixed(4)}`;
+      // Last-resort dedup for a truly pathological input (e.g. two
+      // identical duplicate route records): extend precision
+      // deterministically until unique, still content-derived.
+      let precision = 5;
+      while (used.has(id)) {
+        id = `${base}~${e.bearingDeg.toFixed(precision)}`;
+        precision++;
+      }
+      used.add(id);
+      idOf.set(e, id);
+    }
+  }
+
+  return emissions.map((e) => ({
+    id: idOf.get(e) as string,
+    type: e.route.type,
+    points: runArm(green, e.bearingDeg, extentM, rng),
+    widthM: laneWidth(e.route.type),
+  }));
 }
 
 /** Both sides of every lane are frontage. */
@@ -160,7 +237,7 @@ export function addInventedLanes(
       const side = rng.bool(0.5) ? 1 : -1;
       const branchBearing = (parentBearing + side * (60 + rng.int(0, 51)) + 360) % 360;
       const dir = bearingVector(branchBearing);
-      const length = extentM * 0.5;
+      const length = extentM * BRANCH_LENGTH_FACTOR;
       const points: Point[] = [];
       for (let d = 0; d <= length; d += LANE_SAMPLE_STEP_M) {
         points.push(new Point(anchor.x + dir.x * d, anchor.y + dir.y * d));
@@ -177,7 +254,7 @@ export function addInventedLanes(
     out.push({
       id: inventedLaneId(bearing),
       type: inventedType,
-      points: runArm(green, bearing, extentM * 0.6, rng),
+      points: runArm(green, bearing, extentM * INVENTED_LANE_LENGTH_FACTOR, rng),
       widthM: laneWidth(inventedType),
     });
   }

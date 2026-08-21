@@ -17,6 +17,21 @@ const inputs: AzgaarBurgInput[] = [
     temple: true, shanty: false, capital: false,
     roadBearings: [{ bearing_deg: 0, kind: 'road' }, { bearing_deg: 140, kind: 'foot' }],
     coastlineGeometry: water },
+  // Finding 1 fixtures: colliding rounded bearings. Without the fix these
+  // both produced duplicate lane ids downstream (arm-090 x2, arm-180 x2)
+  // and therefore duplicate lot ids.
+  { name: 'D', population: 300, port: false, citadel: false, walls: false, plaza: false,
+    temple: false, shanty: false, capital: false,
+    roadBearings: [
+      { bearing_deg: 90.0, kind: 'road' },
+      { bearing_deg: 90.2, kind: 'foot' },
+    ] },
+  { name: 'E', population: 300, port: false, citadel: false, walls: false, plaza: false,
+    temple: false, shanty: false, capital: false,
+    roadBearings: [
+      { bearing_deg: 0, kind: 'road', through: true },
+      { bearing_deg: 180, kind: 'road' },
+    ] },
 ];
 
 describe('village invariants (design §5.7)', () => {
