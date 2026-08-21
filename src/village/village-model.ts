@@ -14,11 +14,13 @@ import {
   buildDeck, meanOccupancy, minDwellingFrontageM, widestDwellingWidthM,
 } from './deck.js';
 import { spendCensus, type SpendResult } from './dwellings.js';
+import { closestPointOnSegment, dist } from './geometry.js';
 import {
-  BRANCH_SPACING_M, GAP_TIGHTEN, GROWTH_RADIUS_FACTOR, INITIAL_MEAN_FRONTAGE_FACTOR,
-  LANE_EXTENT_FACTOR, LOT_DEPTH_M, MAX_FEEDBACK_ROUNDS, MEAN_LOT_AREA_M2,
+  BRANCH_SPACING_M, FRONT_ON_LANE_EPS_M, GAP_TIGHTEN, GREEN_JOIN_RATIO, GROWTH_RADIUS_FACTOR,
+  INITIAL_MEAN_FRONTAGE_FACTOR, LANE_EXTENT_FACTOR, LANE_SETBACK_M, LOT_DEPTH_M,
+  MAX_FEEDBACK_ROUNDS, MEAN_LOT_AREA_M2, RING_SETBACK_M,
 } from './constants.js';
-import type { Lot, VillageModel } from './types.js';
+import type { Lane, Lot, VillageModel } from './types.js';
 import type { RouteType } from './route-class.js';
 
 /** The band this engine serves. Above it, the existing engine runs. */
@@ -164,8 +166,40 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
   // a laneId no lane in the model carries any more. Filter them out so
   // every lot's laneId is either the 'green' pseudo-lane or a lane that
   // actually made it into the returned model.
-  const survivingLaneIds = new Set(relaxed.map((l) => l.id));
-  const survivingLots = lots.filter((l) => l.laneId === 'green' || survivingLaneIds.has(l.laneId));
+  const survivingLaneById = new Map(relaxed.map((l) => [l.id, l]));
+  // Fix round 2 (§5.7: "every lot's front lies on a lane or the green"):
+  // trimTails shortens a surviving invented lane down to its last HOUSED
+  // building plus a stub, so a lot further out than that — never housed,
+  // never checked against the final geometry — can outlive the lane it
+  // was cut from. That is exactly the stale claim the upcoming fields
+  // pass would clip against, so it must not survive into the model: keep
+  // a lane lot only if its front still lies within setback + epsilon of
+  // its SURVIVING (post-trim, post-relax) lane's polyline.
+  const survivingLots = lots.filter((l) => {
+    if (l.laneId === 'green') {
+      const radius = (green.diameter / 2) * GREEN_JOIN_RATIO + RING_SETBACK_M;
+      return Math.abs(dist(l.front, green.centre) - radius) < FRONT_ON_LANE_EPS_M;
+    }
+    const lane = survivingLaneById.get(l.laneId);
+    if (!lane) return false;
+    return frontLiesOnLane(l, lane);
+  });
 
   return { site, green, lanes: relaxed, lots: survivingLots, buildings: spend.buildings, diagnostics };
+}
+
+/**
+ * True when `lot.front` still lies within its lane's offset frontage edge
+ * (setback + FRONT_ON_LANE_EPS_M) of `lane`'s CURRENT geometry — which may
+ * be shorter (trimTails) or nudged (relaxLanes) from the geometry the lot
+ * was originally cut against.
+ */
+function frontLiesOnLane(lot: Lot, lane: Lane): boolean {
+  const setback = lane.widthM / 2 + (LANE_SETBACK_M[lane.type] ?? 2);
+  let nearest = Infinity;
+  for (let i = 1; i < lane.points.length; i++) {
+    const q = closestPointOnSegment(lot.front, lane.points[i - 1], lane.points[i]);
+    nearest = Math.min(nearest, dist(lot.front, q));
+  }
+  return Math.abs(nearest - setback) < FRONT_ON_LANE_EPS_M;
 }

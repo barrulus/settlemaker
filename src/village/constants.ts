@@ -168,6 +168,18 @@ export const INNER_CURVE_FRONT_RATIO = 0.8;
  * dropped once truncation would shrink it below this depth — a sliver lot
  * no dwelling could ever seat on is worse than no lot at all. */
 export const MIN_LOT_DEPTH_M = 4;
+/**
+ * Fix round 2 (2026-08-21): slack allowed between a lot's front and its
+ * lane's (or the green's ring) offset frontage edge, on top of the
+ * geometric setback itself. relaxLanes nudges lane points up to
+ * RELAX_MAX_DISPLACEMENT_M after lots are already cut, and
+ * offsetPolyline's mitred corners can swing further still at a sharp bend
+ * (miter capped at 4x the setback in strip.ts) — neither of which
+ * resolveConvergingLots ever touches. Used both to drop a lot whose
+ * surviving (post-trim, post-relax) lane no longer reaches it, and by the
+ * §5.7 property test that checks the same thing.
+ */
+export const FRONT_ON_LANE_EPS_M = 4;
 
 // --- Dwellings ---------------------------------------------------------
 export const SIZE_JITTER = 0.1;

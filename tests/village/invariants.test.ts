@@ -3,7 +3,9 @@ import { generateVillage } from '../../src/village/village-model.js';
 import { intrudesOnLane, overlaps } from '../../src/village/dwellings.js';
 import { lotObb, obbOverlap } from '../../src/village/parcels/overlap.js';
 import { closestPointOnSegment, dist } from '../../src/village/geometry.js';
-import { GREEN_JOIN_RATIO, LANE_SETBACK_M, RING_SETBACK_M } from '../../src/village/constants.js';
+import {
+  FRONT_ON_LANE_EPS_M, GREEN_JOIN_RATIO, LANE_SETBACK_M, RING_SETBACK_M,
+} from '../../src/village/constants.js';
 import { pointInPolygon } from '../../src/geom/point-in-polygon.js';
 import { Point } from '../../src/types/point.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
@@ -133,31 +135,23 @@ describe('village invariants (design §5.7)', () => {
     }
   }, GRID_TIMEOUT_MS);
 
-  it("every housed lot's front lies on its lane or the green (§5.4 rules 3-4)", () => {
-    // Wider than a first guess: relaxLanes nudges lane points up to
-    // RELAX_MAX_DISPLACEMENT_M after lots are cut, and offsetPolyline's
-    // mitred corners can swing further still at a sharp bend (miter is
-    // capped at 4x the setback in strip.ts). Neither is this task's
-    // concern — resolveConvergingLots never moves a front — so the
-    // epsilon just needs to clear that noise floor, verified empirically
-    // against the full seed x population grid below.
-    const FRONT_EPS_M = 4;
+  it("every lot's front lies on its lane or the green (§5.4 rules 3-4)", () => {
+    // Fix round 2: the model itself (village-model.ts's survivingLots
+    // filter) now drops a lane lot whose front no longer lies on its
+    // surviving (post-trim, post-relax) lane — a stale claim the fields
+    // pass would otherwise clip against. So this checks EVERY lot in the
+    // returned model, not just housed ones. FRONT_ON_LANE_EPS_M (same
+    // constant the model filter uses) absorbs relaxLanes's up-to-
+    // RELAX_MAX_DISPLACEMENT_M nudge and offsetPolyline's mitred-corner
+    // swing at a sharp bend (miter capped at 4x the setback in strip.ts).
     for (const input of inputs) {
       for (const seed of seeds) {
         const m = generateVillage(input, seed);
         const laneById = new Map(m.lanes.map((l) => [l.id, l]));
-        // `trimTails` (unrelated to this task) shortens an invented lane's
-        // final polyline down to its last HOUSED building plus a stub, so
-        // an unhoused lot further out can legitimately outlive the
-        // geometry it was cut from — that is a pre-existing trim/cut
-        // mismatch, not a claim-overlap defect. Scoping to housed lots
-        // keeps this test about §5.4 rules 3-4, which never move a front.
-        const housedLotIds = new Set(m.buildings.map((b) => b.lotId));
         for (const lot of m.lots) {
-          if (!housedLotIds.has(lot.id)) continue;
           if (lot.laneId === 'green') {
             const radius = (m.green.diameter / 2) * GREEN_JOIN_RATIO + RING_SETBACK_M;
-            expect(Math.abs(dist(lot.front, m.green.centre) - radius)).toBeLessThan(FRONT_EPS_M);
+            expect(Math.abs(dist(lot.front, m.green.centre) - radius)).toBeLessThan(FRONT_ON_LANE_EPS_M);
             continue;
           }
           const lane = laneById.get(lot.laneId);
@@ -168,7 +162,7 @@ describe('village invariants (design §5.7)', () => {
             const q = closestPointOnSegment(lot.front, lane!.points[i - 1], lane!.points[i]);
             nearest = Math.min(nearest, dist(lot.front, q));
           }
-          expect(Math.abs(nearest - setback)).toBeLessThan(FRONT_EPS_M);
+          expect(Math.abs(nearest - setback)).toBeLessThan(FRONT_ON_LANE_EPS_M);
         }
       }
     }
