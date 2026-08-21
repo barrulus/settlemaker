@@ -237,3 +237,35 @@ export const LANE_EXTENT_FACTOR = 2;
 
 // --- Shorefront (pass 5, declared here so it is not lost) ---------------
 export const SHOREFRONT_REACH_FACTOR = 1.5;
+
+// --- Edges (pass 5 dressing, §7.1) --------------------------------------
+/** Clearance added on top of a lane's own half-width when deciding whether
+ * an edge stamp's centre falls inside its corridor. A stamp that close to
+ * a lane would sit on top of a gate or mouth, so it's skipped — that is
+ * how a stamped boundary naturally breaks at road crossings. */
+export const EDGE_LANE_CLEAR_M = 1;
+/** Below this population, `none` gains extra weight in the edge-style
+ * draw (poor/small sites are less likely to have marked boundaries at
+ * all). No single "the landmark threshold" constant already exists —
+ * deck.ts's `requires.minPop` varies by landmark (inn 180, house-large
+ * 250, chapel 300) — so this picks the chapel's threshold, the deck's
+ * most emblematic landmark gate, as the reference point for "this site
+ * can't yet afford much." */
+export const EDGE_NONE_POP_THRESHOLD = 300;
+/** Added to `none`'s weight (then the whole table renormalises) for a
+ * site below EDGE_NONE_POP_THRESHOLD. */
+export const EDGE_NONE_POOR_BONUS = 0.25;
+
+/**
+ * Per-biome edge-style weights (§7.1: chosen ONCE per village, held
+ * constant). Keys are drawn in `EDGE_STYLE_ORDER`'s fixed order so the
+ * weighted pick is deterministic regardless of object key enumeration.
+ * Biomes not listed fall back to `temperate` (tropical/coastal read the
+ * same as temperate per the brief).
+ */
+export const EDGE_STYLE_ORDER = ['hedge', 'wall', 'fence', 'ditch', 'none'] as const;
+export const EDGE_STYLE_WEIGHTS: Record<string, Record<string, number>> = {
+  temperate: { hedge: 0.5, wall: 0.2, fence: 0.2, ditch: 0.1, none: 0 },
+  desert: { hedge: 0, wall: 0.4, fence: 0.3, ditch: 0.1, none: 0.2 },
+  tundra: { hedge: 0, wall: 0.3, fence: 0.4, ditch: 0.1, none: 0.2 },
+};

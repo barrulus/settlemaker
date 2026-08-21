@@ -58,6 +58,22 @@ export interface Lot {
   score: number;
 }
 
+/**
+ * Boundary treatment for a settlement, per §7.1: held CONSTANT across the
+ * whole village (biome + culture pick it once) — a settlement that fenced
+ * some plots and hedged others reads as an error. `none` is a legal
+ * outcome, more likely for poor/small sites.
+ */
+export type EdgeStyle = 'hedge' | 'wall' | 'fence' | 'ditch' | 'none';
+
+/** One placed `sm-edge-*` glyph along a plot or field boundary polyline. */
+export interface EdgeStamp {
+  id: string;
+  glyph: string;
+  position: Point;
+  bearingDeg: number;
+}
+
 export interface Building {
   id: string;
   lotId: string;
