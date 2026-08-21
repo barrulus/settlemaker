@@ -285,6 +285,10 @@ export const CROFT_TIGHT_FRONTAGE_RATIO = 1.1;
 /** Truncation (lane/green/water/claim clipping) below this depth means no
  * croft at all for that lot -- a sliver strip nobody would fence. */
 export const CROFT_MIN_DEPTH_M = 2;
+/** V3: gap left between the dwelling's painted back wall and the start of
+ * its garden, metres. The croft begins here rather than at the abstract
+ * back of the lot, so the garden connects to the house it belongs to. */
+export const CROFT_BEHIND_INK_M = 1;
 
 // --- Fields (pass 5 dressing, §7.2) -------------------------------------
 /**
@@ -299,12 +303,36 @@ export const CROFT_MIN_DEPTH_M = 2;
  */
 export const FIELD_M2_PER_CAPITA = 150;
 /** The field band's depth (outerRadius - innerRadius) is clamped to
- * [FURROW_WIDTH_M, this] -- floored so a tiny census still gets a strip
- * wide enough for one furrow, capped so a huge census doesn't run fields
- * out to the horizon. */
+ * [FIELD_BAND_DEPTH_MIN_M, this] -- capped so a huge census doesn't run
+ * fields out to the horizon. */
 export const FIELD_BAND_DEPTH_MAX_M = 90;
+/**
+ * Depth floor. TWO furrow widths, not one: a band exactly one furrow deep
+ * cannot actually hold a furrow, because the strips are cut in a
+ * furrow-aligned frame and every sample across a strip's full width must
+ * land inside the CURVED annulus -- so a hamlet's 13 m band produced no
+ * strip at all in the real pipeline (measured: pop 40 got zero fields at
+ * both probe seeds). Two widths leaves the curvature somewhere to go.
+ */
+export const FIELD_BAND_DEPTH_MIN_M = 24;
 /** Furlong strip width, metres. */
 export const FURROW_WIDTH_M = 12;
+/**
+ * V1: each wedge measures its OWN inner radius from the lot claims and
+ * crofts it contains. A claim counts as "in" the wedge when the bearing of
+ * its centre from the green falls inside the wedge's span widened by this
+ * many degrees at each end -- slack so a claim sitting right on a wedge
+ * boundary (which is a lane, so there are always claims there) raises the
+ * inner radius on BOTH sides of it rather than letting the neighbouring
+ * wedge start its band inside that lane's crofts.
+ */
+export const FIELD_WEDGE_CLAIM_MARGIN_DEG = 10;
+/**
+ * V4: a wedge's whole field block is culled when its strips together cover
+ * less than this. Below it the block reads as a dropped rug -- a couple of
+ * disconnected slivers floating in open ground -- rather than as farmland.
+ */
+export const FIELD_MIN_BUNDLE_AREA_M2 = 600;
 /** A clipped strip fragment shorter than this (along its furrow direction)
  * is dropped rather than kept as a sliver. */
 export const FURROW_MIN_LENGTH_M = 10;
@@ -346,12 +374,35 @@ export const FURROW_PATTERN_STEP_DEG = 15;
  * Poisson dart-throwing: exactly one rng draw per cell decides survival,
  * so the draw count never depends on how many darts land. */
 export const VEG_CELL_M = 9;
-/** Scatter rim, as a multiple of builtRadius -- the outer edge of the
- * square grid (and of the density falloff below). */
-export const VEG_RADIUS_FACTOR = 1.8;
-/** Density ceiling: the survival chance a cell rolls against right at the
- * fabric edge (the densest ring), before any per-cell reduction. */
-export const VEG_BASE_DENSITY = 0.55;
+/**
+ * Scatter rim, as a multiple of the MEASURED inner edge the ramp starts at
+ * (the field band's outer radius where fields exist, else the measured
+ * fabric radius) -- the outer edge of the square grid and of the density
+ * falloff below.
+ *
+ * Fix wave (2026-08-21, C2): this used to multiply the PREDICTED
+ * builtRadius, which put the rim permanently INSIDE the inner edge, so the
+ * ramp was unreachable and not one tree landed beyond the fields. Retuned
+ * from 1.8 to 1.5 at the same time: 1.8 of the field band's outer radius is
+ * a far wider scatter than 1.8 of a built radius ever was.
+ */
+export const VEG_RADIUS_FACTOR = 1.5;
+/** §7.3 "thinning outward from the fabric": the first share of the scatter
+ * band beyond the inner edge holds full VEG_BASE_DENSITY (the peak sits
+ * just OUTSIDE the fields, where a village's scrub actually crowds), and
+ * only the remainder thins linearly to nothing at the rim. */
+export const VEG_RAMP_PEAK_SHARE = 0.25;
+/**
+ * Density ceiling: the survival chance a cell rolls against on the ramp's
+ * peak plateau (the densest ring), before any per-cell reduction.
+ *
+ * Fix wave (2026-08-21, C2): retuned 0.55 -> 0.10. 0.55 was calibrated
+ * while the ramp was UNREACHABLE, so it only ever governed the flat infill
+ * inside the fabric (0.55 x VEG_INFILL_SHARE). With the ramp live it
+ * governs a genuinely large annulus as well, and 0.55 there put ~3400 trees
+ * on a pop-900 village -- a closed forest, not a scatter.
+ */
+export const VEG_BASE_DENSITY = 0.10;
 /** Density share allowed on LEFTOVER wedge ground -- inside the fabric
  * edge, but not claimed by any lot, croft, field strip, or lane corridor
  * -- where §7.3 wants the odd clump of trees to land. */
@@ -390,9 +441,18 @@ export const WELL_NUDGE_STEP_M = 0.25;
 /** §7.4/§8.3: chance a village earns a stone circle at all -- rolled ONCE,
  * always, so the draw order never shifts on whether it lands. */
 export const STONE_CIRCLE_CHANCE = 0.08;
-/** How far outside the fabric the stone circle sits, as a multiple of
- * builtRadius. */
-export const STONE_CIRCLE_RADIUS_FACTOR = 1.7;
+/**
+ * How far outside the DRESSED edge the stone circle sits, as a multiple of
+ * max(the field band's outer radius, the measured fabric radius).
+ *
+ * Fix wave (2026-08-21, C1): this used to multiply the PREDICTED
+ * builtRadius, which put the ring 2.5-3x inside the real fabric and its
+ * fields -- all 12 bearings hit a claim and the stone circle placed once in
+ * 30 forced rolls. Against a MEASURED outer edge the factor is a modest
+ * step beyond everything already on the ground, not a multiple of a
+ * prediction, hence 1.15 rather than 1.7.
+ */
+export const STONE_CIRCLE_RADIUS_FACTOR = 1.15;
 /** Its footprint: a 30 m stone ring, i.e. a 15 m radius disc. */
 export const STONE_CIRCLE_FOOTPRINT_RADIUS_M = 15;
 /** Bearings tried (rng.int(0,360) each) before giving up on a stone circle. */

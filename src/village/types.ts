@@ -109,6 +109,12 @@ export interface Croft {
  * furrow direction; `id` is `field:<wedgeId>:S<i>`, `i` the strip's ordinal
  * within its wedge (ordinals may skip where a band was clipped away
  * entirely -- same convention as `EdgeStamp` ids in edges.ts).
+ *
+ * A strip carries NO boundary of its own (fix wave, V2): outlining every
+ * 12 m strip turned the render into caterpillar chains of hedge glyphs.
+ * Strip separation is carried by the alternating crop tiles; the block's
+ * outside edge is stamped once per bundle and lives on
+ * `VillageModel.fieldEdges`.
  */
 export interface FieldStrip {
   id: string;
@@ -117,7 +123,6 @@ export interface FieldStrip {
   /** Quad corners, already clipped to the wedge sector and field band. */
   polygon: Point[];
   furrowBearingDeg: number;
-  boundary: EdgeStamp[];
 }
 
 /**
@@ -161,6 +166,10 @@ export interface VillageModel {
   edgeStyle: EdgeStyle;
   crofts: Croft[];
   fields: FieldStrip[];
+  /** §7.2/V2: the field system's boundary art -- one stamped perimeter per
+   * surviving wedge BLOCK, not per strip. Kept beside `fields` rather than
+   * on each strip because the perimeter belongs to the block. */
+  fieldEdges: EdgeStamp[];
   vegetation: Vegetation[];
   pois: Poi[];
   diagnostics: string[];

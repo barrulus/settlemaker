@@ -154,9 +154,12 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
   const lanePoints = model.lanes.flatMap((lane) => lane.points);
   const fieldPoints = model.fields.flatMap((f) => f.polygon);
   const croftPoints = model.crofts.flatMap((c) => c.polygon);
+  // V2: crofts still carry their own three-sided boundary; the field system
+  // carries ONE stamped perimeter per surviving wedge block, on the model
+  // beside `fields` rather than on each strip.
   const edgeStamps: EdgeStamp[] = [
     ...model.crofts.flatMap((c) => c.boundary),
-    ...model.fields.flatMap((f) => f.boundary),
+    ...model.fieldEdges,
   ];
   const dressingPoints = [
     ...fieldPoints, ...croftPoints,
