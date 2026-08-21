@@ -7,6 +7,7 @@ import {
 import { generateVillage } from '../../src/village/village-model.js';
 import { hasGlyph, nominalFootprint } from '../../src/village/glyphs.js';
 import { closestPointOnSegment, dist } from '../../src/village/geometry.js';
+import { computeInnerRadius } from '../../src/village/dressing/fields.js';
 import {
   SHOREFRONT_REACH_FACTOR, STONE_CIRCLE_FOOTPRINT_RADIUS_M, STONE_CIRCLE_RADIUS_FACTOR,
   WELL_MIN_POP,
@@ -367,4 +368,51 @@ describe('POIs through the full generateVillage pipeline', () => {
       expect(dist(well.position, m.green.centre)).toBeLessThanOrEqual(drawnRadius * 0.6 + 1e-6);
     }
   });
+  // Fix wave regression net (2026-08-21, I1b): the previous net asserted
+  // only that a stone circle, IF one appeared, cleared the fabric -- which
+  // an engine that never places one satisfies vacuously, and that is exactly
+  // what was happening. Keyed to `builtRadius x 1.7` the ring landed 2.5-3x
+  // inside the real fabric and its fields, so all 12 bearings were rejected:
+  // one success in 30 forced rolls. This calls the placement function
+  // DIRECTLY on real generateVillage models with the roll forced true (never
+  // by touching STONE_CIRCLE_CHANCE), and demands the clear majority of a
+  // small fixture grid succeed. On the pre-fix code it fails.
+  it('places on a real model in the clear majority of fixtures, with the roll forced', () => {
+    // Forces the ONE bool draw placeStoneCircle makes (the chance gate)
+    // while leaving every other draw -- the bearing ints -- untouched.
+    class ForcedRandom extends SeededRandom {
+      bool(): boolean { return true; }
+    }
+    const grid: AzgaarBurgInput[] = [
+      { name: 'S1', population: 300, port: false, citadel: false, walls: false, plaza: false,
+        temple: false, shanty: false, capital: false, roadBearings: [225] },
+      { name: 'S2', population: 900, port: false, citadel: false, walls: false, plaza: false,
+        temple: false, shanty: false, capital: false, roadBearings: [90, 200, 300] },
+      { name: 'S3', population: 150, port: false, citadel: false, walls: false, plaza: false,
+        temple: false, shanty: false, capital: false, roadBearings: [45] },
+      { name: 'S4', population: 600, port: false, citadel: false, walls: false, plaza: false,
+        temple: false, shanty: false, capital: false, roadBearings: [0, 180] },
+    ];
+    let placed = 0;
+    for (const input of grid) {
+      const m = generateVillage(input, 1);
+      // The same MEASURED ring radius dressVillage threads in: the outer
+      // edge of everything already on the ground.
+      const fabricRadius = computeInnerRadius(m.green, m.lots, m.crofts);
+      let fieldsOuter = 0;
+      for (const strip of m.fields) {
+        for (const p of strip.polygon) fieldsOuter = Math.max(fieldsOuter, dist(p, m.green.centre));
+      }
+      const circle = placeStoneCircle(
+        m.green, Math.max(fabricRadius, fieldsOuter), m.lanes, m.lots, m.crofts,
+        m.fields, m.site.water, m.vegetation, new ForcedRandom(3),
+      );
+      if (circle) {
+        placed += 1;
+        expect(circle.id).toBe('poi:stone-circle');
+        expect(circle.glyph).toBe('sm-stone-circle');
+      }
+    }
+    expect(placed).toBeGreaterThanOrEqual(3);
+  }, 20000);
 });

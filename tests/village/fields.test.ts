@@ -317,4 +317,44 @@ describe('buildFields geometric invariants (real village fixtures)', () => {
     expect(generateVillage(popInput(300), 1).fields.length).toBeGreaterThan(0);
     expect(generateVillage(popInput(900), 1).fields.length).toBeGreaterThan(0);
   });
+
+  // Fix wave regression net (2026-08-21, I2): furrow alternation used to be
+  // keyed to the wedge's LEXICAL id rank, which has nothing to do with where
+  // the wedge sits, so "alternating" bundles were only alternating on paper
+  // -- 28% of spatially adjacent pairs came out within 15 degrees of
+  // parallel. Spatial adjacency is what matters: two neighbouring bundles
+  // whose furrows run the same way read as one smeared field, which is the
+  // seam the alternation exists to break. Parity now comes from the
+  // BEARING-sorted rank, so this holds; on the pre-fix code it does not.
+  it('no two spatially adjacent bundles run within 15deg of parallel', () => {
+    const popInput = (population: number, bearings: number[]): AzgaarBurgInput => ({
+      name: 'Adjacency', population, port: false, citadel: false, walls: false,
+      plaza: false, temple: false, shanty: false, capital: false,
+      roadBearings: bearings.map((b) => ({ bearing_deg: b, kind: 'road' as const })),
+    });
+    let checked = 0;
+    for (const input of [popInput(300, [225]), popInput(600, [0, 120, 240]), popInput(900, [45, 200])]) {
+      for (const seed of [1, 2, 3]) {
+        const m = generateVillage(input, seed);
+        // Furrow bearing per wedge, taken from its strips (all strips in a
+        // wedge share one bearing -- asserted separately above).
+        const bearingByWedge = new Map<string, number>();
+        for (const s of m.fields) bearingByWedge.set(s.wedgeId, s.furrowBearingDeg);
+        // Spatial adjacency: consecutive wedges in `buildWedges`'s own
+        // bearing-sorted output, wrap included.
+        const wedges = buildWedges(m.green, m.lanes);
+        for (let i = 0; i < wedges.length; i++) {
+          const a = bearingByWedge.get(wedges[i].id);
+          const b = bearingByWedge.get(wedges[(i + 1) % wedges.length].id);
+          if (a === undefined || b === undefined || wedges.length < 2) continue;
+          // Furrows are undirected: 179deg and 359deg are the same run.
+          const gap = angularGap(a, b) % 180;
+          const fromParallel = Math.min(gap, 180 - gap);
+          checked += 1;
+          expect(fromParallel).toBeGreaterThan(15);
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+  }, 20000);
 });

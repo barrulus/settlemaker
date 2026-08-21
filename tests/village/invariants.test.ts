@@ -168,6 +168,29 @@ describe('village invariants (design §5.7)', () => {
     }
   }, GRID_TIMEOUT_MS);
 
+  // M9: §2's stable-id invariant for the LEAF objects that name a lot.
+  // "anchors every building to a lot that exists" above already pins the
+  // building half; crofts carry the same `lotId` reference and nothing
+  // checked it, even though `generateVillage` filters lots twice after
+  // seating (trimTails orphans, then the front-lies-on-lane check). Both
+  // halves are asserted here together, and non-vacuously.
+  it('every building and croft lotId names a surviving lot', () => {
+    let checkedCrofts = 0;
+    for (const input of inputs) {
+      for (const seed of seeds) {
+        const m = generateVillage(input, seed);
+        const lotIds = new Set(m.lots.map((l) => l.id));
+        expect(m.buildings.length).toBeGreaterThan(0);
+        for (const b of m.buildings) expect(lotIds.has(b.lotId)).toBe(true);
+        for (const c of m.crofts) {
+          checkedCrofts += 1;
+          expect(lotIds.has(c.lotId)).toBe(true);
+        }
+      }
+    }
+    expect(checkedCrofts).toBeGreaterThan(0);
+  }, GRID_TIMEOUT_MS);
+
   // Task 3 (§5.6/§7.1): a croft never overlaps any OTHER lot's claim,
   // across the same probe grid the other §5.4 invariants use.
   //

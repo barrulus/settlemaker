@@ -234,6 +234,36 @@ describe('vegetation geometric invariants (real village fixtures)', () => {
     expect(Array.isArray(m.vegetation)).toBe(true);
   });
 
+  // Fix wave regression net (2026-08-21, I1a): the previous net asserted
+  // only ABSENCE -- no tree on a claim -- which an empty scatter satisfies
+  // trivially and a dead density ramp satisfied for real. The C2 defect was
+  // that `rim = builtRadius x VEG_RADIUS_FACTOR` always fell BELOW the field
+  // band's outer edge, so densityAt collapsed to flat infill and NOT ONE
+  // tree could land beyond the fields; the grid did not even reach that far.
+  // This is the positive guard: real villages must put trees out past their
+  // own fields. On the pre-fix code the count here is exactly 0.
+  it('scatters trees beyond the fields, through the real pipeline (pop 300 and 900)', () => {
+    const popInput = (population: number): AzgaarBurgInput => ({
+      name: 'Beyond', population, port: false, citadel: false, walls: false,
+      plaza: false, temple: false, shanty: false, capital: false,
+      roadBearings: [{ bearing_deg: 225, kind: 'road' }],
+    });
+    for (const population of [300, 900]) {
+      for (const seed of [1, 2]) {
+        const m = generateVillage(popInput(population), seed);
+        expect(m.fields.length).toBeGreaterThan(0);
+        // The field system's own outer edge, measured off what it actually
+        // laid down rather than off any radius the engine predicted.
+        let fieldsOuter = 0;
+        for (const strip of m.fields) {
+          for (const p of strip.polygon) fieldsOuter = Math.max(fieldsOuter, dist(p, m.green.centre));
+        }
+        const beyond = m.vegetation.filter((t) => dist(t.position, m.green.centre) > fieldsOuter);
+        expect(beyond.length).toBeGreaterThanOrEqual(5);
+      }
+    }
+  }, 20000);
+
 });
 
 describe('shorefront suppression (§8.4, coastal fixture)', () => {

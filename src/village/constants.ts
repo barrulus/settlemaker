@@ -343,6 +343,17 @@ export const FIELD_SAMPLE_STEP_M = 2;
 /** Jitter range (degrees) added to a wedge's furrow bearing: rng.float() *
  * this - this/2, one draw per wedge. */
 export const FIELD_JITTER_RANGE_DEG = 30;
+/**
+ * I2: how far from parallel (degrees, modulo 180 -- furrows are undirected)
+ * two SPATIALLY adjacent bundles must run. §7.2's alternation exists to
+ * break the seam between neighbouring field blocks, and a fixed +90 on
+ * alternate wedges cannot deliver it: an odd wedge count leaves one
+ * same-parity pair at the wrap, and two wedges whose bisectors already
+ * differ by ~90 land parallel once one is turned. `buildFields` walks the
+ * wedges in bearing order and picks the first candidate offset clearing
+ * this against both fixed neighbours.
+ */
+export const FIELD_FURROW_MIN_SEPARATION_DEG = 20;
 /** §7.2 rule 4: chance a wedge's FIRST (innermost) strip ring swaps its
  * cycled crop for an orchard/vine tile instead -- only rolled for biomes
  * whose crop table is the temperate one (desert/tropical/pasture tables

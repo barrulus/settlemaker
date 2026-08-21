@@ -2,13 +2,15 @@ import { Point } from '../../types/point.js';
 import { pointInPolygon } from '../../geom/point-in-polygon.js';
 import { SeededRandom } from '../../utils/random.js';
 import {
-  bearingOf, bearingVector, dist, greenDrawnRadius, inAnyWater, withinLaneCorridor, wrapDeg,
+  angularGap, bearingOf, bearingVector, dist, greenDrawnRadius, inAnyWater,
+  withinLaneCorridor, wrapDeg,
 } from '../geometry.js';
 import { lotObb, pointInObb, type Obb } from '../parcels/overlap.js';
 import { stampEdge } from './edges.js';
 import {
   FIELD_BAND_DEPTH_MAX_M, FIELD_BAND_DEPTH_MIN_M, FIELD_CROPS, FIELD_JITTER_RANGE_DEG,
-  FIELD_M2_PER_CAPITA, FIELD_MIN_BUNDLE_AREA_M2, FIELD_ORCHARD_VINE_CHANCE, FIELD_SAMPLE_STEP_M,
+  FIELD_FURROW_MIN_SEPARATION_DEG, FIELD_M2_PER_CAPITA, FIELD_MIN_BUNDLE_AREA_M2,
+  FIELD_ORCHARD_VINE_CHANCE, FIELD_SAMPLE_STEP_M,
   FIELD_WEDGE_CLAIM_MARGIN_DEG, FURROW_MIN_LENGTH_M, FURROW_WIDTH_M, LANE_SETBACK_M,
 } from '../constants.js';
 import type {
@@ -401,12 +403,22 @@ export interface FieldsResult {
  * Two orderings, deliberately different, and neither may be collapsed into
  * the other:
  *  - RNG order is wedge-id-sorted, so the draw sequence never depends on
- *    geometry (§8.1).
- *  - Furrow ALTERNATION is by the wedge's rank in the BEARING-sorted order
- *    `buildWedges` produces (fix wave, I2). Keyed to the lexical id order,
- *    as it was, "alternating" bundles were only alternating on paper --
- *    28% of spatially adjacent pairs came out within 15 degrees of
- *    parallel, which is exactly the seam the alternation exists to avoid.
+ *    geometry (§8.1). Every wedge spends its jitter float up front, before
+ *    any geometry gate, so a wedge that produces nothing still spends it.
+ *  - Furrow alternation is walked in the BEARING-sorted order `buildWedges`
+ *    produces, i.e. in SPATIAL adjacency (fix wave, I2).
+ *
+ * §7.2's alternation is enforced as a constraint, not assumed from a fixed
+ * +90 on alternate wedges. Keyed to the lexical id rank, as it was, it was
+ * only alternating on paper: 28% of spatially adjacent bundles came out
+ * within 15 degrees of parallel. But a fixed offset cannot deliver it
+ * either -- an odd wedge count leaves one same-parity seam at the wrap by
+ * construction, and two wedges whose bisectors already differ by ~90 land
+ * PARALLEL once one of them is turned 90. So each wedge, in bearing order,
+ * takes the first of +0/+45/+90/+135 on its parity base that clears
+ * FIELD_FURROW_MIN_SEPARATION_DEG of parallel against both already-fixed
+ * neighbours (the previous wedge, and for the last wedge also the first).
+ * The jitter is applied inside each candidate, so this spends no rng.
  */
 export function buildFields(
   site: Site, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[],
@@ -415,8 +427,38 @@ export function buildFields(
   const fabricRadius = computeInnerRadius(green, lots, crofts);
 
   const byBearing = buildWedges(green, lanes);
-  const bearingRank = new Map(byBearing.map((w, i) => [w.id, i]));
   const wedges = byBearing.slice().sort((a, b) => a.id.localeCompare(b.id));
+
+  // Phase 1 -- every rng draw this stage makes before geometry: one jitter
+  // float per wedge, wedge-id-sorted.
+  const jitterById = new Map<string, number>();
+  for (const wedge of wedges) {
+    jitterById.set(wedge.id, rng.float() * FIELD_JITTER_RANGE_DEG - FIELD_JITTER_RANGE_DEG / 2);
+  }
+
+  // Phase 2 -- furrow bearings, walked in bearing order so "the neighbour"
+  // means the spatial neighbour. No rng.
+  const bearingByWedge = new Map<string, number>();
+  const clearsNeighbour = (candidate: number, neighbour: number | undefined): boolean => {
+    if (neighbour === undefined) return true;
+    const gap = angularGap(candidate, neighbour) % 180;
+    return Math.min(gap, 180 - gap) > FIELD_FURROW_MIN_SEPARATION_DEG;
+  };
+  byBearing.forEach((wedge, rank) => {
+    const jitter = jitterById.get(wedge.id) ?? 0;
+    const base = wedge.bisectorDeg + (rank % 2 === 0 ? 0 : 90);
+    const prev = rank > 0 ? bearingByWedge.get(byBearing[rank - 1].id) : undefined;
+    // The last wedge closes the ring against the first; with 2 wedges the
+    // pair is already covered by `prev`.
+    const wrap = byBearing.length > 2 && rank === byBearing.length - 1
+      ? bearingByWedge.get(byBearing[0].id)
+      : undefined;
+    const candidates = [0, 45, 90, 135].map((extra) => wrapDeg(base + extra + jitter));
+    const chosen = candidates.find(
+      (c) => clearsNeighbour(c, prev) && clearsNeighbour(c, wrap),
+    ) ?? candidates[0];
+    bearingByWedge.set(wedge.id, chosen);
+  });
 
   const crops = FIELD_CROPS[site.biome] ?? FIELD_CROPS.temperate;
   const allowOrchardVine = crops === FIELD_CROPS.temperate;
@@ -430,18 +472,10 @@ export function buildFields(
     // village's deepest lane. An empty quadrant starts at the green ring.
     const innerRadius = computeInnerRadius(green, lots, crofts, wedge);
     const fieldRadius = fieldOuterRadius(innerRadius, site.population);
-
-    // The jitter draw happens for EVERY wedge, before any geometry gate,
-    // so a wedge producing nothing still spends its draw.
-    const jitter = rng.float() * FIELD_JITTER_RANGE_DEG - FIELD_JITTER_RANGE_DEG / 2;
-    const base = (bearingRank.get(wedge.id) ?? 0) % 2 === 0
-      ? wedge.bisectorDeg
-      : wedge.bisectorDeg + 90;
-    const furrowBearingDeg = wrapDeg(base + jitter);
     if (!(fieldRadius > innerRadius)) continue;
 
     const bundle = buildWedgeStrips(
-      wedge, green, innerRadius, fieldRadius, furrowBearingDeg,
+      wedge, green, innerRadius, fieldRadius, bearingByWedge.get(wedge.id) ?? 0,
       lots, crofts, lanes, site.water, style, crops, allowOrchardVine, rng, toggle,
     );
     // V4: a bundle this small reads as a dropped rug, not a field system.
