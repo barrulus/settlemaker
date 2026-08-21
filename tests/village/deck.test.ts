@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { SeededRandom } from '../../src/utils/random.js';
 import {
   TEMPERATE_VILLAGE_DECK, deckFor, deckDropped, drawEntry, eligible, meanOccupancy,
+  widestDwellingWidthM,
 } from '../../src/village/deck.js';
-import { hasGlyph } from '../../src/village/glyphs.js';
+import type { DeckEntry } from '../../src/village/deck.js';
+import { hasGlyph, nominalFootprint } from '../../src/village/glyphs.js';
 import type { Site } from '../../src/village/types.js';
 
 const site = (over: Partial<Site> = {}): Site => ({
@@ -139,5 +141,43 @@ describe('drawEntry', () => {
       const e = drawEntry(fixtureDeck, site({ population: 400 }), 40, new Set(), rng);
       expect(e?.glyph).not.toBe('sm-inn');
     }
+  });
+});
+
+// R21: f0 is the widest COMMON dwelling, not the widest dwelling the deck
+// can ever place. sm-longhouse (weight 6 of 98, ~6%) is far wider than the
+// rest of the temperate deck (sm-house-tiled at 8.6 m is the widest entry
+// that clears F0_WEIGHT_SHARE_MIN) but too rare to set f0 — an outlier is
+// handled per-entry by drawEntry's minFrontage filter, not by widening
+// every lot in the village to fit it.
+describe('widestDwellingWidthM (R21)', () => {
+  it('excludes a rare-but-wide entry below the weight-share threshold', () => {
+    const deck = deckFor('temperate');
+    const longhouse = deck.find((e) => e.glyph === 'sm-longhouse')!;
+    const houseTiled = deck.find((e) => e.glyph === 'sm-house-tiled')!;
+    expect(nominalFootprint(longhouse.glyph)[0]).toBeGreaterThan(nominalFootprint(houseTiled.glyph)[0]);
+    expect(widestDwellingWidthM(deck)).toBeCloseTo(nominalFootprint(houseTiled.glyph)[0], 5);
+    expect(widestDwellingWidthM(deck)).not.toBeCloseTo(nominalFootprint(longhouse.glyph)[0], 5);
+  });
+
+  it('lets a wide entry set f0 when it IS common (clears the threshold)', () => {
+    const fixtureDeck: DeckEntry[] = [
+      { glyph: 'sm-hut-straw', occupancy: 3, weight: 10, sizeFactor: 1, minFrontage: 8 },
+      { glyph: 'sm-longhouse', occupancy: 12, weight: 90, sizeFactor: 1, minFrontage: 18 },
+    ];
+    // Here the longhouse is 90% of the pool — well above F0_WEIGHT_SHARE_MIN
+    // — so it legitimately IS the common entry and must set f0.
+    expect(widestDwellingWidthM(fixtureDeck)).toBeCloseTo(nominalFootprint('sm-longhouse')[0], 5);
+  });
+
+  it('falls back to the widest uncapped entry when nothing clears the threshold (degenerate deck)', () => {
+    // A deck of one rare glyph always carries 100% of the pool's own
+    // weight, so this pins the guard against the case the comment in
+    // deck.ts calls out directly: f0 must never end up zero or undefined
+    // even when the "common" filter could (in principle) leave nothing.
+    const fixtureDeck: DeckEntry[] = [
+      { glyph: 'sm-house', occupancy: 5, weight: 1, sizeFactor: 1, minFrontage: 8 },
+    ];
+    expect(widestDwellingWidthM(fixtureDeck)).toBeCloseTo(nominalFootprint('sm-house')[0], 5);
   });
 });

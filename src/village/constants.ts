@@ -75,6 +75,23 @@ export const FIT_MAX = 1.15;
 export const SEATING_SETBACK_MAX_M = 1.5;
 export const DECK_GAP_M = 1.5;
 
+/**
+ * R21: the minimum share of the UNCAPPED deck's total weight an entry must
+ * carry to be eligible to set `f0` (widestDwellingWidthM). Spec §5.2 says
+ * f0 is the widest COMMON dwelling — the typical lot, not the widest
+ * dwelling the deck can ever place. sm-longhouse is weight 6 of 98 (~6%
+ * of draws) but 16 m wide (the refined manifest's widest dwelling by far);
+ * taken as f0 it forces every lot in the village to be cut at least
+ * longhouse-width, when 94% of draws will never place one there.
+ * Outliers like the longhouse are already handled per-entry: drawEntry
+ * filters by minFrontage, so a narrow lot simply declines to place one —
+ * f0 does not need to widen every lot to accommodate it. 0.1 (10%) keeps
+ * an entry as common as sm-house-tiled (12%) eligible while excluding the
+ * longhouse (6%); raise it if a future deck's "common" entries should be
+ * read more strictly, lower it to let rarer entries back into f0.
+ */
+export const F0_WEIGHT_SHARE_MIN = 0.1;
+
 // --- Lot scoring ---------------------------------------------------------
 export const SCORE_BASE = 100;
 export const SCORE_DISTANCE_PENALTY_PER_M = 0.5;

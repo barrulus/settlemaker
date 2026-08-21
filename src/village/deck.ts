@@ -1,6 +1,6 @@
 import { SeededRandom } from '../utils/random.js';
 import { hasGlyph, nominalFootprint } from './glyphs.js';
-import { DECK_GAP_M } from './constants.js';
+import { DECK_GAP_M, F0_WEIGHT_SHARE_MIN } from './constants.js';
 import type { Site } from './types.js';
 
 export interface DeckEntry {
@@ -106,15 +106,34 @@ export function deckDropped(biome: string): string[] {
 /**
  * Spec §5.2: `f0` (the frontage cut width) is "the widest common dwelling
  * in the deck" plus a gap term. "Common" means an uncapped entry — the
- * ordinary draw, not a one-off landmark such as the chapel or inn — and
- * "widest" is its resolved footprint width times its size factor. Finding
- * 5: this used to be a bare literal `8` in village-model.ts, unrelated to
- * the deck it claimed to describe (sm-house is 6 wide, sm-longhouse is 10).
+ * ordinary draw, not a one-off landmark such as the chapel or inn — AND
+ * one that actually gets drawn often: R21 reads "common" as carrying at
+ * least F0_WEIGHT_SHARE_MIN of the uncapped pool's total weight. Without
+ * that second filter a rare-but-wide outlier (the refined manifest's
+ * sm-longhouse: weight 6 of 98, ~6% of draws, but 16 m wide) sets f0 for
+ * every lot in the village — 94% of lots pay for a dwelling that will
+ * essentially never land there. The outlier does not need f0 to widen
+ * every lot on its behalf: drawEntry already filters by minFrontage, so a
+ * narrow lot simply declines to place it. "widest" is the qualifying
+ * entry's resolved footprint width times its size factor. Finding 5: this
+ * used to be a bare literal `8` in village-model.ts, unrelated to the deck
+ * it claimed to describe (sm-house is 6 wide, sm-longhouse is 10) — that
+ * batch001 gap is long since closed, but the "unrelated to what most lots
+ * actually need" failure mode is exactly what R21 addresses again here.
+ *
+ * Degenerate case: if nothing clears the weight-share threshold (e.g. a
+ * deck of a single rare glyph), fall back to the widest uncapped entry
+ * regardless of share, so f0 is never zero or undefined.
  */
 export function widestDwellingWidthM(deck: DeckEntry[]): number {
   const pool = deck.filter((e) => !e.cap && e.weight > 0);
   if (pool.length === 0) return 8;
-  return Math.max(...pool.map((e) => nominalFootprint(e.glyph)[0] * e.sizeFactor));
+  const totalWeight = pool.reduce((s, e) => s + e.weight, 0);
+  const common = totalWeight > 0
+    ? pool.filter((e) => e.weight / totalWeight >= F0_WEIGHT_SHARE_MIN)
+    : [];
+  const qualifying = common.length > 0 ? common : pool;
+  return Math.max(...qualifying.map((e) => nominalFootprint(e.glyph)[0] * e.sizeFactor));
 }
 
 /** Weighted mean occupancy over the uncapped entries. */
