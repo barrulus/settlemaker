@@ -84,6 +84,16 @@ describe('renderVillage', () => {
       .toBe(renderVillage(generateVillage(input, 2)));
   });
 
+  // Task 8: guards against a renderer that silently ignores its input (e.g.
+  // a stray global/cache) by pinning that two DIFFERENT seeds, same
+  // fixture, produce different SVG bytes. The byte-identical-for-the-SAME-
+  // seed half of this contract is already covered by the 'is deterministic'
+  // test above (full renderVillage(generateVillage(...)) pipeline, pop 300).
+  it('renders different bytes for different seeds (same input)', () => {
+    expect(renderVillage(generateVillage(input, 1)))
+      .not.toBe(renderVillage(generateVillage(input, 2)));
+  });
+
   // --- R17: standalone output ---
 
   it('embeds a <defs> block with a <g id> for every glyph actually used, plus its -sil twin', () => {
