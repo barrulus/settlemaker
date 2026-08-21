@@ -36,11 +36,16 @@ export const FRONTAGE_MARGIN = 1.15;
  * regardless; this only governs how many extra arms the village may add. */
 export const GREEN_ARM_SPACING_M = 30;
 export const GREEN_ARM_MIN = 2;
-/** "Never more than a handful" — the hard ceiling on green-attached lanes
- * beyond what FMG's routes demand. Gate 2 tightened this from 5: the even
- * radial fan around the green read as contrived, so fewer lanes touch the
- * green and more of the fabric hangs off branches. */
-export const GREEN_ARM_MAX = 3;
+/** "Never more than a handful" — the hard ceiling on INVENTED green-
+ * attached lanes, beyond what FMG's routes demand. Gate 2 tightened this
+ * from 5 (an even radial fan read as contrived); gate 4 raised it back to
+ * 4 AND stopped counting FMG's own arms against it — the old accounting
+ * let two incoming routes eat the whole cap, leaving a pop-900 green with
+ * a single radial and a dead quadrant the owner circled ("the green
+ * should have at least three sub roads coming off it"). Radials now also
+ * aim into the widest empty gap, so they fill quadrants instead of
+ * fanning evenly. */
+export const GREEN_ARM_MAX = 4;
 
 /** Pitch between branch slots along a parent lane. Every lane — arms and
  * branches alike — offers an attach point this often, so branches branch

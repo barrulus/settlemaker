@@ -210,6 +210,26 @@ function greenArmCap(green: Green): number {
     Math.max(GREEN_ARM_MIN, Math.round(circumference / GREEN_ARM_SPACING_M)));
 }
 
+/**
+ * Aim a new radial into the WIDEST angular gap between the lanes already
+ * attached to the green, jittered within that gap so consecutive radials
+ * never read as an even fan. Gate 4: random bearings left whole quadrants
+ * of a big green streetless — growth then had to reach that ground the
+ * long way round via branch chains, leaving the void the owner circled.
+ */
+function widestGapBearing(taken: number[], rng: SeededRandom): number {
+  if (taken.length === 0) return rng.int(0, 360);
+  const sorted = [...taken].sort((a, b) => a - b);
+  let gapStart = sorted[sorted.length - 1];
+  let gapSpan = sorted[0] + 360 - gapStart;
+  for (let i = 1; i < sorted.length; i++) {
+    const span = sorted[i] - sorted[i - 1];
+    if (span > gapSpan) { gapSpan = span; gapStart = sorted[i - 1]; }
+  }
+  const jitter = (rng.float() - 0.5) * gapSpan * 0.5;
+  return (gapStart + gapSpan / 2 + jitter + 360) % 360;
+}
+
 /** A branch hosts BRANCH_LOTS_TARGET lots across its two sides. */
 function branchLengthM(meanFrontageM: number): number {
   return Math.min(BRANCH_MAX_M,
@@ -348,10 +368,15 @@ function growOne(
   //    to the circumference-derived cap, at a bearing clear of every
   //    existing green-attached lane. Class is `local` — wagons reach the
   //    green — and it is street-length, not a road to the horizon.
-  if (out.filter(isGreenAttached).length < greenArmCap(green)) {
+  // The cap governs what the village ADDS: only invented radials (their
+  // ids live in the `lane-` space, R10) count against it. Gate 4: counting
+  // FMG's own arms let two incoming routes eat a cap of 3, leaving a
+  // pop-900 green a single radial and a dead quadrant.
+  if (out.filter((l) => isGreenAttached(l) && l.id.startsWith('lane-')).length
+      < greenArmCap(green)) {
     const taken = out.filter(isGreenAttached).map((l) => laneBearing(green, l));
     for (let attempt = 0; attempt < 36; attempt++) {
-      const candidate = rng.int(0, 360);
+      const candidate = Math.round(widestGapBearing(taken, rng)) % 360;
       const collides = taken.some((t) => angularGap(candidate, t) < MIN_ARM_SEPARATION_DEG)
         || out.some((l) => l.id === armLaneId(candidate) || l.id === inventedLaneId(candidate));
       if (collides) continue;
