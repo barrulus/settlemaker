@@ -18,6 +18,54 @@ const GROUND = '#a3c98d';
 const GREEN_FALLBACK_FILL = '#8fbf72';
 const GREEN_FALLBACK_STROKE = '#5f8f4a';
 
+/**
+ * Ink and material tones for the `sm-*` classes BATCH001_GLYPHS' markup
+ * carries (sm-stone, sm-timber, sm-void, sm-ridge, sm-hatch, sm-sil).
+ * With no stylesheet these fall back to solid black fill / no stroke,
+ * which is why an unstyled render reads as a field of black rectangles
+ * rather than buildings. Values copied by hand from the old renderer's
+ * theme (src/output/render-theme.ts / assemble-svg.ts:themeToCss — its
+ * "parchment" default palette), NOT imported: the new engine shares no
+ * code with the old one (see glyphs.ts's own note on the same boundary).
+ * Both this palette and the class list will be revisited once the
+ * refined symbol set (with its own tokens/CSS vars) lands and replaces
+ * batch001 as the deck's source.
+ */
+const SM_INK = '#33262e';
+const SM_STONE = '#e8dcc0';
+const SM_TIMBER = '#d9c39a';
+/** Door/window recesses — a dark-to-stone blend, not flat ink. */
+const SM_VOID = '#7a6a5c';
+
+/**
+ * Only the classes BATCH001_GLYPHS' verified dwelling/civic glyphs
+ * (sm-house, sm-hut-straw, sm-house-tiled, sm-longhouse, sm-inn,
+ * sm-house-large-tiled, sm-well) actually use — not the old renderer's
+ * whole stylesheet. sm-canopy-a/b and sm-mark exist in the wider batch001
+ * set but none of these seven glyphs reference them, so they are left out.
+ *
+ * The `.sm-sil <class>` rules undo the colour/stroke rules for every
+ * element nested under a `<g class="sm-sil">` shadow twin: five of these
+ * six dwelling glyphs' -sil markup is a full copy of the body (stone
+ * rect, ridge line, hatch texture) rather than a single flat currentColor
+ * shape, so without this override the class rules above would paint each
+ * shadow as a coloured, outlined replica of the building instead of a
+ * flat silhouette — the one thing the shadow contract explicitly forbids.
+ * (sm-well is the exception: its -sil is already a flat currentColor
+ * shape with no classed children, so the override rule simply matches
+ * nothing for it.)
+ */
+const SM_STYLE = [
+  `.sm-stone{fill:${SM_STONE};stroke:${SM_INK};stroke-width:2;stroke-linejoin:round;stroke-linecap:round}`,
+  `.sm-timber{fill:${SM_TIMBER};stroke:${SM_INK};stroke-width:2;stroke-linejoin:round;stroke-linecap:round}`,
+  `.sm-void{fill:${SM_VOID};stroke:${SM_INK};stroke-width:2;stroke-linejoin:round;stroke-linecap:round}`,
+  `.sm-ridge{fill:none;stroke:${SM_INK};stroke-width:2;stroke-linecap:round}`,
+  `.sm-hatch{fill:none;stroke:${SM_INK};stroke-width:1;opacity:.45}`,
+  `.sm-sil{stroke-width:2;stroke-linejoin:round}`,
+  '.sm-sil .sm-stone,.sm-sil .sm-timber,.sm-sil .sm-void,.sm-sil .sm-ridge,.sm-sil .sm-hatch'
+    + '{fill:currentColor;stroke:none;opacity:1}',
+].join('');
+
 function n(v: number): string {
   return (Math.round(v * 100) / 100).toString();
 }
@@ -50,8 +98,17 @@ function defBlock(id: string, markup: string): string {
  * <g>, not <symbol> — see defBlock() for why.
  */
 export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
-  const xs = model.buildings.map((b) => b.position.x).concat(model.green.centre.x);
-  const ys = model.buildings.map((b) => b.position.y).concat(model.green.centre.y);
+  // Bounds must cover every lane point, not just buildings and the green:
+  // ruling R15 leaves arm- lanes (FMG's incoming roads) untrimmed out to
+  // roughly builtRadius * 2 past the green whether or not anything is
+  // built along them, so a lane can run well outside the built footprint.
+  // All points, not just endpoints — a lane can wander outside the box
+  // between them.
+  const lanePoints = model.lanes.flatMap((lane) => lane.points);
+  const xs = model.buildings.map((b) => b.position.x)
+    .concat(model.green.centre.x, lanePoints.map((p) => p.x));
+  const ys = model.buildings.map((b) => b.position.y)
+    .concat(model.green.centre.y, lanePoints.map((p) => p.y));
   const pad = 40;
   const minX = Math.min(...xs) - pad;
   const minY = Math.min(...ys) - pad;
@@ -80,6 +137,7 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
 
   const out: string[] = [];
   out.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${n(w)}" height="${n(h)}" viewBox="0 0 ${n(w)} ${n(h)}">`);
+  out.push(`<style>${SM_STYLE}</style>`);
   out.push(`<defs>${defs.join('')}</defs>`);
   out.push(`<rect data-bg="paper" width="${n(w)}" height="${n(h)}" fill="${GROUND}"/>`);
 

@@ -108,4 +108,86 @@ describe('renderVillage', () => {
     const parcelBand = svg.slice(svg.indexOf('data-band="parcel"'), svg.indexOf('</g>', svg.indexOf('data-band="parcel"')));
     expect(parcelBand).toContain('data-green-fallback="1"');
   });
+
+  // --- Regression: unstyled sm-* classes render as solid black rectangles ---
+  // BATCH001_GLYPHS markup uses bare class="sm-stone" / "sm-timber" / etc.
+  // with no stylesheet, so every fill/stroke falls back to SVG defaults
+  // (solid black fill, no stroke) — buildings read as a field of identical
+  // black blocks instead of buildings. A <style> block defining these
+  // classes fixes that; pinned here so it cannot silently disappear.
+  it('emits a <style> block defining the sm-* material classes the deck uses', () => {
+    const styleMatch = svg.match(/<style>([\s\S]*?)<\/style>/);
+    expect(styleMatch).not.toBeNull();
+    const style = styleMatch![1];
+    for (const cls of ['.sm-stone', '.sm-timber', '.sm-void', '.sm-ridge', '.sm-hatch']) {
+      expect(style).toContain(`${cls}{`);
+    }
+  });
+
+  it('does not let the sm-* style rules leak colour into shadow silhouettes', () => {
+    // The shadow contract requires flat, offset, single-colour silhouettes.
+    // Several of BATCH001_GLYPHS' -sil twins duplicate the body's classed
+    // elements (stone rect, ridge line, hatch texture) rather than being a
+    // single flat currentColor shape, so the style block must override
+    // fill/stroke back to currentColor for anything nested under .sm-sil —
+    // otherwise a shadow would render as a coloured, outlined replica of
+    // the building instead of a flat silhouette.
+    const styleMatch = svg.match(/<style>([\s\S]*?)<\/style>/);
+    const style = styleMatch![1];
+    expect(style).toMatch(/\.sm-sil \.sm-stone[^}]*\{[^}]*fill:currentColor/);
+  });
+
+  // --- Regression: viewBox omitted lane geometry, so roads ran off-canvas ---
+  // Bounds were computed from building positions and the green centre only.
+  // Ruling R15 leaves arm- lanes (FMG's incoming roads) deliberately
+  // untrimmed — they run out to roughly builtRadius * 2 past the green
+  // whether or not anything is built along them — so a lane can extend
+  // well past every building, and the viewBox silently clipped it. A
+  // multi-road, low-population input (which leaves the untrimmed arms most
+  // exposed relative to the built cluster) reproduces it reliably; the
+  // single-bearing default used by the other tests in this file does not,
+  // which is exactly what let this ship the first time.
+  describe('viewBox covers every lane point (regression: roads running off-canvas)', () => {
+    const multiRoadInput: AzgaarBurgInput = {
+      name: 'Three Roads', population: 40, port: false, citadel: false, walls: false,
+      plaza: false, temple: false, shanty: false, capital: false,
+      roadBearings: [
+        { bearing_deg: 20, kind: 'road' },
+        { bearing_deg: 150, kind: 'road' },
+        { bearing_deg: 260, kind: 'road' },
+      ],
+    };
+
+    for (let seed = 1; seed <= 5; seed++) {
+      it(`seed ${seed}: every building and every lane point falls within the viewBox`, () => {
+        const pxPerMetre = 4;
+        const m = generateVillage(multiRoadInput, seed);
+        const rendered = renderVillage(m, pxPerMetre);
+        const dims = rendered.match(/^<svg[^>]*width="([\d.]+)"[^>]*height="([\d.]+)"/);
+        expect(dims).not.toBeNull();
+        const width = Number(dims![1]);
+        const height = Number(dims![2]);
+
+        const lanePoints = m.lanes.flatMap((lane) => lane.points);
+        const allPoints = m.buildings.map((b) => b.position).concat(m.green.centre, lanePoints);
+
+        // Reproduce the renderer's own coordinate mapping to check every
+        // world point actually lands inside the declared viewBox.
+        const pad = 40;
+        const xs = allPoints.map((p) => p.x);
+        const ys = allPoints.map((p) => p.y);
+        const minX = Math.min(...xs) - pad;
+        const minY = Math.min(...ys) - pad;
+
+        for (const p of allPoints) {
+          const px = (p.x - minX) * pxPerMetre;
+          const py = (p.y - minY) * pxPerMetre;
+          expect(px).toBeGreaterThanOrEqual(0);
+          expect(px).toBeLessThanOrEqual(width);
+          expect(py).toBeGreaterThanOrEqual(0);
+          expect(py).toBeLessThanOrEqual(height);
+        }
+      });
+    }
+  });
 });
