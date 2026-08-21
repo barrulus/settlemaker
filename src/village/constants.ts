@@ -135,6 +135,15 @@ export const LOT_DEPTH_M = 16;
 /** Gate 2: "green frontage means right at the green" — the ring's fronts
  * sit at the DRAWN edge plus this sliver, not metres out. Was 3. */
 export const RING_SETBACK_M = 0.5;
+/** Share of f0 held clear on EACH side of a road mouth where it pierces
+ * the green ring, on top of the lane's own half width. Ring lots are only
+ * cut in the arcs between these windows, so no ring lot ever straddles a
+ * mouth and dies on the corridor test at seat time. A sliver is enough:
+ * the first lot's BUILDING sits half a frontage past the window edge
+ * already (lots centre within their arc), which clears the corridor by
+ * itself — a fatter window just re-empties the ring from the other
+ * direction. */
+export const RING_MOUTH_CLEAR_FACTOR = 0.1;
 export const MEAN_LOT_AREA_M2 = 130;
 /**
  * Metres between the edge of the carriageway and the house fronts, by lane

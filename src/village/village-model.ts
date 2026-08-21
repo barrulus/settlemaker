@@ -110,7 +110,7 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
     laneTypes.set('green', 'main');
 
     lots = [
-      ...subdivideGreen(green, f0, LOT_DEPTH_M, rng),
+      ...subdivideGreen(green, f0, LOT_DEPTH_M, rng, lanes),
       ...lanes.flatMap((l) => subdivideLane(l, green, builtRadius, f0, LOT_DEPTH_M, rng, lotFloorM)),
     ];
     lots = orderLots(scoreLots(clipLots(lots, green, site.water), green, laneTypes));

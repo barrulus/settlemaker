@@ -3,7 +3,7 @@ import { Point } from '../../src/types/point.js';
 import { SeededRandom } from '../../src/utils/random.js';
 import { GREEN_JOIN_RATIO, RING_SETBACK_M } from '../../src/village/constants.js';
 import { subdivideGreen } from '../../src/village/parcels/lots.js';
-import type { Green } from '../../src/village/types.js';
+import type { Green, Lane } from '../../src/village/types.js';
 
 const green: Green = {
   shape: 'sm-green-round', variant: 'a', centre: new Point(0, 0),
@@ -48,6 +48,40 @@ describe('subdivideGreen', () => {
   it('is deterministic for a seed', () => {
     const mk = () => subdivideGreen(green, 10, 22, new SeededRandom(9));
     expect(JSON.stringify(mk())).toBe(JSON.stringify(mk()));
+  });
+
+  describe('around road mouths', () => {
+    // Gate 4 (owner: "lots of missing coverage on the housing front of the
+    // greens"): the ring was cut blind to the roads piercing it, every lot
+    // straddling a mouth died on the corridor test at seat time, and a big
+    // green's mouths tiled the whole circle — the most valuable frontage
+    // in the settlement seated NOTHING.
+    const through: Lane = {
+      id: 'arm-000', type: 'main', widthM: 5,
+      // Straight north-south through-route under the green: two mouths.
+      points: [new Point(0, -200), new Point(0, 200)],
+    };
+
+    it('leaves a gap at each mouth instead of cutting lots that must die', () => {
+      const lots = subdivideGreen(green, 10, 22, new SeededRandom(1), [through]);
+      expect(lots.length).toBeGreaterThan(2);
+      for (const l of lots) {
+        // No lot front sits inside the road's corridor.
+        expect(Math.abs(l.front.x)).toBeGreaterThan(through.widthM / 2);
+      }
+    });
+
+    it('still fills the arcs between the mouths', () => {
+      const lots = subdivideGreen(green, 10, 22, new SeededRandom(1), [through]);
+      // Both half-rings (east and west of the road) hold lots.
+      expect(lots.some((l) => l.front.x > 0)).toBe(true);
+      expect(lots.some((l) => l.front.x < 0)).toBe(true);
+    });
+
+    it('is deterministic for a seed with lanes present', () => {
+      const mk = () => subdivideGreen(green, 10, 22, new SeededRandom(9), [through]);
+      expect(JSON.stringify(mk())).toBe(JSON.stringify(mk()));
+    });
   });
 
   describe('with a green off the origin', () => {

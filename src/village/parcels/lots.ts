@@ -3,7 +3,8 @@ import { offsetPolyline } from './strip.js';
 import { arcLengths, bearingOf, dist, inAnyWater, sampleAt } from '../geometry.js';
 import {
   F0_FLOOR_RATIO, FRONTAGE_JITTER, GAP_LOOSE_M, GAP_POP_HIGH, GAP_POP_LOW, GAP_TIGHT_M,
-  GRADIENT_EXPONENT, GRADIENT_K, GRADIENT_RATIO_CAP, GREEN_JOIN_RATIO, LANE_SETBACK_M, RING_SETBACK_M,
+  GRADIENT_EXPONENT, GRADIENT_K, GRADIENT_RATIO_CAP, GREEN_JOIN_RATIO, LANE_SETBACK_M,
+  RING_MOUTH_CLEAR_FACTOR, RING_SETBACK_M,
   SCORE_BASE, SCORE_CLASS_WEIGHT, SCORE_DISTANCE_PENALTY_PER_M, SCORE_RING_BONUS,
 } from '../constants.js';
 import { Point } from '../../types/point.js';
@@ -104,37 +105,110 @@ export function subdivideLane(
  * around the green is this subdivision, not a placement rule.
  */
 export function subdivideGreen(
-  green: Green, f0: number, depthM: number, rng: SeededRandom,
+  green: Green, f0: number, depthM: number, rng: SeededRandom, lanes: Lane[] = [],
 ): Lot[] {
   // Gate 2: green frontage means RIGHT AT the green — the ring's fronts
   // sit on the drawn edge (art fills ~87% of the box) plus a sliver, not
   // metres of empty grass out.
   const radius = (green.diameter / 2) * GREEN_JOIN_RATIO + RING_SETBACK_M;
   const circumference = 2 * Math.PI * radius;
-  const count = Math.max(4, Math.floor(circumference / f0));
-  const step = (Math.PI * 2) / count;
+  const TAU = Math.PI * 2;
   // Rotate the ring by a seeded offset so two villages do not share a seam.
-  const phase = rng.float() * step;
+  const phase = rng.float() * (TAU / Math.max(4, Math.floor(circumference / f0)));
+
+  // Gate 4 (owner: "lots of missing coverage on the housing front of the
+  // greens"): the ring used to be cut blind to the roads piercing it, so
+  // every lot straddling a road mouth died on the corridor test at seat
+  // time — and a big green's five or six mouths tiled the entire circle,
+  // seating NOTHING on the most valuable frontage in the settlement. Find
+  // each mouth's bearing and cut lots only in the free arcs between them,
+  // the way a real green fills: houses shoulder to shoulder BETWEEN the
+  // roads, a gap where each road leaves.
+  // A lane blocks every bearing its path sweeps while inside the ring
+  // BAND (ring radius out to where the ring buildings' ink ends, ~one
+  // frontage further) — not just the bearing where it first pierces the
+  // ring: lanes wander, and a radial curving past its mouth sweeps
+  // sideways through the neighbouring arc's building band. Sampled every
+  // couple of metres; the windows merge below.
+  const blocked: Array<[number, number]> = [];
+  const bandOuter = radius + f0;
+  for (const lane of lanes) {
+    const halfAng = (lane.widthM / 2 + f0 * RING_MOUTH_CLEAR_FACTOR) / radius;
+    for (let i = 1; i < lane.points.length; i++) {
+      const a = lane.points[i - 1];
+      const b = lane.points[i];
+      const segLen = dist(a, b);
+      const steps = Math.max(1, Math.ceil(segLen / 2));
+      for (let k = 0; k <= steps; k++) {
+        const p = new Point(
+          a.x + ((b.x - a.x) * k) / steps,
+          a.y + ((b.y - a.y) * k) / steps,
+        );
+        if (dist(p, green.centre) > bandOuter) continue;
+        // Same bearing convention as the fronts below: 0 = north (-y),
+        // clockwise, via atan2(dx, -dy).
+        const mouth = Math.atan2(p.x - green.centre.x, -(p.y - green.centre.y));
+        blocked.push([mouth - halfAng, mouth + halfAng]);
+      }
+    }
+  }
+
+  // Free arcs = the gaps between merged blocked windows. With no lanes the
+  // whole circle is one arc and this reduces to the old even ring.
+  let arcs: Array<[number, number]>;
+  if (blocked.length === 0) {
+    arcs = [[phase, phase + TAU]];
+  } else {
+    const merged: Array<[number, number]> = blocked
+      .map(([s, e]) => [((s % TAU) + TAU) % TAU, e - s] as const)
+      .map(([s, span]) => [s, s + span] as [number, number])
+      .sort((a, b) => a[0] - b[0])
+      .reduce<Array<[number, number]>>((acc, [s, e]) => {
+        const last = acc[acc.length - 1];
+        if (last && s <= last[1]) last[1] = Math.max(last[1], e);
+        else acc.push([s, e]);
+        return acc;
+      }, []);
+    arcs = [];
+    for (let i = 0; i < merged.length; i++) {
+      const gapStart = merged[i][1];
+      const gapEnd = i === merged.length - 1 ? merged[0][0] + TAU : merged[i + 1][0];
+      // A wrap-overlapping pair yields gapEnd <= gapStart and is skipped.
+      if (gapEnd > gapStart) arcs.push([gapStart, gapEnd]);
+    }
+  }
 
   const lots: Lot[] = [];
-  for (let i = 0; i < count; i++) {
-    const a = phase + i * step;
-    const front = new Point(
-      green.centre.x + radius * Math.sin(a),
-      green.centre.y - radius * Math.cos(a),
-    );
-    // Face back at the centre.
-    const bearingDeg = bearingOf(front, green.centre);
-    lots.push({
-      id: lotId('green', 1, i),
-      laneId: 'green',
-      side: 1,
-      front,
-      bearingDeg,
-      frontageM: circumference / count,
-      depthM,
-      score: 0,
-    });
+  let ordinal = 0;
+  for (const [s, e] of arcs) {
+    const arcM = (e - s) * radius;
+    // With no mouths at all (a green nothing pierces yet), keep the old
+    // guarantee of at least 4 ring lots however tiny the green.
+    const n = blocked.length === 0
+      ? Math.max(4, Math.floor(arcM / f0))
+      : Math.floor(arcM / f0);
+    if (n < 1) continue;
+    const step = (e - s) / n;
+    for (let j = 0; j < n; j++) {
+      const a = s + (j + 0.5) * step;
+      const front = new Point(
+        green.centre.x + radius * Math.sin(a),
+        green.centre.y - radius * Math.cos(a),
+      );
+      // Face back at the centre.
+      const bearingDeg = bearingOf(front, green.centre);
+      lots.push({
+        id: lotId('green', 1, ordinal),
+        laneId: 'green',
+        side: 1,
+        front,
+        bearingDeg,
+        frontageM: arcM / n,
+        depthM,
+        score: 0,
+      });
+      ordinal++;
+    }
   }
   return lots;
 }
