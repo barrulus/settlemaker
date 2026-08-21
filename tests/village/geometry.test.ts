@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Point } from '../../src/types/point.js';
 import {
-  angularGap, arcLengths, bearingOf, bearingVector, dist, inAnyWater,
+  angularGap, arcLengths, bearingOf, bearingVector, closestPointOnSegment, dist, inAnyWater,
   polylineLength, sampleAt, unit,
 } from '../../src/village/geometry.js';
 
@@ -96,5 +96,26 @@ describe('inAnyWater', () => {
 
   it('is false when there is no water at all', () => {
     expect(inAnyWater(new Point(5, 5), [])).toBe(false);
+  });
+});
+
+describe('closestPointOnSegment', () => {
+  it('projects onto the segment interior', () => {
+    const q = closestPointOnSegment(new Point(5, 5), new Point(0, 0), new Point(10, 0));
+    expect(q.x).toBeCloseTo(5, 6);
+    expect(q.y).toBeCloseTo(0, 6);
+  });
+
+  it('clamps to the nearer endpoint beyond either end', () => {
+    const q = closestPointOnSegment(new Point(-3, 2), new Point(0, 0), new Point(10, 0));
+    expect(q.x).toBeCloseTo(0, 6);
+    const r = closestPointOnSegment(new Point(14, -2), new Point(0, 0), new Point(10, 0));
+    expect(r.x).toBeCloseTo(10, 6);
+  });
+
+  it('survives a zero-length segment', () => {
+    const q = closestPointOnSegment(new Point(3, 4), new Point(1, 1), new Point(1, 1));
+    expect(q.x).toBeCloseTo(1, 6);
+    expect(q.y).toBeCloseTo(1, 6);
   });
 });

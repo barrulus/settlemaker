@@ -33,33 +33,36 @@ describe('frontage arithmetic', () => {
 describe('addInventedLanes', () => {
   it('adds nothing when the arms already provide enough frontage', () => {
     const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -500))];
-    const out = addInventedLanes(lanes, green, 500, 200, new SeededRandom(1));
+    const out = addInventedLanes(lanes, green, 500, 12, new SeededRandom(1));
     expect(out).toHaveLength(1);
   });
 
   it('adds lanes until available frontage clears required x 1.15', () => {
     const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -110))];
-    const out = addInventedLanes(lanes, green, 2000, 200, new SeededRandom(1));
+    const out = addInventedLanes(lanes, green, 2000, 12, new SeededRandom(1));
     expect(out.length).toBeGreaterThan(1);
     expect(availableFrontage(out)).toBeGreaterThanOrEqual(2000 * 1.15);
   });
 
-  it('classes a green-attached lane one step below the best arm, floored at local', () => {
+  it('keeps every invented lane in the village band: local, trail or footpath', () => {
+    // Owner ruling (2026-08-21): royal/main/market/town are INTER-SETTLEMENT
+    // classes — market lanes connect market towns, they are not suburban
+    // routes. A branch off a `main` road is a `local` street, never `market`.
     const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -60))];
-    const out = addInventedLanes(lanes, green, 800, 200, new SeededRandom(3));
+    const out = addInventedLanes(lanes, green, 800, 12, new SeededRandom(3));
     // Excluded by original id, not by prefix: green-attached invented lanes
     // now use their own `lane-` id space (ruling R10), but excluding by id
     // is the more general check and doesn't depend on that detail.
     const invented = out.filter((l) => !lanes.some((orig) => orig.id === l.id));
     expect(invented.length).toBeGreaterThan(0);
     for (const l of invented) {
-      expect(['market', 'town', 'local', 'trail', 'footpath']).toContain(l.type);
+      expect(['local', 'trail', 'footpath']).toContain(l.type);
     }
   });
 
   it('is deterministic for a seed', () => {
     const mk = () => addInventedLanes(
-      [lane('arm-000', new Point(0, -10), new Point(0, -60))], green, 900, 200,
+      [lane('arm-000', new Point(0, -10), new Point(0, -60))], green, 900, 12,
       new SeededRandom(11),
     );
     expect(JSON.stringify(mk())).toBe(JSON.stringify(mk()));
@@ -67,7 +70,7 @@ describe('addInventedLanes', () => {
 
   it('gives green-attached invented lanes their own id space, distinct from arms (R10)', () => {
     const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -60))];
-    const out = addInventedLanes(lanes, green, 800, 200, new SeededRandom(3));
+    const out = addInventedLanes(lanes, green, 800, 12, new SeededRandom(3));
     const invented = out.filter((l) => !lanes.some((orig) => orig.id === l.id));
     const greenAttached = invented.filter((l) => l.parentId === undefined);
     expect(greenAttached.length).toBeGreaterThan(0);
@@ -88,7 +91,7 @@ describe('addInventedLanes', () => {
     // percentage buckets can collide if the fallback probing is missing.
     for (const seed of [2, 5, 7, 13, 21, 42]) {
       const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -60))];
-      const out = addInventedLanes(lanes, green, 100000, 200, new SeededRandom(seed));
+      const out = addInventedLanes(lanes, green, 100000, 12, new SeededRandom(seed));
       const ids = out.map((l) => l.id);
       expect(new Set(ids).size).toBe(ids.length);
     }

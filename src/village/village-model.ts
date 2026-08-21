@@ -9,10 +9,11 @@ import { relaxLanes, trimTails } from './skeleton/relax.js';
 import {
   clipLots, gapForPopulation, orderLots, scoreLots, subdivideGreen, subdivideLane,
 } from './parcels/lots.js';
-import { deckDropped, deckFor, meanOccupancy, widestDwellingWidthM } from './deck.js';
+import { buildDeck, meanOccupancy, widestDwellingWidthM } from './deck.js';
 import { spendCensus, type SpendResult } from './dwellings.js';
 import {
-  GAP_TIGHTEN, LANE_EXTENT_FACTOR, LOT_DEPTH_M, MAX_FEEDBACK_ROUNDS, MEAN_LOT_AREA_M2,
+  GAP_TIGHTEN, INITIAL_MEAN_FRONTAGE_FACTOR, LANE_EXTENT_FACTOR, LOT_DEPTH_M,
+  MAX_FEEDBACK_ROUNDS, MEAN_LOT_AREA_M2,
 } from './constants.js';
 import type { Lot, VillageModel } from './types.js';
 import type { RouteType } from './route-class.js';
@@ -28,11 +29,11 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
   const site = buildSite(input);
   const diagnostics: string[] = [];
 
-  const deck = deckFor(site.biome);
-  const dropped = deckDropped(site.biome);
+  // One dwelling family per village: the deck is built per (biome,
+  // population, seed), drawing the village's single dwelling glyph here.
+  const { entries: deck, dropped } = buildDeck(site.biome, site.population, rng);
   if (dropped.length > 0) {
-    // Finding 6: deckDropped() existed but nothing called it, so a village
-    // silently missing e.g. its chapel gave no clue why.
+    // Finding 6: a village silently missing e.g. its chapel gave no clue why.
     diagnostics.push(`deck dropped (no manifest entry): ${dropped.join(', ')}`);
   }
   const occupancy = meanOccupancy(deck);
@@ -58,12 +59,12 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
   let lots: Lot[] = [];
   // Annotated, not inferred: an empty literal would infer `never[]`.
   let spend: SpendResult = { buildings: [], housed: 0, unhoused: site.population };
-  // Round 1 has no cut lots yet to measure, so it still guesses f0 x 1.8 as
-  // the mean frontage (R16). Every later round replaces this with the
-  // ACTUAL mean frontage of the lane lots the previous round produced,
-  // because `frontageAt`'s gradient widens fringe lots to several times
-  // f0 — a flat f0 x 1.8 guess is only ever right for round 1.
-  let measuredMeanFrontage = f0 * 1.8;
+  // Round 1 has no cut lots yet to measure, so it guesses
+  // f0 x INITIAL_MEAN_FRONTAGE_FACTOR as the mean frontage (R16; the
+  // factor shrank with the gentler cluster gradient). Every later round
+  // replaces this with the ACTUAL mean frontage of the lane lots the
+  // previous round produced.
+  let measuredMeanFrontage = f0 * INITIAL_MEAN_FRONTAGE_FACTOR;
 
   for (let round = 0; round <= MAX_FEEDBACK_ROUNDS; round++) {
     // R16: after round 1, requiredFrontage's flat per-capita estimate is
@@ -75,7 +76,7 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
     const required = round === 0
       ? requiredFrontage(site.population, occupancy, measuredMeanFrontage)
       : availableFrontage(lanes) + (spend.unhoused / occupancy) * measuredMeanFrontage;
-    lanes = addInventedLanes(lanes, green, required, laneExtentM, rng);
+    lanes = addInventedLanes(lanes, green, required, measuredMeanFrontage, rng);
 
     const laneTypes = new Map<string, RouteType>(lanes.map((l) => [l.id, l.type]));
     laneTypes.set('green', 'main');

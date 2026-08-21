@@ -67,3 +67,17 @@ export function sampleAt(
 export function inAnyWater(p: Point, water: Point[][]): boolean {
   return water.some((ring) => pointInPolygon(p, ring));
 }
+
+/**
+ * The closest point to `p` on the segment a—b. Used by the lane-growth
+ * loop snap: a branch whose end passes near another lane joins it at this
+ * point rather than stopping just short of it.
+ */
+export function closestPointOnSegment(p: Point, a: Point, b: Point): Point {
+  const abx = b.x - a.x;
+  const aby = b.y - a.y;
+  const len2 = abx * abx + aby * aby;
+  if (len2 === 0) return new Point(a.x, a.y);
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * abx + (p.y - a.y) * aby) / len2));
+  return new Point(a.x + abx * t, a.y + aby * t);
+}

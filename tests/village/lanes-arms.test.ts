@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Point } from '../../src/types/point.js';
 import { SeededRandom } from '../../src/utils/random.js';
 import { buildArms } from '../../src/village/skeleton/lanes.js';
+import { GREEN_JOIN_RATIO } from '../../src/village/constants.js';
 import type { Green, Site, SiteRoute } from '../../src/village/types.js';
 
 const route = (bearingDeg: number, type: SiteRoute['type'], through = false): SiteRoute =>
@@ -25,7 +26,10 @@ describe('buildArms', () => {
     expect(lanes[0].widthM).toBe(5);
     // starts on the rim, not at the centre
     const start = lanes[0].points[0];
-    expect(Math.hypot(start.x, start.y)).toBeCloseTo(10, 0);
+    // Junction rule (2026-08-21 gate): arms start at the green's DRAWN
+    // edge — nominal radius x GREEN_JOIN_RATIO — so the road visibly
+    // meets the turf instead of stopping ~1.4 m short of it.
+    expect(Math.hypot(start.x, start.y)).toBeCloseTo(10 * GREEN_JOIN_RATIO, 1);
   });
 
   it('makes two lanes for a through route — it enters and it leaves', () => {
@@ -62,7 +66,10 @@ describe('buildArms', () => {
     for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
       const lanes = buildArms(site([route(0, 'town')]), green, 150, new SeededRandom(seed));
       const start = lanes[0].points[0];
-      expect(Math.hypot(start.x, start.y)).toBeCloseTo(10, 0);
+      // Junction rule (2026-08-21 gate): arms start at the green's DRAWN
+    // edge — nominal radius x GREEN_JOIN_RATIO — so the road visibly
+    // meets the turf instead of stopping ~1.4 m short of it.
+    expect(Math.hypot(start.x, start.y)).toBeCloseTo(10 * GREEN_JOIN_RATIO, 1);
     }
   });
 });

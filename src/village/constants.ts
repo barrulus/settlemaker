@@ -21,8 +21,51 @@ export const GREEN_WATER_MARGIN_M = 6;
 export const LANE_SAMPLE_STEP_M = 12;
 export const LANE_WANDER_M = 3.5;
 export const MIN_ARM_SEPARATION_DEG = 35;
-export const MAX_INVENTED_LANES = 24;
+export const MAX_INVENTED_LANES = 60;
 export const FRONTAGE_MARGIN = 1.15;
+
+// --- Cluster growth (2026-08-21 gate rework) ---------------------------
+// The first render gate rejected the starburst the original growth rule
+// produced: ten radial spokes off the green with empty wedges between
+// them. The owner's reference (a real Welsh estate, Ffordd Beck) is a
+// CLUSTER: a few roads at the green, then short side-lanes branching
+// early and often, branching again, threading between the houses.
+
+/** One green-attached arm per this many metres of green circumference. A
+ * 22 m green earns ~3 arms, a 38 m green ~5. FMG's own routes always join
+ * regardless; this only governs how many extra arms the village may add. */
+export const GREEN_ARM_SPACING_M = 20;
+export const GREEN_ARM_MIN = 2;
+/** "Never more than a handful" — the hard ceiling on green-attached lanes
+ * beyond what FMG's routes demand. */
+export const GREEN_ARM_MAX = 5;
+
+/** Pitch between branch slots along a parent lane. Every lane — arms and
+ * branches alike — offers an attach point this often, so branches branch
+ * again and the fabric fills instead of raying. */
+export const BRANCH_SPACING_M = 28;
+/** A branch is sized to the lots it must host (both sides), not run to the
+ * horizon: length = (target/2) x mean frontage, clamped below. */
+export const BRANCH_LOTS_TARGET = 8;
+export const BRANCH_MIN_M = 24;
+export const BRANCH_MAX_M = 90;
+/** Invented green-attached arms are longer than a branch by this factor —
+ * they are the village's own streets, not culs-de-sac. */
+export const INVENTED_ARM_LENGTH_FACTOR = 2;
+/** A branch whose end passes within this of another lane snaps onto it,
+ * forming a loop. The connector drops one further class (a footpath cut
+ * between two streets), per the owner's rule that loops are made at a
+ * lower class than the lanes they join. */
+export const LOOP_SNAP_M = 12;
+/** Round-0 estimate of mean lot frontage as a multiple of f0, before the
+ * loop has cut real lots to measure. The gradient tops out at ~2x f0, so
+ * the mean sits well under the old 1.8. */
+export const INITIAL_MEAN_FRONTAGE_FACTOR = 1.3;
+
+/** Arms and branches overshoot to the green's DRAWN edge: the green art
+ * fills ~87% of its box, so lanes aimed at the nominal radius stop ~1.4 m
+ * short of visible turf. Joins must be ink, not near-misses. */
+export const GREEN_JOIN_RATIO = 0.82;
 /**
  * How far a green-attached invented lane reaches out, as a fraction of the
  * arm extent (`builtRadius * 2`, see LANE_EXTENT_FACTOR below). A gate
@@ -30,14 +73,12 @@ export const FRONTAGE_MARGIN = 1.15;
  * lowers this; "invented lanes read stubby/cramped against real arms"
  * raises it toward 1.0.
  */
-export const INVENTED_LANE_LENGTH_FACTOR = 0.6;
 /**
  * How far a lane BRANCH (off another lane, once the green itself has no
  * free bearing left) reaches out, as a fraction of the arm extent. A gate
  * verdict of "branches read as short dead-end nubs" raises this; "branches
  * sprawl further than the lane they're hanging off" lowers it.
  */
-export const BRANCH_LENGTH_FACTOR = 0.5;
 
 // --- Relaxation --------------------------------------------------------
 export const RELAX_ITERATIONS = 3;
@@ -51,13 +92,19 @@ export const GAP_TIGHT_M = 1.0;
 export const GAP_POP_LOW = 100;
 export const GAP_POP_HIGH = 900;
 export const GRADIENT_EXPONENT = 1.5;
-export const GRADIENT_K = 2.6;
+export const GRADIENT_K = 1.0;
 /** Caps how wide a plot can get past the built radius: ratio d/R clamps here before the exponent. */
 export const GRADIENT_RATIO_CAP = 1.2;
-export const FRONTAGE_JITTER = 0.1;
-export const LOT_DEPTH_M = 25;
+export const FRONTAGE_JITTER = 0.25;
+/** A lot may be cut down to this fraction of f0. With fit-sizing able to
+ * grow a dwelling into its lot, this is what lets neighbours actually
+ * touch — the owner's rule: not everything uniformly separated, touching
+ * is ok. The rectangle overlap test (not the old circumscribing circle)
+ * is what keeps touching from becoming interpenetration. */
+export const F0_FLOOR_RATIO = 0.85;
+export const LOT_DEPTH_M = 16;
 export const RING_SETBACK_M = 3;
-export const MEAN_LOT_AREA_M2 = 320;
+export const MEAN_LOT_AREA_M2 = 160;
 /**
  * Metres between the edge of the carriageway and the house fronts, by lane
  * class. The spec's range is 1.5-3 m: a royal road keeps its buildings back,
@@ -74,6 +121,13 @@ export const FIT_MIN = 0.85;
 export const FIT_MAX = 1.15;
 export const SEATING_SETBACK_MAX_M = 1.5;
 export const DECK_GAP_M = 1.5;
+
+/** One dwelling family per village (the village-rows rule, restored at the
+ * 2026-08-21 gate): mud/straw huts for tiny hamlets below this population,
+ * houses above it. The longhouse is the only in-family variation, and only
+ * unlocks at LONGHOUSE_MIN_POP; everything else is a capped POI. */
+export const FAMILY_HUT_MAX_POP = 120;
+export const LONGHOUSE_MIN_POP = 250;
 
 /**
  * R21: the minimum share of the UNCAPPED deck's total weight an entry must

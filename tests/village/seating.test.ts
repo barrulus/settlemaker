@@ -3,14 +3,16 @@ import { Point } from '../../src/types/point.js';
 import { SeededRandom } from '../../src/utils/random.js';
 import { overlaps, seat, sizeFor } from '../../src/village/dwellings.js';
 import { FIT_MAX, FIT_MIN, SIZE_JITTER } from '../../src/village/constants.js';
-import { TEMPERATE_VILLAGE_DECK } from '../../src/village/deck.js';
+import { baseDeck } from '../../src/village/deck.js';
 import type { DeckEntry } from '../../src/village/deck.js';
 import type { Lot } from '../../src/village/types.js';
 import { HOUSE_INK_RATIO, nominalFootprint } from '../../src/village/glyphs.js';
 import type { Building } from '../../src/village/types.js';
 
-const house = TEMPERATE_VILLAGE_DECK.find((e) => e.glyph === 'sm-house')!;
-const inn = TEMPERATE_VILLAGE_DECK.find((e) => e.glyph === 'sm-inn')!;
+// Family deck at pop 400, seed 1 — the seeded choice picks sm-house.
+const REF_DECK = baseDeck(400, new SeededRandom(1));
+const house = REF_DECK.find((e) => e.glyph.startsWith('sm-house') && !e.cap)!;
+const inn = REF_DECK.find((e) => e.glyph === 'sm-inn')!;
 // Read dynamically rather than hardcoded so these bounds stay honest
 // against whichever manifest is actually loaded — sm-house's footprint has
 // already changed once across manifest generations (batch001 gave it
@@ -72,13 +74,15 @@ describe('sizeFor', () => {
   // and with jitter drawn identically (same seed, same first rng.float()
   // call in sizeFor), the two entries' non-semantic factors are equal, so
   // this isolates sizeFactor cleanly.
-  it('carries sizeFactor through to the footprint: an inn scales ~1.5x a house', () => {
+  it('landmarks carry no sizeFactor: the refined art bakes semantic size in', () => {
+    // The batch001 era scaled a 7 m inn by 1.5; the refined inn is 17x15
+    // already. Same seed, same lot: the inn and the house scale by the SAME
+    // non-semantic factor — no extra multiplier on either.
     const innW = sizeFor(inn, lot(200), new SeededRandom(3))[0];
     const houseW = sizeFor(house, lot(200), new SeededRandom(3))[0];
-    const innNominalW = nominalFootprint(inn.glyph)[0];
-    const innFactor = innW / innNominalW;
+    const innFactor = innW / nominalFootprint(inn.glyph)[0];
     const houseFactor = houseW / houseNominalW;
-    expect(innFactor / houseFactor).toBeCloseTo(1.5, 5);
+    expect(innFactor / houseFactor).toBeCloseTo(1, 5);
   });
 
   it('grows into a generous fringe lot and shrinks into a tight one', () => {
@@ -90,17 +94,20 @@ describe('sizeFor', () => {
 });
 
 describe('seat', () => {
-  it('faces the dwelling the way its lot faces', () => {
+  it('turns its door to the lane: render bearing is the lot bearing + 180', () => {
+    // Door convention (2026-08-21 gate): glyph entrances are drawn on the
+    // glyph's south edge, so rotating by the lot's facing bearing put every
+    // door on the FAR side. The +180 puts the door edge onto the lane.
     const b = seat(house, lot(12, 10, 0, 270), new SeededRandom(1));
-    expect(b.bearingDeg).toBeCloseTo(270, 5);
+    expect(b.bearingDeg).toBeCloseTo(90, 5);
   });
 
   it('derives the building id from the lot id', () => {
     expect(seat(house, lot(12), new SeededRandom(1)).id).toBe('bld:arm-090:R0');
   });
 
-  it('carries occupancy scaled by sizeFactor', () => {
-    expect(seat(inn, lot(30), new SeededRandom(1)).occupancy).toBe(Math.round(6 * 1.5));
+  it('carries the entry occupancy through unscaled for sizeFactor-1 landmarks', () => {
+    expect(seat(inn, lot(30), new SeededRandom(1)).occupancy).toBe(6);
   });
 
   it('is deterministic for a seed', () => {
@@ -135,7 +142,8 @@ describe('seat', () => {
         glyph: 'sm-kit-gate', occupancy: 0, weight: 1, sizeFactor: 1, minFrontage: 8,
       };
       const b = seat(gate, lot(12, 0, 0, 100), new SeededRandom(1));
-      expect(b.bearingDeg).toBe(90);
+      // door flip first (100 + 180 = 280), then snap: 270.
+      expect(b.bearingDeg).toBe(270);
     });
 
     it('snap-cardinal wraps 350 degrees to 0, not 360', () => {
@@ -143,10 +151,11 @@ describe('seat', () => {
         glyph: 'sm-kit-gate', occupancy: 0, weight: 1, sizeFactor: 1, minFrontage: 8,
       };
       const b = seat(gate, lot(12, 0, 0, 350), new SeededRandom(1));
-      expect(b.bearingDeg).toBe(0);
+      // 350 + 180 wraps to 170, snapping to 180 — never 360.
+      expect(b.bearingDeg).toBe(180);
     });
 
-    it('free/locked glyphs use the lot bearing unmodified (the normal case)', () => {
+    it('free/locked glyphs use the lot bearing plus the door flip (the normal case)', () => {
       // sm-house is genuinely rotation "free" in the refined manifest —
       // the dated shim that used to override batch001's blanket
       // "invariant" for dwellings is gone (see glyphs.ts / glyphs.test.ts).
@@ -154,7 +163,7 @@ describe('seat', () => {
       // accident for 'free' glyphs, so this test exists mainly to pin the
       // normal path alongside the two special ones.
       const b = seat(house, lot(12, 0, 0, 137), new SeededRandom(1));
-      expect(b.bearingDeg).toBeCloseTo(137, 5);
+      expect(b.bearingDeg).toBeCloseTo(317, 5);
     });
   });
 });

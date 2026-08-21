@@ -63,11 +63,22 @@ export function sizeFor(
  *   the lot's bearing to the nearest 90 degrees.
  * - 'free' / 'locked': the normal case — face the lane, exactly as seated.
  */
+/**
+ * DOOR CONVENTION (2026-08-21 gate: "all the doors are facing away from
+ * the street"). The refined glyphs draw their entrance on the glyph's
+ * SOUTH edge (+y). A lot's bearing points AT its lane, and rotating a
+ * glyph by that bearing turns glyph-north toward the lane — putting the
+ * door on the far side. The +180 here puts the door edge onto the lane.
+ *
+ * This is a convention because the shipped symbols.json carries no
+ * `upVector`; the durable fix is regenerating it with upVector per its
+ * own integration notes, at which point this becomes data-driven.
+ */
 function renderBearingFor(glyph: string, lotBearingDeg: number): number {
   const rotation = rotationOf(glyph);
   if (rotation === 'invariant') return 0;
-  if (rotation === 'snap-cardinal') return wrapDeg(Math.round(lotBearingDeg / 90) * 90);
-  return lotBearingDeg;
+  if (rotation === 'snap-cardinal') return wrapDeg(Math.round((lotBearingDeg + 180) / 90) * 90);
+  return wrapDeg(lotBearingDeg + 180);
 }
 
 /** Seat a dwelling at the front of its lot, facing the way the lot faces. */
@@ -118,12 +129,44 @@ export function seat(entry: DeckEntry, lot: Lot, rng: SeededRandom): Building {
  * (worst case for near-square footprints) — the correct direction to err
  * for a collision gate.
  */
+interface ObbAxes { tangent: Point; normal: Point; halfW: number; halfD: number }
+
+function obbOf(b: Building): ObbAxes {
+  const e = inkExtent(b.glyph, b.footprint);
+  // The building's render bearing orients its rectangle: width runs along
+  // the frontage (tangent), depth along the facing axis (normal). A 180°
+  // door flip preserves the rectangle, and `invariant` glyphs (bearing 0)
+  // have square-ish footprints, so using the render bearing is sound.
+  const normal = bearingVector(b.bearingDeg);
+  return {
+    tangent: new Point(-normal.y, normal.x),
+    normal,
+    halfW: e.width / 2,
+    halfD: e.depth / 2,
+  };
+}
+
+/** Two buildings may ABUT (touching is the owner's stated density rule);
+ * only genuine interpenetration beyond this slack is a collision. */
+const TOUCH_EPS_M = 0.05;
+
 export function overlaps(a: Building, b: Building): boolean {
-  const ea = inkExtent(a.glyph, a.footprint);
-  const eb = inkExtent(b.glyph, b.footprint);
-  const ra = Math.hypot(ea.width, ea.depth) / 2;
-  const rb = Math.hypot(eb.width, eb.depth) / 2;
-  return dist(a.position, b.position) < ra + rb;
+  const A = obbOf(a);
+  const B = obbOf(b);
+  const d = new Point(b.position.x - a.position.x, b.position.y - a.position.y);
+  // Separating-axis test over both rectangles' axes. The old circumscribing
+  // -circle test was correct for collision AVOIDANCE but forbade touching:
+  // two abutting houses always "collided". The gate rule that touching is
+  // ok requires the true rectangles.
+  for (const axis of [A.tangent, A.normal, B.tangent, B.normal]) {
+    const gap = Math.abs(d.x * axis.x + d.y * axis.y);
+    const spanA = Math.abs(A.tangent.x * axis.x + A.tangent.y * axis.y) * A.halfW
+      + Math.abs(A.normal.x * axis.x + A.normal.y * axis.y) * A.halfD;
+    const spanB = Math.abs(B.tangent.x * axis.x + B.tangent.y * axis.y) * B.halfW
+      + Math.abs(B.normal.x * axis.x + B.normal.y * axis.y) * B.halfD;
+    if (gap >= spanA + spanB - TOUCH_EPS_M) return false;
+  }
+  return true;
 }
 
 export interface SpendResult {

@@ -2,7 +2,7 @@ import { SeededRandom } from '../../utils/random.js';
 import { offsetPolyline } from './strip.js';
 import { arcLengths, bearingOf, dist, inAnyWater, sampleAt } from '../geometry.js';
 import {
-  FRONTAGE_JITTER, GAP_LOOSE_M, GAP_POP_HIGH, GAP_POP_LOW, GAP_TIGHT_M,
+  F0_FLOOR_RATIO, FRONTAGE_JITTER, GAP_LOOSE_M, GAP_POP_HIGH, GAP_POP_LOW, GAP_TIGHT_M,
   GRADIENT_EXPONENT, GRADIENT_K, GRADIENT_RATIO_CAP, LANE_SETBACK_M, RING_SETBACK_M,
   SCORE_BASE, SCORE_CLASS_WEIGHT, SCORE_DISTANCE_PENALTY_PER_M, SCORE_RING_BONUS,
 } from '../constants.js';
@@ -63,7 +63,12 @@ export function subdivideLane(
       const { p } = sampleAt(edge, edgeAcc, s);
       const d = dist(p, green.centre);
       const jitter = 1 + (rng.float() - 0.5) * 2 * FRONTAGE_JITTER;
-      const frontage = Math.max(f0, frontageAt(d, builtRadiusM, f0) * jitter);
+      // Floor at F0_FLOOR_RATIO x f0, not f0 itself: with fit-sizing able
+      // to grow a dwelling into its lot, a slightly-tight cut is what lets
+      // neighbours actually TOUCH — the owner's density rule ("not
+      // everything uniformly separated; touching is ok"). The rectangle
+      // overlap test keeps touching from becoming interpenetration.
+      const frontage = Math.max(f0 * F0_FLOOR_RATIO, frontageAt(d, builtRadiusM, f0) * jitter);
       if (s + frontage > edgeTotal) break;
       const mid = sampleAt(edge, edgeAcc, s + frontage / 2);
       // Inward normal: the lot faces back across the strip to its lane.

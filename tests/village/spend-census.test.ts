@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Point } from '../../src/types/point.js';
 import { SeededRandom } from '../../src/utils/random.js';
 import { spendCensus } from '../../src/village/dwellings.js';
-import { TEMPERATE_VILLAGE_DECK } from '../../src/village/deck.js';
+import { baseDeck } from '../../src/village/deck.js';
 import type { Lot, Site } from '../../src/village/types.js';
 
 const site = (population: number): Site => ({
@@ -21,16 +21,21 @@ const lots = (n: number): Lot[] => Array.from({ length: n }, (_, i) => ({
   score: 100 - i,
 }));
 
+// One dwelling family per village: the deck under test is a house-family
+// deck at pop 400 (all landmarks eligible), built once with its own seed so
+// the spend RNG below stays independent of the deck choice.
+const DECK = baseDeck(400, new SeededRandom(99));
+
 describe('spendCensus', () => {
   it('houses the census and then stops', () => {
-    const out = spendCensus(lots(60), TEMPERATE_VILLAGE_DECK, site(100), new SeededRandom(1));
+    const out = spendCensus(lots(60), DECK, site(100), new SeededRandom(1));
     expect(out.housed).toBeGreaterThanOrEqual(100);
     expect(out.unhoused).toBe(0);
     expect(out.buildings.length).toBeLessThan(60);
   });
 
   it('leaves the worst-scoring lots empty — that is the straggle', () => {
-    const out = spendCensus(lots(60), TEMPERATE_VILLAGE_DECK, site(60), new SeededRandom(1));
+    const out = spendCensus(lots(60), DECK, site(60), new SeededRandom(1));
     const used = new Set(out.buildings.map((b) => b.lotId));
     expect(used.has('arm-090:R0')).toBe(true);
     expect(used.has('arm-090:R59')).toBe(false);
@@ -39,13 +44,13 @@ describe('spendCensus', () => {
   // Ruling R5: the brief asserted the inn lands specifically on arm-090:R0,
   // the single best-scoring lot. That over-constrains the design: capped
   // entries are placed in deck order, and sm-house-large-tiled (the reeve's
-  // house) precedes sm-inn in TEMPERATE_VILLAGE_DECK, so the manor claims
+  // house) precedes sm-inn in DECK, so the manor claims
   // the top lot and the inn takes the next-best. What the spec actually
   // states is that landmarks take the best lots, not which landmark wins
   // which — so assert the inn is placed, unique, and among the three
   // best-scoring lots.
   it('places capped landmarks first, among the best lots', () => {
-    const out = spendCensus(lots(60), TEMPERATE_VILLAGE_DECK, site(400), new SeededRandom(1));
+    const out = spendCensus(lots(60), DECK, site(400), new SeededRandom(1));
     const inn = out.buildings.find((b) => b.glyph === 'sm-inn');
     expect(inn).toBeDefined();
     const bestThree = new Set(['arm-090:R0', 'arm-090:R1', 'arm-090:R2']);
@@ -54,12 +59,12 @@ describe('spendCensus', () => {
   });
 
   it('reports what it could not house when it runs out of lots', () => {
-    const out = spendCensus(lots(3), TEMPERATE_VILLAGE_DECK, site(900), new SeededRandom(1));
+    const out = spendCensus(lots(3), DECK, site(900), new SeededRandom(1));
     expect(out.unhoused).toBeGreaterThan(0);
   });
 
   it('never places two buildings that overlap', () => {
-    const out = spendCensus(lots(40), TEMPERATE_VILLAGE_DECK, site(200), new SeededRandom(2));
+    const out = spendCensus(lots(40), DECK, site(200), new SeededRandom(2));
     for (let i = 0; i < out.buildings.length; i++) {
       for (let j = i + 1; j < out.buildings.length; j++) {
         const a = out.buildings[i];
@@ -71,7 +76,7 @@ describe('spendCensus', () => {
   });
 
   it('is deterministic for a seed', () => {
-    const mk = () => spendCensus(lots(40), TEMPERATE_VILLAGE_DECK, site(200), new SeededRandom(6));
+    const mk = () => spendCensus(lots(40), DECK, site(200), new SeededRandom(6));
     expect(JSON.stringify(mk())).toBe(JSON.stringify(mk()));
   });
 
@@ -94,7 +99,7 @@ describe('spendCensus', () => {
         bearingDeg: 0, frontageM: 30, depthM: 25, score: 98,
       },
     ];
-    const out = spendCensus(closeLots, TEMPERATE_VILLAGE_DECK, site(20), new SeededRandom(3));
+    const out = spendCensus(closeLots, DECK, site(20), new SeededRandom(3));
     const used = new Set(out.buildings.map((b) => b.lotId));
     // R0 and R1 sit almost on top of each other; the second seating must be
     // rejected as an overlap, so both can never be occupied at once.
@@ -124,7 +129,7 @@ describe('spendCensus', () => {
         bearingDeg: 0, frontageM: 30, depthM: 25, score: 98,
       },
     ];
-    const out = spendCensus(contestedLots, TEMPERATE_VILLAGE_DECK, site(300), new SeededRandom(1));
+    const out = spendCensus(contestedLots, DECK, site(300), new SeededRandom(1));
     const manor = out.buildings.find((b) => b.glyph === 'sm-house-large-tiled');
     const inn = out.buildings.find((b) => b.glyph === 'sm-inn');
     expect(manor).toBeDefined();

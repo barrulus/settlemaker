@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Point } from '../../src/types/point.js';
 import { SeededRandom } from '../../src/utils/random.js';
+import { F0_FLOOR_RATIO } from '../../src/village/constants.js';
 import { frontageAt, gapForPopulation, subdivideLane } from '../../src/village/parcels/lots.js';
 import type { Green, Lane } from '../../src/village/types.js';
 
@@ -32,10 +33,12 @@ describe('frontageAt', () => {
     expect(frontageAt(0, 100, 10)).toBeCloseTo(10, 5);
   });
 
-  it('grows to roughly 3-4x f0 at the fringe', () => {
+  it('grows to roughly 2x f0 at the fringe (cluster gradient)', () => {
+    // 2026-08-21 gate: the 3-4x gradient spread the fabric; the cluster
+    // rework flattened GRADIENT_K so the fringe sits around twice f0.
     const fringe = frontageAt(100, 100, 10);
-    expect(fringe).toBeGreaterThan(30);
-    expect(fringe).toBeLessThan(45);
+    expect(fringe).toBeGreaterThan(17);
+    expect(fringe).toBeLessThan(25);
   });
 
   it('grows monotonically outward', () => {
@@ -72,9 +75,11 @@ describe('subdivideLane', () => {
     expect(lots[lots.length - 1].frontageM).toBeGreaterThan(lots[0].frontageM);
   });
 
-  it('never cuts a lot narrower than f0', () => {
+  it('never cuts a lot narrower than the F0 floor ratio', () => {
+    // The floor is F0_FLOOR_RATIO x f0, not f0: a slightly-tight cut plus
+    // fit-sizing is what lets neighbours touch (2026-08-21 density rule).
     const lots = subdivideLane(straightLane, green, 100, 10, 25, new SeededRandom(2));
-    for (const l of lots) expect(l.frontageM).toBeGreaterThanOrEqual(10);
+    for (const l of lots) expect(l.frontageM).toBeGreaterThanOrEqual(10 * F0_FLOOR_RATIO - 1e-9);
   });
 
   it('is deterministic for a seed', () => {

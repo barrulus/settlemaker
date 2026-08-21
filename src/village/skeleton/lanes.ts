@@ -1,10 +1,15 @@
 import { Point } from '../../types/point.js';
 import { SeededRandom } from '../../utils/random.js';
 import { classRank, laneWidth, stepDown, type RouteType } from '../route-class.js';
-import { angularGap, bearingOf, bearingVector, polylineLength } from '../geometry.js';
 import {
-  BRANCH_LENGTH_FACTOR, FRONTAGE_MARGIN, INVENTED_LANE_LENGTH_FACTOR, LANE_SAMPLE_STEP_M,
-  LANE_WANDER_M, MAX_INVENTED_LANES, MIN_ARM_SEPARATION_DEG,
+  angularGap, arcLengths, bearingOf, bearingVector, closestPointOnSegment, dist,
+  polylineLength, sampleAt,
+} from '../geometry.js';
+import {
+  BRANCH_LOTS_TARGET, BRANCH_MAX_M, BRANCH_MIN_M, BRANCH_SPACING_M, FRONTAGE_MARGIN,
+  GREEN_ARM_MAX, GREEN_ARM_MIN, GREEN_ARM_SPACING_M, GREEN_JOIN_RATIO,
+  INVENTED_ARM_LENGTH_FACTOR, LANE_SAMPLE_STEP_M, LANE_WANDER_M, LOOP_SNAP_M,
+  MAX_INVENTED_LANES, MIN_ARM_SEPARATION_DEG,
 } from '../constants.js';
 import {
   armLaneId, branchLaneId, inventedLaneId, type Green, type Lane, type Site, type SiteRoute,
@@ -29,13 +34,35 @@ function runArm(
 ): Point[] {
   const dir = bearingVector(bearingDeg);
   const normal = new Point(-dir.y, dir.x);
-  const start = green.diameter / 2;
+  // Junction rule: overshoot to the green's DRAWN edge, not its nominal
+  // radius — the green art fills ~87% of its box, so a lane aimed at the
+  // nominal rim stops ~1.4 m short of visible turf and the road appears
+  // to end before the green it feeds.
+  const start = (green.diameter / 2) * GREEN_JOIN_RATIO;
   const points: Point[] = [];
   let drift = 0;
   for (let d = start; d <= start + extentM; d += LANE_SAMPLE_STEP_M) {
     points.push(new Point(
       green.centre.x + dir.x * d + normal.x * drift,
       green.centre.y + dir.y * d + normal.y * drift,
+    ));
+    drift += (rng.float() - 0.5) * 2 * LANE_WANDER_M;
+  }
+  return points;
+}
+
+/** A wandering polyline from `from` along `bearingDeg` for `lengthM`. */
+function runLine(
+  from: Point, bearingDeg: number, lengthM: number, rng: SeededRandom,
+): Point[] {
+  const dir = bearingVector(bearingDeg);
+  const normal = new Point(-dir.y, dir.x);
+  const points: Point[] = [];
+  let drift = 0;
+  for (let d = 0; d <= lengthM; d += LANE_SAMPLE_STEP_M) {
+    points.push(new Point(
+      from.x + dir.x * d + normal.x * drift,
+      from.y + dir.y * d + normal.y * drift,
     ));
     drift += (rng.float() - 0.5) * 2 * LANE_WANDER_M;
   }
@@ -144,6 +171,51 @@ export function buildArms(
   }));
 }
 
+/** Which way a lane leaves the green — geometry.ts owns the trigonometry. */
+function laneBearing(green: Green, lane: Lane): number {
+  return bearingOf(green.centre, lane.points[0]);
+}
+
+/**
+ * The class an invented lane takes when it branches off `parent`.
+ *
+ * Owner ruling (2026-08-21 gate): royal/main/market/town are
+ * INTER-SETTLEMENT classes — FMG's business. "Market lanes connect market
+ * towns, NOT suburban routes." Settlemaker's own lanes live entirely in
+ * the village band: local cart lanes, trails, footpaths. So a branch off
+ * a `main` road is a `local` street (never `market`), a branch off a
+ * `local` street is a `trail`, and a branch off a `trail` is a
+ * `footpath` threading between the houses.
+ */
+function inventedChildClass(parent: RouteType): RouteType {
+  const stepped = stepDown(parent, 'footpath');
+  return classRank(stepped) < classRank('local') ? 'local' : stepped;
+}
+
+/** Lanes attached to the green: FMG arms plus the village's own streets. */
+function isGreenAttached(lane: Lane): boolean {
+  return lane.parentId === undefined;
+}
+
+/**
+ * How many lanes the green can host, derived from the green itself: one
+ * per GREEN_ARM_SPACING_M of circumference, clamped to [GREEN_ARM_MIN,
+ * GREEN_ARM_MAX] — "never more than a handful". A crossroads green whose
+ * FMG routes alone exceed the cap keeps them all (FMG arms always join);
+ * the cap only limits what the village may ADD.
+ */
+function greenArmCap(green: Green): number {
+  const circumference = Math.PI * green.diameter;
+  return Math.min(GREEN_ARM_MAX,
+    Math.max(GREEN_ARM_MIN, Math.round(circumference / GREEN_ARM_SPACING_M)));
+}
+
+/** A branch hosts BRANCH_LOTS_TARGET lots across its two sides. */
+function branchLengthM(meanFrontageM: number): number {
+  return Math.min(BRANCH_MAX_M,
+    Math.max(BRANCH_MIN_M, (BRANCH_LOTS_TARGET / 2) * meanFrontageM));
+}
+
 /** Both sides of every lane are frontage. */
 export function availableFrontage(lanes: Lane[]): number {
   return lanes.reduce((sum, l) => sum + polylineLength(l.points) * 2, 0);
@@ -155,108 +227,161 @@ export function requiredFrontage(
   return (population / meanOccupancy) * meanFrontageM;
 }
 
-/** Which way a lane leaves the green — geometry.ts owns the trigonometry. */
-function laneBearing(green: Green, lane: Lane): number {
-  return bearingOf(green.centre, lane.points[0]);
+interface BranchSlot {
+  parent: Lane;
+  at: number;
+  anchor: Point;
+  dirDeg: number;
+  distToGreen: number;
 }
 
 /**
- * Lanes are invented only when frontage runs out. A new lane leaves the
- * green at a free bearing, at least MIN_ARM_SEPARATION_DEG from every
- * existing one (arms included); its class is one step below the best arm
- * present, floored at `local` so wagons always reach the green.
- *
- * The bearing search also rejects any candidate whose rounded armLaneId or
- * inventedLaneId would collide with a lane already present — the 35°
- * separation rule alone doesn't guarantee that against an existing *arm*
- * sitting at the same rounded bearing, and lot ids are built from lane ids
- * downstream. Green-attached invented lanes get their own `lane-` id space
- * (ruling R10) so a lane's identity can't silently change meaning if FMG
- * later adds a real route at the same bearing a budget lane once used.
+ * Every lane — arm, street, branch — offers an attach point every
+ * BRANCH_SPACING_M along it, and the nearest-the-green free slot is taken
+ * first. This is the heart of the cluster rework: the old rule branched
+ * once, far out, off the longest lane, and produced a starburst; slots
+ * make branches branch again, near the centre, until the wedges fill.
+ * A slot is occupied if any existing lane already starts nearby.
  */
-export function addInventedLanes(
-  lanes: Lane[], green: Green, requiredM: number, extentM: number, rng: SeededRandom,
-): Lane[] {
-  const out = [...lanes];
-  const best = out.length
-    ? out.reduce((a, b) => (classRank(a.type) <= classRank(b.type) ? a : b)).type
-    : ('local' as RouteType);
-  const inventedType = stepDown(best, 'local');
+function branchSlots(out: Lane[], green: Green): BranchSlot[] {
+  const slots: BranchSlot[] = [];
+  for (const parent of out) {
+    const acc = arcLengths(parent.points);
+    const total = acc[acc.length - 1];
+    if (total < BRANCH_SPACING_M * 1.25) continue;
+    for (let s = BRANCH_SPACING_M; s <= total - BRANCH_SPACING_M * 0.5; s += BRANCH_SPACING_M) {
+      const { p, dirDeg } = sampleAt(parent.points, acc, s);
+      if (out.some((l) => dist(l.points[0], p) < BRANCH_SPACING_M * 0.45)) continue;
+      slots.push({ parent, at: s / total, anchor: p, dirDeg, distToGreen: dist(p, green.centre) });
+    }
+  }
+  // Nearest the green first; ties broken structurally so the order can
+  // never depend on array position.
+  slots.sort((a, b) => (a.distToGreen - b.distToGreen)
+    || a.parent.id.localeCompare(b.parent.id) || (a.at - b.at));
+  return slots;
+}
 
-  let guard = 0;
-  while (availableFrontage(out) < requiredM * FRONTAGE_MARGIN && guard < MAX_INVENTED_LANES) {
-    guard++;
-    const taken = out.map((l) => laneBearing(green, l));
-    let bearing = -1;
+/** End of a candidate branch near another lane? Return the join point. */
+function loopSnap(
+  out: Lane[], end: Point, excludeIds: Set<string>,
+): Point | null {
+  let best: Point | null = null;
+  let bestD = LOOP_SNAP_M;
+  for (const lane of out) {
+    if (excludeIds.has(lane.id)) continue;
+    for (let i = 1; i < lane.points.length; i++) {
+      const q = closestPointOnSegment(end, lane.points[i - 1], lane.points[i]);
+      const d = dist(end, q);
+      if (d < bestD) { bestD = d; best = q; }
+    }
+  }
+  return best;
+}
+
+/** One growth step. Returns false when there is nowhere left to grow. */
+function growOne(
+  out: Lane[], green: Green, meanFrontageM: number, rng: SeededRandom,
+): boolean {
+  // 1. The green may still host a street of its own: an invented arm, up
+  //    to the circumference-derived cap, at a bearing clear of every
+  //    existing green-attached lane. Class is `local` — wagons reach the
+  //    green — and it is street-length, not a road to the horizon.
+  if (out.filter(isGreenAttached).length < greenArmCap(green)) {
+    const taken = out.filter(isGreenAttached).map((l) => laneBearing(green, l));
     for (let attempt = 0; attempt < 36; attempt++) {
       const candidate = rng.int(0, 360);
       const collides = taken.some((t) => angularGap(candidate, t) < MIN_ARM_SEPARATION_DEG)
         || out.some((l) => l.id === armLaneId(candidate) || l.id === inventedLaneId(candidate));
-      if (!collides) {
-        bearing = candidate;
-        break;
-      }
-    }
-    // No free bearing left at the green: branch off an existing lane
-    // instead. Prefer longer lanes first, but `branchLaneId` only has ~35
-    // percentage buckets per parent (it formats `at` as a 2-digit percent),
-    // and once the green's bearings are full, every remaining iteration
-    // takes this path on a shrinking set of parents — repeated draws from
-    // 35 buckets collide well before MAX_INVENTED_LANES by the birthday
-    // paradox. So: draw `at` once from the RNG (preserves seeded variation),
-    // and if its bucket on the longest parent is taken, probe the rest of
-    // that parent's buckets deterministically before moving to the
-    // next-longest parent — no extra RNG draws, so same seed → same result.
-    if (bearing < 0) {
-      const parents = [...out].sort(
-        (a, b) => polylineLength(b.points) - polylineLength(a.points),
+      if (collides) continue;
+      const dir = bearingVector(candidate);
+      const start = new Point(
+        green.centre.x + dir.x * (green.diameter / 2) * GREEN_JOIN_RATIO,
+        green.centre.y + dir.y * (green.diameter / 2) * GREEN_JOIN_RATIO,
       );
-      // at stays within [0.33, 0.67] — branchLaneId formats it as a 2-digit
-      // percentage; a value rounding to >= 1.0 would overflow that format.
-      // Widen this range only alongside a clamp in branchLaneId itself.
-      const seedAt = 0.33 + rng.float() * 0.34;
-      const seedPct = Math.round(seedAt * 100);
-      let chosen: { parent: Lane; at: number } | undefined;
-      for (const parent of parents) {
-        for (let step = 0; step < 35 && !chosen; step++) {
-          const pct = 33 + ((seedPct - 33 + step + 35) % 35);
-          const candidateAt = pct / 100;
-          if (!out.some((l) => l.id === branchLaneId(parent.id, candidateAt))) {
-            chosen = { parent, at: candidateAt };
-          }
-        }
-        if (chosen) break;
-      }
-      // Every bucket on every lane is taken: an honest give-up, same as
-      // the MAX_INVENTED_LANES cap.
-      if (!chosen) break;
-      const { parent, at } = chosen;
-      const idx = Math.max(1, Math.floor(parent.points.length * at));
-      const anchor = parent.points[Math.min(idx, parent.points.length - 1)];
-      const parentBearing = laneBearing(green, parent);
-      const side = rng.bool(0.5) ? 1 : -1;
-      const branchBearing = (parentBearing + side * (60 + rng.int(0, 51)) + 360) % 360;
-      const dir = bearingVector(branchBearing);
-      const length = extentM * BRANCH_LENGTH_FACTOR;
-      const points: Point[] = [];
-      for (let d = 0; d <= length; d += LANE_SAMPLE_STEP_M) {
-        points.push(new Point(anchor.x + dir.x * d, anchor.y + dir.y * d));
-      }
       out.push({
-        id: branchLaneId(parent.id, at),
-        type: stepDown(parent.type, 'footpath'),
-        points,
-        widthM: laneWidth(stepDown(parent.type, 'footpath')),
-        parentId: parent.id,
+        id: inventedLaneId(candidate),
+        type: 'local',
+        points: runLine(start, candidate,
+          branchLengthM(meanFrontageM) * INVENTED_ARM_LENGTH_FACTOR, rng),
+        widthM: laneWidth('local'),
       });
-      continue;
+      return true;
+    }
+    // No free bearing: fall through to branching.
+  }
+
+  // 2. Branch at the nearest-the-green free slot.
+  const slots = branchSlots(out, green);
+  for (const slot of slots) {
+    // branchLaneId formats `at` as a 2-digit percent (~100 buckets per
+    // parent); if this slot's bucket is taken, probe deterministically.
+    // The id is identity, the anchor is authoritative for position.
+    let id: string | null = null;
+    const pct0 = Math.max(1, Math.min(99, Math.round(slot.at * 100)));
+    for (let step = 0; step < 99; step++) {
+      const pct = 1 + ((pct0 - 1 + step) % 99);
+      const candidate = branchLaneId(slot.parent.id, pct / 100);
+      if (!out.some((l) => l.id === candidate)) { id = candidate; break; }
+    }
+    if (!id) continue;
+    const side = rng.bool(0.5) ? 1 : -1;
+    const branchBearing = (slot.dirDeg + side * (60 + rng.int(0, 51)) + 360) % 360;
+    let cls = inventedChildClass(slot.parent.type);
+    let points = runLine(slot.anchor, branchBearing, branchLengthM(meanFrontageM), rng);
+    // Loop rule: an end passing near another lane joins it, and the
+    // connector drops one further class — a path cut between two streets.
+    const snap = loopSnap(out, points[points.length - 1], new Set([slot.parent.id]));
+    if (snap) {
+      points = [...points, snap];
+      cls = stepDown(cls, 'footpath');
     }
     out.push({
-      id: inventedLaneId(bearing),
-      type: inventedType,
-      points: runArm(green, bearing, extentM * INVENTED_LANE_LENGTH_FACTOR, rng),
-      widthM: laneWidth(inventedType),
+      id,
+      type: cls,
+      points,
+      widthM: laneWidth(cls),
+      parentId: slot.parent.id,
     });
+    return true;
+  }
+
+  // 3. Every slot is taken: the village grows the way a real one does —
+  //    by LENGTHENING its own streets. Extend the shortest invented lane
+  //    from its end along its end direction; the new length carries fresh
+  //    frontage AND fresh branch slots, so growth cannot deadlock while
+  //    the census is unhoused. FMG arms are never extended — they already
+  //    run to the map's edge. Shortest-first keeps the cluster balanced
+  //    instead of streaming out one long tentacle.
+  const extendable = out
+    .filter((l) => !l.id.startsWith('arm-') && l.points.length >= 2)
+    .sort((a, b) => (polylineLength(a.points) - polylineLength(b.points))
+      || a.id.localeCompare(b.id));
+  for (const lane of extendable) {
+    const n = lane.points.length;
+    const endDir = bearingOf(lane.points[n - 2], lane.points[n - 1]);
+    const extension = runLine(lane.points[n - 1], endDir, branchLengthM(meanFrontageM), rng);
+    lane.points = [...lane.points, ...extension.slice(1)];
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Lanes are invented only when frontage runs out, and growth is
+ * CLUSTER-FIRST (2026-08-21 gate rework): a handful of streets at the
+ * green, then short branches attaching near the centre, branching again,
+ * occasionally looping — never the radial spoke fan the first gate
+ * rejected. `meanFrontageM` sizes each branch to the lots it must host.
+ */
+export function addInventedLanes(
+  lanes: Lane[], green: Green, requiredM: number, meanFrontageM: number, rng: SeededRandom,
+): Lane[] {
+  const out = [...lanes];
+  let guard = 0;
+  while (availableFrontage(out) < requiredM * FRONTAGE_MARGIN && guard < MAX_INVENTED_LANES) {
+    guard++;
+    if (!growOne(out, green, meanFrontageM, rng)) break;
   }
   return out;
 }
