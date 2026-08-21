@@ -147,3 +147,27 @@ export function generateFromBurg(
   const degradedFlags = [...model.degradedFlags].sort() as DegradedFlag[];
   return { model, svg, geojson, degradedFlags, originShift: shift };
 }
+
+// ---------------------------------------------------------------------------
+// Roads-first village engine — EXPLICIT OPT-IN, not yet wired to any threshold
+// ---------------------------------------------------------------------------
+//
+// The village engine (src/village/) generates hamlets and villages by solving a
+// road skeleton and dressing it with parcels, rather than by partitioning
+// polygons the way `Model` above does. It is exported here so a caller can
+// invoke it deliberately and look at the result.
+//
+// It is deliberately NOT routed by population yet. `VILLAGE_POP_CEILING`
+// records the band it is designed for, but switching burgs onto it
+// automatically would hand callers an engine that does not yet emit GeoJSON,
+// does not paint through the theme/palette system, and has no pass 5 (crofts,
+// fields, vegetation, POIs) — so a village renders as buildings and roads on
+// bare ground. Those are missing capabilities, not compatibility concerns.
+// Wire the threshold once they exist.
+export { generateVillage, VILLAGE_POP_CEILING } from './village/village-model.js';
+export { renderVillage } from './village/render.js';
+export type {
+  Site, SiteRoute, Green, GreenShape, Lane, Lot, Building, VillageModel,
+} from './village/types.js';
+export type { RouteType } from './village/route-class.js';
+export type { DeckEntry } from './village/deck.js';
