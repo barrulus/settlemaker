@@ -169,6 +169,33 @@ export const SECTOR_COVERAGE_DEG = 50;
 export const SECTOR_SAMPLE_DEG = 2;
 
 /**
+ * Gate 6.5, VOID FILLING -- the fix for the spider.
+ *
+ * The road web is a TREE radiating from the green, so branch slots sitting
+ * every BRANCH_SPACING_M *along a parent* give uniform junction density per
+ * metre of LANE -- but the lanes radiate, so lane density per unit AREA
+ * falls as 1/r and the gaps between neighbouring tendrils widen with
+ * distance. No slot pitch and no gap term can fix that; it is a topology
+ * problem, and it is what made the fabric read as a spider rather than a
+ * cluster (measured at gate 6.4: ~60% of the fabric disc lay more than 6 m
+ * from any building).
+ *
+ * Tiling a plane needs a spacing rule IN THE PLANE. The disc is scanned on
+ * a grid; wherever the nearest lane is further than VOID_SPACING_M, a lane
+ * is seeded into that void. With lanes nowhere more than this far apart and
+ * LOT_DEPTH_M lots on both sides, facing rows back onto each other and the
+ * ground is actually used.
+ *
+ * VOID_SPACING_M is a lane width plus two lot depths plus slack -- the
+ * point at which two facing rows stop reaching each other and open ground
+ * appears between them.
+ */
+export const VOID_SPACING_M = 34;
+/** Scan pitch for that search. Fine enough to find a void a lane could
+ * fill, coarse enough that the scan stays cheap inside the growth loop. */
+export const VOID_SCAN_STEP_M = 8;
+
+/**
  * Gate 6.3, RED CONNECTORS. The owner drew red lines linking branch ends
  * and mid-points to neighbouring lanes, turning the growth TREE into a WEB
  * with essentially no dead ends inside the fabric.

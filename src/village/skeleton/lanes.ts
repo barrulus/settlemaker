@@ -13,6 +13,7 @@ import {
   ARM_LOT_RADIUS_SHARE, CONNECT_MAX_M, CONNECT_MIN_M, HAMLET_RIBBON_POP, LANE_CURVE_MAX_M,
   LOOP_SNAP_M, MAX_INVENTED_LANES, MIN_ARM_SEPARATION_DEG, SATURATION_RING_START_M,
   SATURATION_RING_STEP_M, SECTOR_COVERAGE_DEG, SECTOR_SAMPLE_DEG,
+  VOID_SCAN_STEP_M, VOID_SPACING_M,
 } from '../constants.js';
 import {
   armLaneId, branchLaneId, inventedLaneId,
@@ -872,6 +873,117 @@ function widestGap(covered: boolean[]): { bisectorDeg: number; widthDeg: number 
 }
 
 /**
+ * Gate 6.5: the emptiest point in the disc, and the lane nearest it.
+ *
+ * Scanned on a fixed VOID_SCAN_STEP_M grid so the result cannot depend on
+ * iteration order, and ordered by distance descending with x then y
+ * breaking ties -- two voids of equal size must always be filled in the
+ * same order for the same seed.
+ */
+function widestVoid(
+  lanes: Lane[], green: Green, satRadiusM: number,
+): { point: Point; junction: Point; parent: Lane; distance: number } | null {
+  let best: { point: Point; junction: Point; parent: Lane; distance: number } | null = null;
+  for (let x = -satRadiusM; x <= satRadiusM; x += VOID_SCAN_STEP_M) {
+    for (let y = -satRadiusM; y <= satRadiusM; y += VOID_SCAN_STEP_M) {
+      const p = new Point(green.centre.x + x, green.centre.y + y);
+      if (dist(p, green.centre) > satRadiusM) continue;
+      let nearest: { point: Point; parent: Lane; distance: number } | null = null;
+      for (const lane of lanes) {
+        for (let i = 1; i < lane.points.length; i++) {
+          const q = closestPointOnSegment(p, lane.points[i - 1], lane.points[i]);
+          const d = dist(p, q);
+          if (!nearest || d < nearest.distance) nearest = { point: q, parent: lane, distance: d };
+        }
+      }
+      if (!nearest) continue;
+      const better = !best || nearest.distance > best.distance
+        || (nearest.distance === best.distance
+          && (p.x < best.point.x || (p.x === best.point.x && p.y < best.point.y)));
+      if (better) {
+        best = {
+          point: p, junction: nearest.point, parent: nearest.parent, distance: nearest.distance,
+        };
+      }
+    }
+  }
+  return best;
+}
+
+/**
+ * Gate 6.5: seed a lane INTO the emptiest place in the disc.
+ *
+ * This is the plane-spacing rule the spider needed. Everything before it
+ * measures the network against ITSELF -- slots per metre of lane, coverage
+ * per bearing -- and a radial tree satisfies all of those while leaving
+ * widening wedges of untouched ground between its tendrils. This measures
+ * the GROUND instead: if any point of the disc is further than
+ * VOID_SPACING_M from a lane, that ground cannot be reached by lots from
+ * either side, so a lane goes there.
+ *
+ * The junction is the nearest point on the nearest lane, WHEREVER that
+ * falls. Branch slots exist at BRANCH_SPACING_M pitch for texture -- to
+ * keep junctions evenly spaced along a street -- and that is a rule about
+ * how a street reads, not a constraint on where a road may physically
+ * meet another. The void rule supersedes it: a junction may form anywhere.
+ *
+ * Returns true if it seeded a lane. Called before any ring widening, after
+ * slots, extensions and sector coverage are exhausted.
+ */
+function seedVoidLane(
+  out: Lane[], green: Green, meanFrontageM: number, satRadiusM: number, rng: SeededRandom,
+): boolean {
+  const void_ = widestVoid(out, green, satRadiusM);
+  if (!void_ || void_.distance <= VOID_SPACING_M) return false;
+
+  const bearing = Math.round(bearingOf(void_.junction, void_.point)) % 360;
+  // Long enough to run THROUGH the void rather than stop at its near edge,
+  // then the ordinary clamp.
+  const nominal = Math.min(
+    BRANCH_MAX_M,
+    Math.max(BRANCH_MIN_M, void_.distance + branchLengthM(meanFrontageM) / 2),
+  );
+
+  const atFraction = (() => {
+    const acc = arcLengths(void_.parent.points);
+    const total = acc[acc.length - 1];
+    if (!(total > 0)) return 0.5;
+    let travelled = 0;
+    for (let i = 1; i < void_.parent.points.length; i++) {
+      const a = void_.parent.points[i - 1];
+      const b = void_.parent.points[i];
+      const q = closestPointOnSegment(void_.junction, a, b);
+      if (dist(void_.junction, q) < 1e-6) { travelled = acc[i - 1] + dist(a, q); break; }
+    }
+    return Math.min(0.99, Math.max(0.01, travelled / total));
+  })();
+
+  let id: string | null = null;
+  const pct0 = Math.max(1, Math.min(99, Math.round(atFraction * 100)));
+  for (let step = 0; step < 99; step++) {
+    const pct = 1 + ((pct0 - 1 + step) % 99);
+    const candidate = branchLaneId(void_.parent.id, pct / 100);
+    if (!out.some((l) => l.id === candidate)) { id = candidate; break; }
+  }
+  if (!id) return false;
+
+  let cls = inventedChildClass(void_.parent.type);
+  let points = runLine(void_.junction, bearing, nominal, rng);
+  const snap = loopSnap(out, points[points.length - 1], new Set([void_.parent.id]));
+  if (snap) points = [...points, snap];
+  const assembled = points.length;
+  points = truncateAtFirstCrossing(points, out, green, void_.parent.id);
+  if (snap || points.length < assembled) cls = stepDown(cls, 'footpath');
+  if (points.length < 2 || polylineLength(points) < BRANCH_MIN_M) return false;
+  if (crossesParentTwice(points, void_.parent)) return false;
+
+  out.push({
+    id, type: cls, points, widthM: laneWidth(cls), parentId: void_.parent.id,
+  });
+  return true;
+}
+
+/**
  * Gate 6.4: fill the biggest hole in the ring's angular coverage.
  *
  * Growth is otherwise sector-blind -- branch slots exist only ON lanes, so
@@ -955,6 +1067,11 @@ export function addInventedLanes(
     // looks exactly like a full one. Check angular coverage BEFORE
     // widening, and seed into the biggest hole if there is one.
     if (seedCoverageLane(out, green, meanFrontageM, reachM(), rng)) continue;
+    // Gate 6.5: and even with every bearing covered, a RADIAL tree leaves
+    // widening wedges of untouched ground between its tendrils -- the
+    // spider. Measure the GROUND, not the network: if anywhere in the disc
+    // is further than VOID_SPACING_M from a lane, put a lane there.
+    if (seedVoidLane(out, green, meanFrontageM, reachM(), rng)) continue;
     // Nothing left to do inside this ring. Widen it -- and only then, once
     // the ring has caught up with the outer growth circle, widen that too.
     // The outer circle and its stepping remain the ultimate bound; the ring

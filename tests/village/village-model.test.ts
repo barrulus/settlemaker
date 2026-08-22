@@ -6,7 +6,8 @@ import { generateVillage, VILLAGE_POP_CEILING } from '../../src/village/village-
 // this rule will let the cutter use.
 import { lotReachFor } from '../../src/village/skeleton/lanes.js';
 import {
-  ARM_LOT_RADIUS_SHARE, EDGE_STYLE_ORDER, HAMLET_RIBBON_POP, SECTOR_COVERAGE_DEG,
+  ARM_LOT_RADIUS_SHARE, BRANCH_SPACING_M, EDGE_STYLE_ORDER, HAMLET_RIBBON_POP,
+  SECTOR_COVERAGE_DEG, VOID_SCAN_STEP_M, VOID_SPACING_M,
 } from '../../src/village/constants.js';
 import type { RouteType } from '../../src/village/route-class.js';
 import {
@@ -376,4 +377,76 @@ describe('angular coverage (gate 6.4: no laneless sector)', () => {
       }
     }
   }, 30000);
+});
+
+// Gate 6.5: the plane-spacing rule. Every rule before it measured the road
+// network against ITSELF -- slots per metre of lane, coverage per bearing --
+// and a radial tree satisfies all of them while leaving widening wedges of
+// untouched ground between its tendrils. This measures the GROUND.
+describe('void filling (gate 6.5: lanes tile the plane)', () => {
+  /** Greatest distance from any point of the fabric disc to the nearest lane. */
+  const maxVoidM = (m: ReturnType<typeof generateVillage>, radiusM: number): number => {
+    let worst = 0;
+    for (let x = -radiusM; x <= radiusM; x += VOID_SCAN_STEP_M) {
+      for (let y = -radiusM; y <= radiusM; y += VOID_SCAN_STEP_M) {
+        const p = new Point(m.green.centre.x + x, m.green.centre.y + y);
+        if (dist(p, m.green.centre) > radiusM) continue;
+        let best = Infinity;
+        for (const lane of m.lanes) {
+          for (let i = 1; i < lane.points.length; i++) {
+            best = Math.min(best, dist(p, closestPointOnSegment(p, lane.points[i - 1], lane.points[i])));
+          }
+        }
+        worst = Math.max(worst, best);
+      }
+    }
+    return worst;
+  };
+
+  it('leaves nowhere in the fabric further than VOID_SPACING_M from a lane', () => {
+    for (const population of [300, 600, 900]) {
+      for (const seed of [1, 2]) {
+        const m = generateVillage({ ...base, population }, seed);
+        const dists = m.buildings.map((b) => dist(b.position, m.green.centre)).sort((a, c) => a - c);
+        const fabricR = dists[Math.floor(dists.length * 0.95)];
+        // Slack of one scan step: the seeding loop works to VOID_SPACING_M
+        // over the SATURATED disc, and this measures over the p95 BUILDING
+        // disc, which can reach a little past where the last lane was
+        // seeded. Anything beyond that is a genuine untiled void.
+        expect(maxVoidM(m, fabricR)).toBeLessThanOrEqual(VOID_SPACING_M + VOID_SCAN_STEP_M);
+      }
+    }
+  }, 60000);
+
+  it('a junction may form anywhere along a lane, not only at slot pitch', () => {
+    // The void rule supersedes the BRANCH_SPACING_M pitch, which is a
+    // texture rule about how a street reads, not a constraint on where a
+    // road may physically meet another. If every junction still sat on the
+    // pitch, the void rule would be inert.
+    const m = generateVillage({ ...base, population: 900 }, 1);
+    const laneById = new Map(m.lanes.map((l) => [l.id, l]));
+    let offPitch = 0;
+    for (const lane of m.lanes) {
+      if (lane.parentId === undefined || lane.id.endsWith('/c')) continue;
+      const parent = laneById.get(lane.parentId);
+      if (!parent) continue;
+      const start = lane.points[0];
+      // Arc length of the junction along the parent.
+      let travelled = 0;
+      let acc = 0;
+      let bestD = Infinity;
+      for (let i = 1; i < parent.points.length; i++) {
+        const a = parent.points[i - 1];
+        const b = parent.points[i];
+        const q = closestPointOnSegment(start, a, b);
+        const d = dist(start, q);
+        if (d < bestD) { bestD = d; travelled = acc + dist(a, q); }
+        acc += dist(a, b);
+      }
+      if (bestD > 2) continue; // not seated on this parent
+      const offset = Math.abs(travelled - Math.round(travelled / BRANCH_SPACING_M) * BRANCH_SPACING_M);
+      if (offset > 4) offPitch += 1;
+    }
+    expect(offPitch).toBeGreaterThan(0);
+  });
 });
