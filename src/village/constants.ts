@@ -402,6 +402,39 @@ export const INNER_CURVE_FRONT_RATIO = 0.8;
  * no dwelling could ever seat on is worse than no lot at all. */
 export const MIN_LOT_DEPTH_M = 4;
 /**
+ * Gate 6.9, THE RE-CUT FLOOR -- the shallowest claim on which a dwelling is
+ * still a dwelling.
+ *
+ * `LOT_DEPTH_M` (12) is a house plus its garden. A lot that has only the
+ * house is not a failure: the gate-6.7 histogram showed 33-38% of every lot
+ * cut dying in claim resolution, and a lot killed there leaves its ground
+ * EMPTY -- which is precisely the grass the owner keeps circling. `recutFreedGround`
+ * walks that freed frontage again and cuts it SHALLOW, to whatever actually
+ * fits between the claims that survived.
+ *
+ * 6 m: the ordinary dwellings' painted ink depth (4.49 sm-house, 4.69
+ * sm-house-tiled, 5.44 both huts) plus a sliver for `SEATING_SETBACK_MAX_M`.
+ * Below that the house's own ink would hang out of the back of its claim,
+ * and the plot is not worth cutting. Above `MIN_LOT_DEPTH_M` (4), which is
+ * the floor for TRUNCATING an existing claim rather than cutting a new one.
+ */
+export const MIN_BUILD_DEPTH_M = 6;
+/**
+ * Gate 6.9: how many times cut -> resolve -> re-cut runs before a round
+ * gives up. Bounded because each pass can only fill gaps the previous one
+ * left, so the sequence converges fast; measured, pass 3 adds single-digit
+ * lots. The loop also stops early the moment a pass adds nothing.
+ */
+export const RECUT_MAX_PASSES = 3;
+/**
+ * Gate 6.9: one notch of the escalation ladder's first rung. The disc is a
+ * HARD cap now (see DISC_MARGIN), so when the census will not fit the loop
+ * TIGHTENS instead of widening: every lot's cut width comes down by this
+ * much per notch, bounded below by the dwelling's own ink width -- houses
+ * may end up touching, never overlapping.
+ */
+export const GAP_TIGHTEN_STEP_M = 0.25;
+/**
  * Gate 6.7, THE BUILD BAND -- the front slice of a lot where the DWELLING
  * actually stands. The rest of `LOT_DEPTH_M` is garden.
  *
@@ -537,12 +570,40 @@ export const SCORE_CLASS_WEIGHT = 3;
 export const SCORE_RING_BONUS = 40;
 
 // --- Feedback loop -----------------------------------------------------
-// Gate 6.6: the loop no longer bargains over frontage or tightens the gap
-// term. The disc is sized in closed form (DISC_MARGIN above) and saturated;
-// the loop's ONLY remaining job is to widen R_target by one
-// SATURATION_RING_STEP_M when the saturated, spent disc still leaves
-// someone unhoused. These rungs bound that widening.
-export const MAX_FEEDBACK_ROUNDS = 4;
+// Gate 6.6: the loop no longer bargains over frontage. The disc is sized in
+// closed form (DISC_MARGIN above) and saturated.
+//
+// Gate 6.9 turned that size into a HARD CAP and inverted the escalation.
+// Widening the disc when the census does not fit is the move that produced
+// every "too much grass" verdict since gate 6.4: it buys ground faster than
+// it buys houses, so the fabric thins out precisely when it is already too
+// thin. The ladder now tightens instead, re-spending after each rung:
+//   1. tighten the cut width by GAP_TIGHTEN_STEP_M, bounded by the ink floor;
+//   2. permit TERRACE ROWS -- the seat-slide walks a finer ladder and will
+//      take a position where two houses touch rather than fail the seat;
+//   3. only then widen by ONE SATURATION_RING_STEP_M, and say so in the
+//      diagnostics, naming the shortfall that forced it.
+// These rungs bound the whole ladder.
+// Gate 6.9 lengthened this 4 -> 8. The ladder now has more rungs than the
+// old "one more ring per round" did — up to `maxNotches` tightenings, then
+// terraces, then rings — and at 4 the ring rungs were unreachable: a
+// village that genuinely needed ground reported an overflow instead of
+// buying it, which is the one failure mode this engine must never have.
+export const MAX_FEEDBACK_ROUNDS = 12;
+/**
+ * GATE 6.9: how much ground the LAST rung buys, as a share of the capped
+ * radius — not a fixed number of metres.
+ *
+ * `SATURATION_RING_STEP_M` (20) is the step growth uses to widen its own
+ * saturation ring INSIDE a given disc, and it is the right size there. Used
+ * as the escalation step it was not: 20 m is 42% of a pop-300 disc (48 m)
+ * and 24% of a pop-900 one (82 m), so "one more ring" meant two completely
+ * different escalations, and the small village always overshot — measured,
+ * pop 300 bought a 42% wider disc to house its last few dozen heads and
+ * came out at +15-21% over its closed form while pop 900 sat at +4%. A
+ * proportional step buys the same relative slack at every size.
+ */
+export const DISC_ESCALATION_STEP_RATIO = 0.06;
 
 /**
  * How far an arm/lane extends past the green, as a multiple of the

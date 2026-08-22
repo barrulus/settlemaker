@@ -1,8 +1,10 @@
 import { Point } from '../../types/point.js';
 import { bearingVector, closestPointOnSegment, dist } from '../geometry.js';
 import { classRank, type RouteType } from '../route-class.js';
-import { BUILD_BAND_DEPTH_M, INNER_CURVE_FRONT_RATIO, MIN_LOT_DEPTH_M } from '../constants.js';
-import type { Green, Lane, Lot } from '../types.js';
+import {
+  BUILD_BAND_DEPTH_M, INNER_CURVE_FRONT_RATIO, MIN_BUILD_DEPTH_M, MIN_LOT_DEPTH_M,
+} from '../constants.js';
+import { lotOrdinal, type Green, type Lane, type Lot } from '../types.js';
 
 /**
  * §5.4 rules 3-4: pay the R20 debt. Lots are cut per-lane (and for the
@@ -89,7 +91,7 @@ export function buildBandObb(lot: Lot): Obb {
  * The largest depth <= `lot.depthM` whose claim no longer overlaps
  * `winner`, floored at 0. ~8 bisections is plenty at metre precision.
  */
-function maxDepthClearOf(lot: Lot, winner: Obb): number {
+export function maxDepthClearOf(lot: Lot, winner: Obb): number {
   let lo = 0;
   let hi = lot.depthM;
   for (let i = 0; i < 8; i++) {
@@ -98,11 +100,6 @@ function maxDepthClearOf(lot: Lot, winner: Obb): number {
     if (obbOverlap(trial, winner)) hi = mid; else lo = mid;
   }
   return lo;
-}
-
-function ordinalOf(id: string): number {
-  const m = /(\d+)$/.exec(id);
-  return m ? parseInt(m[1], 10) : 0;
 }
 
 /**
@@ -132,7 +129,7 @@ export function resolveInnerCurves(lots: Lot[], reasons?: Map<string, string>): 
   }
   for (const arr of groups.values()) {
     if (arr.length < 2) continue;
-    const sorted = [...arr].sort((a, b) => ordinalOf(a.id) - ordinalOf(b.id));
+    const sorted = [...arr].sort((a, b) => lotOrdinal(a.id) - lotOrdinal(b.id));
     const meanFrontage = sorted.reduce((s, l) => s + l.frontageM, 0) / sorted.length;
     const threshold = meanFrontage * INNER_CURVE_FRONT_RATIO;
     let prev = sorted[0];
@@ -160,13 +157,31 @@ export function resolveInnerCurves(lots: Lot[], reasons?: Map<string, string>): 
         continue;
       }
       const clearDepth = maxDepthClearOf(cur, prevObb);
-      if (clearDepth < MIN_LOT_DEPTH_M) {
-        dropped.add(cur.id);
-        reasons?.set(cur.id, 'inner-wander');
-      } else {
+      if (clearDepth >= MIN_LOT_DEPTH_M) {
         depthOverride.set(cur.id, clearDepth);
         prev = { ...cur, depthM: clearDepth };
+        continue;
       }
+      // Gate 6.9, as in `resolveCrossStrip`: two SHALLOW plots before one
+      // deleted house. `prev` gives up its garden down to MIN_BUILD_DEPTH_M
+      // if that is what lets `cur` keep a dwelling.
+      const shallowPrev = Math.min(prev.depthM, MIN_BUILD_DEPTH_M);
+      const curOnShallow = maxDepthClearOf(
+        cur, lotObb({ ...prev, depthM: shallowPrev }),
+      );
+      if (curOnShallow >= MIN_BUILD_DEPTH_M) {
+        const prevDepth = Math.min(
+          prev.depthM,
+          Math.max(shallowPrev, maxDepthClearOf(prev, lotObb({ ...cur, depthM: curOnShallow }))),
+        );
+        depthOverride.set(prev.id, prevDepth);
+        const curDepth = maxDepthClearOf(cur, lotObb({ ...prev, depthM: prevDepth }));
+        depthOverride.set(cur.id, curDepth);
+        prev = { ...cur, depthM: curDepth };
+        continue;
+      }
+      dropped.add(cur.id);
+      reasons?.set(cur.id, 'inner-wander');
     }
   }
   return lots
@@ -236,7 +251,7 @@ function resolveCrossStrip(
       // claims and are resolved here like any other.
       const sameStrip = a0.laneId === b0.laneId && a0.side === b0.side;
       const adjacent = sameStrip
-        && Math.abs(ordinalOf(a0.id) - ordinalOf(b0.id)) === 1;
+        && Math.abs(lotOrdinal(a0.id) - lotOrdinal(b0.id)) === 1;
       if (adjacent && a0.laneId !== 'green') continue;
 
       const a = effective(a0);
@@ -287,8 +302,39 @@ function resolveCrossStrip(
         continue;
       }
 
-      // The bands themselves conflict: one of these two houses cannot
-      // stand, and class priority decides which.
+      // GATE 6.9: the bands conflict — but ask a narrower question before
+      // deleting a house. `BUILD_BAND_DEPTH_M` (8) is the deepest ordinary
+      // dwelling at its largest fit; `MIN_BUILD_DEPTH_M` (6) is an ordinary
+      // dwelling's painted ink and a sliver. Two SHALLOW plots fit ground
+      // two full-band plots do not, and this is where the fabric loses its
+      // frontage: between two lanes running 20 m apart, ~15 m of ground is
+      // left after both setbacks, which two 8 m bands cannot share and two
+      // 6 m ones can. The old rule read that as "one of these houses cannot
+      // stand" and deleted it — a house's worth of grass, at every such
+      // pair, all through the village.
+      //
+      // Depths still only ever SHRINK, so pairs settled earlier stay settled.
+      const shallow = (l: Lot): Obb =>
+        lotObb({ ...l, depthM: Math.min(l.depthM, MIN_BUILD_DEPTH_M) });
+      if (!obbOverlap(shallow(winner), shallow(loser))) {
+        // The winner keeps priority: as deep as it can be while still
+        // leaving the loser room for a house, never deeper than it was.
+        const winnerDepth = Math.min(
+          winner.depthM,
+          Math.max(MIN_BUILD_DEPTH_M, maxDepthClearOf(winner, shallow(loser))),
+        );
+        const loserDepth = maxDepthClearOf(
+          loser, lotObb({ ...winner, depthM: winnerDepth }),
+        );
+        if (loserDepth >= MIN_BUILD_DEPTH_M) {
+          depthOverride.set(winner.id, winnerDepth);
+          depthOverride.set(loser.id, loserDepth);
+          continue;
+        }
+      }
+
+      // Genuinely irreconcilable: one of these two houses cannot stand, and
+      // class priority decides which.
       const winnerObb = lotObb(winner);
       if (pointInObb(loser.front, winnerObb)) {
         dropped.add(loser.id);
