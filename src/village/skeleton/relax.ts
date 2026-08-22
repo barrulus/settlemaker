@@ -1,5 +1,5 @@
 import { Point } from '../../types/point.js';
-import { dist } from '../geometry.js';
+import { arcLengths, closestPointOnSegment, dist } from '../geometry.js';
 import { inkExtent } from '../glyphs.js';
 import {
   RELAX_CLEARANCE_M, RELAX_ITERATIONS, RELAX_MAX_DISPLACEMENT_M, TAIL_STUB_M,
@@ -123,6 +123,20 @@ function buildingsOf(lane: Lane, buildings: Building[]): Building[] {
  * from the start; a lane that wandered back toward its own beginning would
  * break the assumption, but no pass in this engine produces one.
  */
+/** Arc length along `points` of the position nearest `p` — where a
+ * building sits ALONG its lane, as opposed to how far it is from the
+ * lane's start as the crow flies. */
+function arcLengthOf(p: Point, points: Point[], acc: number[]): number {
+  let best = Infinity;
+  let bestS = 0;
+  for (let i = 1; i < points.length; i++) {
+    const q = closestPointOnSegment(p, points[i - 1], points[i]);
+    const d = dist(p, q);
+    if (d < best) { best = d; bestS = acc[i - 1] + dist(points[i - 1], q); }
+  }
+  return bestS;
+}
+
 export function trimTails(lanes: Lane[], buildings: Building[]): Lane[] {
   const result: Lane[] = [];
 
@@ -138,17 +152,32 @@ export function trimTails(lanes: Lane[], buildings: Building[]): Lane[] {
       continue;
     }
 
-    const start = lane.points[0];
-    const furthest = mine.reduce((best, b) => Math.max(best, dist(b.position, start)), 0);
-    const cutoff = furthest + TAIL_STUB_M;
-    const keep = lane.points.filter((p) => dist(p, start) <= cutoff);
+    // Gate 5.4: measured along the lane, not as the crow flies.
+    //
+    // This used to be `points.filter(p => dist(p, start) <= cutoff)` — a
+    // STRAIGHT-LINE test that also filtered rather than truncated. On a
+    // curving lane (gate 5 gave every lane a smooth arc) a later point can
+    // sit CLOSER to the start than an earlier one, so the filter dropped a
+    // middle point and kept a later one, and the surviving polyline jumped
+    // the chord — cutting the corner across ground the lane never ran over,
+    // including, in one measured pop-300 fixture, straight under a house.
+    // The mesh exposed it by making central lanes shorter and curvier.
+    //
+    // Arc length fixes both halves: the cutoff is a distance ALONG the
+    // lane, and the result is a genuine PREFIX, so the kept geometry is
+    // always a leading piece of the original and can never take a new path.
+    const acc = arcLengths(lane.points);
+    const furthestS = mine.reduce((best, b) => Math.max(best, arcLengthOf(b.position, lane.points, acc)), 0);
+    const cutoff = furthestS + TAIL_STUB_M;
+    let k = lane.points.length;
+    while (k > 2 && acc[k - 1] > cutoff) k -= 1;
 
     // A lane must always keep at least two points — a single point is not
     // a lane. If the trim window collapsed below that (the last dwelling
     // sits well inside the first segment), fall back to the lane's own
     // first two points, which is the shortest possible stub this lane can
     // honestly offer.
-    result.push({ ...lane, points: keep.length < 2 ? lane.points.slice(0, 2) : keep });
+    result.push({ ...lane, points: lane.points.slice(0, Math.max(2, k)) });
   }
 
   return result;

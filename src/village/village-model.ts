@@ -13,7 +13,7 @@ import { resolveConvergingLots } from './parcels/overlap.js';
 import {
   buildDeck, meanOccupancy, minDwellingFrontageM, widestDwellingWidthM,
 } from './deck.js';
-import { spendCensus, type SpendResult } from './dwellings.js';
+import { intrudesOnLane, spendCensus, type SpendResult } from './dwellings.js';
 import { dressVillage } from './dressing/index.js';
 import { closestPointOnSegment, dist } from './geometry.js';
 import {
@@ -175,7 +175,20 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
     f0 = widestDwellingM + gapTerm;
   }
 
-  const relaxed = trimTails(relaxLanes(lanes, spend.buildings), spend.buildings);
+  // Gate 5.4: relaxation is COSMETIC -- it nudges lane points off houses by
+  // up to RELAX_MAX_DISPLACEMENT_M. Because that nudge is clamped, and
+  // because moving a point away from one building can carry it toward
+  // another, relaxation can leave a lane sitting on a house that the
+  // pre-relax geometry cleared at seat time. The denser mesh made this show
+  // up in the §5.7 net. A lane that relaxation puts under a building simply
+  // keeps its unrelaxed geometry: that geometry was already verified clear
+  // when the building was seated, and losing a 1.5 m cosmetic nudge is
+  // nothing beside a house standing in the road.
+  const relaxedLanes = relaxLanes(lanes, spend.buildings).map((relaxedLane) => {
+    const intrudes = spend.buildings.some((b) => intrudesOnLane(b, [relaxedLane]));
+    return intrudes ? (lanes.find((l) => l.id === relaxedLane.id) ?? relaxedLane) : relaxedLane;
+  });
+  const relaxed = trimTails(relaxedLanes, spend.buildings);
   // Finding 3: trimTails (R15) may drop an invented lane that earned no
   // dwelling. Its lots are then orphaned — surviving in `lots` but naming
   // a laneId no lane in the model carries any more. Filter them out so

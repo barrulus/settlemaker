@@ -9,7 +9,8 @@ import {
   BRANCH_LOTS_TARGET, BRANCH_MAX_M, BRANCH_MIN_M, BRANCH_SPACING_M, FRONTAGE_MARGIN,
   GREEN_ARM_MAX, GREEN_ARM_MIN, GREEN_ARM_SPACING_M, GREEN_UNDERLAP_RATIO,
   GROWTH_RADIUS_STEP, INVENTED_ARM_LENGTH_FACTOR, JUNCTION_CLEAR_M, LANE_SAMPLE_STEP_M,
-  LANE_CURVE_MAX_M, LOOP_SNAP_M, MAX_INVENTED_LANES, MIN_ARM_SEPARATION_DEG,
+  LANE_CURVE_MAX_M, LOOP_SNAP_M, MAX_INVENTED_LANES, MESH_BRANCH_LOTS,
+  MESH_BRANCH_SPACING_M, MESH_LOOP_SNAP_M, MESH_RADIUS_FACTOR, MIN_ARM_SEPARATION_DEG,
 } from '../constants.js';
 import {
   armLaneId, branchLaneId, inventedLaneId, type Green, type Lane, type Site, type SiteRoute,
@@ -255,6 +256,24 @@ function widestGapBearing(taken: number[], rng: SeededRandom): number {
 }
 
 /**
+ * Gate 5.4: branch-slot pitch at a given distance from the green. Inside
+ * the mesh radius the web reticulates at MESH_BRANCH_SPACING_M; outside it
+ * the existing BRANCH_SPACING_M stands.
+ */
+function spacingAt(distToGreenM: number, meshRadiusM: number): number {
+  return distToGreenM <= meshRadiusM ? MESH_BRANCH_SPACING_M : BRANCH_SPACING_M;
+}
+
+/**
+ * Gate 5.4: loop-snap radius at a given distance. Wider inside the mesh, so
+ * a short central street reaching toward its neighbour actually joins it
+ * and closes a block, instead of stopping just short as a dead end.
+ */
+function snapRadiusAt(distToGreenM: number, meshRadiusM: number): number {
+  return distToGreenM <= meshRadiusM ? MESH_LOOP_SNAP_M : LOOP_SNAP_M;
+}
+
+/**
  * How long a new street needs to be, sized to the dwellings still to be
  * housed THIS ROUND rather than to a fixed target.
  *
@@ -270,8 +289,18 @@ function widestGapBearing(taken: number[], rng: SeededRandom): number {
  * grows several streets rather than one enormous one. Floored at two lots
  * so a spur is never a single plot.
  */
-function branchLengthM(meanFrontageM: number, remainingDwellings: number): number {
-  const lots = Math.min(BRANCH_LOTS_TARGET, Math.max(2, Math.ceil(remainingDwellings)));
+function branchLengthM(
+  meanFrontageM: number, remainingDwellings: number,
+  distToGreenM: number = Infinity, meshRadiusM: number = 0,
+): number {
+  // Gate 5.4: inside the mesh a street is SHORT by design -- it carries
+  // about MESH_BRANCH_LOTS lots and then meets something. The centre fills
+  // with many short interconnected streets rather than a few long ones,
+  // which is Maplefall's texture. Outside, the need-derived sizing stands.
+  const wanted = distToGreenM <= meshRadiusM
+    ? MESH_BRANCH_LOTS
+    : Math.max(2, Math.ceil(remainingDwellings));
+  const lots = Math.min(BRANCH_LOTS_TARGET, wanted);
   return Math.min(BRANCH_MAX_M, Math.max(BRANCH_MIN_M, (lots / 2) * meanFrontageM));
 }
 
@@ -327,21 +356,32 @@ interface BranchSlot {
  * make branches branch again, near the centre, until the wedges fill.
  * A slot is occupied if any existing lane already starts nearby.
  */
-function branchSlots(out: Lane[], green: Green, growthRadiusM: number): BranchSlot[] {
+function branchSlots(
+  out: Lane[], green: Green, growthRadiusM: number, meshRadiusM: number,
+): BranchSlot[] {
   const slots: BranchSlot[] = [];
   for (const parent of out) {
     const acc = arcLengths(parent.points);
     const total = acc[acc.length - 1];
-    if (total < BRANCH_SPACING_M * 1.25) continue;
-    for (let s = BRANCH_SPACING_M; s <= total - BRANCH_SPACING_M * 0.5; s += BRANCH_SPACING_M) {
+    if (total < MESH_BRANCH_SPACING_M * 1.25) continue;
+    // Gate 5.4: the pitch is graded by distance, so the walk steps by
+    // whatever spacing applies WHERE IT CURRENTLY IS rather than by one
+    // fixed increment. Near the green that is MESH_BRANCH_SPACING_M --
+    // junctions twice as often, which is what makes blocks; further out it
+    // relaxes to BRANCH_SPACING_M and the fringe keeps its long radials.
+    let s = spacingAt(dist(sampleAt(parent.points, acc, 0).p, green.centre), meshRadiusM);
+    while (s <= total - MESH_BRANCH_SPACING_M * 0.5) {
       const { p, dirDeg } = sampleAt(parent.points, acc, s);
       const distToGreen = dist(p, green.centre);
+      const pitch = spacingAt(distToGreen, meshRadiusM);
       // Gate 3: "sprawl should be clustered around the green" — a slot
       // outside the growth circle never spawns a branch, so a long FMG
       // road cannot sprout satellite webs half a map away.
-      if (distToGreen > growthRadiusM) continue;
-      if (out.some((l) => dist(l.points[0], p) < BRANCH_SPACING_M * 0.45)) continue;
-      slots.push({ parent, at: s / total, anchor: p, dirDeg, distToGreen });
+      if (distToGreen <= growthRadiusM
+        && !out.some((l) => dist(l.points[0], p) < pitch * 0.45)) {
+        slots.push({ parent, at: s / total, anchor: p, dirDeg, distToGreen });
+      }
+      s += pitch;
     }
   }
   // Nearest the green first; ties broken structurally so the order can
@@ -353,10 +393,10 @@ function branchSlots(out: Lane[], green: Green, growthRadiusM: number): BranchSl
 
 /** End of a candidate branch near another lane? Return the join point. */
 function loopSnap(
-  out: Lane[], end: Point, excludeIds: Set<string>,
+  out: Lane[], end: Point, excludeIds: Set<string>, radiusM: number = LOOP_SNAP_M,
 ): Point | null {
   let best: Point | null = null;
-  let bestD = LOOP_SNAP_M;
+  let bestD = radiusM;
   for (const lane of out) {
     if (excludeIds.has(lane.id)) continue;
     for (let i = 1; i < lane.points.length; i++) {
@@ -406,6 +446,35 @@ function truncateAtFirstCrossing(
   return points;
 }
 
+/**
+ * Gate 5.4: the last word on crossings. `truncateAtFirstCrossing` exempts
+ * the branch's own PARENT within JUNCTION_CLEAR_M of the start -- that
+ * exemption exists for the junction the branch is there to make. But it is
+ * written as a DISTANCE from the start, so a curving parent that loops back
+ * within that distance gets a free crossing too. The mesh makes this
+ * likelier (shorter streets, denser slots, curvier parents), and it showed
+ * up as exactly one crossing in a pop-900 fixture: a branch crossing its
+ * own parent a second time, 109 m out.
+ *
+ * So the assembled polyline is checked once more against the parent alone
+ * -- every other lane was already truncated against without exemption --
+ * and more than one intersection with it means this is not a junction, it
+ * is a crossing. The caller rejects the slot and tries the next.
+ */
+function crossesParentTwice(points: Point[], parent: Lane | undefined): boolean {
+  if (!parent) return false;
+  let hits = 0;
+  for (let i = 1; i < points.length; i++) {
+    for (let j = 1; j < parent.points.length; j++) {
+      if (segmentIntersection(points[i - 1], points[i], parent.points[j - 1], parent.points[j])) {
+        hits += 1;
+        if (hits > 1) return true;
+      }
+    }
+  }
+  return false;
+}
+
 /** Truncated and loop-snapped lanes END on another lane — that end is a
  * junction, and a street that ends at a junction never grows through it.
  * The tolerance is an identity epsilon (cut and snap points sit exactly ON
@@ -433,10 +502,29 @@ function endsOnAnotherLane(lane: Lane, out: Lane[]): boolean {
 function extendOne(
   out: Lane[], green: Green, meanFrontageM: number, growthRadiusM: number,
   rng: SeededRandom, maxLengthM: number, remainingDwellings: number,
+  meshRadiusM: number = 0,
 ): boolean {
+  // Gate 5.4: the length ceiling is graded like everything else. A street
+  // whose end sits inside the mesh is capped at the MESH length -- without
+  // this, the outer "lengthen before branching" rule cheerfully extends
+  // central streets to the full need-derived length and undoes the mesh
+  // (measured: central branches came out at 47 m against a 28 m target).
+  //
+  // An INFINITE ceiling means this is the last-resort call, the one that
+  // exists to break a growth deadlock while the census is still unhoused.
+  // The mesh cap must not apply there, or the breaker cannot break
+  // anything: measured, capping it left a pop-900 village with 260 of 900
+  // housed, because every central street was frozen at the mesh length and
+  // there was nowhere else to grow.
+  const ceilingFor = (l: Lane): number => {
+    if (!Number.isFinite(maxLengthM)) return maxLengthM;
+    return dist(l.points[l.points.length - 1], green.centre) <= meshRadiusM
+      ? Math.min(maxLengthM, branchLengthM(meanFrontageM, remainingDwellings, 0, meshRadiusM))
+      : maxLengthM;
+  };
   const extendable = out
     .filter((l) => !l.id.startsWith('arm-') && l.points.length >= 2
-      && polylineLength(l.points) < maxLengthM
+      && polylineLength(l.points) < ceilingFor(l)
       // Gate 3: extension is confined to the cluster — a street whose end
       // has left the growth circle stops growing outward.
       && dist(l.points[l.points.length - 1], green.centre) <= growthRadiusM
@@ -452,9 +540,41 @@ function extendOne(
     const n = lane.points.length;
     const endDir = bearingOf(lane.points[n - 2], lane.points[n - 1]);
     const extension = truncateAtFirstCrossing(
-      runLine(lane.points[n - 1], endDir, branchLengthM(meanFrontageM, remainingDwellings), rng),
+      runLine(
+        lane.points[n - 1], endDir,
+        branchLengthM(
+          meanFrontageM, remainingDwellings,
+          dist(lane.points[n - 1], green.centre), meshRadiusM,
+        ),
+        rng,
+      ),
       out.filter((l) => l.id !== lane.id), green);
     if (extension.length < 2) continue;
+    // Gate 5.4: an extension leaves from the lane's OLD END -- which is
+    // exactly where a child branch may also leave. segmentIntersection
+    // ignores crossings at a shared endpoint (by design: a branch starting
+    // on its parent must not read as crossing it), so truncation cannot
+    // see the extension running straight through that child. Measured as
+    // one crossing in a pop-900 fixture, parent through its own child.
+    // Re-test with the origin nudged forward, where the exclusion no
+    // longer hides anything, and abandon the extension if it crosses.
+    const probe = [...extension];
+    probe[0] = new Point(
+      extension[0].x + (extension[1].x - extension[0].x) * 0.05,
+      extension[0].y + (extension[1].y - extension[0].y) * 0.05,
+    );
+    const crosses = out.some((other) => {
+      if (other.id === lane.id) return false;
+      for (let i = 1; i < probe.length; i++) {
+        for (let j = 1; j < other.points.length; j++) {
+          if (segmentIntersection(probe[i - 1], probe[i], other.points[j - 1], other.points[j])) {
+            return true;
+          }
+        }
+      }
+      return false;
+    });
+    if (crosses) continue;
     lane.points = [...lane.points, ...extension.slice(1)];
     return true;
   }
@@ -464,7 +584,7 @@ function extendOne(
 /** One growth step. Returns false when there is nowhere left to grow. */
 function growOne(
   out: Lane[], green: Green, meanFrontageM: number, growthRadiusM: number,
-  rng: SeededRandom, remainingDwellings: number,
+  rng: SeededRandom, remainingDwellings: number, meshRadiusM: number,
 ): boolean {
   // 1. The green may still host a street of its own: an invented arm, up
   //    to the circumference-derived cap, at a bearing clear of every
@@ -507,68 +627,93 @@ function growOne(
     // No free bearing: fall through to branching.
   }
 
-  // 2. Gate 5: LENGTHEN BEFORE BRANCHING. Any existing street still
-  //    shorter than a full branch length gets extended first, so the
-  //    village grows a few proper streets rather than a thicket of stubs.
-  //    Only once every street has reached full length does a new branch
-  //    open. This, BRANCH_SPACING_M 28 -> 40 and BRANCH_LOTS_TARGET 8 -> 14
-  //    are one change: the same census laid along fewer, longer roads.
+  // Gate 5.4: the growth order itself is graded by distance. Inside the
+  // mesh radius the centre grows by RETICULATION -- open another short
+  // street rather than lengthen an existing one -- and outside it the
+  // gate-5 rule stands, lengthening before branching so the fringe keeps
+  // long clean radials instead of a thicket of stubs. Centre reticulates,
+  // edge extends; that inversion is the whole change.
+  const slots = branchSlots(out, green, growthRadiusM, meshRadiusM);
+
+  /** Try each candidate slot in order; returns true once one takes. */
+  const tryBranch = (candidates: BranchSlot[]): boolean => {
+    for (const slot of candidates) {
+      // branchLaneId formats `at` as a 2-digit percent (~100 buckets per
+      // parent); if this slot's bucket is taken, probe deterministically.
+      // The id is identity, the anchor is authoritative for position.
+      let id: string | null = null;
+      const pct0 = Math.max(1, Math.min(99, Math.round(slot.at * 100)));
+      for (let step = 0; step < 99; step++) {
+        const pct = 1 + ((pct0 - 1 + step) % 99);
+        const candidate = branchLaneId(slot.parent.id, pct / 100);
+        if (!out.some((l) => l.id === candidate)) { id = candidate; break; }
+      }
+      if (!id) continue;
+      const side = rng.bool(0.5) ? 1 : -1;
+      const branchBearing = (slot.dirDeg + side * (60 + rng.int(0, 51)) + 360) % 360;
+      let cls = inventedChildClass(slot.parent.type);
+      let points = runLine(
+        slot.anchor, branchBearing,
+        branchLengthM(meanFrontageM, remainingDwellings, slot.distToGreen, meshRadiusM),
+        rng,
+      );
+      // Loop rule first: an end passing near another lane joins it. Then ONE
+      // crossing pass over the fully assembled polyline — snap tail included —
+      // so no segment of the final lane crosses anything. Either cut means the
+      // lane meets another lane, and a connector runs one class lower.
+      //
+      // Gate 5.4: the snap radius widens inside the mesh, so a short central
+      // street reaching for its neighbour actually joins it and closes a
+      // block, rather than stopping just short as a dead end. The class-drop
+      // is unchanged — a snapped lane is still a connector.
+      const snap = loopSnap(
+        out, points[points.length - 1], new Set([slot.parent.id]),
+        snapRadiusAt(slot.distToGreen, meshRadiusM),
+      );
+      if (snap) points = [...points, snap];
+      const assembled = points.length;
+      points = truncateAtFirstCrossing(points, out, green, slot.parent.id);
+      if (snap || points.length < assembled) {
+        cls = stepDown(cls, 'footpath');
+      }
+      // Gate 5: a branch cut down to a stub is not a street. Truncation at a
+      // crossing (or a loop snap that lands almost at once) can leave a few
+      // metres of road going nowhere, which is exactly the litter the owner
+      // saw. Reject it and try the next slot rather than keeping it.
+      if (points.length < 2 || polylineLength(points) < BRANCH_MIN_M) continue;
+      if (crossesParentTwice(points, slot.parent)) continue;
+      out.push({
+        id,
+        type: cls,
+        points,
+        widthM: laneWidth(cls),
+        parentId: slot.parent.id,
+      });
+      return true;
+    }
+    return false;
+  };
+
+  // 2. MESH: inside the centre, open another short street first.
+  if (tryBranch(slots.filter((sl) => sl.distToGreen <= meshRadiusM))) return true;
+
+  // 3. Outside the mesh, gate 5's rule: LENGTHEN BEFORE BRANCHING, so the
+  //    fringe grows a few proper streets rather than a thicket of stubs.
   if (extendOne(out, green, meanFrontageM, growthRadiusM, rng,
-    branchLengthM(meanFrontageM, remainingDwellings), remainingDwellings)) {
+    branchLengthM(meanFrontageM, remainingDwellings), remainingDwellings, meshRadiusM)) {
     return true;
   }
 
-  // 3. Branch at the nearest-the-green free slot.
-  const slots = branchSlots(out, green, growthRadiusM);
-  for (const slot of slots) {
-    // branchLaneId formats `at` as a 2-digit percent (~100 buckets per
-    // parent); if this slot's bucket is taken, probe deterministically.
-    // The id is identity, the anchor is authoritative for position.
-    let id: string | null = null;
-    const pct0 = Math.max(1, Math.min(99, Math.round(slot.at * 100)));
-    for (let step = 0; step < 99; step++) {
-      const pct = 1 + ((pct0 - 1 + step) % 99);
-      const candidate = branchLaneId(slot.parent.id, pct / 100);
-      if (!out.some((l) => l.id === candidate)) { id = candidate; break; }
-    }
-    if (!id) continue;
-    const side = rng.bool(0.5) ? 1 : -1;
-    const branchBearing = (slot.dirDeg + side * (60 + rng.int(0, 51)) + 360) % 360;
-    let cls = inventedChildClass(slot.parent.type);
-    let points = runLine(
-      slot.anchor, branchBearing, branchLengthM(meanFrontageM, remainingDwellings), rng,
-    );
-    // Loop rule first: an end passing near another lane joins it. Then ONE
-    // crossing pass over the fully assembled polyline — snap tail included —
-    // so no segment of the final lane crosses anything. Either cut means the
-    // lane meets another lane, and a connector runs one class lower.
-    const snap = loopSnap(out, points[points.length - 1], new Set([slot.parent.id]));
-    if (snap) points = [...points, snap];
-    const assembled = points.length;
-    points = truncateAtFirstCrossing(points, out, green, slot.parent.id);
-    if (snap || points.length < assembled) {
-      cls = stepDown(cls, 'footpath');
-    }
-    // Gate 5: a branch cut down to a stub is not a street. Truncation at a
-    // crossing (or a loop snap that lands almost at once) can leave a few
-    // metres of road going nowhere, which is exactly the litter the owner
-    // saw. Reject it and try the next slot rather than keeping it.
-    if (points.length < 2 || polylineLength(points) < BRANCH_MIN_M) continue;
-    out.push({
-      id,
-      type: cls,
-      points,
-      widthM: laneWidth(cls),
-      parentId: slot.parent.id,
-    });
-    return true;
-  }
+  // 4. Then branch at the remaining (outer) slots.
+  if (tryBranch(slots.filter((sl) => sl.distToGreen > meshRadiusM))) return true;
 
-  // 4. Last resort: every slot is taken and every street is already at
+  // 5. Last resort: every slot is taken and every street is already at
   //    full length, so lengthen one anyway. The new length carries fresh
   //    frontage AND fresh branch slots, so growth cannot deadlock while the
   //    census is unhoused.
-  return extendOne(out, green, meanFrontageM, growthRadiusM, rng, Infinity, remainingDwellings);
+  return extendOne(
+    out, green, meanFrontageM, growthRadiusM, rng, Infinity, remainingDwellings, meshRadiusM,
+  );
 }
 
 /**
@@ -585,6 +730,12 @@ export function addInventedLanes(
   const out = [...lanes];
   let guard = 0;
   let radiusM = growthRadiusM;
+  // Gate 5.4: the MESH radius is anchored to the ORIGINAL growth circle,
+  // never to the widened one. When the cluster fills and frontage is still
+  // owed the circle steps outward, but "the centre of the village" must
+  // not drift with it -- otherwise a village that had to grow twice ends
+  // up meshed to its fringe, and the graded texture disappears.
+  const meshRadiusM = growthRadiusM * MESH_RADIUS_FACTOR;
   // Only frontage inside the cluster counts, because only that stretch
   // will be cut into lots (gate 5.1).
   const owed = (): number => requiredM * FRONTAGE_MARGIN - availableFrontage(out, green, radiusM);
@@ -593,7 +744,7 @@ export function addInventedLanes(
     // Dwellings still to house, derived from the frontage still owed, so
     // each new street is sized to what is actually left.
     const remainingDwellings = meanFrontageM > 0 ? owed() / meanFrontageM : 0;
-    if (!growOne(out, green, meanFrontageM, radiusM, rng, remainingDwellings)) {
+    if (!growOne(out, green, meanFrontageM, radiusM, rng, remainingDwellings, meshRadiusM)) {
       // The circle is full — cap reached, slots taken, street ends outside
       // it — but frontage is still owed. A real village fills its circle
       // and then the circle widens: step the radius and retry. The guard

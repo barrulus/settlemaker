@@ -85,6 +85,47 @@ export const INVENTED_ARM_LENGTH_FACTOR = 1.2;
  * between two streets), per the owner's rule that loops are made at a
  * lower class than the lanes they join. */
 export const LOOP_SNAP_M = 12;
+/**
+ * Gate 5.4, MESH THE CENTRE. Owner's side-by-side against watabou's
+ * Maplefall, read correctly on the second look: EVERY Maplefall house
+ * fronts a road. The court-and-cluster texture comes from the ROAD WEB --
+ * short segments, tightly meshed and interconnected near the centre --
+ * not from bands of houses sitting off the lanes.
+ *
+ * So the lanes change texture with distance from the green. Inside
+ * `growthRadius x MESH_RADIUS_FACTOR` the web reticulates: branch slots
+ * come twice as often, new streets are short, they snap into their
+ * neighbours readily, and growth prefers opening another one over
+ * lengthening what is there. Outside it the existing rules stand
+ * unchanged, so the fringe keeps its long clean radials.
+ *
+ * Centre grows by reticulation, edge grows by extension.
+ */
+export const MESH_RADIUS_FACTOR = 0.9;
+/*
+ * Why 0.9 and not the 0.6 the brief suggested: `growthRadiusM` derives from
+ * `predictedBuiltRadius`, and this wave established that the prediction
+ * under-reports the real fabric 2.5-3x. Measured at pop 900: predicted
+ * built radius 90 m, growth radius 108 m, ACTUAL fabric radius 153-166 m.
+ * At 0.6 the mesh reached only 65 m -- the innermost 40% of the settlement
+ * -- against a brief whose stated intent is "the central ~100 m should
+ * contain a mesh". 0.9 puts it at ~97 m, which is that intent. The formula
+ * could not be taken literally because the radius it multiplies is a
+ * prediction, not a measurement, and the mesh runs during growth (pass 2)
+ * where no measured fabric radius exists yet.
+ */
+/** Branch-slot pitch inside the mesh radius (against BRANCH_SPACING_M
+ * outside it): junctions twice as often, which is what makes blocks. */
+export const MESH_BRANCH_SPACING_M = 24;
+/** Lots a MESH street is sized to carry, in place of the need-derived
+ * count used outside. Short streets, so the centre fills with many of them
+ * rather than a few long ones. */
+export const MESH_BRANCH_LOTS = 6;
+/** Loop-snap radius inside the mesh radius (against LOOP_SNAP_M outside).
+ * A wider snap is what closes short central streets into blocks and
+ * courts instead of leaving them as dead ends. The class-drop rule for a
+ * snapped connector is unchanged -- it is still a connector. */
+export const MESH_LOOP_SNAP_M = 18;
 /** Crossing checks ignore intersections with a branch's own PARENT this
  * close to the branch's start — that is the junction the branch exists to
  * make, not an untidy crossing. (Gate 4: crossings with any OTHER lane are
