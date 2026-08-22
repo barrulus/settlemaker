@@ -1,3 +1,4 @@
+import type { Point } from '../types/point.js';
 import { SeededRandom } from '../utils/random.js';
 import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import { buildSite } from './site.js';
@@ -18,7 +19,7 @@ import {
 import { intrudesOnLane, spendCensus, type SpendResult } from './dwellings.js';
 import { resetLotTrace, type LotTrace } from './lot-trace.js';
 import { dressVillage } from './dressing/index.js';
-import { closestPointOnSegment, dist } from './geometry.js';
+import { closestPointOnSegment, dist, segmentIntersection } from './geometry.js';
 import {
   ARM_LOT_RADIUS_SHARE, BRANCH_SPACING_M, FRONT_ON_LANE_EPS_M, GAP_TIGHTEN_STEP_M,
   GREEN_JOIN_RATIO, HAMLET_RIBBON_POP,
@@ -34,6 +35,17 @@ export const VILLAGE_POP_CEILING = 1000;
 
 // Every tunable below comes from constants.ts. VILLAGE_POP_CEILING lives
 // here because it is a routing decision, not a value a gate would tune.
+
+/** Do two polylines properly cross? Endpoint touches are junctions, and
+ * `segmentIntersection` already excludes them. */
+function crossesLane(a: Point[], b: Point[]): boolean {
+  for (let i = 1; i < a.length; i++) {
+    for (let j = 1; j < b.length; j++) {
+      if (segmentIntersection(a[i - 1], a[i], b[j - 1], b[j])) return true;
+    }
+  }
+  return false;
+}
 
 /** `<laneId>/c` -- the connector sub-space `connectDeadEnds` adds. */
 function isConnectorLane(laneId: string): boolean {
@@ -297,10 +309,36 @@ export function generateVillage(
   // keeps its unrelaxed geometry: that geometry was already verified clear
   // when the building was seated, and losing a 1.5 m cosmetic nudge is
   // nothing beside a house standing in the road.
+  //
+  // GATE 6.10 adds the second half of exactly that argument. The nudge can
+  // also carry a lane point ACROSS a neighbouring lane, and nothing looked:
+  // growth guarantees zero crossings, relaxation runs after every crossing
+  // check, and with the arc primitive the fabric is dense enough for a
+  // 1.5 m nudge to matter -- measured, one crossing at pop 300 and three at
+  // pop 900, in every case a lane against its own arc child near their
+  // junction. Same remedy, same reasoning: a lane whose relaxed geometry
+  // crosses another keeps its unrelaxed geometry, which was verified
+  // crossing-free when it was grown. Reverting only ever moves a lane back
+  // toward a form that crossed nothing, so the sweep converges; it is
+  // bounded anyway, and walked in id order so it can never depend on array
+  // position.
   const relaxedLanes = relaxLanes(lanes, spend.buildings).map((relaxedLane) => {
     const intrudes = spend.buildings.some((b) => intrudesOnLane(b, [relaxedLane]));
     return intrudes ? (lanes.find((l) => l.id === relaxedLane.id) ?? relaxedLane) : relaxedLane;
   });
+  for (let pass = 0; pass < 4; pass++) {
+    const order = relaxedLanes.map((l, i) => i)
+      .sort((a, b) => relaxedLanes[a].id.localeCompare(relaxedLanes[b].id));
+    let reverted = false;
+    for (const i of order) {
+      const original = lanes.find((l) => l.id === relaxedLanes[i].id);
+      if (!original || original === relaxedLanes[i]) continue;
+      const crosses = relaxedLanes.some((other, j) => j !== i
+        && crossesLane(relaxedLanes[i].points, other.points));
+      if (crosses) { relaxedLanes[i] = original; reverted = true; }
+    }
+    if (!reverted) break;
+  }
   // Gate 6.3, RED CONNECTORS. Runs here, on the FINAL geometry, and this
   // position is load-bearing twice over.
   //
