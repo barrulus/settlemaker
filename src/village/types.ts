@@ -213,6 +213,55 @@ export function lotId(laneId: string, side: 1 | -1, ordinal: number): string {
   return `${laneId}:${side === 1 ? 'R' : 'L'}${ordinal}`;
 }
 
+/**
+ * Gate 6.9, THE RE-CUT ID SPACE. `<laneId>:<R|L><n>+r<pass>`.
+ *
+ * A lot cut by the FIRST pass down a lane keeps the plain `lotId` form, and
+ * its ordinal keeps meaning what §2's stable-id invariant says it means:
+ * position counted from the green end, so adding fabric further out never
+ * renumbers what is already nearer the green.
+ *
+ * `recutFreedGround` cuts a SECOND (and third) time, into the gaps claim
+ * resolution left behind. Those lots cannot borrow the first pass's
+ * ordinals -- the whole point is that they sit BETWEEN them -- so they get
+ * their own suffixed space, one counter per (lane, side, pass), numbered in
+ * arc order from the green end exactly as the first pass is. The suffix
+ * makes a re-cut lot identifiable at a glance in a render or a probe, and
+ * keeps every id unique without the first pass's ids ever moving.
+ */
+export const RECUT_ID_SEPARATOR = '+r';
+
+export function recutLotId(
+  laneId: string, side: 1 | -1, ordinal: number, pass: number,
+): string {
+  return `${lotId(laneId, side, ordinal)}${RECUT_ID_SEPARATOR}${pass}`;
+}
+
+/**
+ * Ordinal spacing between re-cut passes. Claim resolution orders a strip by
+ * ordinal and treats ADJACENT ordinals as one pass's business (see
+ * `resolveInnerCurves`); giving each re-cut pass a block of its own above
+ * every first-pass ordinal keeps that reading true — a re-cut lot is never
+ * mistaken for the first-pass neighbour it happens to sit beside.
+ */
+export const RECUT_ORDINAL_BASE = 1000;
+
+/**
+ * The sort key for a lot within its (lane, side) strip: the first pass's
+ * ordinals in order, then each re-cut pass's, in arc order within the pass.
+ * Parsing the trailing digits alone would read `...:R3+r2` as ordinal 2.
+ */
+export function lotOrdinal(id: string): number {
+  const cut = id.lastIndexOf(RECUT_ID_SEPARATOR);
+  if (cut < 0) {
+    const m = /(\d+)$/.exec(id);
+    return m ? parseInt(m[1], 10) : 0;
+  }
+  const pass = parseInt(id.slice(cut + RECUT_ID_SEPARATOR.length), 10) || 0;
+  const m = /(\d+)$/.exec(id.slice(0, cut));
+  return pass * RECUT_ORDINAL_BASE + (m ? parseInt(m[1], 10) : 0);
+}
+
 export function buildingId(lotIdValue: string): string {
   return `bld:${lotIdValue}`;
 }
