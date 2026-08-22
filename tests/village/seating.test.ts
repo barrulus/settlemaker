@@ -2,7 +2,16 @@ import { describe, it, expect } from 'vitest';
 import { Point } from '../../src/types/point.js';
 import { SeededRandom } from '../../src/utils/random.js';
 import { overlaps, seat, sizeFor } from '../../src/village/dwellings.js';
-import { FIT_MAX, FIT_MIN, SIZE_JITTER } from '../../src/village/constants.js';
+import {
+  FIT_MAX, FIT_MIN, SEATING_BEARING_JITTER_DEG, SIZE_JITTER,
+} from '../../src/village/constants.js';
+
+/** Shorter way round between two bearings, 0..180. */
+const angDist = (a: number, b: number): number => Math.abs(((a - b + 540) % 360) - 180);
+/** Distance from whichever aspect the dwelling took: square-on or gable-on. */
+const offNearestAspect = (bearingDeg: number, squareOn: number): number => Math.min(
+  angDist(bearingDeg, squareOn), angDist(bearingDeg, squareOn + 90),
+);
 import { baseDeck } from '../../src/village/deck.js';
 import type { DeckEntry } from '../../src/village/deck.js';
 import type { Lot } from '../../src/village/types.js';
@@ -100,8 +109,14 @@ describe('seat', () => {
     // Door convention (2026-08-21 gate): glyph entrances are drawn on the
     // glyph's south edge, so rotating by the lot's facing bearing put every
     // door on the FAR side. The +180 puts the door edge onto the lane.
+    //
+    // Gate 5.3 adds organic seating on top: a free-rotating dwelling takes
+    // a +/-SEATING_BEARING_JITTER_DEG nudge and, one time in ten, a +90
+    // gable-on turn. So the assertion is the door convention WITHIN that
+    // tolerance, rather than an exact equality that would only be pinning
+    // one seed's jitter draw.
     const b = seat(house, lot(12, 10, 0, 270), new SeededRandom(1));
-    expect(b.bearingDeg).toBeCloseTo(90, 5);
+    expect(offNearestAspect(b.bearingDeg, 90)).toBeLessThanOrEqual(SEATING_BEARING_JITTER_DEG + 1e-6);
   });
 
   it('derives the building id from the lot id', () => {
@@ -164,8 +179,29 @@ describe('seat', () => {
       // Without honouring the rotation class this would still pass by
       // accident for 'free' glyphs, so this test exists mainly to pin the
       // normal path alongside the two special ones.
+      // Within gate 5.3's jitter/gable tolerance, as above.
       const b = seat(house, lot(12, 0, 0, 137), new SeededRandom(1));
-      expect(b.bearingDeg).toBeCloseTo(317, 5);
+      expect(offNearestAspect(b.bearingDeg, 317)).toBeLessThanOrEqual(SEATING_BEARING_JITTER_DEG + 1e-6);
+    });
+
+    it('gate 5.3: free glyphs vary -- not every house is square to its lane', () => {
+      // The defect this closes: every house sat parade-parallel. Across
+      // many seeds a free-rotating dwelling must actually take a spread of
+      // bearings, and about a tenth of them must sit gable-on.
+      const bearings: number[] = [];
+      for (let seed = 1; seed <= 300; seed++) {
+        bearings.push(seat(house, lot(12, 0, 0, 0), new SeededRandom(seed)).bearingDeg);
+      }
+      // Lot bearing 0 -> square-on render bearing 180, gable-on 270.
+      const exactlySquare = bearings.filter((b) => angDist(b, 180) < 0.25).length;
+      expect(exactlySquare).toBeLessThan(bearings.length / 4); // not a parade
+      const gable = bearings.filter((b) => angDist(b, 270) <= SEATING_BEARING_JITTER_DEG + 1e-6).length;
+      expect(gable).toBeGreaterThan(0);
+      expect(gable).toBeLessThan(bearings.length / 3);
+      // Never further from an aspect than the jitter allows.
+      for (const b of bearings) {
+        expect(offNearestAspect(b, 180)).toBeLessThanOrEqual(SEATING_BEARING_JITTER_DEG + 1e-6);
+      }
     });
   });
 });

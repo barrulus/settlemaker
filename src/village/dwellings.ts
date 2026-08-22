@@ -5,7 +5,8 @@ import {
 } from './geometry.js';
 import { inkExtent, nominalFootprint, rotationOf } from './glyphs.js';
 import {
-  FIT_MAX, FIT_MIN, SEATING_SETBACK_MAX_M, SIZE_JITTER,
+  FIT_MAX, FIT_MIN, SEATING_BEARING_JITTER_DEG, SEATING_GABLE_CHANCE,
+  SEATING_SETBACK_MAX_M, SIZE_JITTER,
 } from './constants.js';
 import { buildingId, type Building, type Lane, type Lot, type Site } from './types.js';
 import { drawEntry, eligible, type DeckEntry } from './deck.js';
@@ -80,11 +81,19 @@ export function sizeFor(
  * `upVector`; the durable fix is regenerating it with upVector per its
  * own integration notes, at which point this becomes data-driven.
  */
-export function renderBearingFor(glyph: string, lotBearingDeg: number): number {
+export function renderBearingFor(
+  glyph: string, lotBearingDeg: number,
+  jitterDeg: number = 0, gableOn: boolean = false,
+): number {
   const rotation = rotationOf(glyph);
   if (rotation === 'invariant') return 0;
   if (rotation === 'snap-cardinal') return wrapDeg(Math.round((lotBearingDeg + 180) / 90) * 90);
-  return wrapDeg(lotBearingDeg + 180);
+  // Gate 5.3's organic seating applies ONLY to genuinely free rotation.
+  // `locked` means the artwork's orientation is not ours to vary, and
+  // `invariant`/`snap-cardinal` were already exempt above -- so a round hut
+  // or a cardinal-snapped landmark is untouched by any of this.
+  if (rotation !== 'free') return wrapDeg(lotBearingDeg + 180);
+  return wrapDeg(lotBearingDeg + 180 + (gableOn ? 90 : 0) + jitterDeg);
 }
 
 /** Seat a dwelling at the front of its lot, facing the way the lot faces. */
@@ -105,6 +114,13 @@ export function seat(entry: DeckEntry, lot: Lot, rng: SeededRandom): Building {
   // front + setback.
   const inkMarginM = (footprint[1] - inkExtent(entry.glyph, footprint).depth) / 2;
   const offset = setback + footprint[1] / 2 - inkMarginM;
+  // Gate 5.3, organic seating. DRAW ORDER: these two are APPENDED after the
+  // existing seat draws (sizeFor's, then the setback float), so every draw
+  // that came before keeps its place in the sequence. Both are rolled for
+  // EVERY dwelling, including glyphs that will ignore them, so the draw
+  // count never depends on which glyph the deck handed us.
+  const bearingJitterDeg = (rng.float() * 2 - 1) * SEATING_BEARING_JITTER_DEG;
+  const gableOn = rng.bool(SEATING_GABLE_CHANCE);
   return {
     id: buildingId(lot.id),
     lotId: lot.id,
@@ -113,7 +129,7 @@ export function seat(entry: DeckEntry, lot: Lot, rng: SeededRandom): Building {
       lot.front.x + inward.x * offset,
       lot.front.y + inward.y * offset,
     ),
-    bearingDeg: renderBearingFor(entry.glyph, lot.bearingDeg),
+    bearingDeg: renderBearingFor(entry.glyph, lot.bearingDeg, bearingJitterDeg, gableOn),
     footprint,
     occupancy: Math.round(entry.occupancy * entry.sizeFactor),
   };

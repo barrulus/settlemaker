@@ -240,6 +240,21 @@ export const FIT_MIN = 0.85;
 export const FIT_MAX = 1.15;
 /** Gate 3: houses still read as set back too far. Was 1.5, then 0.5. */
 export const SEATING_SETBACK_MAX_M = 0.3;
+/**
+ * Gate 5.3: houses sat parade-parallel, every one exactly square to its
+ * lane, which is the single loudest difference from the reference village.
+ * A free-rotating dwelling now takes a bearing jitter of +/- this many
+ * degrees -- enough to break the parade, small enough that the row still
+ * reads as a row and every door still lands on its own street.
+ */
+export const SEATING_BEARING_JITTER_DEG = 8;
+/**
+ * Gate 5.3: and this fraction of free-rotating dwellings turn GABLE-ON to
+ * the lane (+90). Real rows are not uniform in aspect: the odd house
+ * presents its end wall to the street. Rolled for every dwelling so the
+ * draw count never depends on the outcome.
+ */
+export const SEATING_GABLE_CHANCE = 0.1;
 export const DECK_GAP_M = 1.5;
 
 /** One dwelling family per village (the village-rows rule, restored at the
