@@ -1,13 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { Point } from '../../src/types/point.js';
+import { generateVillage, VILLAGE_POP_CEILING } from '../../src/village/village-model.js';
+// Gate 6.4 moved the trunk-reach rule to `skeleton/lanes.ts`, where
+// `availableFrontage` needs it too -- the budget must count only frontage
+// this rule will let the cutter use.
+import { lotReachFor } from '../../src/village/skeleton/lanes.js';
 import {
-  generateVillage, lotReachFor, VILLAGE_POP_CEILING,
-} from '../../src/village/village-model.js';
-import {
-  ARM_LOT_RADIUS_SHARE, EDGE_STYLE_ORDER, HAMLET_RIBBON_POP,
+  ARM_LOT_RADIUS_SHARE, EDGE_STYLE_ORDER, HAMLET_RIBBON_POP, SECTOR_COVERAGE_DEG,
 } from '../../src/village/constants.js';
 import type { RouteType } from '../../src/village/route-class.js';
-import { closestPointOnSegment, dist, segmentIntersection } from '../../src/village/geometry.js';
+import {
+  bearingOf, closestPointOnSegment, dist, segmentIntersection,
+} from '../../src/village/geometry.js';
 import type { Lane } from '../../src/village/types.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 
@@ -283,10 +287,23 @@ describe('connectDeadEnds (gate 6.3: red connectors)', () => {
   it('closes the majority of interior dead ends at 300 and 900', () => {
     for (const population of [300, 900]) {
       const m = generateVillage(popInput(population), 1);
+      // INTERIOR, as the name says. Gate 6.4's coverage seeding pushes
+      // lanes into empty sectors, and one that runs past the built fabric
+      // ends in open country -- which is a lane reaching outward, not a
+      // dead end in the web. The p95 building radius is the fabric edge the
+      // acceptance metric uses, so this uses it too. Before this the test
+      // counted every invented lane's end at any radius, which quietly
+      // conflated the two.
+      const dists = m.buildings.map((b) => dist(b.position, m.green.centre)).sort((a, c) => a - c);
+      const fabricR = dists[Math.floor(dists.length * 0.95)];
       const invented = m.lanes.filter((l) => !l.id.startsWith('arm-'));
-      const deadEnds = invented.filter((l) => !endsOnAnother(l, m.lanes));
+      const interior = invented.filter(
+        (l) => dist(l.points[l.points.length - 1], m.green.centre) <= fabricR,
+      );
+      const deadEnds = interior.filter((l) => !endsOnAnother(l, m.lanes));
+      expect(interior.length).toBeGreaterThan(0);
       // Far more lanes than dead ends: the web is closed, not a fan.
-      expect(deadEnds.length).toBeLessThan(invented.length / 2);
+      expect(deadEnds.length).toBeLessThan(interior.length / 2);
     }
   });
 
@@ -308,4 +325,55 @@ describe('connectDeadEnds (gate 6.3: red connectors)', () => {
       }
     }
   }, 20000);
+});
+
+// Gate 6.4: the owner's pop-600 screenshot had the WEST HALF of the disc
+// laneless while houses crowded the east. Saturation was sector-blind --
+// branch slots exist only ON lanes, so a sector no lane ever entered
+// offered nothing to do, the ring reported itself full while empty, and the
+// radius widened past a hole it could not see.
+describe('angular coverage (gate 6.4: no laneless sector)', () => {
+  /** Widest run of bearings from the green with no lane point inside `radiusM`. */
+  const widestLanelessSectorDeg = (m: ReturnType<typeof generateVillage>, radiusM: number): number => {
+    const BUCKET = 2;
+    const n = 360 / BUCKET;
+    const covered = new Array<boolean>(n).fill(false);
+    const mark = (p: Point): void => {
+      const d = dist(p, m.green.centre);
+      if (d > radiusM || d < 1) return;
+      covered[Math.floor(bearingOf(m.green.centre, p) / BUCKET) % n] = true;
+    };
+    for (const lane of m.lanes) {
+      for (let i = 0; i < lane.points.length; i++) {
+        mark(lane.points[i]);
+        if (i === 0) continue;
+        const a = lane.points[i - 1];
+        const b = lane.points[i];
+        const steps = Math.max(1, Math.ceil(dist(a, b) / 4));
+        for (let k = 1; k < steps; k++) {
+          mark(new Point(a.x + ((b.x - a.x) * k) / steps, a.y + ((b.y - a.y) * k) / steps));
+        }
+      }
+    }
+    let worst = 0;
+    let run = 0;
+    for (let i = 0; i < n * 2; i++) {
+      if (covered[i % n]) run = 0; else { run += 1; worst = Math.max(worst, run); }
+    }
+    return Math.min(360, worst * BUCKET);
+  };
+
+  it('leaves no laneless sector wider than SECTOR_COVERAGE_DEG + a bucket, at 300/600/900', () => {
+    for (const population of [300, 600, 900]) {
+      for (const seed of [1, 2]) {
+        const m = generateVillage({ ...base, population }, seed);
+        const dists = m.buildings.map((b) => dist(b.position, m.green.centre)).sort((a, c) => a - c);
+        const fabricR = dists[Math.floor(dists.length * 0.95)];
+        // The seeder acts on sectors wider than SECTOR_COVERAGE_DEG; one
+        // sample bucket of slack absorbs the discretisation, and a seeded
+        // lane can still leave a little either side of itself.
+        expect(widestLanelessSectorDeg(m, fabricR)).toBeLessThan(SECTOR_COVERAGE_DEG + 10);
+      }
+    }
+  }, 30000);
 });

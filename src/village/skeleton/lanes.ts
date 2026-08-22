@@ -1,6 +1,7 @@
 import { Point } from '../../types/point.js';
 import { SeededRandom } from '../../utils/random.js';
 import { classRank, laneWidth, stepDown, type RouteType } from '../route-class.js';
+import { intrudesOnLane } from '../dwellings.js';
 import {
   angularGap, arcLengths, bearingOf, bearingVector, closestPointOnSegment, dist,
   polylineLength, sampleAt, segmentIntersection, greenDrawnRadius,
@@ -9,11 +10,13 @@ import {
   BRANCH_LOTS_TARGET, BRANCH_MAX_M, BRANCH_MIN_M, BRANCH_SPACING_M, FRONTAGE_MARGIN,
   GREEN_ARM_MAX, GREEN_ARM_MIN, GREEN_ARM_SPACING_M, GREEN_UNDERLAP_RATIO,
   GROWTH_RADIUS_STEP, INVENTED_ARM_LENGTH_FACTOR, JUNCTION_CLEAR_M, LANE_SAMPLE_STEP_M,
-  CONNECT_MAX_M, CONNECT_MIN_M, LANE_CURVE_MAX_M, LOOP_SNAP_M, MAX_INVENTED_LANES,
-  MIN_ARM_SEPARATION_DEG, SATURATION_RING_START_M, SATURATION_RING_STEP_M,
+  ARM_LOT_RADIUS_SHARE, CONNECT_MAX_M, CONNECT_MIN_M, HAMLET_RIBBON_POP, LANE_CURVE_MAX_M,
+  LOOP_SNAP_M, MAX_INVENTED_LANES, MIN_ARM_SEPARATION_DEG, SATURATION_RING_START_M,
+  SATURATION_RING_STEP_M, SECTOR_COVERAGE_DEG, SECTOR_SAMPLE_DEG,
 } from '../constants.js';
 import {
-  armLaneId, branchLaneId, inventedLaneId, type Green, type Lane, type Site, type SiteRoute,
+  armLaneId, branchLaneId, inventedLaneId,
+  type Building, type Green, type Lane, type Site, type SiteRoute,
 } from '../types.js';
 
 // geometry.ts owns polylineLength; re-exported here since Task 8's tests
@@ -292,19 +295,63 @@ function branchLengthM(meanFrontageM: number): number {
  * is, and not at all when neither is -- enough precision for an estimate
  * the loop only uses to decide whether to grow again.
  */
+/**
+ * Gate 6.3: how far out along a given lane lots may be cut.
+ *
+ * A TRUNK-class lane -- royal/main/market/town, i.e. one of FMG's own arms,
+ * drawn to the map edge and never grown -- carries lots only within
+ * ARM_LOT_RADIUS_SHARE of the saturated disc. Beyond that it is a plain
+ * road leaving the village, which is what the owner drew: "no isolated long
+ * roads leading away from the core", the arm bare past the cluster body.
+ *
+ * The village's own invented streets (local/trail/footpath) keep the whole
+ * disc -- they ARE the cluster.
+ *
+ * Below HAMLET_RIBBON_POP the cap lifts entirely: "only in tiny hamlets is
+ * stretch on the road fine."
+ */
+export function lotReachFor(
+  lane: Lane, saturatedRadiusM: number, population: number,
+): number {
+  if (population < HAMLET_RIBBON_POP) return saturatedRadiusM;
+  const isTrunk = classRank(lane.type) <= classRank('town');
+  return isTrunk ? saturatedRadiusM * ARM_LOT_RADIUS_SHARE : saturatedRadiusM;
+}
+
+
+/**
+ * Both sides of every lane are frontage -- but only the stretch that will
+ * actually be CUT into lots. Two limits apply, and both must be here or the
+ * growth budget buys frontage it can never use:
+ *  - the saturated disc (gate 5.1/6.2): nothing outside it is cut;
+ *  - the TRUNK CAP (gate 6.3): a trunk-class arm is cut only within
+ *    ARM_LOT_RADIUS_SHARE of that disc.
+ *
+ * Gate 6.4 fixes the second. 6.3 stopped CUTTING beyond the trunk cap but
+ * went on COUNTING that length, so the budget was satisfied by frontage
+ * that could never carry a house -- growth then under-built the web by
+ * exactly that amount, which is a direct cause of the sparse, gappy fabric
+ * the owner rejected.
+ *
+ * Segments are counted whole when both ends are inside the limit, half when
+ * one is, and not at all when neither is -- enough for an estimate the loop
+ * only uses to decide whether to grow again.
+ */
 export function availableFrontage(
   lanes: Lane[], green?: Green, maxDistanceM: number = Infinity,
+  population: number = 0,
 ): number {
   if (!green || !Number.isFinite(maxDistanceM)) {
     return lanes.reduce((sum, l) => sum + polylineLength(l.points) * 2, 0);
   }
   let total = 0;
   for (const lane of lanes) {
+    const reach = lotReachFor(lane, maxDistanceM, population);
     for (let i = 1; i < lane.points.length; i++) {
       const a = lane.points[i - 1];
       const b = lane.points[i];
-      const inA = dist(a, green.centre) <= maxDistanceM;
-      const inB = dist(b, green.centre) <= maxDistanceM;
+      const inA = dist(a, green.centre) <= reach;
+      const inB = dist(b, green.centre) <= reach;
       if (!inA && !inB) continue;
       total += dist(a, b) * (inA && inB ? 1 : 0.5) * 2;
     }
@@ -659,20 +706,31 @@ function growOne(
   return extendOne(out, green, meanFrontageM, growthRadiusM, rng, Infinity, satRadiusM);
 }
 
-/** Nearest point on any lane other than `excludeIds`, with its distance. */
-function nearestOnOtherLane(
+/**
+ * Every lane's nearest point to `from`, nearest first -- one candidate per
+ * lane, so a dead end can try its second and third choice.
+ *
+ * Gate 6.4: this used to return only the single nearest point. Once
+ * connectors had to clear BUILDINGS as well as lanes, one blocked target
+ * abandoned the dead end entirely, and the closed-web count collapsed (7 of
+ * 10 interior lanes dead-ended again at pop 300). A neighbour that cannot
+ * be reached is a reason to try the next neighbour, not to give up.
+ */
+function nearestOnOtherLanes(
   from: Point, lanes: Lane[], excludeIds: Set<string>,
-): { point: Point; distance: number } | null {
-  let best: { point: Point; distance: number } | null = null;
+): Array<{ point: Point; distance: number }> {
+  const out: Array<{ point: Point; distance: number }> = [];
   for (const lane of lanes) {
     if (excludeIds.has(lane.id)) continue;
+    let best: { point: Point; distance: number } | null = null;
     for (let i = 1; i < lane.points.length; i++) {
       const q = closestPointOnSegment(from, lane.points[i - 1], lane.points[i]);
       const d = dist(from, q);
       if (!best || d < best.distance) best = { point: q, distance: d };
     }
+    if (best) out.push(best);
   }
-  return best;
+  return out.sort((a, b) => a.distance - b.distance);
 }
 
 /** Does this polyline cross any lane anywhere? Endpoint touches do not
@@ -715,7 +773,9 @@ function crossesAnyLane(points: Point[], lanes: Lane[]): boolean {
  * end. A connector is footpath class -- the owner's standing rule that a
  * loop is made at a lower class than the lanes it joins.
  */
-export function connectDeadEnds(lanes: Lane[], green: Green): Lane[] {
+export function connectDeadEnds(
+  lanes: Lane[], green: Green, buildings: Building[] = [],
+): Lane[] {
   const out = [...lanes];
   const candidates = lanes
     .filter((l) => !l.id.startsWith('arm-') && l.points.length >= 2)
@@ -725,31 +785,138 @@ export function connectDeadEnds(lanes: Lane[], green: Green): Lane[] {
   for (const lane of candidates) {
     if (endsOnAnotherLane(lane, out)) continue;
     const end = lane.points[lane.points.length - 1];
-    const target = nearestOnOtherLane(end, out, new Set([lane.id]));
-    if (!target) continue;
-    if (target.distance > CONNECT_MAX_M || target.distance < CONNECT_MIN_M) continue;
+    for (const target of nearestOnOtherLanes(end, out, new Set([lane.id]))) {
+      if (target.distance > CONNECT_MAX_M) break; // sorted: the rest are further
+      if (target.distance < CONNECT_MIN_M) continue;
 
-    const points = [end, target.point];
-    // Tested against EVERY lane including its own parent. The connector
-    // legitimately touches its parent at the start and its target at the
-    // end, and `segmentIntersection` ignores both as endpoint touches --
-    // so no lane needs excluding, and excluding the parent (as this first
-    // did) lets a connector curl back and cut across the very lane it
-    // grew from. Measured as one crossing at pop 900 seed 2.
-    if (crossesAnyLane(points, out)) continue;
-    // Under the green's turf every radial shares the ground and no crossing
-    // is visible; a connector there would be invisible clutter.
-    if (dist(target.point, green.centre) <= green.diameter / 2) continue;
+      const points = [end, target.point];
+      // Tested against EVERY lane including its own parent. The connector
+      // legitimately touches its parent at the start and its target at the
+      // end, and `segmentIntersection` ignores both as endpoint touches --
+      // so no lane needs excluding, and excluding the parent (as this first
+      // did) lets a connector curl back and cut across the very lane it
+      // grew from. Measured as one crossing at pop 900 seed 2.
+      if (crossesAnyLane(points, out)) continue;
+      // Under the green's turf every radial shares the ground and no
+      // crossing is visible; a connector there would be invisible clutter.
+      if (dist(target.point, green.centre) <= green.diameter / 2) continue;
 
-    out.push({
-      id: `${lane.id}/c`,
-      type: 'footpath',
-      points,
-      widthM: laneWidth('footpath'),
-      parentId: lane.id,
-    });
+      const connector: Lane = {
+        id: `${lane.id}/c`,
+        type: 'footpath',
+        points,
+        widthM: laneWidth('footpath'),
+        parentId: lane.id,
+      };
+      // Gate 6.4: and it must not run through a HOUSE. Connectors are
+      // placed after seating, so unlike every other lane they meet a
+      // fabric that is already built -- and nothing else in this pass
+      // would notice. Missing this put buildings in the road once
+      // connectors were adopted whether or not a re-seat followed.
+      if (buildings.some((b) => intrudesOnLane(b, [connector]))) continue;
+      out.push(connector);
+      break; // this dead end is closed; on to the next
+    }
   }
   return out;
+}
+
+/**
+ * Gate 6.4: which bearings from the green have ANY lane in them, inside
+ * `radiusM`. Buckets are SECTOR_SAMPLE_DEG wide; segments are walked, not
+ * just their vertices, so a long lane crossing a sector marks it covered
+ * even when neither endpoint sits there.
+ */
+function angularCoverage(lanes: Lane[], green: Green, radiusM: number): boolean[] {
+  const buckets = Math.round(360 / SECTOR_SAMPLE_DEG);
+  const covered = new Array<boolean>(buckets).fill(false);
+  const mark = (p: Point): void => {
+    const d = dist(p, green.centre);
+    if (d > radiusM || d < 1) return;
+    covered[Math.floor(bearingOf(green.centre, p) / SECTOR_SAMPLE_DEG) % buckets] = true;
+  };
+  for (const lane of lanes) {
+    for (let i = 0; i < lane.points.length; i++) {
+      mark(lane.points[i]);
+      if (i === 0) continue;
+      const a = lane.points[i - 1];
+      const b = lane.points[i];
+      const steps = Math.max(1, Math.ceil(dist(a, b) / 4));
+      for (let k = 1; k < steps; k++) {
+        mark(new Point(a.x + ((b.x - a.x) * k) / steps, a.y + ((b.y - a.y) * k) / steps));
+      }
+    }
+  }
+  return covered;
+}
+
+/** The widest run of uncovered buckets, as {bisectorDeg, widthDeg}. */
+function widestGap(covered: boolean[]): { bisectorDeg: number; widthDeg: number } {
+  const n = covered.length;
+  if (covered.every((c) => !c)) return { bisectorDeg: 0, widthDeg: 360 };
+  let best = { start: 0, len: 0 };
+  let i = 0;
+  // Walk twice round so a run spanning bearing 0 is measured whole.
+  while (i < n * 2) {
+    if (covered[i % n]) { i += 1; continue; }
+    const start = i;
+    let len = 0;
+    while (len < n && !covered[(start + len) % n]) len += 1;
+    if (len > best.len) best = { start: start % n, len };
+    i = start + len;
+  }
+  return {
+    bisectorDeg: ((best.start + best.len / 2) * SECTOR_SAMPLE_DEG) % 360,
+    widthDeg: best.len * SECTOR_SAMPLE_DEG,
+  };
+}
+
+/**
+ * Gate 6.4: fill the biggest hole in the ring's angular coverage.
+ *
+ * Growth is otherwise sector-blind -- branch slots exist only ON lanes, so
+ * a sector no lane ever entered offers nothing to do and the ring reports
+ * itself full while empty. This is what the owner saw as a laneless western
+ * half. Called before any ring widening; returns true if it seeded a lane.
+ *
+ * The seed starts at the GREEN's ring, because an uncovered sector by
+ * definition has no lane anywhere along that bearing -- including next to
+ * the green -- so the green's edge is both the nearest available start and
+ * the one that fills the sector from the centre outward.
+ *
+ * Deliberately NOT subject to `greenArmCap`: that cap governs how the
+ * green's own ring LOOKS, and a village with an empty quadrant needs a lane
+ * there whatever the green already carries. See the note at GREEN_ARM_MAX.
+ */
+function seedCoverageLane(
+  out: Lane[], green: Green, meanFrontageM: number, satRadiusM: number, rng: SeededRandom,
+): boolean {
+  const gap = widestGap(angularCoverage(out, green, satRadiusM));
+  if (gap.widthDeg <= SECTOR_COVERAGE_DEG) return false;
+
+  const reach = Math.max(0, satRadiusM - greenDrawnRadius(green));
+  if (reach < BRANCH_MIN_M) return false;
+  const nominal = Math.min(reach, branchLengthM(meanFrontageM) * INVENTED_ARM_LENGTH_FACTOR);
+
+  // Probe outward from the bisector so a taken id or a blocked bearing does
+  // not abandon the whole sector.
+  for (const offset of [0, 6, -6, 12, -12, 18, -18]) {
+    const bearing = Math.round(gap.bisectorDeg + offset + 360) % 360;
+    const id = inventedLaneId(bearing);
+    if (out.some((l) => l.id === id || l.id === armLaneId(bearing))) continue;
+    const dir = bearingVector(bearing);
+    const start = new Point(
+      green.centre.x + dir.x * (green.diameter / 2) * GREEN_UNDERLAP_RATIO,
+      green.centre.y + dir.y * (green.diameter / 2) * GREEN_UNDERLAP_RATIO,
+    );
+    const points = truncateAtFirstCrossing(runLine(start, bearing, nominal, rng), out, green);
+    if (points.length < 2 || polylineLength(points) < BRANCH_MIN_M) continue;
+    out.push({
+      id, type: 'local', points, widthM: laneWidth('local'),
+    });
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -761,7 +928,7 @@ export function connectDeadEnds(lanes: Lane[], green: Green): Lane[] {
  */
 export function addInventedLanes(
   lanes: Lane[], green: Green, requiredM: number, meanFrontageM: number,
-  growthRadiusM: number, rng: SeededRandom,
+  growthRadiusM: number, rng: SeededRandom, population: number = 0,
 ): { lanes: Lane[]; radiusM: number } {
   const out = [...lanes];
   let guard = 0;
@@ -779,10 +946,15 @@ export function addInventedLanes(
   // the census; the cutter is handed this same radius below.
   const reachM = (): number => Math.min(satRadiusM, radiusM);
   const owed = (): number => requiredM * FRONTAGE_MARGIN
-    - availableFrontage(out, green, reachM());
+    - availableFrontage(out, green, reachM(), population);
   while (owed() > 0 && guard < MAX_INVENTED_LANES) {
     guard++;
     if (growOne(out, green, meanFrontageM, radiusM, rng, reachM())) continue;
+    // Gate 6.4: growth found nothing to do -- but "nothing to do" is
+    // measured over slots that only exist ON lanes, so an empty sector
+    // looks exactly like a full one. Check angular coverage BEFORE
+    // widening, and seed into the biggest hole if there is one.
+    if (seedCoverageLane(out, green, meanFrontageM, reachM(), rng)) continue;
     // Nothing left to do inside this ring. Widen it -- and only then, once
     // the ring has caught up with the outer growth circle, widen that too.
     // The outer circle and its stepping remain the ultimate bound; the ring

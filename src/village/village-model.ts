@@ -3,7 +3,8 @@ import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import { buildSite } from './site.js';
 import { predictedBuiltRadius, siteGreen } from './skeleton/green-siting.js';
 import {
-  addInventedLanes, availableFrontage, buildArms, connectDeadEnds, requiredFrontage,
+  addInventedLanes, availableFrontage, buildArms, connectDeadEnds, lotReachFor,
+  requiredFrontage,
 } from './skeleton/lanes.js';
 import { relaxLanes, trimTails } from './skeleton/relax.js';
 import {
@@ -30,29 +31,6 @@ export const VILLAGE_POP_CEILING = 1000;
 
 // Every tunable below comes from constants.ts. VILLAGE_POP_CEILING lives
 // here because it is a routing decision, not a value a gate would tune.
-
-/**
- * Gate 6.3: how far out along a given lane lots may be cut.
- *
- * A TRUNK-class lane -- royal/main/market/town, i.e. one of FMG's own arms,
- * drawn to the map edge and never grown -- carries lots only within
- * ARM_LOT_RADIUS_SHARE of the saturated disc. Beyond that it is a plain
- * road leaving the village, which is what the owner drew: "no isolated long
- * roads leading away from the core", the arm bare past the cluster body.
- *
- * The village's own invented streets (local/trail/footpath) keep the whole
- * disc -- they ARE the cluster.
- *
- * Below HAMLET_RIBBON_POP the cap lifts entirely: "only in tiny hamlets is
- * stretch on the road fine."
- */
-export function lotReachFor(
-  lane: Lane, saturatedRadiusM: number, population: number,
-): number {
-  if (population < HAMLET_RIBBON_POP) return saturatedRadiusM;
-  const isTrunk = classRank(lane.type) <= classRank('town');
-  return isTrunk ? saturatedRadiusM * ARM_LOT_RADIUS_SHARE : saturatedRadiusM;
-}
 
 /** `<laneId>/c` -- the connector sub-space `connectDeadEnds` adds. */
 function isConnectorLane(laneId: string): boolean {
@@ -151,12 +129,14 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
       : Math.max(0.25, spend.buildings.length / preResolutionLotCount);
     const required = round === 0
       ? requiredFrontage(site.population, occupancy, measuredMeanFrontage)
-      : availableFrontage(lanes, green, lotRadiusM)
+      : availableFrontage(lanes, green, lotRadiusM, site.population)
         + ((spend.unhoused / occupancy) * measuredMeanFrontage) / seatEfficiency;
     // The growth circle can widen when the cluster fills but frontage is
     // still owed; the cutter must use the SAME radius the growth actually
     // reached, or it refuses to fill the ground the lanes just covered.
-    const grown = addInventedLanes(lanes, green, required, measuredMeanFrontage, lotRadiusM, rng);
+    const grown = addInventedLanes(
+      lanes, green, required, measuredMeanFrontage, lotRadiusM, rng, site.population,
+    );
     lanes = grown.lanes;
     lotRadiusM = grown.radiusM;
 
@@ -233,15 +213,19 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
   // Run any earlier and it connects ends that no longer exist -- measured,
   // it added nothing at all and the dead-end count did not move.
   //
-  // Lots are then re-cut and re-seated over the enlarged set, because a
-  // connector is a street and carries frontage like any other. The census
-  // is already satisfied here, so the re-seat only lets the new frontage
-  // take its share -- and it cuts against TRIMMED lanes, which is stricter
-  // than the in-loop cut against untrimmed ones.
+  // A connector carries lots ONLY to the extent the census still needs them
+  // (gate 6.4). Cutting frontage along every connector regardless left them
+  // ~30% housed -- rows of empty claims that grow no house but still push
+  // fields and trees away, because the dressing passes avoid lot claims
+  // whether or not anything was built on them. So when the census is
+  // already satisfied the connectors are pure links, and no re-cut or
+  // re-seat happens at all.
   let relaxed = trimTails(relaxedLanes, spend.buildings);
-  const connected = connectDeadEnds(relaxed, green);
-  if (connected.length !== relaxed.length) {
-    relaxed = connected;
+  const connected = connectDeadEnds(relaxed, green, spend.buildings);
+  const connectorLotsNeeded = Math.ceil(spend.unhoused / Math.max(1, occupancy));
+  const gainedConnectors = connected.length !== relaxed.length;
+  relaxed = connected;
+  if (gainedConnectors && connectorLotsNeeded > 0) {
     const finalLaneTypes = new Map<string, RouteType>(relaxed.map((l) => [l.id, l.type]));
     finalLaneTypes.set('green', 'main');
     // ONLY the connectors are cut fresh. Re-cutting every lane against the
@@ -258,12 +242,18 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
     const liveLaneIds = new Set(relaxed.map((l) => l.id));
     lots = lots.filter((l) => l.laneId === 'green' || liveLaneIds.has(l.laneId));
 
+    // Capped to the shortfall: `connectorLotsNeeded` dwellings' worth, taken
+    // nearest the green first, so a connector supplies what is actually
+    // wanted instead of scattering half-empty rows across the fabric.
     const connectorLots = relaxed
       .filter((l) => isConnectorLane(l.id))
       .flatMap((l) => subdivideLane(
         l, green, builtRadius, f0, LOT_DEPTH_M, rng, lotFloorM, lotCapM,
         lotReachFor(l, lotRadiusM, site.population),
-      ));
+      ))
+      .sort((a, b) => dist(a.front, green.centre) - dist(b.front, green.centre)
+        || a.id.localeCompare(b.id))
+      .slice(0, connectorLotsNeeded);
     lots = orderLots(scoreLots(
       resolveConvergingLots(
         clipLots([...lots, ...connectorLots], green, site.water), relaxed, green,

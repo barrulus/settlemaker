@@ -58,6 +58,14 @@ export const GREEN_ARM_MIN = 2;
  * aim into the widest empty gap, so they fill quadrants instead of
  * fanning evenly. */
 export const GREEN_ARM_MAX = 4;
+/*
+ * NOTE (gate 6.4): this cap is an AESTHETIC rule about the green's own ring
+ * -- how many radials may fan off the turf before it reads as contrived.
+ * It is NOT a coverage limiter, and coverage seeding (below) deliberately
+ * ignores it: a village with an empty western half needs a lane there
+ * whatever the green already carries. Conflating the two is what let the
+ * cap silently cause the hole it had no business governing.
+ */
 
 /**
  * Pitch between branch slots along a parent lane. Every lane -- arms and
@@ -140,6 +148,25 @@ export const SATURATION_RING_START_M = 30;
 export const ARM_LOT_RADIUS_SHARE = 0.6;
 
 export const SATURATION_RING_STEP_M = 20;
+/**
+ * Gate 6.4, SECTOR COVERAGE. The owner's pop-600 screenshot had the WEST
+ * HALF of the disc laneless and empty while houses crowded the east.
+ *
+ * The cause is that saturation was SECTOR-BLIND. `growOne` decides a ring
+ * is full when no branch slot and no extension can be taken -- but slots
+ * only exist ON existing lanes, so a sector no lane ever entered offers no
+ * slots at all. The ring therefore reported itself full while sitting
+ * empty, and the radius widened past a hole it could not see.
+ *
+ * So before any widening, the bearings inside the ring are swept: a
+ * contiguous sector wider than this with no lane point in it gets a lane
+ * SEEDED toward its bisector. Only when coverage is satisfied AND no slot
+ * remains may the ring widen.
+ */
+export const SECTOR_COVERAGE_DEG = 50;
+/** Bearing bucket width for that sweep. Fine enough to locate a hole,
+ * coarse enough that one stray lane point does not mask one. */
+export const SECTOR_SAMPLE_DEG = 2;
 
 /**
  * Gate 6.3, RED CONNECTORS. The owner drew red lines linking branch ends
