@@ -14,6 +14,7 @@ import {
   LOOP_SNAP_M, MAX_INVENTED_LANES, MIN_ARM_SEPARATION_DEG, SATURATION_RING_START_M,
   SATURATION_RING_STEP_M, SECTOR_COVERAGE_DEG, SECTOR_SAMPLE_DEG,
   VOID_SCAN_STEP_M, VOID_SPACING_M, LANE_SEATING_YIELD, LANE_TILE_SPACING_M,
+  ARC_MAX_SWEEP_DEG, ARC_NEIGHBOURHOOD_M, ARC_RADIAL_TOL_DEG, LANE_PARALLEL_TOL_DEG,
 } from '../constants.js';
 import {
   armLaneId, branchLaneId, inventedLaneId,
@@ -629,17 +630,45 @@ function endsOnAnotherLane(lane: Lane, out: Lane[]): boolean {
  * thread past a neighbour, or run a while alongside one; what it may not do
  * is exist entirely inside ground the lanes already serve.
  */
-function earnsItsSpace(points: Point[], out: Lane[], parentId?: string): boolean {
+/**
+ * How far apart two UNDIRECTED headings are, in [0, 90]. A road has no
+ * forward and back: two lanes at 10 deg and 190 deg run alongside each
+ * other, and every angle comparison in this file that is about ALIGNMENT
+ * rather than direction of travel folds through here.
+ */
+function foldedGap(a: number, b: number): number {
+  const g = angularGap(a, b);
+  return Math.min(g, 180 - g);
+}
+
+/**
+ * GATE 6.10: the same rule, but only lanes running ALONGSIDE the candidate
+ * count against it -- see LANE_PARALLEL_TOL_DEG.
+ *
+ * The clearance `earnsItsSpace` guards is a LOT-STRIP clearance: two lanes
+ * closer than LANE_MIN_SPACING_M and pointing the same way have facing rows
+ * that fight, and one of every pair dies in §5.4 resolution. Two lanes that
+ * MEET at an angle share no strip except at the mouth. Measuring against
+ * every lane regardless of heading made the rule forbid, by construction,
+ * every street whose whole purpose is to tie two others together -- arcs,
+ * cross-links, block ends -- because such a street is a block's width from
+ * its neighbours everywhere along it and can never "open new ground".
+ */
+function earnsItsSpace(
+  points: Point[], out: Lane[], parentId?: string, alongsideOnly = false,
+): boolean {
   const others = out.filter((l) => l.id !== parentId);
   if (others.length === 0) return true;
   const acc = arcLengths(points);
   const total = acc[acc.length - 1];
   const gaps: number[] = [];
   for (let s = 0; s <= total; s += LANE_SAMPLE_STEP_M) {
-    const { p } = sampleAt(points, acc, s);
+    const { p, dirDeg } = sampleAt(points, acc, s);
     let nearest = Infinity;
     for (const lane of others) {
       for (let i = 1; i < lane.points.length; i++) {
+        if (alongsideOnly && foldedGap(dirDeg, bearingOf(lane.points[i - 1], lane.points[i]))
+          > LANE_PARALLEL_TOL_DEG) continue;
         nearest = Math.min(
           nearest, dist(p, closestPointOnSegment(p, lane.points[i - 1], lane.points[i])),
         );
@@ -782,6 +811,13 @@ function growOne(
   /** Try each candidate slot in order; returns true once one takes. */
   const tryBranch = (candidates: BranchSlot[]): boolean => {
     for (const slot of candidates) {
+      // GATE 6.10: where the fabric around this slot is a set of RIBS, the
+      // street it wants is the one that ties them — an arc at this slot's
+      // radius, sweeping to the neighbouring rib on each side. Tried first
+      // because a radial-ish branch into a radial fabric is what built the
+      // starfish; where the fabric is not radial `seedArcThrough` declines
+      // and the ordinary branch below is unchanged.
+      if (seedArcThrough(out, green, slot.anchor, slot.parent)) return true;
       // branchLaneId formats `at` as a 2-digit percent (~100 buckets per
       // parent); if this slot's bucket is taken, probe deterministically.
       // The id is identity, the anchor is authoritative for position.
@@ -1060,6 +1096,219 @@ function widestVoid(
   return best;
 }
 
+/** The nearest point on one lane to `p`, with that lane's LOCAL heading
+ * there — enough to ask which way the fabric runs near a point. */
+function nearestWithHeading(
+  p: Point, lane: Lane,
+): { point: Point; distance: number; dirDeg: number } | null {
+  let best: { point: Point; distance: number; dirDeg: number } | null = null;
+  for (let i = 1; i < lane.points.length; i++) {
+    const q = closestPointOnSegment(p, lane.points[i - 1], lane.points[i]);
+    const d = dist(p, q);
+    if (!best || d < best.distance) {
+      best = { point: q, distance: d, dirDeg: bearingOf(lane.points[i - 1], lane.points[i]) };
+    }
+  }
+  return best;
+}
+
+/**
+ * GATE 6.10: do the lanes near `p` run RADIALLY?
+ *
+ * A lane is radial where its local heading sits within ARC_RADIAL_TOL_DEG
+ * of the bearing out of the green at that point. `p` is called radial when
+ * at least two lanes lie within ARC_NEIGHBOURHOOD_M of it and at least half
+ * of them are ribs — one rib is a street, two or more with nothing crossing
+ * them is a starfish, and that is the shape an arc exists to break.
+ *
+ * Fewer than two neighbours means there is nothing to tie together, so the
+ * ordinary radial-ish primitives keep the ground.
+ */
+function locallyRadial(lanes: Lane[], p: Point, green: Green): boolean {
+  let radial = 0;
+  let total = 0;
+  for (const lane of lanes) {
+    const near = nearestWithHeading(p, lane);
+    if (!near || near.distance > ARC_NEIGHBOURHOOD_M) continue;
+    if (dist(near.point, green.centre) < greenDrawnRadius(green)) continue;
+    total += 1;
+    if (foldedGap(near.dirDeg, bearingOf(green.centre, near.point)) <= ARC_RADIAL_TOL_DEG) {
+      radial += 1;
+    }
+  }
+  return total >= 2 && radial * 2 >= total;
+}
+
+/**
+ * GATE 6.10: the arc itself — a street at constant radius through `through`,
+ * sweeping BOTH ways until it meets a lane, and joining it.
+ *
+ * Sampled at LANE_SAMPLE_STEP_M of ARC LENGTH, so it is an ordinary
+ * polyline in every respect the rest of the engine cares about: lots are
+ * cut along it, branch slots open on it, `truncateAtFirstCrossing` and
+ * `earnsItsSpace` judge it, and it curves gently by construction rather
+ * than by `laneCurve` (an arc's whole identity is its curvature, so it
+ * spends no rng at all — which is also why adding one shifts no draw
+ * downstream of it).
+ *
+ * JOIN, NEVER CROSS. Each sweep stops at the first intersection with an
+ * existing lane and ENDS on it, or short of one it passes within
+ * LOOP_SNAP_M of. The zero-crossing invariant is therefore satisfied by
+ * construction, and `segmentIntersection`'s endpoint exclusion is what lets
+ * the join read as a junction rather than a crossing.
+ *
+ * Returns the assembled polyline and how many of its two ends found a lane.
+ */
+function buildArc(
+  out: Lane[], green: Green, through: Point, snapExclude: Set<string>,
+): { points: Point[]; joinedEnds: number } | null {
+  const radiusM = dist(through, green.centre);
+  if (radiusM < greenDrawnRadius(green) + LANE_SAMPLE_STEP_M) return null;
+  const stepDeg = (LANE_SAMPLE_STEP_M / radiusM) * (180 / Math.PI);
+  const theta0 = bearingOf(green.centre, through);
+  const at = (deg: number): Point => {
+    const d = bearingVector(deg);
+    return new Point(green.centre.x + d.x * radiusM, green.centre.y + d.y * radiusM);
+  };
+
+  const sweep = (sign: 1 | -1): { pts: Point[]; joined: boolean } => {
+    const pts: Point[] = [];
+    let prev = through;
+    for (let k = 1; k * stepDeg <= ARC_MAX_SWEEP_DEG / 2; k++) {
+      const cur = at(theta0 + sign * k * stepDeg);
+      let hit: Point | null = null;
+      let hitD = Infinity;
+      for (const lane of out) {
+        for (let i = 1; i < lane.points.length; i++) {
+          const q = segmentIntersection(prev, cur, lane.points[i - 1], lane.points[i]);
+          if (!q) continue;
+          const d = dist(prev, q);
+          if (d < hitD) { hitD = d; hit = q; }
+        }
+      }
+      if (hit) { pts.push(hit); return { pts, joined: true }; }
+      pts.push(cur);
+      prev = cur;
+      // A near miss counts as a join too, once the sweep is clear of
+      // whatever lane `through` may itself be sitting on: an arc that
+      // stopped a metre short of its neighbour would be a dead end where a
+      // junction is the whole point.
+      if ((k * stepDeg * Math.PI) / 180 * radiusM >= CONNECT_MIN_M) {
+        const snap = loopSnap(out, cur, snapExclude);
+        if (snap) { pts.push(snap); return { pts, joined: true }; }
+      }
+    }
+    return { pts, joined: false };
+  };
+
+  const back = sweep(-1);
+  const fwd = sweep(1);
+  const points = [...back.pts.slice().reverse(), through, ...fwd.pts];
+  if (points.length < 2) return null;
+  return { points, joinedEnds: (back.joined ? 1 : 0) + (fwd.joined ? 1 : 0) };
+}
+
+/**
+ * GATE 6.10: try to answer a demand for a street at `through` with an ARC.
+ *
+ * Returns false — and the caller falls back to its ordinary radial-ish
+ * primitive — unless the fabric there is genuinely radial, the arc reaches
+ * a lane on at least one side, and it passes every rule an ordinary street
+ * passes: stub floor, zero crossings, `earnsItsSpace`.
+ *
+ * At least ONE joined end is required rather than two. A one-ended arc is
+ * still a real street that turns the fabric, and its free end is offered to
+ * `connectDeadEnds` like any other; an arc that joins NOTHING is a floating
+ * ring segment, which is litter.
+ *
+ * Ids live in the parent's branch space (`<parent>/b<pct>`) with the parent
+ * being the lane the arc's FIRST end lands on, so an arc has an ordinary
+ * lane's identity and its lots have ordinary lot ids.
+ */
+function seedArcThrough(
+  out: Lane[], green: Green, through: Point, parent: Lane | undefined,
+): boolean {
+  if (!locallyRadial(out, through, green)) return false;
+  const snapExclude = new Set<string>(parent ? [parent.id] : []);
+  const arc = buildArc(out, green, through, snapExclude);
+  if (!arc || arc.joinedEnds === 0) return false;
+  let { points } = arc;
+  if (polylineLength(points) < BRANCH_MIN_M) return false;
+
+  // The arc was built to stop at its joins, so this can only bite on a lane
+  // the sweep's straight chords clipped between samples. NO parent
+  // exemption is passed: that exemption exists because an ordinary branch
+  // leaves its parent AT a point on it and may formally cross the parent's
+  // polyline right at the junction, whereas an arc only ever TOUCHES a lane
+  // at an endpoint, which `segmentIntersection` excludes anyway. Passing
+  // the host here let an arc whose back sweep joined its own host cross
+  // that host for free near the join — measured as the one crossing at pop
+  // 300 seed 1, which is how this was found.
+  points = truncateAtFirstCrossing(points, out, green);
+  if (points.length < 2 || polylineLength(points) < BRANCH_MIN_M) return false;
+
+  // Whose branch space? The lane the arc was seeded from, or — for an arc
+  // seeded into open ground — the nearest lane to the point it runs
+  // through, by distance then id so array order can never decide it.
+  const host = parent ?? (() => {
+    const cands = out
+      .map((l) => ({ l, d: nearestWithHeading(through, l)?.distance ?? Infinity }))
+      .sort((a, b) => (a.d - b.d) || a.l.id.localeCompare(b.l.id));
+    return cands.length > 0 && Number.isFinite(cands[0].d) ? cands[0].l : undefined;
+  })();
+  if (!host) return false;
+  // Not `crossesParentTwice`: an arc meets its host at an ENDPOINT, so a
+  // single properly-registered intersection with it is already one too many.
+  for (let i = 1; i < points.length; i++) {
+    for (let j = 1; j < host.points.length; j++) {
+      if (segmentIntersection(points[i - 1], points[i], host.points[j - 1], host.points[j])) {
+        return false;
+      }
+    }
+  }
+  // ALONGSIDE ONLY. An arc crosses the ribs it ties at nearly a right
+  // angle, so it is a block's width from each of them by construction and
+  // can never "open new ground" as the unconditional rule means it — which
+  // is exactly how that rule forbade every ring, block and cross-link this
+  // engine has ever tried to grow (gate 6.8 measured 61 of 64 candidates
+  // rejected at pop 300). What an arc must still clear is another lane
+  // running THE SAME WAY, since that is the one whose lot strip it would
+  // take. The exemption is deliberately arc-only: applied to every branch
+  // it let the fabric pack to a 18 m junction pitch and pushed the
+  // converging-claim death share from 31% to 44%.
+  if (!earnsItsSpace(points, out, host.id, true)) return false;
+
+  const acc = arcLengths(host.points);
+  const totalHost = acc[acc.length - 1];
+  const near = nearestWithHeading(through, host);
+  let travelled = 0;
+  if (near && totalHost > 0) {
+    for (let i = 1; i < host.points.length; i++) {
+      const q = closestPointOnSegment(near.point, host.points[i - 1], host.points[i]);
+      if (dist(near.point, q) < 1e-6) { travelled = acc[i - 1] + dist(host.points[i - 1], q); break; }
+    }
+  }
+  const atFraction = totalHost > 0
+    ? Math.min(0.99, Math.max(0.01, travelled / totalHost)) : 0.5;
+
+  let id: string | null = null;
+  const pct0 = Math.max(1, Math.min(99, Math.round(atFraction * 100)));
+  for (let step = 0; step < 99; step++) {
+    const pct = 1 + ((pct0 - 1 + step) % 99);
+    const candidate = branchLaneId(host.id, pct / 100);
+    if (!out.some((l) => l.id === candidate)) { id = candidate; break; }
+  }
+  if (!id) return false;
+
+  // An arc MEETS the lanes it ties, so it is a connector by the standing
+  // rule and runs one class below the child class its host would give it.
+  const cls = stepDown(inventedChildClass(host.type), 'footpath');
+  out.push({
+    id, type: cls, points, widthM: laneWidth(cls), parentId: host.id,
+  });
+  return true;
+}
+
 /**
  * Gate 6.5: seed a lane INTO the emptiest place in the disc.
  *
@@ -1085,6 +1334,12 @@ function seedVoidLane(
 ): boolean {
   const void_ = widestVoid(out, green, satRadiusM);
   if (!void_ || void_.distance <= VOID_SPACING_M) return false;
+
+  // GATE 6.10: a void between two RIBS is a wedge, and the street that
+  // fills a wedge runs across it, not out of it. No parent is handed to the
+  // arc here: the void point is in open ground, so every lane around it —
+  // the nearest one included — is a candidate to join.
+  if (seedArcThrough(out, green, void_.point, undefined)) return true;
 
   const bearing = Math.round(bearingOf(void_.junction, void_.point)) % 360;
   // Long enough to run THROUGH the void rather than stop at its near edge,

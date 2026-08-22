@@ -167,6 +167,58 @@ export const SECTOR_COVERAGE_DEG = 50;
  * coarse enough that one stray lane point does not mask one. */
 export const SECTOR_SAMPLE_DEG = 2;
 
+/**
+ * GATE 6.10, THE ARC -- the growth primitive that runs AROUND rather than
+ * OUT, and the answer to four gates of "pop 300 is a starfish".
+ *
+ * Every other primitive in this engine is radial-ish: an arm leaves the
+ * green, a branch leaves an arm, a void lane offsets from whatever is
+ * nearest. So a small village -- where the sector-coverage rule alone
+ * spends the whole lane budget on radials leaving the green -- can only
+ * ever come out as ribs with grass wedges between them. Measured at gate
+ * 6.9's HEAD, pop 300 seed 1 grew NINE lanes, eight of them radials off the
+ * green, ONE branch, zero enclosed blocks and a 463 m junction pitch.
+ *
+ * An arc is laid at CONSTANT RADIUS from the green's centre through the
+ * point that needs a street, sweeping both ways until it meets a lane and
+ * JOINING it. Two radials plus two arcs is an enclosed block; an arc's two
+ * sides are ordinary frontage; and an arc marks every bearing it sweeps as
+ * covered, so it feeds the coverage rule instead of competing with it.
+ *
+ * It is offered only where the fabric is ALREADY radial: `ARC_RADIAL_TOL_DEG`
+ * is how far a neighbouring lane's local direction may sit from the bearing
+ * out of the green and still count as a rib. Where the fabric already turns,
+ * today's offset behaviour is the right answer and nothing changes.
+ */
+export const ARC_RADIAL_TOL_DEG = 35;
+/**
+ * Total sweep an arc may make, half to each side, before it gives up on
+ * finding a lane to join. Wide enough to cross a wedge between radials at
+ * the widest spacing the coverage rule permits (SECTOR_COVERAGE_DEG plus
+ * slack), narrow enough that an arc is a street between two junctions and
+ * never a ring road round the whole village.
+ */
+export const ARC_MAX_SWEEP_DEG = 150;
+/**
+ * How far from a point the fabric is read when deciding whether it is
+ * radial there. One void spacing either side: the flanking ribs of the
+ * wedge an arc would cross, and nothing beyond them.
+ */
+export const ARC_NEIGHBOURHOOD_M = 52;
+/**
+ * GATE 6.10: how nearly parallel two lanes must be for one to count against
+ * the other's `earnsItsSpace` clearance.
+ *
+ * That rule exists because two lanes running ALONGSIDE each other closer
+ * than LANE_MIN_SPACING_M have overlapping lot strips, and §5.4 resolution
+ * drops one of every facing pair. Two lanes that MEET -- at a junction, at
+ * a corner, at any real angle -- do not share a strip except at the mouth,
+ * which is already the junction rule's business. Gate 6.9 measured the
+ * unconditional version rejecting essentially every cross-link a village
+ * offered (gate 6.8: 61 of 64 candidates at pop 300), which is precisely
+ * why no arc, ring or block could ever be grown.
+ */
+export const LANE_PARALLEL_TOL_DEG = 40;
 
 /**
  * Gate 6.5, VOID FILLING -- the fix for the spider.
