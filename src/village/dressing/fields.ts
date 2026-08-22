@@ -141,11 +141,22 @@ function bearingInWedge(p: Point, green: Green, wedge: Wedge): boolean {
  * own corners (a lot claim) or vertices (a croft). One number per claim,
  * which is what the percentile below ranks.
  */
+/**
+ * Gate 6.11 (owner: the ring must hug the village, not the plot survey):
+ * only lots that CARRY A BUILDING count toward the built-up edge. Since
+ * gate 6.9 the cutter tiles the whole saturated disc with plots and the
+ * census fills the inner part of it, so measuring claims meant the ring
+ * sat at the edge of the SURVEY — leaving a band of open green as wide as
+ * the village itself between the last house and the first furrow. Crofts
+ * already exist only behind built lots, so they need no such filter.
+ */
 function claimBackEdgeDistances(
   green: Green, lots: Lot[], crofts: Croft[], wedge?: Wedge,
+  housedLotIds?: ReadonlySet<string>,
 ): number[] {
   const out: number[] = [];
   for (const lot of lots) {
+    if (housedLotIds && !housedLotIds.has(lot.id)) continue;
     const obb = lotObb(lot);
     if (wedge && !bearingInWedge(obb.center, green, wedge)) continue;
     let far = 0;
@@ -173,9 +184,13 @@ function claimBackEdgeDistances(
  * explicitly NOT what a wedge's field band starts at -- see
  * `wedgeInnerRadius`.
  */
-export function computeFabricRadius(green: Green, lots: Lot[], crofts: Croft[]): number {
+export function computeFabricRadius(
+  green: Green, lots: Lot[], crofts: Croft[], housedLotIds?: ReadonlySet<string>,
+): number {
   let maxR = greenDrawnRadius(green);
-  for (const d of claimBackEdgeDistances(green, lots, crofts)) maxR = Math.max(maxR, d);
+  for (const d of claimBackEdgeDistances(green, lots, crofts, undefined, housedLotIds)) {
+    maxR = Math.max(maxR, d);
+  }
   return maxR;
 }
 
@@ -205,9 +220,10 @@ export function computeFabricRadius(green: Green, lots: Lot[], crofts: Croft[]):
  */
 function wedgeInnerRadius(
   green: Green, lots: Lot[], crofts: Croft[], wedge: Wedge,
+  housedLotIds?: ReadonlySet<string>,
 ): number {
   const floor = greenDrawnRadius(green) + RING_SETBACK_M + FIELD_INNER_FLOOR_PAD_M;
-  const distances = claimBackEdgeDistances(green, lots, crofts, wedge);
+  const distances = claimBackEdgeDistances(green, lots, crofts, wedge, housedLotIds);
   if (distances.length === 0) return floor;
   distances.sort((a, b) => a - b);
   const idx = Math.min(
@@ -536,8 +552,9 @@ export interface FieldsResult {
  */
 export function buildFields(
   site: Site, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[], rng: SeededRandom,
+  housedLotIds?: ReadonlySet<string>,
 ): FieldsResult {
-  const fabricRadius = computeFabricRadius(green, lots, crofts);
+  const fabricRadius = computeFabricRadius(green, lots, crofts, housedLotIds);
 
   const byBearing = buildWedges(green, lanes);
   const wedges = byBearing.slice().sort((a, b) => a.id.localeCompare(b.id));
@@ -582,7 +599,7 @@ export function buildFields(
   const blocks: FieldBlock[] = [];
   let outerRadius = fabricRadius;
   for (const wedge of wedges) {
-    const innerRadius = wedgeInnerRadius(green, lots, crofts, wedge);
+    const innerRadius = wedgeInnerRadius(green, lots, crofts, wedge, housedLotIds);
     const ring = buildWedgeBlocks(
       wedge, green, innerRadius, site.population, bearingByWedge.get(wedge.id) ?? 0,
       lots, crofts, lanes, site.water, crops, allowOrchardVine, rng, toggle,

@@ -48,10 +48,14 @@ export function dressVillage(input: DressingInput): DressingResult {
   } = input;
 
   const edgeStyle = settlementEdgeStyle(site.biome, site.population, rng);
+  // Gate 6.11: the field ring measures where the HOUSES end, not where the
+  // plot survey ends — since the cutter tiles the whole disc, the two differ
+  // by a band of open green as wide as the village.
+  const housedLotIds: ReadonlySet<string> = new Set(buildings.map((b) => b.lotId));
   const crofts = buildCrofts(lots, buildings, green, lanes, site.water, builtRadiusM, f0);
   const {
     blocks: fields, edges: fieldEdges, outerRadius: fieldsOuterRadius,
-  } = buildFields(site, green, lanes, lots, crofts, rng);
+  } = buildFields(site, green, lanes, lots, crofts, rng, housedLotIds);
 
   // THE fix-wave rule (2026-08-21): after pass 3, nothing keys off
   // `builtRadiusM` -- the PREDICTED built radius under-reports the real
@@ -60,7 +64,7 @@ export function dressVillage(input: DressingInput): DressingResult {
   // `builtRadiusM` survives only as crofts' frontage-gradient reference
   // (pass 3's own prediction, which is the right input there) and is
   // deliberately not passed any further.
-  const fabricRadiusM = computeFabricRadius(green, lots, crofts);
+  const fabricRadiusM = computeFabricRadius(green, lots, crofts, housedLotIds);
   const vegInnerEdgeM = fields.length > 0 ? fieldsOuterRadius : fabricRadiusM;
   const shorefrontReachM = fabricRadiusM * SHOREFRONT_REACH_FACTOR;
   const vegetation = buildVegetation(
