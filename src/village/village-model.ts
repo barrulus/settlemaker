@@ -3,8 +3,7 @@ import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import { buildSite } from './site.js';
 import { predictedBuiltRadius, siteGreen } from './skeleton/green-siting.js';
 import {
-  addInventedLanes, availableFrontage, buildArms, connectDeadEnds, lotReachFor,
-  requiredFrontage,
+  availableFrontage, buildArms, connectDeadEnds, discRadiusFor, lotReachFor, saturateDisc,
 } from './skeleton/lanes.js';
 import { relaxLanes, trimTails } from './skeleton/relax.js';
 import {
@@ -12,16 +11,17 @@ import {
 } from './parcels/lots.js';
 import { resolveConvergingLots } from './parcels/overlap.js';
 import {
-  buildDeck, meanOccupancy, minDwellingFrontageM, widestDwellingWidthM,
+  buildDeck, eligible, meanOccupancy, minDwellingFrontageM, ordinaryOccupancy, widestDwellingWidthM,
 } from './deck.js';
 import { intrudesOnLane, spendCensus, type SpendResult } from './dwellings.js';
 import { dressVillage } from './dressing/index.js';
 import { closestPointOnSegment, dist } from './geometry.js';
 import {
-  ARM_LOT_RADIUS_SHARE, BRANCH_SPACING_M, FRONT_ON_LANE_EPS_M, GAP_TIGHTEN, GREEN_JOIN_RATIO,
-  GROWTH_RADIUS_FACTOR, HAMLET_RIBBON_POP,
+  ARM_LOT_RADIUS_SHARE, BRANCH_SPACING_M, FRONT_ON_LANE_EPS_M, GREEN_JOIN_RATIO,
+  HAMLET_RIBBON_POP,
   INITIAL_MEAN_FRONTAGE_FACTOR, LANE_EXTENT_FACTOR, LANE_SETBACK_M, LOT_DEPTH_M,
   MAX_FEEDBACK_ROUNDS, MAX_LOT_FRONTAGE_RATIO, MEAN_LOT_AREA_M2, RING_SETBACK_M,
+  SATURATION_RING_STEP_M,
 } from './constants.js';
 import type { Lane, Lot, VillageModel } from './types.js';
 import { classRank, type RouteType } from './route-class.js';
@@ -50,24 +50,18 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
     diagnostics.push(`deck dropped (no manifest entry): ${dropped.join(', ')}`);
   }
   const occupancy = meanOccupancy(deck);
-  const builtRadius = predictedBuiltRadius(site.population, occupancy, MEAN_LOT_AREA_M2);
-  const green = siteGreen(site, builtRadius, rng);
-  const laneExtentM = builtRadius * LANE_EXTENT_FACTOR;
-  // Gate 3: growth is confined to a circle around the green, so the fabric
-  // clusters instead of streaming along a long road. Floored so the FIRST
-  // branch-slot ring (BRANCH_SPACING_M from the green edge) plus a lot's
-  // depth always fits: a hamlet's builtRadius can undercut the slot
-  // spacing, and a radius that excludes every slot freezes growth
-  // entirely — the escalation loop then cannot house the census at all.
-  const growthRadiusM = Math.max(
-    builtRadius * GROWTH_RADIUS_FACTOR,
-    green.diameter / 2 + BRANCH_SPACING_M + LOT_DEPTH_M,
-  );
+  // PRE-FABRIC ONLY (gate 6.6, and the rule that has bitten four times):
+  // `predictedBuiltRadius` is a census-to-area guess made before any
+  // geometry exists. It may size things that are themselves pre-fabric --
+  // the green, and how far FMG's arms are drawn past it -- and NOTHING
+  // downstream of growth. Everything after growth keys off `discRadiusM`,
+  // the disc growth actually saturated.
+  const preFabricRadius = predictedBuiltRadius(site.population, occupancy, MEAN_LOT_AREA_M2);
+  const green = siteGreen(site, preFabricRadius, rng);
+  const laneExtentM = preFabricRadius * LANE_EXTENT_FACTOR;
 
   // Finding 5: f0 is spec §5.2's "widest common dwelling in the deck" plus
-  // the population gap term — not an unrelated literal. widestDwellingM is
-  // held constant across rounds so the round-3 tighten step (finding 4)
-  // compounds only the gap term, never the dwelling-width part of f0.
+  // the population gap term — not an unrelated literal.
   const widestDwellingM = widestDwellingWidthM(deck);
   // Lots narrower than the deck's narrowest usable dwelling are dead on
   // arrival; the cutter floors at this so tightening the gap can never
@@ -76,15 +70,14 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
   // Gate 5.1: the hard cap on any lot's frontage -- a dwelling plus at most
   // about one house width of gap, independent of distance from the green.
   const lotCapM = widestDwellingM * MAX_LOT_FRONTAGE_RATIO;
-  // Finding 4: the gap term is tracked separately from f0 itself so that
-  // tightening it each round compounds — GAP_TIGHTEN applied to the gap
-  // left over from the PREVIOUS round, not recomputed fresh from the
-  // population every time. Previously f0 was rebuilt from scratch as
-  // `8 + gapForPopulation(pop) * GAP_TIGHTEN` on every tighten, so rounds 2
-  // and 3 produced an identical f0 — one rung of the bounded ladder was a
-  // no-op.
-  let gapTerm = gapForPopulation(site.population);
-  let f0 = widestDwellingM + gapTerm;
+  // Gate 6.6: f0 is FIXED for the village. The old loop tightened the gap
+  // term one rung per round to squeeze more lots out of the same lanes;
+  // that made the cut width a moving target, and the disc is now sized
+  // FROM that width (`discRadiusFor` below), so a shifting f0 would mean a
+  // shifting disc — the round-to-round feedback area-first sizing exists to
+  // remove. The loop widens the disc instead, which is the honest lever:
+  // more ground for more houses, at one constant plot width.
+  const f0 = widestDwellingM + gapForPopulation(site.population);
   let lanes = buildArms(site, green, laneExtentM, rng);
   let lots: Lot[] = [];
   // Annotated, not inferred: an empty literal would infer `never[]`.
@@ -95,48 +88,40 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
   // replaces this with the ACTUAL mean frontage of the lane lots the
   // previous round produced.
   let measuredMeanFrontage = f0 * INITIAL_MEAN_FRONTAGE_FACTOR;
-  // Fix round 1: seatEfficiency must be measured against the lot supply
-  // BEFORE resolveConvergingLots removes converging claims, not after.
-  // A lot dropped by resolution is a conversion failure exactly like one
-  // rejected at seat time (a lane intrusion or building overlap) — both
-  // mean a metre of frontage did not become a house. Measuring against
-  // the POST-resolution count made the ratio look artificially healthy,
-  // so the escalator under-asked for frontage and the loop settled short
-  // of the full census instead of growing another rung.
-  let preResolutionLotCount = 0;
-  // The cluster radius the lot cutter uses. It starts at the growth radius
-  // and follows any widening `addInventedLanes` had to do, so the frontage
-  // estimate and the cutter always speak about the same circle.
-  let lotRadiusM = growthRadiusM;
+  // Gate 6.6: reported, never fed back. seatEfficiency is measured against
+  // DECK-USABLE lots -- those wide enough for some uncapped deck entry --
+  // because a lot too narrow for any dwelling is a cutting artefact, not a
+  // seating failure. When it drove the growth budget (and counted every lot
+  // cut) an over-tiled fabric reported itself as a seating failure and
+  // demanded yet more lane: the spiral gate 6.6 removes.
+  let deckUsableLotCount = 0;
+  // The disc the census needs, in closed form -- see `discRadiusFor`.
+  // Landmarks are counted in: the inn, chapel and large house each take a
+  // lot, and the chapel houses nobody at all, so a disc sized for
+  // `population / occupancy` alone comes up a few plots short.
+  const landmarkLots = deck.filter((e) => e.cap && eligible(e, site, Infinity)).length;
+  const dwellingsNeeded = Math.ceil(site.population / ordinaryOccupancy(deck)) + landmarkLots;
+  // Floored so the FIRST branch-slot ring (BRANCH_SPACING_M from the green
+  // edge) plus a lot's depth always fits: a hamlet's disc can undercut the
+  // slot spacing, and a radius that excludes every slot freezes growth
+  // entirely -- the escalation loop then cannot house the census at all.
+  // The cut width, not the ideal: `lotFloorM` (the deck's narrowest usable
+  // dwelling) overrides f0 wherever it is wider, and then IT is what every
+  // metre of frontage actually costs. Sizing the disc from f0 alone
+  // under-counted the ground the same houses need.
+  const meanLotFrontageM = Math.max(f0, lotFloorM);
+  let targetRadiusM = Math.max(
+    discRadiusFor(dwellingsNeeded, meanLotFrontageM),
+    green.diameter / 2 + BRANCH_SPACING_M + LOT_DEPTH_M,
+  );
+  // The disc growth actually saturated, which is also the disc the lot
+  // cutter fills and the reference for the frontage gradient. Everything
+  // downstream of growth speaks about THIS radius, never the pre-fabric
+  // estimate.
+  let lotRadiusM = targetRadiusM;
 
   for (let round = 0; round <= MAX_FEEDBACK_ROUNDS; round++) {
-    // R16: after round 1, requiredFrontage's flat per-capita estimate is
-    // not what makes the loop escalate — the loop already satisfied that
-    // estimate and still came up short, which means the estimate itself
-    // was wrong. From round 2 on, ask for what's actually missing: the
-    // frontage already available, plus enough (at the measured mean lot
-    // width) to house the shortfall the previous round reported.
-    // A metre of frontage does not always convert to housing: seatings die
-    // on lane intrusions (a branch corridor crossing its parent's strips
-    // near the junction) and building overlaps. The previous round measured
-    // that conversion directly — buildings seated per lot offered (valid
-    // because an unhoused round attempted EVERY lot) — so the shortfall
-    // term is scaled by it, or a dense fabric asks for exactly the frontage
-    // it will then reject. Floored so one pathological round cannot demand
-    // unbounded lanes.
-    const seatEfficiency = round === 0 || preResolutionLotCount === 0
-      ? 1
-      : Math.max(0.25, spend.buildings.length / preResolutionLotCount);
-    const required = round === 0
-      ? requiredFrontage(site.population, occupancy, measuredMeanFrontage)
-      : availableFrontage(lanes, green, lotRadiusM, site.population)
-        + ((spend.unhoused / occupancy) * measuredMeanFrontage) / seatEfficiency;
-    // The growth circle can widen when the cluster fills but frontage is
-    // still owed; the cutter must use the SAME radius the growth actually
-    // reached, or it refuses to fill the ground the lanes just covered.
-    const grown = addInventedLanes(
-      lanes, green, required, measuredMeanFrontage, lotRadiusM, rng, site.population,
-    );
+    const grown = saturateDisc(lanes, green, measuredMeanFrontage, targetRadiusM, rng);
     lanes = grown.lanes;
     lotRadiusM = grown.radiusM;
 
@@ -146,7 +131,7 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
     lots = [
       ...subdivideGreen(green, f0, LOT_DEPTH_M, rng, lanes),
       ...lanes.flatMap((l) => subdivideLane(
-        l, green, builtRadius, f0, LOT_DEPTH_M, rng, lotFloorM, lotCapM,
+        l, green, lotRadiusM, f0, LOT_DEPTH_M, rng, lotFloorM, lotCapM,
         lotReachFor(l, lotRadiusM, site.population),
       )),
     ];
@@ -155,7 +140,7 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
     // lanes converge. resolveConvergingLots makes the surviving claims
     // disjoint before scoring/ordering ever sees them.
     const clipped = clipLots(lots, green, site.water);
-    preResolutionLotCount = clipped.length;
+    deckUsableLotCount = clipped.filter((l) => l.frontageM >= lotFloorM).length;
     lots = resolveConvergingLots(clipped, lanes, green);
     lots = orderLots(scoreLots(lots, green, laneTypes));
 
@@ -180,9 +165,10 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
       );
       break;
     }
-    // Not enough room: tighten the gap and re-cut.
-    gapTerm *= GAP_TIGHTEN;
-    f0 = widestDwellingM + gapTerm;
+    // Gate 6.6: the disc was saturated and spent, and someone is still
+    // unhoused. The ONLY remaining escalation is more ground -- one
+    // saturation ring wider, then saturate and spend again.
+    targetRadiusM += SATURATION_RING_STEP_M;
   }
 
   // Gate 5.4: relaxation is COSMETIC -- it nudges lane points off houses by
@@ -248,7 +234,7 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
     const connectorLots = relaxed
       .filter((l) => isConnectorLane(l.id))
       .flatMap((l) => subdivideLane(
-        l, green, builtRadius, f0, LOT_DEPTH_M, rng, lotFloorM, lotCapM,
+        l, green, lotRadiusM, f0, LOT_DEPTH_M, rng, lotFloorM, lotCapM,
         lotReachFor(l, lotRadiusM, site.population),
       ))
       .sort((a, b) => dist(a.front, green.centre) - dist(b.front, green.centre)
@@ -299,9 +285,22 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
     return frontLiesOnLane(l, lane);
   });
 
+  // Gate 6.6: reported every village, because it is the number that told
+  // the last four gates a lie. Measured against deck-usable lots (wide
+  // enough for some uncapped entry) from the final growth round; connector
+  // lots, cut afterwards and only to the shortfall, are not counted.
+  // Area-first sizing should keep this near 1 -- well under it means the
+  // fabric is offering plots nothing will ever sit on.
+  if (deckUsableLotCount > 0) {
+    diagnostics.push(
+      `seating: ${Math.round((spend.buildings.length / deckUsableLotCount) * 100)}% `
+      + `(${spend.buildings.length} of ${deckUsableLotCount} deck-usable lots)`,
+    );
+  }
+
   const dressing = dressVillage({
     site, green, lanes: relaxed, lots: survivingLots, buildings: spend.buildings,
-    builtRadiusM: builtRadius, f0, rng,
+    builtRadiusM: lotRadiusM, f0, rng,
   });
 
   return {

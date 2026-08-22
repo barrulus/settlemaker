@@ -7,9 +7,9 @@ import {
   polylineLength, sampleAt, segmentIntersection, greenDrawnRadius,
 } from '../geometry.js';
 import {
-  BRANCH_LOTS_TARGET, BRANCH_MAX_M, BRANCH_MIN_M, BRANCH_SPACING_M, FRONTAGE_MARGIN,
+  BRANCH_LOTS_TARGET, BRANCH_MAX_M, BRANCH_MIN_M, BRANCH_SPACING_M, DISC_MARGIN,
   GREEN_ARM_MAX, GREEN_ARM_MIN, GREEN_ARM_SPACING_M, GREEN_UNDERLAP_RATIO,
-  GROWTH_RADIUS_STEP, INVENTED_ARM_LENGTH_FACTOR, JUNCTION_CLEAR_M, LANE_SAMPLE_STEP_M,
+  INVENTED_ARM_LENGTH_FACTOR, JUNCTION_CLEAR_M, LANE_MIN_SPACING_M, LANE_SAMPLE_STEP_M,
   ARM_LOT_RADIUS_SHARE, CONNECT_MAX_M, CONNECT_MIN_M, HAMLET_RIBBON_POP, LANE_CURVE_MAX_M,
   LOOP_SNAP_M, MAX_INVENTED_LANES, MIN_ARM_SEPARATION_DEG, SATURATION_RING_START_M,
   SATURATION_RING_STEP_M, SECTOR_COVERAGE_DEG, SECTOR_SAMPLE_DEG,
@@ -360,10 +360,54 @@ export function availableFrontage(
   return total;
 }
 
-export function requiredFrontage(
-  population: number, meanOccupancy: number, meanFrontageM: number,
-): number {
-  return (population / meanOccupancy) * meanFrontageM;
+/**
+ * Gate 6.6, AREA-FIRST DISC SIZING -- the radius the census actually needs.
+ *
+ *   laneLength = dwellings x meanLotFrontageM / 2   (both sides carry lots)
+ *   area       = laneLength x VOID_SPACING_M        (the plane-spacing rule
+ *                                                    growth tiles the disc to)
+ *   R          = sqrt(area / PI) x DISC_MARGIN
+ *
+ * This replaces the frontage BUDGET the growth loop used to bargain over.
+ * That budget fed back on itself through `seatEfficiency` and demanded
+ * roughly three times the frontage the census could fill, so the disc came
+ * out ~1.4x too wide and every row was two-thirds empty (see
+ * DISC_MARGIN's note). A closed form cannot spiral: the house count and the
+ * cut width are both known before a single lane exists.
+ *
+ * `meanLotFrontageM` is f0 -- the ink-economy cut width, jitter-neutral --
+ * not the measured mean of an earlier round's lots, which would reintroduce
+ * exactly the round-to-round feedback this removes.
+ */
+export function discRadiusFor(dwellings: number, meanLotFrontageM: number): number {
+  const laneLengthM = (Math.max(1, dwellings) * meanLotFrontageM) / 2;
+  return Math.sqrt((laneLengthM * VOID_SPACING_M) / Math.PI) * DISC_MARGIN;
+}
+
+/**
+ * The same closed form read the other way: how much lane tiles a disc of
+ * `radiusM` at VOID_SPACING_M. Growth spends against this, so widening the
+ * disc buys more road at ONE density instead of meshing the same ground
+ * ever finer. Inverse of `discRadiusFor` by construction.
+ */
+export function laneBudgetFor(radiusM: number): number {
+  return (Math.PI * radiusM * radiusM) / (VOID_SPACING_M * DISC_MARGIN * DISC_MARGIN);
+}
+
+/** Lane length inside `radiusM` of the green, segment by segment. */
+function laneLengthWithin(lanes: Lane[], green: Green, radiusM: number): number {
+  let total = 0;
+  for (const lane of lanes) {
+    for (let i = 1; i < lane.points.length; i++) {
+      const a = lane.points[i - 1];
+      const b = lane.points[i];
+      const inA = dist(a, green.centre) <= radiusM;
+      const inB = dist(b, green.centre) <= radiusM;
+      if (!inA && !inB) continue;
+      total += dist(a, b) * (inA && inB ? 1 : 0.5);
+    }
+  }
+  return total;
 }
 
 interface BranchSlot {
@@ -516,6 +560,52 @@ function endsOnAnotherLane(lane: Lane, out: Lane[]): boolean {
 }
 
 /**
+ * Gate 6.6: the MINIMUM half of the plane-spacing rule -- does this lane
+ * open ground no existing lane can already reach?
+ *
+ * Gate 6.5 fixed the maximum (`seedVoidLane`: nowhere further than
+ * VOID_SPACING_M from a lane) but left the minimum unbounded, and growth
+ * duly packed lanes at a measured ~19 m mean spacing. Lots are LOT_DEPTH_M
+ * deep on both sides of a lane, so at that spacing the facing strips of
+ * neighbouring lanes overlap and `resolveConvergingLots` drops one of every
+ * pair: measured at gate 6.5, only ~31% of the lots cut survived to be
+ * offered, the census then needed three times the frontage, and the disc
+ * ballooned. Over-tiling with lanes does not house more people -- it houses
+ * fewer, and spreads them wider.
+ *
+ * So a new lane must get at least LANE_MIN_SPACING_M clear of every
+ * existing lane SOMEWHERE along its length. It may leave its parent's side,
+ * thread past a neighbour, or run a while alongside one; what it may not do
+ * is exist entirely inside ground the lanes already serve.
+ */
+function earnsItsSpace(points: Point[], out: Lane[], parentId?: string): boolean {
+  const others = out.filter((l) => l.id !== parentId);
+  if (others.length === 0) return true;
+  const acc = arcLengths(points);
+  const total = acc[acc.length - 1];
+  const gaps: number[] = [];
+  for (let s = 0; s <= total; s += LANE_SAMPLE_STEP_M) {
+    const { p } = sampleAt(points, acc, s);
+    let nearest = Infinity;
+    for (const lane of others) {
+      for (let i = 1; i < lane.points.length; i++) {
+        nearest = Math.min(
+          nearest, dist(p, closestPointOnSegment(p, lane.points[i - 1], lane.points[i])),
+        );
+      }
+    }
+    gaps.push(nearest);
+  }
+  if (gaps.length === 0) return true;
+  // The MEDIAN, not the best point: a lane that hugs a neighbour for most of
+  // its length and only escapes at the tip splits one street's frontage in
+  // two instead of opening new ground, and every lot along the shared
+  // stretch dies in resolution.
+  gaps.sort((a, b) => a - b);
+  return gaps[Math.floor(gaps.length / 2)] >= LANE_MIN_SPACING_M;
+}
+
+/**
  * Lengthen the shortest extendable street whose length is still under
  * `maxLengthM`, from its end along its end direction. FMG arms are never
  * extended — they already run to the map's edge. Shortest-first keeps the
@@ -616,6 +706,9 @@ function growOne(
         runLine(start, candidate,
           branchLengthM(meanFrontageM) * INVENTED_ARM_LENGTH_FACTOR * lengthJitter, rng),
         out, green);
+      // Gate 6.6: a radial that never leaves its neighbours' ground only
+      // splits the same frontage in two -- see `earnsItsSpace`.
+      if (points.length < 2 || !earnsItsSpace(points, out)) continue;
       out.push({
         id: inventedLaneId(candidate),
         type: 'local',
@@ -678,6 +771,8 @@ function growOne(
       // saw. Reject it and try the next slot rather than keeping it.
       if (points.length < 2 || polylineLength(points) < BRANCH_MIN_M) continue;
       if (crossesParentTwice(points, slot.parent)) continue;
+      // Gate 6.6: and it must open ground the existing lanes cannot reach.
+      if (!earnsItsSpace(points, out, slot.parent.id)) continue;
       out.push({
         id,
         type: cls,
@@ -1032,60 +1127,68 @@ function seedCoverageLane(
 }
 
 /**
- * Lanes are invented only when frontage runs out, and growth is
- * CLUSTER-FIRST (2026-08-21 gate rework): a handful of streets at the
- * green, then short branches attaching near the centre, branching again,
- * occasionally looping — never the radial spoke fan the first gate
+ * Grow the village's own streets until the disc of radius `targetRadiusM`
+ * is SATURATED, and no further.
+ *
+ * Growth is cluster-first (2026-08-21 gate rework): a handful of streets at
+ * the green, then short branches attaching near the centre, branching
+ * again, occasionally looping — never the radial spoke fan the first gate
  * rejected. `meanFrontageM` sizes each branch to the lots it must host.
+ *
+ * Gate 6.6 changed only WHERE IT STOPS. It used to run until a frontage
+ * budget was met, with the disc widening by a growth factor whenever the
+ * budget was still owed — a loop that fed back on itself and over-tiled the
+ * ground (see DISC_MARGIN). The disc is now handed in, sized in closed form
+ * from the census by `discRadiusFor`, and this function's only job is to
+ * fill it: rings widen by SATURATION_RING_STEP_M up to the target and stop
+ * there. The caller widens the target if the census still comes up short.
  */
-export function addInventedLanes(
-  lanes: Lane[], green: Green, requiredM: number, meanFrontageM: number,
-  growthRadiusM: number, rng: SeededRandom, population: number = 0,
+export function saturateDisc(
+  lanes: Lane[], green: Green, meanFrontageM: number,
+  targetRadiusM: number, rng: SeededRandom,
 ): { lanes: Lane[]; radiusM: number } {
   const out = [...lanes];
   let guard = 0;
-  let radiusM = growthRadiusM;
   // Gate 6.2 CONCENTRIC SATURATION. The ring being filled starts just
   // outside the green and only ever widens when nothing can be done inside
   // it. This is the whole fix for "houses closer together but along LONG
   // streets that leave 90% of the available land empty": the mesh changed
   // local texture, but growth could still escape outward, because a long
-  // arm or extension supplied frontage cheaply far from the green and the
-  // budget was met before the interior wedges filled.
-  let satRadiusM = greenDrawnRadius(green) + SATURATION_RING_START_M;
-  // Only frontage inside the SATURATED disc counts. Counting lane length
-  // the cutter will not use is exactly how distant frontage used to pay for
-  // the census; the cutter is handed this same radius below.
-  const reachM = (): number => Math.min(satRadiusM, radiusM);
-  const owed = (): number => requiredM * FRONTAGE_MARGIN
-    - availableFrontage(out, green, reachM(), population);
-  while (owed() > 0 && guard < MAX_INVENTED_LANES) {
+  // arm or extension supplied frontage cheaply far from the green.
+  let satRadiusM = Math.min(
+    targetRadiusM, greenDrawnRadius(green) + SATURATION_RING_START_M,
+  );
+  // Gate 6.6: the disc's LANE BUDGET, from the same closed form as its
+  // radius -- the length of road that tiles this much ground at
+  // VOID_SPACING_M, which is the density the census was sized against.
+  // Without it, growth keeps meshing a disc it has already filled: branch
+  // slots exist every BRANCH_SPACING_M along every lane, so junctions
+  // multiply, and a junction sterilises frontage on BOTH lanes (the claims
+  // round it collide and §5.4 resolution drops them). Measured at gate 6.5,
+  // that is where two thirds of every village's cut frontage went.
+  const budgetM = laneBudgetFor(targetRadiusM);
+  while (guard < MAX_INVENTED_LANES && laneLengthWithin(out, green, targetRadiusM) < budgetM) {
     guard++;
-    if (growOne(out, green, meanFrontageM, radiusM, rng, reachM())) continue;
+    if (growOne(out, green, meanFrontageM, targetRadiusM, rng, satRadiusM)) continue;
     // Gate 6.4: growth found nothing to do -- but "nothing to do" is
     // measured over slots that only exist ON lanes, so an empty sector
     // looks exactly like a full one. Check angular coverage BEFORE
     // widening, and seed into the biggest hole if there is one.
-    if (seedCoverageLane(out, green, meanFrontageM, reachM(), rng)) continue;
+    if (seedCoverageLane(out, green, meanFrontageM, satRadiusM, rng)) continue;
     // Gate 6.5: and even with every bearing covered, a RADIAL tree leaves
     // widening wedges of untouched ground between its tendrils -- the
     // spider. Measure the GROUND, not the network: if anywhere in the disc
     // is further than VOID_SPACING_M from a lane, put a lane there.
-    if (seedVoidLane(out, green, meanFrontageM, reachM(), rng)) continue;
-    // Nothing left to do inside this ring. Widen it -- and only then, once
-    // the ring has caught up with the outer growth circle, widen that too.
-    // The outer circle and its stepping remain the ultimate bound; the ring
-    // is a stricter one layered inside it.
-    if (satRadiusM < radiusM) {
-      satRadiusM = Math.min(radiusM, satRadiusM + SATURATION_RING_STEP_M);
-    } else {
-      radiusM *= GROWTH_RADIUS_STEP;
-      satRadiusM += SATURATION_RING_STEP_M;
-    }
+    if (seedVoidLane(out, green, meanFrontageM, satRadiusM, rng)) continue;
+    // This ring is genuinely full. Widen it -- or, at the target, stop:
+    // the disc is saturated and growing past it is exactly the over-tiling
+    // gate 6.6 removed.
+    if (satRadiusM >= targetRadiusM) break;
+    satRadiusM = Math.min(targetRadiusM, satRadiusM + SATURATION_RING_STEP_M);
   }
-  // The FINAL saturated radius is returned, not the growth circle: the lot
-  // cutter must use the same disc, or it cuts plots along stretches the
-  // budget never counted (and the far reaches of an FMG arm sprout houses
-  // while the interior is still empty).
-  return { lanes: out, radiusM: reachM() };
+  // The radius actually saturated is returned: the lot cutter must use the
+  // same disc, or it cuts plots along stretches growth never reached (and
+  // the far reaches of an FMG arm sprout houses while the interior is still
+  // empty).
+  return { lanes: out, radiusM: satRadiusM };
 }

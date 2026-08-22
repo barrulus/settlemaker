@@ -208,6 +208,22 @@ export function minDwellingFrontageM(deck: DeckEntry[]): number {
   return Math.min(...pool.map((e) => e.minFrontage));
 }
 
+/**
+ * Gate 6.6: people per ORDINARY house -- the occupancy the disc is sized
+ * from. `meanOccupancy` weights the longhouse's 12 heads into the mean, but
+ * a longhouse needs an 11 m lot and the fabric rarely offers one, so the
+ * mean over-states how many people a plot actually houses: measured at pop
+ * 300, meanOccupancy says 4.98 while the finished village houses 4.0 per
+ * building, and the disc came out a sixth too small before it escalated.
+ * Halls and capped landmarks are excluded; the heaviest ordinary dwelling
+ * entry is the village's one house type.
+ */
+export function ordinaryOccupancy(deck: DeckEntry[]): number {
+  const pool = deck.filter((e) => !e.cap && e.weight > 0 && !e.hall);
+  if (pool.length === 0) return meanOccupancy(deck);
+  return pool.reduce((best, e) => (e.weight > best.weight ? e : best), pool[0]).occupancy;
+}
+
 /** Weighted mean occupancy over the uncapped entries. */
 export function meanOccupancy(deck: DeckEntry[]): number {
   const pool = deck.filter((e) => !e.cap);

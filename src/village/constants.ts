@@ -34,7 +34,6 @@ export const LANE_SAMPLE_STEP_M = 12;
 export const LANE_CURVE_MAX_M = 10;
 export const MIN_ARM_SEPARATION_DEG = 35;
 export const MAX_INVENTED_LANES = 60;
-export const FRONTAGE_MARGIN = 1.15;
 
 // --- Cluster growth (2026-08-21 gate rework) ---------------------------
 // The first render gate rejected the starburst the original growth rule
@@ -188,9 +187,27 @@ export const SECTOR_SAMPLE_DEG = 2;
  *
  * VOID_SPACING_M is a lane width plus two lot depths plus slack -- the
  * point at which two facing rows stop reaching each other and open ground
- * appears between them.
+ * appears between them. Gate 6.6 took it 34 -> 26 with LOT_DEPTH_M 16 -> 12:
+ * it is DERIVED from the plot depth, so it had to follow it down.
  */
-export const VOID_SPACING_M = 34;
+export const VOID_SPACING_M = 26;
+/**
+ * Gate 6.6, the MINIMUM half of that same rule -- and the missing half of
+ * gate 6.5.
+ *
+ * VOID_SPACING_M bounds how FAR apart lanes may be; nothing bounded how
+ * CLOSE, and growth packed them at a measured ~19 m mean spacing. Lots are
+ * LOT_DEPTH_M deep on both sides of a lane, so below roughly two lot depths
+ * the facing strips of neighbouring lanes overlap and resolveConvergingLots
+ * drops one of each pair: only ~31% of the lots cut survived at gate 6.5,
+ * the census needed three times the frontage as a result, and the disc
+ * ballooned to ~1.4x the radius the house count needs.
+ *
+ * Set a little under VOID_SPACING_M so the two rules leave a band rather
+ * than a single legal spacing: lanes end up between this and VOID_SPACING_M
+ * apart, which is exactly the density the closed-form disc is sized for.
+ */
+export const LANE_MIN_SPACING_M = 20;
 /** Scan pitch for that search. Fine enough to find a void a lane could
  * fill, coarse enough that the scan stays cheap inside the growth loop. */
 export const VOID_SCAN_STEP_M = 8;
@@ -220,18 +237,28 @@ export const CONNECT_MIN_M = 4;
  * never exempt, at any distance — the old any-lane exemption let a branch
  * starting near an unrelated lane paint straight over it.) */
 export const JUNCTION_CLEAR_M = 6;
-/** Gate 3: "sprawl should be clustered around the green". Growth may only
- * attach or extend within this multiple of the predicted built radius —
- * distant slots on a long FMG road no longer sprout satellite webs; the
- * ladder tightens density inside the circle instead. */
-export const GROWTH_RADIUS_FACTOR = 1.2;
-/** When the growth circle is FULL (arm cap reached, every slot taken,
- * every street's end outside the circle) but the census still needs
- * frontage, the circle itself grows by this factor and growth retries —
- * a village fills its circle, then the circle widens. Without this the
- * confinement deadlocks small sites, which cannot house their census at
- * any density. */
-export const GROWTH_RADIUS_STEP = 1.15;
+/**
+ * Gate 6.6, AREA-FIRST DISC SIZING.
+ *
+ * Everything before this derived the disc from a FRONTAGE BUDGET, and that
+ * budget had a feedback spiral in it: sparse rows drove `seatEfficiency`
+ * (~0.31 measured), which divides the shortfall term, so growth demanded
+ * ~3x the frontage the census needed, over-tiled the disc with lanes the
+ * census could not fill, and made the rows sparser still. Measured at gate
+ * 6.5: only ~31% of the offered frontage carried a house, and the disc was
+ * ~1.4x the radius the house count needs (71 m against 47 at pop 300).
+ *
+ * So the disc is now sized in CLOSED FORM from the census, before any
+ * geometry exists, and growth's whole job is to saturate that disc:
+ *
+ *   laneLength  = dwellings x meanLotFrontage / 2   (both sides are frontage)
+ *   area        = laneLength x VOID_SPACING_M       (the plane-spacing rule)
+ *   R_target    = sqrt(area / PI) x DISC_MARGIN
+ *
+ * DISC_MARGIN is the only slack: junction mouths, corner losses and the
+ * green's own footprint mean a disc cannot be tiled to the last metre.
+ */
+export const DISC_MARGIN = 1.1;
 /** Round-0 estimate of mean lot frontage as a multiple of f0, before the
  * loop has cut real lots to measure. The gradient tops out at ~2x f0, so
  * the mean sits well under the old 1.8. */
@@ -319,7 +346,25 @@ export const MAX_LOT_FRONTAGE_RATIO = 2;
  * is ok. The rectangle overlap test (not the old circumscribing circle)
  * is what keeps touching from becoming interpenetration. */
 export const F0_FLOOR_RATIO = 0.85;
-export const LOT_DEPTH_M = 16;
+/**
+ * Plot depth. Gate 6.6 took this 16 -> 12, and it is the single change that
+ * moved the village's density most.
+ *
+ * A claim is a RECTANGLE, depth x frontage, squared to the local bearing.
+ * At 16 m deep against a ~6 m frontage it is a 2.7:1 sliver, and slivers
+ * that deep collide with everything: with their own neighbours on the
+ * inside of every bend, with the other lane's claims at every junction,
+ * with the green's ring all round the centre. Measured at gate 6.5, those
+ * collisions destroyed roughly two thirds of every village's cut frontage,
+ * which is why the census needed ~3x the ground the house count implies and
+ * the disc came out ~1.4x too wide.
+ *
+ * 12 m still gives a house its yard (crofts consume this depth), while
+ * pulling VOID_SPACING_M down with it (that constant is two plot depths
+ * plus a lane) -- so the lanes come closer, the rows face each other, and
+ * the same census fits in measurably less ground.
+ */
+export const LOT_DEPTH_M = 12;
 /** Gate 2: "green frontage means right at the green" — the ring's fronts
  * sit at the DRAWN edge plus this sliver, not metres out. Was 3. */
 export const RING_SETBACK_M = 0.5;
@@ -356,6 +401,14 @@ export const INNER_CURVE_FRONT_RATIO = 0.8;
  * dropped once truncation would shrink it below this depth — a sliver lot
  * no dwelling could ever seat on is worse than no lot at all. */
 export const MIN_LOT_DEPTH_M = 4;
+/**
+ * Gate 6.6: the sliver of clear ground the cutter leaves between two
+ * neighbouring claims. Claims that abut EXACTLY read as overlapping under
+ * float noise, and §5.4's resolution then drops one of them outright --
+ * measured as nine lost lots in a single pop-300 fixture. Small enough to
+ * be invisible on the ground, large enough to be unambiguous.
+ */
+export const CLAIM_TOUCH_EPS_M = 0.05;
 /**
  * Fix round 2 (2026-08-21): slack allowed between a lot's front and its
  * lane's (or the green's ring) offset frontage edge, on top of the
@@ -460,12 +513,12 @@ export const SCORE_CLASS_WEIGHT = 3;
 export const SCORE_RING_BONUS = 40;
 
 // --- Feedback loop -----------------------------------------------------
-// Fix round 1 (2026-08-21): the §5.4 rules-3-4 lot-claim clipping counts
-// a resolved-away claim as a conversion failure in seatEfficiency, which
-// is more honest but needs one more rung of escalation to still fully
-// house a few small-population fixtures within the probe grid.
+// Gate 6.6: the loop no longer bargains over frontage or tightens the gap
+// term. The disc is sized in closed form (DISC_MARGIN above) and saturated;
+// the loop's ONLY remaining job is to widen R_target by one
+// SATURATION_RING_STEP_M when the saturated, spent disc still leaves
+// someone unhoused. These rungs bound that widening.
 export const MAX_FEEDBACK_ROUNDS = 4;
-export const GAP_TIGHTEN = 0.85;
 
 /**
  * How far an arm/lane extends past the green, as a multiple of the
@@ -519,9 +572,20 @@ export const EDGE_STYLE_WEIGHTS: Record<string, Record<string, number>> = {
  * GRADIENT_RATIO_CAP) -- reusing the frontage gradient's own shape rather
  * than inventing a second curve, so the two read as one system.
  */
-export const CROFT_DEPTH_MAX_M = 25;
-/** Frontage within this fraction of f0 counts as "tight" -- no garden. */
-export const CROFT_TIGHT_FRONTAGE_RATIO = 1.1;
+export const CROFT_DEPTH_MAX_M = 15;
+/**
+ * Frontage within this fraction of f0 counts as "tight" -- no garden.
+ *
+ * Gate 6.6 took it 1.1 -> 1.05. The ramp is driven by `frontageAt(d)/f0`,
+ * whose ceiling is only 1.131, and the gradient's reference radius is now
+ * the disc growth actually SATURATED rather than the old pre-fabric guess.
+ * The guess ran well short of the built edge, so outer lots sat past
+ * GRADIENT_RATIO_CAP and cleared 1.1 easily; against the true disc nothing
+ * exceeds d/R = 1, the ratio tops out AT 1.1, and every croft in the
+ * village silently disappeared. 1.05 puts the gardens back on the outer
+ * third of the fabric, which is where the design asks for them.
+ */
+export const CROFT_TIGHT_FRONTAGE_RATIO = 1.05;
 /** Truncation (lane/green/water/claim clipping) below this depth means no
  * croft at all for that lot -- a sliver strip nobody would fence. */
 export const CROFT_MIN_DEPTH_M = 2;
