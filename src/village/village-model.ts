@@ -25,7 +25,7 @@ import {
   GREEN_JOIN_RATIO, HAMLET_RIBBON_POP,
   INITIAL_MEAN_FRONTAGE_FACTOR, LANE_EXTENT_FACTOR, LANE_SETBACK_M, LOT_DEPTH_M,
   MAX_FEEDBACK_ROUNDS, MAX_LOT_FRONTAGE_RATIO, MEAN_LOT_AREA_M2, RECUT_MAX_PASSES,
-  DISC_ESCALATION_STEP_RATIO, RING_SETBACK_M,
+  DISC_ESCALATION_STEP_RATIO, RING_SETBACK_M, SPACING_RELAX_FLOOR, SPACING_RELAX_STEP,
 } from './constants.js';
 import type { Lane, Lot, VillageModel } from './types.js';
 import { classRank, type RouteType } from './route-class.js';
@@ -152,6 +152,19 @@ export function generateVillage(
   // — and only then — one more saturation ring, with a diagnostic.
   let notch = 0;
   let terrace = false;
+  // GATE 6.11: the rung between terracing and widening. `spacingScale`
+  // multiplies the lane-spacing floors growth judges a new street by, so a
+  // village that cannot house its census at the ideal polar spacing MESHES
+  // TIGHTER before it spreads WIDER. That is the same argument gate 6.9 made
+  // for the cut width, applied to the thing that actually decides how much
+  // street a small disc can hold: widening buys area as the square of the
+  // radius and frontage only as the radius, so it makes the fabric thinner
+  // exactly when it is already too thin, and the land-use metric -- a share
+  // of a disc whose radius is the p95 of the buildings -- falls with it.
+  let spacingRung = 0;
+  const spacingScale = (): number => Math.max(
+    SPACING_RELAX_FLOOR, 1 - spacingRung * SPACING_RELAX_STEP,
+  );
   let extraRings = 0;
   let targetRadiusM = cappedRadiusM;
   // The disc growth actually saturated, which is also the disc the lot
@@ -170,7 +183,8 @@ export function generateVillage(
     lotFloorM = Math.max(inkFloorM, nominalLotFloorM - tightenM);
     activeDeck = tightenDeck(deck, tightenM);
     targetRadiusM = cappedRadiusM * (1 + extraRings * DISC_ESCALATION_STEP_RATIO);
-    const grown = saturateDisc(lanes, green, measuredMeanFrontage, targetRadiusM, rng);
+    const grown = saturateDisc(lanes, green, measuredMeanFrontage, targetRadiusM,
+      rng, spacingScale());
     lanes = grown.lanes;
     lotRadiusM = grown.radiusM;
 
@@ -289,12 +303,16 @@ export function generateVillage(
       notch++;
     } else if (!terrace) {
       terrace = true;
+    } else if (spacingScale() > SPACING_RELAX_FLOOR) {
+      // GATE 6.11: mesh tighter before spreading wider -- see `spacingScale`.
+      spacingRung++;
     } else {
       extraRings++;
       diagnostics.push(
         `disc widened past its closed form: ${spend.unhoused} of ${site.population} `
         + `still unhoused at the cap (R ${Math.round(cappedRadiusM)} m, cut width `
-        + `${f0.toFixed(2)} m at the ink floor, terraces on); `
+        + `${f0.toFixed(2)} m at the ink floor, terraces on, lane spacing at `
+        + `${Math.round(spacingScale() * 100)}% of the polar floor); `
         + `+${Math.round(extraRings * DISC_ESCALATION_STEP_RATIO * 100)}%`,
       );
     }

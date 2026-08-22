@@ -88,6 +88,25 @@ export const BRANCH_SPACING_M = 24;
 export const SLOT_PITCH_MIN_M = 14;
 
 /**
+ * GATE 6.11: how far the lane-spacing floors may RELAX when a village
+ * cannot house its census at the ideal polar spacing -- the ladder rung
+ * between terracing and widening the disc.
+ *
+ * The polar floors (RIB_SPACING_M / LANE_MIN_SPACING_M, blended by how
+ * circumferentially a street runs) are what a fabric wants: they keep ribs
+ * far enough apart that the rings between them are not all junction mouth,
+ * which is where claims die. A SMALL disc cannot always afford them -- there
+ * is only so much circumference at r=25 -- and the honest answer when the
+ * census will not fit is to mesh tighter, not to spread wider. Widening buys
+ * area as the square of the radius and frontage only as the radius, so it
+ * thins the fabric exactly when it is already too thin.
+ *
+ * The floor is 60%: below that the rings ARE all mouth and the extra streets
+ * house nobody, which is the over-tiling gate 6.6 removed.
+ */
+export const SPACING_RELAX_STEP = 0.1;
+export const SPACING_RELAX_FLOOR = 0.6;
+/**
  * Lots a new street is sized to carry across its two sides:
  * length = (target/2) x mean frontage, clamped to [BRANCH_MIN_M,
  * BRANCH_MAX_M]. Short, so a village fills with many interconnected
@@ -381,9 +400,9 @@ export const DISC_MARGIN = 1.1;
  * only thing that moves is the budget, which doubles. That is the whole
  * correction, and it is why the disc becomes a real cap.
  */
-export const LANE_SEATING_YIELD = 0.4;
+export const LANE_SEATING_YIELD = 0.46;
 /** See LANE_SEATING_YIELD: VOID_SPACING_M x LANE_SEATING_YIELD. */
-export const LANE_TILE_SPACING_M = 11.6;
+export const LANE_TILE_SPACING_M = 13.7;
 
 /** Round-0 estimate of mean lot frontage as a multiple of f0, before the
  * loop has cut real lots to measure. The gradient tops out at ~2x f0, so

@@ -730,7 +730,8 @@ function foldedGap(a: number, b: number): number {
  * that cannot house its census meshes tighter rather than spreading thinner.
  */
 function earnsItsSpace(
-  points: Point[], out: Lane[], parentId?: string, alongsideOnly = false,
+  points: Point[], out: Lane[], spacingScale: number,
+  parentId?: string, alongsideOnly = false,
 ): boolean {
   const others = out.filter((l) => l.id !== parentId);
   if (others.length === 0) return true;
@@ -758,7 +759,7 @@ function earnsItsSpace(
   // stretch dies in resolution. The floor is taken at the median too, so a
   // lane that is a rib for half its length is judged as one.
   gaps.sort((a, b) => a - b);
-  return gaps[Math.floor(gaps.length / 2)] >= LANE_MIN_SPACING_M;
+  return gaps[Math.floor(gaps.length / 2)] >= LANE_MIN_SPACING_M * spacingScale;
 }
 
 /**
@@ -832,7 +833,7 @@ function extendOne(
 /** One growth step. Returns false when there is nowhere left to grow. */
 function growOne(
   out: Lane[], green: Green, meanFrontageM: number, growthRadiusM: number,
-  rng: SeededRandom, satRadiusM: number,
+  rng: SeededRandom, satRadiusM: number, spacingScale: number,
 ): boolean {
   // 1. The green may still host a street of its own: an invented rib, up
   //    to the DISC-derived rib count (gate 6.11 -- see `ribCountFor`; it
@@ -867,7 +868,7 @@ function growOne(
         out, green);
       // Gate 6.6: a radial that never leaves its neighbours' ground only
       // splits the same frontage in two -- see `earnsItsSpace`.
-      if (points.length < 2 || !earnsItsSpace(points, out)) continue;
+      if (points.length < 2 || !earnsItsSpace(points, out, spacingScale)) continue;
       out.push({
         id: inventedLaneId(candidate),
         type: 'local',
@@ -896,7 +897,7 @@ function growOne(
       // because a radial-ish branch into a radial fabric is what built the
       // starfish; where the fabric is not radial `seedArcThrough` declines
       // and the ordinary branch below is unchanged.
-      if (seedArcThrough(out, green, slot.anchor, slot.parent)) return true;
+      if (seedArcThrough(out, green, slot.anchor, slot.parent, spacingScale)) return true;
       // branchLaneId formats `at` as a 2-digit percent (~100 buckets per
       // parent); if this slot's bucket is taken, probe deterministically.
       // The id is identity, the anchor is authoritative for position.
@@ -976,7 +977,8 @@ function growOne(
       // forbids it by construction. Without this the polar floor rejects
       // every rung and the fabric stays an onion however short a rung is
       // allowed to be.
-      if (!earnsItsSpace(points, out, slot.parent.id, joinsAtBothEnds)) continue;
+      if (!earnsItsSpace(points, out, spacingScale, slot.parent.id,
+        joinsAtBothEnds)) continue;
       out.push({
         id,
         type: cls,
@@ -1340,6 +1342,7 @@ function buildArc(
  */
 function seedArcThrough(
   out: Lane[], green: Green, through: Point, parent: Lane | undefined,
+  spacingScale: number,
 ): boolean {
   if (!locallyRadial(out, through, green)) return false;
   const snapExclude = new Set<string>(parent ? [parent.id] : []);
@@ -1383,7 +1386,7 @@ function seedArcThrough(
   // take. The exemption is deliberately arc-only: applied to every branch
   // it let the fabric pack to a 18 m junction pitch and pushed the
   // converging-claim death share from 31% to 44%.
-  if (!earnsItsSpace(points, out, host.id, true)) return false;
+  if (!earnsItsSpace(points, out, spacingScale, host.id, true)) return false;
   {
     const acc = arcLengths(points);
     const total = acc[acc.length - 1];
@@ -1399,7 +1402,7 @@ function seedArcThrough(
       }
       widest = Math.max(widest, nearest);
     }
-    if (widest < LANE_MIN_SPACING_M) return false;
+    if (widest < LANE_MIN_SPACING_M * spacingScale) return false;
   }
 
   const acc = arcLengths(host.points);
@@ -1455,7 +1458,7 @@ function seedArcThrough(
  */
 function seedVoidLane(
   out: Lane[], green: Green, meanFrontageM: number, satRadiusM: number,
-  rng: SeededRandom,
+  rng: SeededRandom, spacingScale: number,
 ): boolean {
   const void_ = widestVoid(out, green, satRadiusM);
   if (!void_ || void_.distance <= VOID_SPACING_M) return false;
@@ -1464,7 +1467,7 @@ function seedVoidLane(
   // fills a wedge runs across it, not out of it. No parent is handed to the
   // arc here: the void point is in open ground, so every lane around it —
   // the nearest one included — is a candidate to join.
-  if (seedArcThrough(out, green, void_.point, undefined)) return true;
+  if (seedArcThrough(out, green, void_.point, undefined, spacingScale)) return true;
 
   const bearing = Math.round(bearingOf(void_.junction, void_.point)) % 360;
   // Long enough to run THROUGH the void rather than stop at its near edge,
@@ -1583,7 +1586,7 @@ function circumferentialityDeg(lane: Lane, green: Green): number {
  */
 function seedCoverageLane(
   out: Lane[], green: Green, meanFrontageM: number, satRadiusM: number,
-  rng: SeededRandom,
+  rng: SeededRandom, spacingScale: number,
 ): boolean {
   const gap = widestGap(angularCoverage(out, green, satRadiusM));
   if (gap.widthDeg <= coverageThresholdDeg(satRadiusM)) return false;
@@ -1603,7 +1606,7 @@ function seedCoverageLane(
     const at = new Point(
       green.centre.x + dir.x * radiusM, green.centre.y + dir.y * radiusM,
     );
-    if (seedArcThrough(out, green, at, undefined)) return true;
+    if (seedArcThrough(out, green, at, undefined, spacingScale)) return true;
   }
 
   const reach = Math.max(0, satRadiusM - greenDrawnRadius(green));
@@ -1650,7 +1653,7 @@ function seedCoverageLane(
  */
 export function saturateDisc(
   lanes: Lane[], green: Green, meanFrontageM: number,
-  targetRadiusM: number, rng: SeededRandom,
+  targetRadiusM: number, rng: SeededRandom, spacingScale = 1,
 ): { lanes: Lane[]; radiusM: number } {
   const out = [...lanes];
   let guard = 0;
@@ -1682,13 +1685,13 @@ export function saturateDisc(
     // as a 66 deg laneless sector at pop 300, over the 60 deg bar. Coverage
     // is a hard constraint on the shape; meshing an already-covered ring is
     // discretionary, so the constraint goes first.
-    if (seedCoverageLane(out, green, meanFrontageM, satRadiusM, rng)) continue;
-    if (growOne(out, green, meanFrontageM, targetRadiusM, rng, satRadiusM)) continue;
+    if (seedCoverageLane(out, green, meanFrontageM, satRadiusM, rng, spacingScale)) continue;
+    if (growOne(out, green, meanFrontageM, targetRadiusM, rng, satRadiusM, spacingScale)) continue;
     // Gate 6.5: and even with every bearing covered, a RADIAL tree leaves
     // widening wedges of untouched ground between its tendrils -- the
     // spider. Measure the GROUND, not the network: if anywhere in the disc
     // is further than VOID_SPACING_M from a lane, put a lane there.
-    if (seedVoidLane(out, green, meanFrontageM, satRadiusM, rng)) continue;
+    if (seedVoidLane(out, green, meanFrontageM, satRadiusM, rng, spacingScale)) continue;
     // This ring is genuinely full. Widen it -- or, at the target, stop:
     // the disc is saturated and growing past it is exactly the over-tiling
     // gate 6.6 removed.
