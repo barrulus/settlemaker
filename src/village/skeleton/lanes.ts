@@ -605,7 +605,6 @@ function truncateAtFirstCrossing(
         const q = segmentIntersection(points[i - 1], points[i], lane.points[j - 1], lane.points[j]);
         if (!q) continue;
         if (lane.id === parentId && dist(start, q) <= JUNCTION_CLEAR_M) continue;
-        if (dist(q, green.centre) <= green.diameter / 2) continue;
         const t = dist(points[i - 1], q);
         if (!best || t < best.t) best = { q, t };
       }
@@ -952,7 +951,9 @@ function growOne(
       // finding was lost with that revert.) A run that ends ON another lane
       // is floored at CONNECT_MIN_M instead; one that ends in open ground
       // still has to be a street.
-      if (points.length < 2 || polylineLength(points) < BRANCH_MIN_M) continue;
+      const joinsAtBothEnds = snap !== null || points.length < assembled;
+      const floorM = joinsAtBothEnds ? CONNECT_MIN_M : BRANCH_MIN_M;
+      if (points.length < 2 || polylineLength(points) < floorM) continue;
       // GATE 6.11: a run that JOINS at both ends takes no mouth exemption.
       // `truncateAtFirstCrossing` forgives one crossing of the parent within
       // JUNCTION_CLEAR_M of the start -- that is the junction an ordinary
@@ -964,7 +965,9 @@ function growOne(
       // `segmentIntersection` excludes anyway, so for it a single
       // registered intersection with the parent is one too many. Same
       // reasoning, and the same rule, as gate 6.10 applied to the arc.
-      if (crossesParentTwice(points, slot.parent)) continue;
+      if (joinsAtBothEnds
+        ? crossesLanePoints(points, slot.parent.points)
+        : crossesParentTwice(points, slot.parent)) continue;
       // Gate 6.6: and it must open ground the existing lanes cannot reach.
       // GATE 6.11: a run that JOINS at both ends is judged by the same
       // alongside-only rule an arc gets, and for the identical reason — a
@@ -973,7 +976,7 @@ function growOne(
       // forbids it by construction. Without this the polar floor rejects
       // every rung and the fabric stays an onion however short a rung is
       // allowed to be.
-      if (!earnsItsSpace(points, out, slot.parent.id)) continue;
+      if (!earnsItsSpace(points, out, slot.parent.id, joinsAtBothEnds)) continue;
       out.push({
         id,
         type: cls,
@@ -1381,6 +1384,23 @@ function seedArcThrough(
   // it let the fabric pack to a 18 m junction pitch and pushed the
   // converging-claim death share from 31% to 44%.
   if (!earnsItsSpace(points, out, host.id, true)) return false;
+  {
+    const acc = arcLengths(points);
+    const total = acc[acc.length - 1];
+    let widest = 0;
+    for (let s = 0; s <= total; s += LANE_SAMPLE_STEP_M) {
+      const { p } = sampleAt(points, acc, s);
+      let nearest = Infinity;
+      for (const lane of out) {
+        for (let i = 1; i < lane.points.length; i++) {
+          nearest = Math.min(nearest,
+            dist(p, closestPointOnSegment(p, lane.points[i - 1], lane.points[i])));
+        }
+      }
+      widest = Math.max(widest, nearest);
+    }
+    if (widest < LANE_MIN_SPACING_M) return false;
+  }
 
   const acc = arcLengths(host.points);
   const totalHost = acc[acc.length - 1];
