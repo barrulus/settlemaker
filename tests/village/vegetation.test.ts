@@ -313,7 +313,17 @@ describe('vegetation geometric invariants (real village fixtures)', () => {
       const insideArea = Math.PI * edge * edge;
       const outsideArea = Math.PI * (rim * rim - edge * edge);
       expect(inside).toBeGreaterThan(0);
-      expect(inside / insideArea).toBeGreaterThan(3 * (outside / outsideArea));
+      // Gate 5.4 deliberately thickened the OUTER woods (bigger patches,
+      // more of them, so adjacent woods merge into masses), which narrowed
+      // this ratio from comfortably over 3x to about 2.95x. The property
+      // being pinned is the FLIP -- grove country inside, open country
+      // outside -- not the particular multiple, so the bar moved to 2x.
+      //
+      // It did NOT move again: at a seed chance of 0.8 the ratio fell to
+      // 1.93x and this failed, and the answer was to pull the seeding back
+      // to 0.7 (the brief asked for merging to be "occasional"), not to
+      // lower the bar a second time until the design fit it.
+      expect(inside / insideArea).toBeGreaterThan(2 * (outside / outsideArea));
     }
   }, 20000);
 

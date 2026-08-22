@@ -1,7 +1,7 @@
 import { SeededRandom } from '../utils/random.js';
 import { hasGlyph, nominalInkWidthM } from './glyphs.js';
 import {
-  DECK_GAP_M, F0_WEIGHT_SHARE_MIN, FAMILY_HUT_MAX_POP, LONGHOUSE_MIN_POP,
+  DECK_GAP_M, F0_WEIGHT_SHARE_MIN, FAMILY_HUT_MAX_POP, LONGHOUSE_MIN_POP, LONGHOUSE_WEIGHT,
 } from './constants.js';
 import type { Site } from './types.js';
 
@@ -18,6 +18,22 @@ export interface DeckEntry {
   /** Capped entries are placed once, before the ordinary draw. */
   cap?: 'one';
   requires?: { minPop?: number; flag?: 'temple' | 'trade' | 'port' };
+  /**
+   * Gate 5.4: a HALL -- a longhouse or barn, not an ordinary dwelling.
+   * Halls are placed by the ordinary draw like anything else, but they are
+   * excluded from `widestDwellingWidthM`, which is R21's "widest COMMON
+   * dwelling" and sets f0 (and with it every lot's width and the owner's
+   * one-house-width gap rule).
+   *
+   * Before this flag, "is it an outlier?" was inferred from deck WEIGHT
+   * alone. That conflated two independent things: how OFTEN a building is
+   * placed, and whether it is the size the ordinary plot is cut for.
+   * Raising the longhouse's weight to put more halls among the cottages
+   * pushed it over F0_WEIGHT_SHARE_MIN and doubled f0 -- widening every lot
+   * in the village to fit a building that drawEntry's own minFrontage
+   * filter already declines to place on a narrow one.
+   */
+  hall?: true;
 }
 
 // Footprints come from glyphs.ts — this module never touches the manifest.
@@ -31,6 +47,7 @@ function entry(
     occupancy,
     weight,
     sizeFactor: extra.sizeFactor ?? 1,
+    hall: extra.hall,
     minFrontage: extra.minFrontage
       ?? nominalInkWidthM(glyph) * (extra.sizeFactor ?? 1) + DECK_GAP_M,
     cap: extra.cap,
@@ -81,7 +98,7 @@ export function baseDeck(population: number, rng: SeededRandom): DeckEntry[] {
 
   const entries: DeckEntry[] = [entry(dwelling, occupancy, 100)];
   if (!hutFamily && population >= LONGHOUSE_MIN_POP) {
-    entries.push(entry('sm-longhouse', 12, 8));
+    entries.push(entry('sm-longhouse', 12, LONGHOUSE_WEIGHT, { hall: true }));
   }
   entries.push(
     // No sizeFactor on the landmarks: the batch001 era scaled a 7 m inn up
@@ -168,7 +185,9 @@ export function deckFor(biome: string, population: number, rng: SeededRandom): D
  * regardless of share, so f0 is never zero or undefined.
  */
 export function widestDwellingWidthM(deck: DeckEntry[]): number {
-  const pool = deck.filter((e) => !e.cap && e.weight > 0);
+  // Halls are excluded outright (gate 5.4): a longhouse is not the size the
+  // ordinary plot is cut for, however often the deck places one.
+  const pool = deck.filter((e) => !e.cap && e.weight > 0 && !e.hall);
   if (pool.length === 0) return 8;
   const totalWeight = pool.reduce((s, e) => s + e.weight, 0);
   const common = totalWeight > 0

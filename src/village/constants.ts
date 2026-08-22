@@ -276,7 +276,13 @@ export const MIN_LOT_DEPTH_M = 4;
 export const FRONT_ON_LANE_EPS_M = 4;
 
 // --- Dwellings ---------------------------------------------------------
-export const SIZE_JITTER = 0.1;
+/**
+ * Gate 5.4: +/-0.10 -> +/-0.18. Maplefall's roofs vary visibly in size;
+ * ours were near-uniform, which is part of why the fabric read as
+ * manufactured. Widened rather than replaced -- this is the same per-
+ * instance footprint jitter, just given more room.
+ */
+export const SIZE_JITTER = 0.18;
 export const FIT_MIN = 0.85;
 export const FIT_MAX = 1.15;
 /** Gate 3: houses still read as set back too far. Was 1.5, then 0.5. */
@@ -303,7 +309,16 @@ export const DECK_GAP_M = 1.5;
  * houses above it. The longhouse is the only in-family variation, and only
  * unlocks at LONGHOUSE_MIN_POP; everything else is a capped POI. */
 export const FAMILY_HUT_MAX_POP = 120;
-export const LONGHOUSE_MIN_POP = 250;
+/**
+ * Gate 5.4: 250 -> 200, and the longhouse's deck weight 8 -> 14. Maplefall
+ * has big halls and barns standing among the cottages; a single dwelling
+ * size everywhere is what made ours read as an estate of identical units.
+ * Lowering the gate and raising the weight puts a few large roofs into
+ * villages from 200 up.
+ */
+export const LONGHOUSE_MIN_POP = 200;
+/** Deck weight for the longhouse against the ordinary dwelling's 100. */
+export const LONGHOUSE_WEIGHT = 14;
 
 /**
  * R21: the minimum share of the UNCAPPED deck's total weight an entry must
@@ -643,19 +658,36 @@ export const VEG_CLUMP_INTERIOR = [2, 6] as const;
  * described: outside the fabric nothing is placed one tree at a time any
  * more.
  */
-/** Pitch of the patch-seed grid, metres. Comfortably wider than twice
- * VEG_PATCH_RADIUS_M, so neighbouring woods have open ground between them
- * instead of merging into a continuous belt. */
+/**
+ * Pitch of the patch-seed grid, metres.
+ *
+ * Gate 5.4 grew the patches (radius 15 -> 22, trees 8-20 -> 10-28) and
+ * raised the seed chance 0.5 -> 0.8 against this unchanged pitch, so
+ * adjacent woods now OVERLAP and merge into larger masses -- Maplefall's
+ * woodland reads as blobs of real size, not as a polka dot of identical
+ * copses. The thinning-to-rim falloff still opens the country out, so
+ * merging happens near the fields and stops further out.
+ */
 export const VEG_PATCH_CELL_M = 45;
-/** Chance a patch cell seeds a wood, right at the fabric edge. Thins
- * linearly to nothing at the scatter rim, so the country opens out. */
-export const VEG_PATCH_CHANCE = 0.5;
+/**
+ * Chance a patch cell seeds a wood, right at the fabric edge. Thins
+ * linearly to nothing at the scatter rim, so the country opens out.
+ *
+ * Gate 5.4: 0.5 -> 0.7. The brief asked for enough seeding that adjacent
+ * patches "occasionally merge"; 0.8 merged them so thoroughly that the
+ * outer woodland reached the interior's own per-area density and the
+ * grove-country net -- which pins the whole inside-denser-than-outside
+ * flip -- came out at 1.93x. Rather than lower that bar a second time,
+ * the seeding was pulled back to where merging is occasional, which is
+ * what was actually asked for.
+ */
+export const VEG_PATCH_CHANCE = 0.7;
 /** How far a wood's trees spread from its seed point. */
-export const VEG_PATCH_RADIUS_M = 15;
+export const VEG_PATCH_RADIUS_M = 22;
 /** Trees per wood, as [min, maxExclusive] for `rng.int` -- 8 to 20. Enough
  * overlap at VEG_PATCH_RADIUS_M to read as a canopy mass rather than a
  * ring of separate trees. */
-export const VEG_PATCH_TREES = [8, 21] as const;
+export const VEG_PATCH_TREES = [10, 29] as const;
 /** Clearance added on top of a lane's own half-width for the vegetation
  * rejection test (flat across every lane class, unlike LANE_SETBACK_M --
  * a tree that close to any lane reads as blocking it). */

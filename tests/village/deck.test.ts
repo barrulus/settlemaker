@@ -4,6 +4,7 @@ import {
   baseDeck, buildDeck, deckFor, drawEntry, eligible, meanOccupancy,
   widestDwellingWidthM,
 } from '../../src/village/deck.js';
+import { LONGHOUSE_MIN_POP } from '../../src/village/constants.js';
 import type { DeckEntry } from '../../src/village/deck.js';
 import { hasGlyph, nominalFootprint, nominalInkWidthM } from '../../src/village/glyphs.js';
 import type { Site } from '../../src/village/types.js';
@@ -78,10 +79,26 @@ describe('deck contents', () => {
   });
 
   it('unlocks the longhouse only above its population gate', () => {
-    const below = baseDeck(200, new SeededRandom(1));
+    // Gate 5.4 lowered LONGHOUSE_MIN_POP 250 -> 200, so halls stand among
+    // the cottages from a mid-sized village up. Bounds taken from the
+    // constant rather than restated, so the next move cannot silently
+    // leave this test asserting the old gate.
+    const below = baseDeck(LONGHOUSE_MIN_POP - 1, new SeededRandom(1));
     expect(below.some((e) => e.glyph === 'sm-longhouse')).toBe(false);
-    const above = baseDeck(300, new SeededRandom(1));
+    const above = baseDeck(LONGHOUSE_MIN_POP, new SeededRandom(1));
     expect(above.some((e) => e.glyph === 'sm-longhouse')).toBe(true);
+  });
+
+  // Gate 5.4: placement frequency and plot-width basis are independent.
+  it('marks the longhouse a HALL, so its weight never widens every lot', () => {
+    const deck = baseDeck(400, new SeededRandom(1));
+    const longhouse = deck.find((e) => e.glyph === 'sm-longhouse')!;
+    expect(longhouse.hall).toBe(true);
+    // It carries real weight (it is meant to be placed), yet f0's basis
+    // still comes from the ordinary dwelling.
+    expect(longhouse.weight).toBeGreaterThan(10);
+    const dwelling = deck.filter((e) => !e.cap && !e.hall)[0];
+    expect(widestDwellingWidthM(deck)).toBeCloseTo(nominalInkWidthM(dwelling.glyph), 5);
   });
 
   it('is deterministic per seed and varies between villages', () => {

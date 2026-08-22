@@ -328,30 +328,32 @@ function sectorPolygon(
   skew: number = 0,
 ): Point[] {
   const span = toDeg - fromDeg;
-  const mid = (fromDeg + toDeg) / 2;
-  // Gate 5.4 SKEW: the inner arc subtends a different angle from the outer,
-  // both centred on the block's mid-bearing, so the block is an irregular
-  // quad rather than a perfect annular sector. `skew` is bounded by
-  // FIELD_SKEW_JITTER and the WIDER of the two spans is what the clip
-  // tested, so neither arc can reach ground that was not checked.
-  // The skew SHRINKS one arc; it never widens either. Both arcs therefore
-  // stay inside the span the clip proved clear, so no vertex can land on
-  // untested ground -- and the block is still a trapezoid rather than a
-  // sector, which is the whole visual point.
-  const shrink = Math.abs(skew);
-  const outerSpan = skew >= 0 ? span : span * (1 - shrink);
-  const innerSpan = skew >= 0 ? span * (1 - shrink) : span;
-  const steps = Math.max(2, Math.ceil(Math.max(outerSpan, innerSpan) / FIELD_BLOCK_SLICE_DEG));
+  const steps = Math.max(2, Math.ceil(span / FIELD_BLOCK_SLICE_DEG));
   const at = (deg: number, r: number): Point => {
     const d = bearingVector(deg);
     return new Point(green.centre.x + d.x * r, green.centre.y + d.y * r);
   };
+  // Gate 5.4 SKEW, expressed RADIALLY rather than angularly: the block is
+  // deeper at one end than the other, so it is an irregular quad instead of
+  // a perfect annular sector -- which is the visual point -- while every
+  // vertex stays on a bearing the clip actually tested, at a radius inside
+  // [inner, outer], which the clip also tested.
+  //
+  // The first attempt skewed the SPAN (inner arc subtending a different
+  // angle from the outer). That put the shrunk arc's vertices on bearings
+  // BETWEEN the tested slices, and the §5.7 net duly caught a vertex inside
+  // a lot claim. Bearings are not ours to invent here; radii are.
+  const depth = outer - inner;
+  const mag = Math.abs(skew) * 0.5;
+  const lean = (t: number): number => (skew >= 0 ? t : 1 - t);
   const pts: Point[] = [];
   for (let i = 0; i <= steps; i++) {
-    pts.push(at(mid - outerSpan / 2 + (outerSpan * i) / steps, outer));
+    const t = i / steps;
+    pts.push(at(fromDeg + span * t, outer - depth * mag * lean(t)));
   }
   for (let i = steps; i >= 0; i--) {
-    pts.push(at(mid - innerSpan / 2 + (innerSpan * i) / steps, inner));
+    const t = i / steps;
+    pts.push(at(fromDeg + span * t, inner + depth * mag * lean(1 - t)));
   }
   return pts;
 }
@@ -453,12 +455,24 @@ function buildWedgeBlocks(
       const area = sectorArea(spanDeg, jInner, jOuter);
       // A block this small is the dropped rug, not a field.
       if (area < FIELD_MIN_BLOCK_AREA_M2) continue;
+      // Gate 5.4: verify the POLYGON, not just the sample grid.
+      //
+      // `clipSlotToRuns` proves a set of bearings clear at a fixed slice
+      // pitch; `sectorPolygon` emits vertices at its own pitch across the
+      // surviving run. Those two pitches only coincide when the run's span
+      // is an exact multiple of the slice -- which the span jitter made
+      // untrue, so a vertex could land between tested bearings and, in one
+      // measured village out of forty, inside a lot claim. Rather than try
+      // to keep two samplings in phase, the emitted geometry is checked
+      // directly: if any vertex is on claimed ground the block is dropped.
+      const polygon = sectorPolygon(green, run.fromDeg, run.toDeg, jInner, jOuter, skew);
+      if (!polygon.every((p) => isClearGround(p, lots, crofts, lanes, water))) continue;
       const glyph = pickCropGlyph(crops, blocks.length, blocks.length === 0, allowOrchardVine, rng, toggle);
       blocks.push({
         id: `field:${wedge.id}:S${ordinal}`,
         wedgeId: wedge.id,
         glyph,
-        polygon: sectorPolygon(green, run.fromDeg, run.toDeg, jInner, jOuter, skew),
+        polygon,
         furrowBearingDeg,
         areaM2: area,
       });

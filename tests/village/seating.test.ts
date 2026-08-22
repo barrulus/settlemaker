@@ -56,14 +56,20 @@ describe('sizeFor', () => {
   // NON-SEMANTIC factor — jitter x fit, i.e. the variation applied ON TOP
   // OF sizeFactor. For a sizeFactor-1 entry that is exactly footprint /
   // nominal, so this test pins it directly: [FIT_MIN, FIT_MAX] x
-  // [1-SIZE_JITTER, 1+SIZE_JITTER] = [0.765, 1.265], across many seeds and
-  // a range of lot frontages (narrow, typical, generous — so both the
-  // shrink-to-fit and grow-to-fit legs of `fit` get exercised).
-  it('keeps the non-semantic (jitter x fit) factor within [0.765, 1.265] for a sizeFactor-1 entry', () => {
+  // [1-SIZE_JITTER, 1+SIZE_JITTER], across many seeds and a range of lot
+  // frontages (narrow, typical, generous — so both the shrink-to-fit and
+  // grow-to-fit legs of `fit` get exercised).
+  //
+  // Gate 5.4 widened SIZE_JITTER 0.10 -> 0.18 for roof variety, so the
+  // bound is DERIVED from the constants rather than restated as literals.
+  // The two literal assertions that used to sit here (0.765 / 1.265) were
+  // pinning the constants' current values a second time, in a test about
+  // the fit maths — so they failed for a tuning change that broke nothing.
+  it('keeps the non-semantic (jitter x fit) factor inside [FIT_MIN x (1-jitter), FIT_MAX x (1+jitter)]', () => {
     const nonSemanticMin = FIT_MIN * (1 - SIZE_JITTER);
     const nonSemanticMax = FIT_MAX * (1 + SIZE_JITTER);
-    expect(nonSemanticMin).toBeCloseTo(0.765, 9);
-    expect(nonSemanticMax).toBeCloseTo(1.265, 9);
+    expect(nonSemanticMin).toBeLessThan(1);
+    expect(nonSemanticMax).toBeGreaterThan(1);
     for (const frontageM of [4, 8, 40]) {
       for (let s = 1; s < 40; s++) {
         const [w] = sizeFor(house, lot(frontageM), new SeededRandom(s));
