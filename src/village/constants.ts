@@ -126,6 +126,19 @@ export const LOOP_SNAP_M = 18;
  *    can no longer pay for the census.
  */
 export const SATURATION_RING_START_M = 30;
+/**
+ * Gate 6.3, NO HOUSED RIBBON ON THE TRUNK. In the owner's drawing over
+ * nofauna-900-seed1 the SW trunk arm is BARE beyond the cluster body: the
+ * houses stop where the round fabric ends and the arm carries on as a plain
+ * road. "No isolated long roads leading away from the core."
+ *
+ * So a TRUNK-class lane (royal/main/market/town -- the FMG arms, which are
+ * drawn to the map edge and never grown) carries lots only within this
+ * share of the saturated disc. Invented local/trail/footpath lanes are the
+ * village's own streets and keep the full disc.
+ */
+export const ARM_LOT_RADIUS_SHARE = 0.6;
+
 export const SATURATION_RING_STEP_M = 20;
 /** Crossing checks ignore intersections with a branch's own PARENT this
  * close to the branch's start — that is the junction the branch exists to
@@ -310,6 +323,17 @@ export const DECK_GAP_M = 1.5;
  * houses above it. The longhouse is the only in-family variation, and only
  * unlocks at LONGHOUSE_MIN_POP; everything else is a capped POI. */
 export const FAMILY_HUT_MAX_POP = 120;
+/**
+ * ...except in a hamlet, where the owner is explicit that stringing along
+ * the road is right: "only in tiny hamlets is stretch on the road fine."
+ * Below this population the trunk cap does not apply at all.
+ *
+ * Deliberately the same threshold as FAMILY_HUT_MAX_POP: "small enough to
+ * be a hut village" and "small enough to be a roadside string" are the same
+ * judgement about the same settlements, and splitting them into two numbers
+ * that happen to be equal would invite them to drift apart for no reason.
+ */
+export const HAMLET_RIBBON_POP = FAMILY_HUT_MAX_POP;
 /**
  * Gate 5.4: 250 -> 200, and the longhouse's deck weight 8 -> 14. Maplefall
  * has big halls and barns standing among the cottages; a single dwelling

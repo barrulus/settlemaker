@@ -17,18 +17,42 @@ import { intrudesOnLane, spendCensus, type SpendResult } from './dwellings.js';
 import { dressVillage } from './dressing/index.js';
 import { closestPointOnSegment, dist } from './geometry.js';
 import {
-  BRANCH_SPACING_M, FRONT_ON_LANE_EPS_M, GAP_TIGHTEN, GREEN_JOIN_RATIO, GROWTH_RADIUS_FACTOR,
+  ARM_LOT_RADIUS_SHARE, BRANCH_SPACING_M, FRONT_ON_LANE_EPS_M, GAP_TIGHTEN, GREEN_JOIN_RATIO,
+  GROWTH_RADIUS_FACTOR, HAMLET_RIBBON_POP,
   INITIAL_MEAN_FRONTAGE_FACTOR, LANE_EXTENT_FACTOR, LANE_SETBACK_M, LOT_DEPTH_M,
   MAX_FEEDBACK_ROUNDS, MAX_LOT_FRONTAGE_RATIO, MEAN_LOT_AREA_M2, RING_SETBACK_M,
 } from './constants.js';
 import type { Lane, Lot, VillageModel } from './types.js';
-import type { RouteType } from './route-class.js';
+import { classRank, type RouteType } from './route-class.js';
 
 /** The band this engine serves. Above it, the existing engine runs. */
 export const VILLAGE_POP_CEILING = 1000;
 
 // Every tunable below comes from constants.ts. VILLAGE_POP_CEILING lives
 // here because it is a routing decision, not a value a gate would tune.
+
+/**
+ * Gate 6.3: how far out along a given lane lots may be cut.
+ *
+ * A TRUNK-class lane -- royal/main/market/town, i.e. one of FMG's own arms,
+ * drawn to the map edge and never grown -- carries lots only within
+ * ARM_LOT_RADIUS_SHARE of the saturated disc. Beyond that it is a plain
+ * road leaving the village, which is what the owner drew: "no isolated long
+ * roads leading away from the core", the arm bare past the cluster body.
+ *
+ * The village's own invented streets (local/trail/footpath) keep the whole
+ * disc -- they ARE the cluster.
+ *
+ * Below HAMLET_RIBBON_POP the cap lifts entirely: "only in tiny hamlets is
+ * stretch on the road fine."
+ */
+export function lotReachFor(
+  lane: Lane, saturatedRadiusM: number, population: number,
+): number {
+  if (population < HAMLET_RIBBON_POP) return saturatedRadiusM;
+  const isTrunk = classRank(lane.type) <= classRank('town');
+  return isTrunk ? saturatedRadiusM * ARM_LOT_RADIUS_SHARE : saturatedRadiusM;
+}
 
 export function generateVillage(input: AzgaarBurgInput, seed: number): VillageModel {
   const rng = new SeededRandom(seed);
@@ -137,7 +161,8 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
     lots = [
       ...subdivideGreen(green, f0, LOT_DEPTH_M, rng, lanes),
       ...lanes.flatMap((l) => subdivideLane(
-        l, green, builtRadius, f0, LOT_DEPTH_M, rng, lotFloorM, lotCapM, lotRadiusM,
+        l, green, builtRadius, f0, LOT_DEPTH_M, rng, lotFloorM, lotCapM,
+        lotReachFor(l, lotRadiusM, site.population),
       )),
     ];
     // §5.4 rules 3-4 (the R20 debt): clipLots only ever dropped water/

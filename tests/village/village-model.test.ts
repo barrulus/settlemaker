@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { generateVillage, VILLAGE_POP_CEILING } from '../../src/village/village-model.js';
-import { EDGE_STYLE_ORDER } from '../../src/village/constants.js';
+import { Point } from '../../src/types/point.js';
+import {
+  generateVillage, lotReachFor, VILLAGE_POP_CEILING,
+} from '../../src/village/village-model.js';
+import {
+  ARM_LOT_RADIUS_SHARE, EDGE_STYLE_ORDER, HAMLET_RIBBON_POP,
+} from '../../src/village/constants.js';
+import type { RouteType } from '../../src/village/route-class.js';
+import type { Lane } from '../../src/village/types.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 
 const base: AzgaarBurgInput = {
@@ -201,5 +208,41 @@ describe('generateVillage: frontage feedback loop escalation (R16)', () => {
     const a = generateVillage({ ...base, population: 900 }, 11);
     const b = generateVillage({ ...base, population: 900 }, 11);
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+});
+
+// Gate 6.3: the owner drew the SW trunk arm BARE beyond the cluster body --
+// "no isolated long roads leading away from the core; only in tiny hamlets
+// is stretch on the road fine." The rule is pinned directly rather than
+// end-to-end: the saturated disc is internal to growth, and every proxy for
+// it from the finished model turned out to be unsound (a constrained
+// village's invented streets need not reach as far as its trunk, so
+// "trunk <= invented" is simply not an invariant).
+describe('lotReachFor (gate 6.3: no housed ribbon on the trunk)', () => {
+  const trunk = (type: RouteType): Lane => ({
+    id: 'arm-225', type, widthM: 5, points: [new Point(0, 0), new Point(0, 100)],
+  });
+  const street: Lane = {
+    id: 'lane-100', type: 'local', widthM: 3.5, points: [new Point(0, 0), new Point(0, 50)],
+  };
+
+  it('caps every trunk class at ARM_LOT_RADIUS_SHARE of the disc', () => {
+    for (const type of ['royal', 'main', 'market', 'town'] as RouteType[]) {
+      expect(lotReachFor(trunk(type), 200, 900)).toBeCloseTo(200 * ARM_LOT_RADIUS_SHARE, 6);
+    }
+  });
+
+  it('leaves the village its own streets in full', () => {
+    expect(lotReachFor(street, 200, 900)).toBeCloseTo(200, 6);
+    for (const type of ['trail', 'footpath'] as RouteType[]) {
+      expect(lotReachFor({ ...street, type }, 200, 900)).toBeCloseTo(200, 6);
+    }
+  });
+
+  it('lifts the cap entirely below HAMLET_RIBBON_POP: a hamlet may string along its road', () => {
+    expect(lotReachFor(trunk('main'), 200, HAMLET_RIBBON_POP - 1)).toBeCloseTo(200, 6);
+    expect(lotReachFor(trunk('main'), 200, HAMLET_RIBBON_POP)).toBeCloseTo(
+      200 * ARM_LOT_RADIUS_SHARE, 6,
+    );
   });
 });
