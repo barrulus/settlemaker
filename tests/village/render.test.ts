@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { generateVillage } from '../../src/village/village-model.js';
 import { renderVillage } from '../../src/village/render.js';
 import { hasGlyph } from '../../src/village/glyphs.js';
+import { classRank } from '../../src/village/route-class.js';
+import { RENDER_MINOR_LANE_WIDTH_SHARE } from '../../src/village/constants.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 
 // Fix round 1 (2026-08-21): field/wedge ids can legitimately carry regex
@@ -21,6 +23,9 @@ const input: AzgaarBurgInput = {
 
 describe('renderVillage', () => {
   const model = generateVillage(input, 1);
+  /** renderVillage's own default; pinned here so the stroke-width maths below
+   * converts painted pixels back to metres against the same scale. */
+  const PX_PER_M = 4;
   const svg = renderVillage(model);
 
   it('emits a single svg document with the tiler background contract', () => {
@@ -252,6 +257,32 @@ describe('renderVillage', () => {
     for (const croft of model.crofts) {
       expect(svg).not.toContain(croft.id);
     }
+  });
+
+  // Gate 5.3: minor streets recede in the PAINT only. The wagon classes
+  // keep their true width (an inter-settlement road is a real road); the
+  // classes a village invents for itself are drawn thinner, so lanes read
+  // as tracks between the houses rather than as the widest thing on the
+  // page. lane.widthM itself is untouched, which this pins by comparing
+  // the painted stroke against the model's own width.
+  it('paints minor lanes narrower than their geometric width, wagon roads at full width', () => {
+    let checkedMinor = 0;
+    let checkedWagon = 0;
+    for (const lane of model.lanes) {
+      const m2 = svg.match(new RegExp(`data-lane="${escapeRegExp(lane.id)}"[^>]*stroke-width="([\\d.]+)"`));
+      expect(m2).not.toBeNull();
+      const paintedM = Number(m2![1]) / PX_PER_M;
+      if (classRank(lane.type) < classRank('local')) {
+        checkedWagon += 1;
+        expect(paintedM).toBeCloseTo(lane.widthM, 2);
+      } else {
+        checkedMinor += 1;
+        expect(paintedM).toBeCloseTo(lane.widthM * RENDER_MINOR_LANE_WIDTH_SHARE, 2);
+        expect(paintedM).toBeLessThan(lane.widthM);
+      }
+    }
+    expect(checkedMinor + checkedWagon).toBe(model.lanes.length);
+    expect(checkedMinor).toBeGreaterThan(0);
   });
 
   it('places every edge stamp in the parcel-fields band with no shadow', () => {

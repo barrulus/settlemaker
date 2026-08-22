@@ -478,6 +478,22 @@ export const FIELD_CROPS: Record<string, string[]> = {
   steppe: ['sm-field-pasture'],
 };
 
+/**
+ * Gate 5.3, RENDER ONLY: a village's minor streets are drawn at this share
+ * of their geometric width. In the reference village the lanes recede --
+ * they are tracks between houses, not the widest thing on the page, which
+ * is how ours read once every lane was painted at full wagon width.
+ *
+ * The wagon classes (royal/main/market/town) keep their full width, per the
+ * owner's earlier rule that an inter-settlement road is a real road. Only
+ * local/trail/footpath -- the classes a village invents for itself -- thin.
+ *
+ * Nothing else moves: lane.widthM still drives the parcel setback, the lane
+ * corridor tests, the field and vegetation clearances and the junction
+ * geometry. This is paint.
+ */
+export const RENDER_MINOR_LANE_WIDTH_SHARE = 0.55;
+
 // --- Render (pass 5 dressing, §8.2) -------------------------------------
 /** A field-pattern `<pattern>` def is keyed by (glyph, quantised furrow
  * bearing) so defs stay bounded (24 rotations x a few glyphs, only the

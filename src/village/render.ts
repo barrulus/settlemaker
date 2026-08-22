@@ -2,7 +2,8 @@ import type { EdgeStamp, VillageModel } from './types.js';
 import type { Point } from '../types/point.js';
 import { hasGlyph, nominalFootprint } from './glyphs.js';
 import { REFINED_GLYPHS } from '../assets/refined-glyphs.js';
-import { FURROW_PATTERN_STEP_DEG } from './constants.js';
+import { FURROW_PATTERN_STEP_DEG, RENDER_MINOR_LANE_WIDTH_SHARE } from './constants.js';
+import { classRank, type RouteType } from './route-class.js';
 
 /** integration.md's shadow contract: one light, never rotated with the mark. */
 const SHADOW_OFFSET: [number, number] = [2.6, 3.6];
@@ -84,6 +85,26 @@ const SM_STYLE = [
   // way since these paths carry no class either.
   `g[id^="sm-edge-"] path[fill^="var(--sm-"]{stroke:var(--sm-ink,#33262e);stroke-linejoin:round;stroke-linecap:round}`,
 ].join('');
+
+/**
+ * Gate 5.3, RENDER ONLY: how wide a lane is PAINTED. The wagon classes
+ * (royal/main/market/town) are drawn at their true width -- the owner's
+ * rule that an inter-settlement road is a real road. The classes a village
+ * invents for itself (local/trail/footpath) recede to
+ * RENDER_MINOR_LANE_WIDTH_SHARE of it: in the reference village the lanes
+ * are tracks between the houses, not the widest thing on the page.
+ *
+ * `lane.widthM` is untouched everywhere else -- parcel setbacks, lane
+ * corridor tests, field and vegetation clearances, junction geometry. The
+ * settlement is not rearranged by this; only the paint is.
+ */
+function paintedLaneWidthM(lane: { type: RouteType; widthM: number }): number {
+  // Strictly above `local` = the wagon classes. Expressed by rank rather
+  // than via isRoadClass(), which counts `local` as a road class and would
+  // put a village street on the wrong side of this line.
+  const isWagonClass = classRank(lane.type) < classRank('local');
+  return isWagonClass ? lane.widthM : lane.widthM * RENDER_MINOR_LANE_WIDTH_SHARE;
+}
 
 function n(v: number): string {
   return (Math.round(v * 100) / 100).toString();
@@ -279,7 +300,10 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
     const d = lane.points
       .map((p, i) => `${i === 0 ? 'M' : 'L'}${n(X(p.x))},${n(Y(p.y))}`)
       .join(' ');
-    out.push(`<path data-lane="${lane.id}" d="${d}" stroke-width="${n(lane.widthM * pxPerMetre)}"/>`);
+    out.push(
+      `<path data-lane="${lane.id}" d="${d}" `
+      + `stroke-width="${n(paintedLaneWidthM(lane) * pxPerMetre)}"/>`,
+    );
   }
   out.push('</g>');
 
