@@ -7,7 +7,9 @@ import {
 } from '../geometry.js';
 import { lotObb, pointInObb, type Obb } from '../parcels/overlap.js';
 import {
-  FIELD_BELT_GAP_M, FIELD_BLOCK_DEPTH_MAX_M, FIELD_BLOCK_DEPTH_MIN_M,
+  FIELD_BELT_GAP_M, FIELD_BELT_JITTER_MAX_M, FIELD_BELT_JITTER_MIN_M,
+  FIELD_BLOCK_DEPTH_MAX_M, FIELD_BLOCK_DEPTH_MIN_M, FIELD_DEPTH_JITTER,
+  FIELD_SKEW_JITTER, FIELD_SPAN_JITTER,
   FIELD_BLOCK_GAP_SHARE, FIELD_BLOCK_MAX_PER_WEDGE, FIELD_BLOCK_SLICE_DEG,
   FIELD_BLOCK_SPAN_TARGET_DEG, FIELD_CROPS, FIELD_FURROW_MIN_SEPARATION_DEG,
   FIELD_INNER_FLOOR_PAD_M, FIELD_INNER_PERCENTILE, FIELD_JITTER_RANGE_DEG,
@@ -323,16 +325,34 @@ function blockSlots(wedge: Wedge): Slot[] {
  */
 function sectorPolygon(
   green: Green, fromDeg: number, toDeg: number, inner: number, outer: number,
+  skew: number = 0,
 ): Point[] {
   const span = toDeg - fromDeg;
-  const steps = Math.max(2, Math.ceil(span / FIELD_BLOCK_SLICE_DEG));
+  const mid = (fromDeg + toDeg) / 2;
+  // Gate 5.4 SKEW: the inner arc subtends a different angle from the outer,
+  // both centred on the block's mid-bearing, so the block is an irregular
+  // quad rather than a perfect annular sector. `skew` is bounded by
+  // FIELD_SKEW_JITTER and the WIDER of the two spans is what the clip
+  // tested, so neither arc can reach ground that was not checked.
+  // The skew SHRINKS one arc; it never widens either. Both arcs therefore
+  // stay inside the span the clip proved clear, so no vertex can land on
+  // untested ground -- and the block is still a trapezoid rather than a
+  // sector, which is the whole visual point.
+  const shrink = Math.abs(skew);
+  const outerSpan = skew >= 0 ? span : span * (1 - shrink);
+  const innerSpan = skew >= 0 ? span * (1 - shrink) : span;
+  const steps = Math.max(2, Math.ceil(Math.max(outerSpan, innerSpan) / FIELD_BLOCK_SLICE_DEG));
   const at = (deg: number, r: number): Point => {
     const d = bearingVector(deg);
     return new Point(green.centre.x + d.x * r, green.centre.y + d.y * r);
   };
   const pts: Point[] = [];
-  for (let i = 0; i <= steps; i++) pts.push(at(fromDeg + (span * i) / steps, outer));
-  for (let i = steps; i >= 0; i--) pts.push(at(fromDeg + (span * i) / steps, inner));
+  for (let i = 0; i <= steps; i++) {
+    pts.push(at(mid - outerSpan / 2 + (outerSpan * i) / steps, outer));
+  }
+  for (let i = steps; i >= 0; i--) {
+    pts.push(at(mid - innerSpan / 2 + (innerSpan * i) / steps, inner));
+  }
   return pts;
 }
 
@@ -399,10 +419,38 @@ function buildWedgeBlocks(
 
   const blocks: FieldBlock[] = [];
   let ordinal = 0;
+  let reach = innerRadius;
   for (const slot of slots) {
-    for (const run of clipSlotToRuns(green, slot, innerRadius, outerRadius, lots, crofts, lanes, water)) {
+    // Gate 5.4: four jitter draws per slot, in slot order, BEFORE the clip
+    // -- so the geometry that gets tested against claims is the geometry
+    // that gets drawn. Jittering a cleared block afterwards would push it
+    // onto ground nothing ever checked.
+    const beltOffset = FIELD_BELT_JITTER_MIN_M
+      + rng.float() * (FIELD_BELT_JITTER_MAX_M - FIELD_BELT_JITTER_MIN_M);
+    const depthMul = 1 + (rng.float() * 2 - 1) * FIELD_DEPTH_JITTER;
+    const spanMul = 1 + (rng.float() * 2 - 1) * FIELD_SPAN_JITTER;
+    const skew = (rng.float() * 2 - 1) * FIELD_SKEW_JITTER;
+
+    const jInner = innerRadius + beltOffset;
+    // The depth clamp still governs: jitter varies the depth WITHIN
+    // [FIELD_BLOCK_DEPTH_MIN_M, FIELD_BLOCK_DEPTH_MAX_M], never through it.
+    // A block below the floor is the thin strip gate 5 rejected.
+    const jDepth = Math.min(
+      FIELD_BLOCK_DEPTH_MAX_M,
+      Math.max(FIELD_BLOCK_DEPTH_MIN_M, (outerRadius - innerRadius) * depthMul),
+    );
+    const jOuter = jInner + jDepth;
+    if (!(jOuter > jInner)) continue;
+    // The span is scaled about the slot's own mid-bearing. The skew needs
+    // no allowance here because it only ever shrinks an arc (see
+    // `sectorPolygon`), so both arcs stay inside what the clip tested.
+    const slotMid = (slot.fromDeg + slot.toDeg) / 2;
+    const jSpan = (slot.toDeg - slot.fromDeg) * spanMul;
+    const jSlot: Slot = { fromDeg: slotMid - jSpan / 2, toDeg: slotMid + jSpan / 2 };
+
+    for (const run of clipSlotToRuns(green, jSlot, jInner, jOuter, lots, crofts, lanes, water)) {
       const spanDeg = run.toDeg - run.fromDeg;
-      const area = sectorArea(spanDeg, innerRadius, outerRadius);
+      const area = sectorArea(spanDeg, jInner, jOuter);
       // A block this small is the dropped rug, not a field.
       if (area < FIELD_MIN_BLOCK_AREA_M2) continue;
       const glyph = pickCropGlyph(crops, blocks.length, blocks.length === 0, allowOrchardVine, rng, toggle);
@@ -410,14 +458,15 @@ function buildWedgeBlocks(
         id: `field:${wedge.id}:S${ordinal}`,
         wedgeId: wedge.id,
         glyph,
-        polygon: sectorPolygon(green, run.fromDeg, run.toDeg, innerRadius, outerRadius),
+        polygon: sectorPolygon(green, run.fromDeg, run.toDeg, jInner, jOuter, skew),
         furrowBearingDeg,
         areaM2: area,
       });
       ordinal += 1;
+      reach = Math.max(reach, jOuter);
     }
   }
-  return { blocks, outerRadius };
+  return { blocks, outerRadius: Math.max(outerRadius, reach) };
 }
 
 export interface FieldsResult {

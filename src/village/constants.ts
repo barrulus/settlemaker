@@ -496,6 +496,34 @@ export const FIELD_BLOCK_SLICE_DEG = 2;
  * 40 m depth floor this is a block barely 10 m of arc wide.
  */
 export const FIELD_MIN_BLOCK_AREA_M2 = 400;
+
+/**
+ * Gate 5.4, IRREGULAR FIELDS. The ring read as a mechanical pinwheel:
+ * every block the same depth, the same span, starting at the same radius.
+ * Real field systems are irregular, so each block draws four jitters --
+ * one rng float each, in slot order within the wedge, appended after the
+ * wedge's existing field draws.
+ *
+ * They are applied BEFORE the block is clipped against claims, never
+ * after, so the geometry that gets tested is the geometry that gets drawn.
+ * Jittering a cleared block afterwards would push it onto ground nothing
+ * ever checked.
+ */
+/** Each block starts this far beyond the wedge's inner radius, varying per
+ * block: the belt between fabric and plough is uneven, as it is anywhere
+ * fields grew rather than were laid out. */
+export const FIELD_BELT_JITTER_MIN_M = 5;
+export const FIELD_BELT_JITTER_MAX_M = 30;
+/** Per-block multipliers: depth +/-15%, angular span +/-25%. */
+export const FIELD_DEPTH_JITTER = 0.15;
+export const FIELD_SPAN_JITTER = 0.25;
+/**
+ * SKEW: the inner arc's angular span differs from the outer's by up to
+ * this fraction, so a block is an irregular quad rather than a perfect
+ * annular sector -- the single change that stops the ring reading as a
+ * pinwheel of identical wedges.
+ */
+export const FIELD_SKEW_JITTER = 0.15;
 /** Jitter range (degrees) added to a wedge's furrow bearing: rng.float() *
  * this - this/2, one draw per wedge. */
 export const FIELD_JITTER_RANGE_DEG = 30;
@@ -523,7 +551,14 @@ export const FIELD_ORCHARD_VINE_CHANCE = 0.15;
  * array, not on the biome string itself.
  */
 export const FIELD_CROPS: Record<string, string[]> = {
-  temperate: ['sm-field-plough', 'sm-field-stubble', 'sm-field-fallow'],
+  // Gate 5.4: Maplefall's fields are mostly GREEN. Pasture appears twice
+  // in the temperate rotation, so a ring reads as grazing with ploughland
+  // among it rather than as bare earth throughout. The orchard/vine swap
+  // chance is unchanged.
+  temperate: [
+    'sm-field-plough', 'sm-field-pasture', 'sm-field-stubble',
+    'sm-field-pasture', 'sm-field-fallow',
+  ],
   desert: ['sm-field-irrigated--desert', 'sm-field-fallow'],
   tropical: ['sm-field-paddy--tropical', 'sm-field-fallow'],
   tundra: ['sm-field-pasture'],
