@@ -539,21 +539,36 @@ export const VEG_BAND_DEPTH_M = 70;
  */
 export const VEG_INTERIOR_DENSITY = 0.42;
 /**
- * Survival chance just OUTSIDE the fabric edge, thinning linearly to 0 at
- * the rim. Deliberately an order below the interior: the ring belt and the
- * country beyond get specks, not a forest fringe, and the field blocks must
- * not be crowded out (trees avoid them outright as well).
- */
-export const VEG_OUTER_DENSITY = 0.035;
-/**
- * Clump neighbours drawn per accepted tree, as [min, maxExclusive] for
- * `rng.int`. Interior clumps are bigger, which is what turns the interior
- * scatter into GROVES rather than lone trees; outside they stay small.
- * Exactly one rng.int is drawn per accepted tree either way, so the draw
- * budget does not depend on which side of the edge the tree landed.
+ * Clump neighbours drawn per accepted INTERIOR tree, as [min, maxExclusive]
+ * for `rng.int`. Bigger clumps are what turn interior scatter into GROVES
+ * rather than lone trees.
  */
 export const VEG_CLUMP_INTERIOR = [2, 6] as const;
-export const VEG_CLUMP_OUTER = [0, 3] as const;
+
+/**
+ * Gate 5.3, WOODLAND MASSES. Outside the fabric the old profile was a
+ * sparse uniform scatter, which reads as lonely specks; the reference
+ * village has woodland BLOBS sitting between and behind the fields. So the
+ * belt-and-ring zone is no longer a per-cell dice roll at all -- it is a
+ * coarse grid of PATCH seeds, each of which becomes one wood.
+ *
+ * VEG_OUTER_DENSITY and VEG_CLUMP_OUTER are RETIRED with the scatter they
+ * described: outside the fabric nothing is placed one tree at a time any
+ * more.
+ */
+/** Pitch of the patch-seed grid, metres. Comfortably wider than twice
+ * VEG_PATCH_RADIUS_M, so neighbouring woods have open ground between them
+ * instead of merging into a continuous belt. */
+export const VEG_PATCH_CELL_M = 45;
+/** Chance a patch cell seeds a wood, right at the fabric edge. Thins
+ * linearly to nothing at the scatter rim, so the country opens out. */
+export const VEG_PATCH_CHANCE = 0.5;
+/** How far a wood's trees spread from its seed point. */
+export const VEG_PATCH_RADIUS_M = 15;
+/** Trees per wood, as [min, maxExclusive] for `rng.int` -- 8 to 20. Enough
+ * overlap at VEG_PATCH_RADIUS_M to read as a canopy mass rather than a
+ * ring of separate trees. */
+export const VEG_PATCH_TREES = [8, 21] as const;
 /** Clearance added on top of a lane's own half-width for the vegetation
  * rejection test (flat across every lane class, unlike LANE_SETBACK_M --
  * a tree that close to any lane reads as blocking it). */

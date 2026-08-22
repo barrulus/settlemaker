@@ -72,7 +72,7 @@ describe('buildVegetation', () => {
     expect(trees.length).toBeGreaterThan(0);
   });
 
-  it('emits ids as veg:<cellX>x<cellY>, and clump children as veg:<cellX>x<cellY>:<j>', () => {
+  it('emits ids as veg:<cellX>x<cellY> / veg:...:<j> for groves, wood:<cellX>x<cellY>:<j> for woods', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
     const trees = buildVegetation(
       site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, 60, new SeededRandom(5),
@@ -80,8 +80,12 @@ describe('buildVegetation', () => {
     expect(trees.length).toBeGreaterThan(0);
     const parentIds = new Set<string>();
     for (const t of trees) {
-      expect(/^veg:-?\d+x-?\d+(:\d+)?$/.test(t.id)).toBe(true);
-      if (!t.id.includes(':', 4)) parentIds.add(t.id);
+      // Gate 5.3: two id spaces now. `veg:` is a grove tree inside the
+      // fabric (a cell's own tree, or its clump child); `wood:` is a tree
+      // of a woodland patch outside it, which has no single parent tree --
+      // the whole mass is seeded at once.
+      expect(/^(veg:-?\d+x-?\d+(:\d+)?|wood:-?\d+x-?\d+:\d+)$/.test(t.id)).toBe(true);
+      if (t.id.startsWith('veg:') && !t.id.includes(':', 4)) parentIds.add(t.id);
     }
     // At least one clump child, whose parent id is also present.
     const children = trees.filter((t) => /^veg:-?\d+x-?\d+:\d+$/.test(t.id));
@@ -235,6 +239,47 @@ describe('vegetation geometric invariants (real village fixtures)', () => {
     const m = generateVillage(bare, 1);
     expect(Array.isArray(m.vegetation)).toBe(true);
   });
+
+  // Gate 5.3 regression net: outside the fabric the scatter used to be a
+  // sparse uniform dice roll, which renders as lonely specks; the reference
+  // village has woodland MASSES between and behind the fields. Clustering
+  // is the property, so this measures it directly -- a tree in a wood has
+  // close company, a speck does not -- and also insists the woods do not
+  // merge into one continuous belt.
+  it('places outer trees as woodland masses, not lonely specks', () => {
+    const popInput = (population: number): AzgaarBurgInput => ({
+      name: 'Woods', population, port: false, citadel: false, walls: false,
+      plaza: false, temple: false, shanty: false, capital: false,
+      roadBearings: [{ bearing_deg: 225, kind: 'road' }],
+    });
+    for (const population of [300, 900]) {
+      const m = generateVillage(popInput(population), 1);
+      const outer = m.vegetation.filter((t) => t.id.startsWith('wood:'));
+      expect(outer.length).toBeGreaterThan(20);
+
+      // Every outer tree belongs to a named patch, and patches are real
+      // groups rather than one tree each.
+      const patches = new Map<string, number>();
+      for (const t of outer) {
+        const key = t.id.slice(0, t.id.lastIndexOf(':'));
+        patches.set(key, (patches.get(key) ?? 0) + 1);
+      }
+      expect(patches.size).toBeGreaterThan(1);
+      const sizes = [...patches.values()];
+      expect(Math.max(...sizes)).toBeGreaterThanOrEqual(5);
+
+      // Clustered: the clear majority of outer trees have a neighbour
+      // within a canopy's width. A uniform scatter over this area does not.
+      const withCompany = outer.filter(
+        (t) => outer.some((o) => o.id !== t.id && dist(t.position, o.position) <= 8),
+      ).length;
+      expect(withCompany / outer.length).toBeGreaterThan(0.75);
+
+      // ...but the woods keep gaps between them: not every patch centre is
+      // within one patch radius of another patch's trees.
+      expect(patches.size).toBeGreaterThan(2);
+    }
+  }, 20000);
 
   // Gate 5 regression net (2026-08-22): the emphasis is FLIPPED. The owner's
   // reference has groves crowding the leftover ground between the lanes

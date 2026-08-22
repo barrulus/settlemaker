@@ -7,8 +7,8 @@ import {
 import { lotObb, pointInObb } from '../parcels/overlap.js';
 import {
   CLUMP_RADIUS_M, SHOREFRONT_BAND_M, VEG_BAND_DEPTH_M, VEG_CELL_M,
-  VEG_CLUMP_INTERIOR, VEG_CLUMP_OUTER, VEG_GLYPHS,
-  VEG_INTERIOR_DENSITY, VEG_LANE_CLEAR_M, VEG_OUTER_DENSITY,
+  VEG_CLUMP_INTERIOR, VEG_GLYPHS, VEG_INTERIOR_DENSITY, VEG_LANE_CLEAR_M,
+  VEG_PATCH_CELL_M, VEG_PATCH_CHANCE, VEG_PATCH_RADIUS_M, VEG_PATCH_TREES,
   VEG_SCALE_MAX, VEG_SCALE_MIN,
 } from '../constants.js';
 import type {
@@ -74,34 +74,28 @@ function isRejected(
 }
 
 /**
- * Density(d), in the three zones the owner's reference map actually has:
+ * Survival chance for an INTERIOR cell. Gate 5.3 reduced this to one zone:
+ * everything inside `groveEdge` (the measured fabric radius) is grove
+ * country at VEG_INTERIOR_DENSITY, and everything outside it is no longer
+ * a per-cell dice roll at all -- it is woodland patches, seeded on their
+ * own coarse grid by `seedWoodlandPatches`.
  *
- *  1. `d < groveEdge` -- INSIDE the fabric, among the houses:
- *     VEG_INTERIOR_DENSITY. Grove country. The rejection tests above
- *     (lanes, lot claims, croft claims, field blocks, the green, water) are
- *     what confine this to genuinely open ground, so a high number here
- *     fills the gaps between the houses rather than burying them.
- *  2. `groveEdge <= d < innerEdge` -- the OPEN GREEN BELT between the last
- *     houses and the field ring: VEG_OUTER_DENSITY, flat. It is common, and
- *     common is open; a few trees, not a wood.
- *  3. `innerEdge <= d <= rim` -- the ring and the country beyond: the same
- *     low level, thinning linearly to nothing at the rim. Specks.
- *
- * Gate 5 (2026-08-22) both flipped the emphasis and split zone 1 from
- * zone 2. The old profile put a thin infill inside and a full-strength
- * plateau outside -- a sparse village inside a forest fringe, the exact
- * reverse of the reference. Keying "interior" to the FIELD radius rather
- * than the fabric was the second half of the mistake: on a hamlet the field
- * ring stands well clear of the houses, so grove density was being applied
- * to a wide belt of empty ground and a 14-building hamlet grew ~700 trees.
+ * The rejection tests (lanes, lot claims, croft claims, field blocks, the
+ * green, water) are what confine this to genuinely open ground, so a high
+ * number here fills the gaps between the houses rather than burying them.
  */
-function densityAt(d: number, groveEdge: number, innerEdge: number, rim: number): number {
-  if (d < groveEdge) return VEG_INTERIOR_DENSITY;
-  if (d < innerEdge) return VEG_OUTER_DENSITY;
-  if (!(rim > innerEdge)) return 0;
-  if (d > rim) return 0;
-  const t = (d - innerEdge) / (rim - innerEdge);
-  return VEG_OUTER_DENSITY * Math.max(0, 1 - t);
+function interiorDensityAt(d: number, groveEdge: number): number {
+  return d < groveEdge ? VEG_INTERIOR_DENSITY : 0;
+}
+
+/**
+ * Gate 5.3: how likely a patch cell is to seed a wood at distance `d` --
+ * VEG_PATCH_CHANCE at the fabric edge, thinning linearly to nothing at the
+ * rim, so the country opens out rather than ending in a wall of trees.
+ */
+function patchChanceAt(d: number, groveEdge: number, rim: number): number {
+  if (d < groveEdge || d > rim || !(rim > groveEdge)) return 0;
+  return VEG_PATCH_CHANCE * Math.max(0, 1 - (d - groveEdge) / (rim - groveEdge));
 }
 
 function pickGlyph(biome: string, rng: SeededRandom): string {
@@ -141,9 +135,13 @@ export function buildVegetation(
   const rim = innerEdgeM + VEG_BAND_DEPTH_M;
   if (!(rim > 0)) return [];
 
-  const halfCells = Math.max(0, Math.ceil(rim / VEG_CELL_M));
   const trees: Vegetation[] = [];
 
+  // --- Pass 1: grove country, inside the fabric. One rng.float decides
+  // every cell's survival, so the draw count never depends on how many
+  // trees land. The grid only spans the interior now: outside it, pass 2
+  // does the placing.
+  const halfCells = Math.max(0, Math.ceil(groveEdgeM / VEG_CELL_M));
   for (let cellX = -halfCells; cellX <= halfCells; cellX++) {
     for (let cellY = -halfCells; cellY <= halfCells; cellY++) {
       const cellOrigin = new Point(
@@ -154,7 +152,7 @@ export function buildVegetation(
         cellOrigin.x + VEG_CELL_M / 2,
         cellOrigin.y + VEG_CELL_M / 2,
       );
-      const density = densityAt(dist(cellCentre, green.centre), groveEdgeM, innerEdgeM, rim);
+      const density = interiorDensityAt(dist(cellCentre, green.centre), groveEdgeM);
 
       const survives = rng.float() < density;
       if (!survives) continue;
@@ -176,12 +174,8 @@ export function buildVegetation(
         id, glyph, position, scale,
       });
 
-      // Interior clumps are bigger -- that is what makes a GROVE rather
-      // than a lone tree. Exactly one rng.int is drawn either way, so the
-      // draw budget never depends on which side of the edge this landed.
-      const [clumpMin, clumpMaxExcl] = dist(position, green.centre) < groveEdgeM
-        ? VEG_CLUMP_INTERIOR
-        : VEG_CLUMP_OUTER;
+      // Clumps are what make a GROVE rather than a lone tree.
+      const [clumpMin, clumpMaxExcl] = VEG_CLUMP_INTERIOR;
       const clumpCount = rng.int(clumpMin, clumpMaxExcl);
       for (let j = 1; j <= clumpCount; j++) {
         // r is NOT scaled by sqrt(rng.float()), so this is NOT uniform in
@@ -201,6 +195,64 @@ export function buildVegetation(
         }
         trees.push({
           id: `${id}:${j}`, glyph, position: neighbourPos, scale,
+        });
+      }
+    }
+  }
+
+  // --- Pass 2: WOODLAND MASSES, outside the fabric. Gate 5.3 replaced the
+  // old per-cell scatter out here, which read as lonely specks, with woods:
+  // a coarse grid of patch seeds, each becoming one overlapping mass of
+  // 8-20 trees. VEG_PATCH_CELL_M is comfortably more than twice
+  // VEG_PATCH_RADIUS_M, so neighbouring woods keep open ground between
+  // them instead of merging into a continuous belt.
+  //
+  // DRAW ORDER: this pass runs entirely AFTER pass 1, and walks its own
+  // grid in the same sorted (cellX, then cellY) order. Per patch cell:
+  // one survival float ALWAYS; then, only if it survived, two centre
+  // offsets, one rng.int tree count, and per tree two offsets plus a glyph
+  // and a scale float. A tree rejected by the geometry tests discards the
+  // tree, never the draws already spent on it -- the same rule pass 1 uses.
+  const patchHalf = Math.max(0, Math.ceil(rim / VEG_PATCH_CELL_M));
+  for (let cellX = -patchHalf; cellX <= patchHalf; cellX++) {
+    for (let cellY = -patchHalf; cellY <= patchHalf; cellY++) {
+      const cellOrigin = new Point(
+        green.centre.x + cellX * VEG_PATCH_CELL_M,
+        green.centre.y + cellY * VEG_PATCH_CELL_M,
+      );
+      const cellCentre = new Point(
+        cellOrigin.x + VEG_PATCH_CELL_M / 2,
+        cellOrigin.y + VEG_PATCH_CELL_M / 2,
+      );
+      const chance = patchChanceAt(dist(cellCentre, green.centre), groveEdgeM, rim);
+      if (!(rng.float() < chance)) continue;
+
+      const seed = new Point(
+        cellOrigin.x + rng.float() * VEG_PATCH_CELL_M,
+        cellOrigin.y + rng.float() * VEG_PATCH_CELL_M,
+      );
+      const [treeMin, treeMaxExcl] = VEG_PATCH_TREES;
+      const count = rng.int(treeMin, treeMaxExcl);
+      const patchId = `wood:${cellX}x${cellY}`;
+      for (let j = 0; j < count; j++) {
+        // Same deliberate bias toward the centre pass 1's clumps use: r is
+        // NOT sqrt-scaled, so trees crowd the middle of the wood and thin
+        // at its edge, which is what makes a canopy mass rather than a ring.
+        const r = rng.float() * VEG_PATCH_RADIUS_M;
+        const theta = rng.float() * 2 * Math.PI;
+        const position = new Point(
+          seed.x + r * Math.sin(theta),
+          seed.y - r * Math.cos(theta),
+        );
+        const glyph = pickGlyph(site.biome, rng);
+        const scale = VEG_SCALE_MIN + rng.float() * (VEG_SCALE_MAX - VEG_SCALE_MIN);
+        // Every rejection still applies out here -- a wood may abut a field
+        // block but never stands on one, nor on a lane, claim or water.
+        if (isRejected(position, green, lanes, lots, crofts, fields, site.water, shorefrontReachM)) {
+          continue;
+        }
+        trees.push({
+          id: `${patchId}:${j}`, glyph, position, scale,
         });
       }
     }
