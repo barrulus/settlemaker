@@ -18,6 +18,47 @@ const site = (over: Partial<Site> = {}): Site => ({
 // (population, seed). A fixed reference deck for entry-shape tests:
 const REF_DECK = baseDeck(400, new SeededRandom(1));
 
+// Gate 5.3 (2026-08-22): household size is pinned, because it has moved
+// twice on owner verdicts and nothing in the suite guarded it. Gate 5.1
+// raised a hut 3 -> 6 ("3 people per house is completely unrealistic");
+// gate 5.3 walked both back to a realistic medieval household of 4-5,
+// against watabou's St Aldusa drawing ~1 building per 3.3 people. These
+// numbers set how many roofs a census buys, which is what fills or empties
+// the interior -- they are not incidental.
+describe('household size (gate 5.3)', () => {
+  const dwellingOf = (population: number): DeckEntry => {
+    const deck = buildDeck('temperate', population, new SeededRandom(4)).entries;
+    const ordinary = deck.filter((e) => !e.cap && e.glyph !== 'sm-longhouse');
+    expect(ordinary).toHaveLength(1);
+    return ordinary[0];
+  };
+
+  it('a hut houses 5 and a house houses 4', () => {
+    const hut = dwellingOf(60);
+    expect(hut.glyph.startsWith('sm-hut')).toBe(true);
+    expect(hut.occupancy).toBe(5);
+
+    const house = dwellingOf(400);
+    expect(house.glyph.startsWith('sm-house')).toBe(true);
+    expect(house.occupancy).toBe(4);
+  });
+
+  it('a longhouse still houses 12 -- it is the several-household building', () => {
+    const deck = buildDeck('temperate', 400, new SeededRandom(4)).entries;
+    const longhouse = deck.find((e) => e.glyph === 'sm-longhouse');
+    expect(longhouse).toBeDefined();
+    expect(longhouse!.occupancy).toBe(12);
+  });
+
+  it('buys a village roughly one roof per 4-5 heads, never per 6+', () => {
+    for (const population of [60, 300, 900]) {
+      const mean = meanOccupancy(buildDeck('temperate', population, new SeededRandom(4)).entries);
+      expect(mean).toBeGreaterThanOrEqual(4);
+      expect(mean).toBeLessThanOrEqual(5);
+    }
+  });
+});
+
 describe('deck contents', () => {
   it('draws exactly ONE ordinary dwelling glyph per village', () => {
     // The village-rows rule: a settlement never mixes dwelling types. The

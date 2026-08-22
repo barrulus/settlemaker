@@ -64,10 +64,20 @@ export function baseDeck(population: number, rng: SeededRandom): DeckEntry[] {
   const dwelling = hutFamily
     ? (rng.bool(0.5) ? 'sm-hut-straw' : 'sm-hut-round')
     : (rng.bool(0.7) ? 'sm-house' : 'sm-house-tiled');
-  // Gate 5.1: a hut houses a FAMILY, 6, not 3 -- the owner's "3 people per
-  // house is completely unrealistic". A pop-60 hamlet therefore needs ~10
-  // huts rather than 20, which is what lets them all fit around the green.
-  const occupancy = hutFamily ? 6 : 5;
+  // Household size, twice corrected. Gate 5.1 raised a hut from 3 ("3
+  // people per house is completely unrealistic") to 6. Gate 5.3 walks it
+  // back one: the objection was to an unrealistically SMALL household, not
+  // a plea for a large one, and the reference village (watabou's St
+  // Aldusa, pop 400, dense/organic) draws about one building per 3.3
+  // people. A medieval household is 4-5, so a house takes 4 and a hut 5 --
+  // a hut is one family in one room, a house is a family with more of its
+  // floor given to living than to storage.
+  //
+  // The point is not the arithmetic: fewer heads per roof means MORE
+  // roofs, the frontage demand rises, the escalation loop grows more lane,
+  // and the interior fills instead of reading as meadow with a few houses
+  // dropped on it.
+  const occupancy = hutFamily ? 5 : 4;
 
   const entries: DeckEntry[] = [entry(dwelling, occupancy, 100)];
   if (!hutFamily && population >= LONGHOUSE_MIN_POP) {
