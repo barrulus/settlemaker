@@ -3,7 +3,7 @@ import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import { buildSite } from './site.js';
 import { predictedBuiltRadius, siteGreen } from './skeleton/green-siting.js';
 import {
-  addInventedLanes, availableFrontage, buildArms, requiredFrontage,
+  addInventedLanes, availableFrontage, buildArms, connectDeadEnds, requiredFrontage,
 } from './skeleton/lanes.js';
 import { relaxLanes, trimTails } from './skeleton/relax.js';
 import {
@@ -52,6 +52,11 @@ export function lotReachFor(
   if (population < HAMLET_RIBBON_POP) return saturatedRadiusM;
   const isTrunk = classRank(lane.type) <= classRank('town');
   return isTrunk ? saturatedRadiusM * ARM_LOT_RADIUS_SHARE : saturatedRadiusM;
+}
+
+/** `<laneId>/c` -- the connector sub-space `connectDeadEnds` adds. */
+function isConnectorLane(laneId: string): boolean {
+  return laneId.endsWith('/c');
 }
 
 export function generateVillage(input: AzgaarBurgInput, seed: number): VillageModel {
@@ -213,7 +218,64 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
     const intrudes = spend.buildings.some((b) => intrudesOnLane(b, [relaxedLane]));
     return intrudes ? (lanes.find((l) => l.id === relaxedLane.id) ?? relaxedLane) : relaxedLane;
   });
-  const relaxed = trimTails(relaxedLanes, spend.buildings);
+  // Gate 6.3, RED CONNECTORS. Runs here, on the FINAL geometry, and this
+  // position is load-bearing twice over.
+  //
+  // It cannot run inside the feedback loop: `extendOne` refuses to extend a
+  // lane that ends on another lane (that end is a junction, and extending
+  // through it makes exactly the untidy crossing the growth rules prevent),
+  // so connecting every dead end mid-loop removes the capacity growth needs
+  // to break a deadlock -- measured, the census collapsed to 168/300.
+  //
+  // Nor can it run before `trimTails`, because trimming is what CREATES the
+  // final dead ends: it cuts each lane back to its last house plus a stub,
+  // and that dangling end is precisely what the owner drew red lines from.
+  // Run any earlier and it connects ends that no longer exist -- measured,
+  // it added nothing at all and the dead-end count did not move.
+  //
+  // Lots are then re-cut and re-seated over the enlarged set, because a
+  // connector is a street and carries frontage like any other. The census
+  // is already satisfied here, so the re-seat only lets the new frontage
+  // take its share -- and it cuts against TRIMMED lanes, which is stricter
+  // than the in-loop cut against untrimmed ones.
+  let relaxed = trimTails(relaxedLanes, spend.buildings);
+  const connected = connectDeadEnds(relaxed, green);
+  if (connected.length !== relaxed.length) {
+    relaxed = connected;
+    const finalLaneTypes = new Map<string, RouteType>(relaxed.map((l) => [l.id, l.type]));
+    finalLaneTypes.set('green', 'main');
+    // ONLY the connectors are cut fresh. Re-cutting every lane against the
+    // now-TRIMMED geometry would delete the very frontage the trim was
+    // derived from -- trimming stops at the last house, so re-cutting there
+    // removes the lots that house was seated on, and the census falls
+    // (measured: 268/300 and 876/900). The existing lots stand; the
+    // connectors add to them.
+    // The FIRST trim already dropped lanes that earned no dwelling, but
+    // their lots are still in `lots`. Re-seating over those would house a
+    // building on a lane that no longer exists -- §2's stable-id invariant
+    // broken, and measured as orphaned lots in six of six probe seeds. Only
+    // lots whose lane survived may take part.
+    const liveLaneIds = new Set(relaxed.map((l) => l.id));
+    lots = lots.filter((l) => l.laneId === 'green' || liveLaneIds.has(l.laneId));
+
+    const connectorLots = relaxed
+      .filter((l) => isConnectorLane(l.id))
+      .flatMap((l) => subdivideLane(
+        l, green, builtRadius, f0, LOT_DEPTH_M, rng, lotFloorM, lotCapM,
+        lotReachFor(l, lotRadiusM, site.population),
+      ));
+    lots = orderLots(scoreLots(
+      resolveConvergingLots(
+        clipLots([...lots, ...connectorLots], green, site.water), relaxed, green,
+      ),
+      green, finalLaneTypes,
+    ));
+    spend = spendCensus(lots, deck, site, rng, relaxed);
+    // The re-seat moved houses, so the tails must follow them. Connectors
+    // are exempt from trimming (both their ends are junctions), so this
+    // cannot re-open what was just closed.
+    relaxed = trimTails(relaxed, spend.buildings);
+  }
   // Finding 3: trimTails (R15) may drop an invented lane that earned no
   // dwelling. Its lots are then orphaned — surviving in `lots` but naming
   // a laneId no lane in the model carries any more. Filter them out so

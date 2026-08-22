@@ -137,8 +137,16 @@ function arcLengthOf(p: Point, points: Point[], acc: number[]): number {
   return bestS;
 }
 
+/** `<laneId>/c` -- the connector sub-space added by `connectDeadEnds`. */
+function isConnector(laneId: string): boolean {
+  return laneId.endsWith('/c');
+}
+
 export function trimTails(lanes: Lane[], buildings: Building[]): Lane[] {
   const result: Lane[] = [];
+  const connectorParents = new Set(
+    lanes.filter((l) => isConnector(l.id) && l.parentId !== undefined).map((l) => l.parentId!),
+  );
 
   for (const lane of lanes) {
     if (isFmgArm(lane.id)) {
@@ -146,9 +154,27 @@ export function trimTails(lanes: Lane[], buildings: Building[]): Lane[] {
       continue;
     }
 
+    // Gate 6.3: a CONNECTOR is structural, not frontage-driven. Both its
+    // ends are junctions on other lanes -- that is its entire purpose --
+    // so trimming it back to its last house would sever the link and
+    // re-open the dead end it was added to close, and dropping it for
+    // earning no dwelling would do the same. Connectors pass through
+    // untouched.
+    if (isConnector(lane.id)) {
+      result.push(lane);
+      continue;
+    }
+
     const mine = buildingsOf(lane, buildings);
     if (mine.length === 0) {
-      // Invented purely to supply frontage; none was used, so it is not drawn.
+      // Gate 6.3: unless a CONNECTOR hangs off it. Dropping such a lane
+      // would leave the connector linking from nowhere, and dropping the
+      // connector in turn would orphan the lots cut along it -- a cascade
+      // that broke §2's stable-id invariant both ways round when tried.
+      // A lane carrying part of the web is structural even with no house
+      // on it, exactly as a connector is.
+      if (!connectorParents.has(lane.id)) continue;
+      result.push(lane);
       continue;
     }
 

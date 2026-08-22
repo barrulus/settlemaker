@@ -7,6 +7,7 @@ import {
   ARM_LOT_RADIUS_SHARE, EDGE_STYLE_ORDER, HAMLET_RIBBON_POP,
 } from '../../src/village/constants.js';
 import type { RouteType } from '../../src/village/route-class.js';
+import { closestPointOnSegment, dist, segmentIntersection } from '../../src/village/geometry.js';
 import type { Lane } from '../../src/village/types.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 
@@ -245,4 +246,66 @@ describe('lotReachFor (gate 6.3: no housed ribbon on the trunk)', () => {
       200 * ARM_LOT_RADIUS_SHARE, 6,
     );
   });
+});
+
+// Gate 6.3: the owner drew red lines linking branch ends to the lanes
+// beside them -- turning the growth TREE into a WEB with essentially no
+// dead ends inside the fabric.
+describe('connectDeadEnds (gate 6.3: red connectors)', () => {
+  const popInput = (population: number): AzgaarBurgInput => ({
+    ...base, population,
+  });
+  const endsOnAnother = (lane: Lane, lanes: Lane[]): boolean => lanes.some((o) => {
+    if (o.id === lane.id) return false;
+    const end = lane.points[lane.points.length - 1];
+    for (let i = 1; i < o.points.length; i++) {
+      if (dist(end, closestPointOnSegment(end, o.points[i - 1], o.points[i])) <= 1) return true;
+    }
+    return false;
+  });
+
+  it('uses the `<laneId>/c` id sub-space, footpath class, parented to its lane', () => {
+    const m = generateVillage(popInput(900), 1);
+    const connectors = m.lanes.filter((l) => l.id.endsWith('/c'));
+    expect(connectors.length).toBeGreaterThan(0);
+    const laneIds = new Set(m.lanes.map((l) => l.id));
+    for (const c of connectors) {
+      // Stable id: exactly its parent's id plus the suffix.
+      expect(c.parentId).toBe(c.id.slice(0, -2));
+      expect(laneIds.has(c.parentId!)).toBe(true);
+      // A loop is made at a lower class than the lanes it joins.
+      expect(c.type).toBe('footpath');
+      // Ids stay unique -- a lane gets at most one connector.
+      expect(m.lanes.filter((l) => l.id === c.id)).toHaveLength(1);
+    }
+  });
+
+  it('closes the majority of interior dead ends at 300 and 900', () => {
+    for (const population of [300, 900]) {
+      const m = generateVillage(popInput(population), 1);
+      const invented = m.lanes.filter((l) => !l.id.startsWith('arm-'));
+      const deadEnds = invented.filter((l) => !endsOnAnother(l, m.lanes));
+      // Far more lanes than dead ends: the web is closed, not a fan.
+      expect(deadEnds.length).toBeLessThan(invented.length / 2);
+    }
+  });
+
+  it('never leaves a connector crossing another lane', () => {
+    for (const seed of [1, 2, 3]) {
+      const m = generateVillage(popInput(900), seed);
+      const connectors = m.lanes.filter((l) => l.id.endsWith('/c'));
+      for (const c of connectors) {
+        for (const other of m.lanes) {
+          if (other.id === c.id) continue;
+          for (let i = 1; i < c.points.length; i++) {
+            for (let j = 1; j < other.points.length; j++) {
+              expect(
+                segmentIntersection(c.points[i - 1], c.points[i], other.points[j - 1], other.points[j]),
+              ).toBeNull();
+            }
+          }
+        }
+      }
+    }
+  }, 20000);
 });

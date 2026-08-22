@@ -140,6 +140,26 @@ export const SATURATION_RING_START_M = 30;
 export const ARM_LOT_RADIUS_SHARE = 0.6;
 
 export const SATURATION_RING_STEP_M = 20;
+
+/**
+ * Gate 6.3, RED CONNECTORS. The owner drew red lines linking branch ends
+ * and mid-points to neighbouring lanes, turning the growth TREE into a WEB
+ * with essentially no dead ends inside the fabric.
+ *
+ * Growth can only ever produce a tree plus whatever the loop-snap happens
+ * to close, because every new lane hangs off exactly one parent. So a
+ * post-pass runs after growth: each dead-ended invented lane reaches for
+ * the nearest point on any other lane within CONNECT_MAX_M, and takes it if
+ * a straight run gets there without crossing anything.
+ *
+ * Rejected rather than truncated, unlike growth: a connector that cannot
+ * reach cleanly is not wanted at all -- a truncated one would be a new dead
+ * end, which is the thing being removed.
+ */
+export const CONNECT_MAX_M = 30;
+/** Below this a "connector" is two lanes already touching; adding one would
+ * be noise rather than a link. */
+export const CONNECT_MIN_M = 4;
 /** Crossing checks ignore intersections with a branch's own PARENT this
  * close to the branch's start — that is the junction the branch exists to
  * make, not an untidy crossing. (Gate 4: crossings with any OTHER lane are

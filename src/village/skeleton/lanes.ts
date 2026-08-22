@@ -9,8 +9,8 @@ import {
   BRANCH_LOTS_TARGET, BRANCH_MAX_M, BRANCH_MIN_M, BRANCH_SPACING_M, FRONTAGE_MARGIN,
   GREEN_ARM_MAX, GREEN_ARM_MIN, GREEN_ARM_SPACING_M, GREEN_UNDERLAP_RATIO,
   GROWTH_RADIUS_STEP, INVENTED_ARM_LENGTH_FACTOR, JUNCTION_CLEAR_M, LANE_SAMPLE_STEP_M,
-  LANE_CURVE_MAX_M, LOOP_SNAP_M, MAX_INVENTED_LANES, MIN_ARM_SEPARATION_DEG,
-  SATURATION_RING_START_M, SATURATION_RING_STEP_M,
+  CONNECT_MAX_M, CONNECT_MIN_M, LANE_CURVE_MAX_M, LOOP_SNAP_M, MAX_INVENTED_LANES,
+  MIN_ARM_SEPARATION_DEG, SATURATION_RING_START_M, SATURATION_RING_STEP_M,
 } from '../constants.js';
 import {
   armLaneId, branchLaneId, inventedLaneId, type Green, type Lane, type Site, type SiteRoute,
@@ -453,7 +453,7 @@ function crossesParentTwice(points: Point[], parent: Lane | undefined): boolean 
  * junction, and a street that ends at a junction never grows through it.
  * The tolerance is an identity epsilon (cut and snap points sit exactly ON
  * the other centreline), not a tunable. */
-const JOINED_END_EPS_M = 1;
+export const JOINED_END_EPS_M = 1;
 
 function endsOnAnotherLane(lane: Lane, out: Lane[]): boolean {
   const end = lane.points[lane.points.length - 1];
@@ -657,6 +657,96 @@ function growOne(
   //    Still ring-bounded -- when this also fails, the caller widens the
   //    ring, which is the only way growth ever moves outward.
   return extendOne(out, green, meanFrontageM, growthRadiusM, rng, Infinity, satRadiusM);
+}
+
+/** Nearest point on any lane other than `excludeIds`, with its distance. */
+function nearestOnOtherLane(
+  from: Point, lanes: Lane[], excludeIds: Set<string>,
+): { point: Point; distance: number } | null {
+  let best: { point: Point; distance: number } | null = null;
+  for (const lane of lanes) {
+    if (excludeIds.has(lane.id)) continue;
+    for (let i = 1; i < lane.points.length; i++) {
+      const q = closestPointOnSegment(from, lane.points[i - 1], lane.points[i]);
+      const d = dist(from, q);
+      if (!best || d < best.distance) best = { point: q, distance: d };
+    }
+  }
+  return best;
+}
+
+/** Does this polyline cross any lane anywhere? Endpoint touches do not
+ * count -- `segmentIntersection` already excludes them, which is what lets
+ * a connector start ON its own lane and end ON its target. */
+function crossesAnyLane(points: Point[], lanes: Lane[]): boolean {
+  for (const lane of lanes) {
+    for (let i = 1; i < points.length; i++) {
+      for (let j = 1; j < lane.points.length; j++) {
+        if (segmentIntersection(points[i - 1], points[i], lane.points[j - 1], lane.points[j])) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Gate 6.3: turn the growth TREE into a WEB.
+ *
+ * Growth hangs every new lane off exactly one parent, so the result is a
+ * tree -- dead-ended except where the loop-snap happened to catch a
+ * neighbour. The owner drew the missing half in red: short links from
+ * branch ends to the lanes beside them, leaving essentially no dead ends
+ * inside the fabric.
+ *
+ * For each invented lane that dead-ends, the nearest point on any other
+ * lane within CONNECT_MAX_M is taken as the target, and a straight run to
+ * it is accepted only if it crosses nothing. REJECTED, not truncated: a
+ * connector that cannot reach cleanly would leave a new dead end, which is
+ * exactly what this is removing.
+ *
+ * Deterministic and rng-free -- connectors are pure geometry, so they can
+ * be added between growth and lot-cutting without shifting a single draw.
+ * Walked in id order, and each accepted connector joins the set the next
+ * candidate is tested against, so two connectors can never cross either.
+ *
+ * Ids are `<laneId>/c`, a stable sub-space of the lane that grew the dead
+ * end. A connector is footpath class -- the owner's standing rule that a
+ * loop is made at a lower class than the lanes it joins.
+ */
+export function connectDeadEnds(lanes: Lane[], green: Green): Lane[] {
+  const out = [...lanes];
+  const candidates = lanes
+    .filter((l) => !l.id.startsWith('arm-') && l.points.length >= 2)
+    .slice()
+    .sort((a, b) => a.id.localeCompare(b.id));
+
+  for (const lane of candidates) {
+    if (endsOnAnotherLane(lane, out)) continue;
+    const end = lane.points[lane.points.length - 1];
+    const target = nearestOnOtherLane(end, out, new Set([lane.id]));
+    if (!target) continue;
+    if (target.distance > CONNECT_MAX_M || target.distance < CONNECT_MIN_M) continue;
+
+    const points = [end, target.point];
+    // Everything except this lane and the connector itself: the connector
+    // legitimately touches its own lane at the start and its target at the
+    // end, and `segmentIntersection` ignores both as endpoint touches.
+    if (crossesAnyLane(points, out.filter((l) => l.id !== lane.id))) continue;
+    // Under the green's turf every radial shares the ground and no crossing
+    // is visible; a connector there would be invisible clutter.
+    if (dist(target.point, green.centre) <= green.diameter / 2) continue;
+
+    out.push({
+      id: `${lane.id}/c`,
+      type: 'footpath',
+      points,
+      widthM: laneWidth('footpath'),
+      parentId: lane.id,
+    });
+  }
+  return out;
 }
 
 /**
