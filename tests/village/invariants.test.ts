@@ -4,7 +4,7 @@ import { intrudesOnLane, overlaps } from '../../src/village/dwellings.js';
 import { lotObb, obbOverlap } from '../../src/village/parcels/overlap.js';
 import { closestPointOnSegment, dist } from '../../src/village/geometry.js';
 import {
-  FRONT_ON_LANE_EPS_M, GREEN_JOIN_RATIO, LANE_SETBACK_M, RING_SETBACK_M,
+  FRONT_ON_LANE_EPS_M, TAIL_STUB_M, GREEN_JOIN_RATIO, LANE_SETBACK_M, RING_SETBACK_M,
 } from '../../src/village/constants.js';
 import { pointInPolygon } from '../../src/geom/point-in-polygon.js';
 import { Point } from '../../src/types/point.js';
@@ -137,7 +137,7 @@ describe('village invariants (design §5.7)', () => {
 
   it("every lot's front lies on its lane or the green (§5.4 rules 3-4)", () => {
     // Fix round 2: the model itself (village-model.ts's survivingLots
-    // filter) now drops a lane lot whose front no longer lies on its
+    // filter) drops an UNHOUSED lane lot whose front no longer lies on its
     // surviving (post-trim, post-relax) lane — a stale claim the fields
     // pass would otherwise clip against. So this checks EVERY lot in the
     // returned model, not just housed ones. FRONT_ON_LANE_EPS_M (same
@@ -148,6 +148,7 @@ describe('village invariants (design §5.7)', () => {
       for (const seed of seeds) {
         const m = generateVillage(input, seed);
         const laneById = new Map(m.lanes.map((l) => [l.id, l]));
+        const housed = new Set(m.buildings.map((b) => b.lotId));
         for (const lot of m.lots) {
           if (lot.laneId === 'green') {
             const radius = (m.green.diameter / 2) * GREEN_JOIN_RATIO + RING_SETBACK_M;
@@ -162,7 +163,18 @@ describe('village invariants (design §5.7)', () => {
             const q = closestPointOnSegment(lot.front, lane!.points[i - 1], lane!.points[i]);
             nearest = Math.min(nearest, dist(lot.front, q));
           }
-          expect(Math.abs(nearest - setback)).toBeLessThan(FRONT_ON_LANE_EPS_M);
+          // Gate 5.1: a lot CARRYING A BUILDING is never dropped by the
+          // model, whatever this measurement says -- a building must have
+          // its lot, or §2's stable-id invariant breaks, which is the more
+          // serious of the two. Its lane is still required to exist, and
+          // its front still has to be near that lane; but the allowance is
+          // widened by TAIL_STUB_M, because the lane was trimmed to just
+          // past this very building AFTER the lot was cut. Anything worse
+          // than that is a genuinely stale claim and still fails here.
+          const allowance = housed.has(lot.id)
+            ? FRONT_ON_LANE_EPS_M + TAIL_STUB_M
+            : FRONT_ON_LANE_EPS_M;
+          expect(Math.abs(nearest - setback)).toBeLessThan(allowance);
         }
       }
     }

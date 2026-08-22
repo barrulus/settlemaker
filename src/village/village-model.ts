@@ -19,7 +19,7 @@ import { closestPointOnSegment, dist } from './geometry.js';
 import {
   BRANCH_SPACING_M, FRONT_ON_LANE_EPS_M, GAP_TIGHTEN, GREEN_JOIN_RATIO, GROWTH_RADIUS_FACTOR,
   INITIAL_MEAN_FRONTAGE_FACTOR, LANE_EXTENT_FACTOR, LANE_SETBACK_M, LOT_DEPTH_M,
-  MAX_FEEDBACK_ROUNDS, MEAN_LOT_AREA_M2, RING_SETBACK_M,
+  MAX_FEEDBACK_ROUNDS, MAX_LOT_FRONTAGE_RATIO, MEAN_LOT_AREA_M2, RING_SETBACK_M,
 } from './constants.js';
 import type { Lane, Lot, VillageModel } from './types.js';
 import type { RouteType } from './route-class.js';
@@ -66,6 +66,9 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
   // arrival; the cutter floors at this so tightening the gap can never
   // manufacture unusable frontage.
   const lotFloorM = minDwellingFrontageM(deck);
+  // Gate 5.1: the hard cap on any lot's frontage -- a dwelling plus at most
+  // about one house width of gap, independent of distance from the green.
+  const lotCapM = widestDwellingM * MAX_LOT_FRONTAGE_RATIO;
   // Finding 4: the gap term is tracked separately from f0 itself so that
   // tightening it each round compounds — GAP_TIGHTEN applied to the gap
   // left over from the PREVIOUS round, not recomputed fresh from the
@@ -94,6 +97,10 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
   // so the escalator under-asked for frontage and the loop settled short
   // of the full census instead of growing another rung.
   let preResolutionLotCount = 0;
+  // The cluster radius the lot cutter uses. It starts at the growth radius
+  // and follows any widening `addInventedLanes` had to do, so the frontage
+  // estimate and the cutter always speak about the same circle.
+  let lotRadiusM = growthRadiusM;
 
   for (let round = 0; round <= MAX_FEEDBACK_ROUNDS; round++) {
     // R16: after round 1, requiredFrontage's flat per-capita estimate is
@@ -115,16 +122,23 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
       : Math.max(0.25, spend.buildings.length / preResolutionLotCount);
     const required = round === 0
       ? requiredFrontage(site.population, occupancy, measuredMeanFrontage)
-      : availableFrontage(lanes)
+      : availableFrontage(lanes, green, lotRadiusM)
         + ((spend.unhoused / occupancy) * measuredMeanFrontage) / seatEfficiency;
-    lanes = addInventedLanes(lanes, green, required, measuredMeanFrontage, growthRadiusM, rng);
+    // The growth circle can widen when the cluster fills but frontage is
+    // still owed; the cutter must use the SAME radius the growth actually
+    // reached, or it refuses to fill the ground the lanes just covered.
+    const grown = addInventedLanes(lanes, green, required, measuredMeanFrontage, lotRadiusM, rng);
+    lanes = grown.lanes;
+    lotRadiusM = grown.radiusM;
 
     const laneTypes = new Map<string, RouteType>(lanes.map((l) => [l.id, l.type]));
     laneTypes.set('green', 'main');
 
     lots = [
       ...subdivideGreen(green, f0, LOT_DEPTH_M, rng, lanes),
-      ...lanes.flatMap((l) => subdivideLane(l, green, builtRadius, f0, LOT_DEPTH_M, rng, lotFloorM)),
+      ...lanes.flatMap((l) => subdivideLane(
+        l, green, builtRadius, f0, LOT_DEPTH_M, rng, lotFloorM, lotCapM, lotRadiusM,
+      )),
     ];
     // §5.4 rules 3-4 (the R20 debt): clipLots only ever dropped water/
     // green-interior lots, so cross-strip claims still overlapped where
@@ -176,7 +190,16 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
   // pass would clip against, so it must not survive into the model: keep
   // a lane lot only if its front still lies within setback + epsilon of
   // its SURVIVING (post-trim, post-relax) lane's polyline.
+  // Gate 5.1: a lot CARRYING A BUILDING always survives, whatever the
+  // geometry test says. TAIL_STUB_M 12 -> 6 trims a lane to just past its
+  // last house, which can leave that house's own lot front a whisker
+  // outside the setback+epsilon window and drop it -- breaking §2's
+  // stable-id invariant (a building naming a lot that no longer exists).
+  // The building is the reason the lane was kept at all; its lot is not a
+  // stale claim by any reading.
+  const housedLotIds = new Set(spend.buildings.map((b) => b.lotId));
   const survivingLots = lots.filter((l) => {
+    if (housedLotIds.has(l.id)) return true;
     if (l.laneId === 'green') {
       const radius = (green.diameter / 2) * GREEN_JOIN_RATIO + RING_SETBACK_M;
       return Math.abs(dist(l.front, green.centre) - radius) < FRONT_ON_LANE_EPS_M;

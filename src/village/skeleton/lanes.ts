@@ -254,15 +254,55 @@ function widestGapBearing(taken: number[], rng: SeededRandom): number {
   return (gapStart + gapSpan / 2 + jitter + 360) % 360;
 }
 
-/** A branch hosts BRANCH_LOTS_TARGET lots across its two sides. */
-function branchLengthM(meanFrontageM: number): number {
-  return Math.min(BRANCH_MAX_M,
-    Math.max(BRANCH_MIN_M, (BRANCH_LOTS_TARGET / 2) * meanFrontageM));
+/**
+ * How long a new street needs to be, sized to the dwellings still to be
+ * housed THIS ROUND rather than to a fixed target.
+ *
+ * Gate 5.1: a hamlet was being given the same 14-lot street a pop-900
+ * village gets, so its handful of huts strung out along a road instead of
+ * gathering at the green -- the owner's "we have ZERO clustering ... they're
+ * in a single line away from the green". `remainingDwellings` is derived
+ * from the frontage still owed, so it falls as the loop adds lanes and the
+ * last spur of a village is short.
+ *
+ * BRANCH_LOTS_TARGET survives as the CAP: one street never tries to host
+ * more than that many lots, however big the shortfall, so a big village
+ * grows several streets rather than one enormous one. Floored at two lots
+ * so a spur is never a single plot.
+ */
+function branchLengthM(meanFrontageM: number, remainingDwellings: number): number {
+  const lots = Math.min(BRANCH_LOTS_TARGET, Math.max(2, Math.ceil(remainingDwellings)));
+  return Math.min(BRANCH_MAX_M, Math.max(BRANCH_MIN_M, (lots / 2) * meanFrontageM));
 }
 
-/** Both sides of every lane are frontage. */
-export function availableFrontage(lanes: Lane[]): number {
-  return lanes.reduce((sum, l) => sum + polylineLength(l.points) * 2, 0);
+/**
+ * Both sides of every lane are frontage -- but only the stretch that
+ * actually carries lots. Gate 5.1 stopped the cutter placing lots beyond
+ * the cluster (`subdivideLane`'s `maxDistanceM`), so counting a trunk
+ * road's whole run to the map edge would tell the escalation loop it had
+ * frontage it will never use, and the census would go unhoused. Segments
+ * are counted whole when both ends are inside the radius, half when one
+ * is, and not at all when neither is -- enough precision for an estimate
+ * the loop only uses to decide whether to grow again.
+ */
+export function availableFrontage(
+  lanes: Lane[], green?: Green, maxDistanceM: number = Infinity,
+): number {
+  if (!green || !Number.isFinite(maxDistanceM)) {
+    return lanes.reduce((sum, l) => sum + polylineLength(l.points) * 2, 0);
+  }
+  let total = 0;
+  for (const lane of lanes) {
+    for (let i = 1; i < lane.points.length; i++) {
+      const a = lane.points[i - 1];
+      const b = lane.points[i];
+      const inA = dist(a, green.centre) <= maxDistanceM;
+      const inB = dist(b, green.centre) <= maxDistanceM;
+      if (!inA && !inB) continue;
+      total += dist(a, b) * (inA && inB ? 1 : 0.5) * 2;
+    }
+  }
+  return total;
 }
 
 export function requiredFrontage(
@@ -392,7 +432,7 @@ function endsOnAnotherLane(lane: Lane, out: Lane[]): boolean {
  */
 function extendOne(
   out: Lane[], green: Green, meanFrontageM: number, growthRadiusM: number,
-  rng: SeededRandom, maxLengthM: number,
+  rng: SeededRandom, maxLengthM: number, remainingDwellings: number,
 ): boolean {
   const extendable = out
     .filter((l) => !l.id.startsWith('arm-') && l.points.length >= 2
@@ -412,7 +452,7 @@ function extendOne(
     const n = lane.points.length;
     const endDir = bearingOf(lane.points[n - 2], lane.points[n - 1]);
     const extension = truncateAtFirstCrossing(
-      runLine(lane.points[n - 1], endDir, branchLengthM(meanFrontageM), rng),
+      runLine(lane.points[n - 1], endDir, branchLengthM(meanFrontageM, remainingDwellings), rng),
       out.filter((l) => l.id !== lane.id), green);
     if (extension.length < 2) continue;
     lane.points = [...lane.points, ...extension.slice(1)];
@@ -423,7 +463,8 @@ function extendOne(
 
 /** One growth step. Returns false when there is nowhere left to grow. */
 function growOne(
-  out: Lane[], green: Green, meanFrontageM: number, growthRadiusM: number, rng: SeededRandom,
+  out: Lane[], green: Green, meanFrontageM: number, growthRadiusM: number,
+  rng: SeededRandom, remainingDwellings: number,
 ): boolean {
   // 1. The green may still host a street of its own: an invented arm, up
   //    to the circumference-derived cap, at a bearing clear of every
@@ -452,7 +493,8 @@ function growOne(
       const lengthJitter = 0.7 + rng.float() * 0.6;
       const points = truncateAtFirstCrossing(
         runLine(start, candidate,
-          branchLengthM(meanFrontageM) * INVENTED_ARM_LENGTH_FACTOR * lengthJitter, rng),
+          branchLengthM(meanFrontageM, remainingDwellings)
+            * INVENTED_ARM_LENGTH_FACTOR * lengthJitter, rng),
         out, green);
       out.push({
         id: inventedLaneId(candidate),
@@ -471,7 +513,8 @@ function growOne(
   //    Only once every street has reached full length does a new branch
   //    open. This, BRANCH_SPACING_M 28 -> 40 and BRANCH_LOTS_TARGET 8 -> 14
   //    are one change: the same census laid along fewer, longer roads.
-  if (extendOne(out, green, meanFrontageM, growthRadiusM, rng, branchLengthM(meanFrontageM))) {
+  if (extendOne(out, green, meanFrontageM, growthRadiusM, rng,
+    branchLengthM(meanFrontageM, remainingDwellings), remainingDwellings)) {
     return true;
   }
 
@@ -492,7 +535,9 @@ function growOne(
     const side = rng.bool(0.5) ? 1 : -1;
     const branchBearing = (slot.dirDeg + side * (60 + rng.int(0, 51)) + 360) % 360;
     let cls = inventedChildClass(slot.parent.type);
-    let points = runLine(slot.anchor, branchBearing, branchLengthM(meanFrontageM), rng);
+    let points = runLine(
+      slot.anchor, branchBearing, branchLengthM(meanFrontageM, remainingDwellings), rng,
+    );
     // Loop rule first: an end passing near another lane joins it. Then ONE
     // crossing pass over the fully assembled polyline — snap tail included —
     // so no segment of the final lane crosses anything. Either cut means the
@@ -523,7 +568,7 @@ function growOne(
   //    full length, so lengthen one anyway. The new length carries fresh
   //    frontage AND fresh branch slots, so growth cannot deadlock while the
   //    census is unhoused.
-  return extendOne(out, green, meanFrontageM, growthRadiusM, rng, Infinity);
+  return extendOne(out, green, meanFrontageM, growthRadiusM, rng, Infinity, remainingDwellings);
 }
 
 /**
@@ -536,13 +581,19 @@ function growOne(
 export function addInventedLanes(
   lanes: Lane[], green: Green, requiredM: number, meanFrontageM: number,
   growthRadiusM: number, rng: SeededRandom,
-): Lane[] {
+): { lanes: Lane[]; radiusM: number } {
   const out = [...lanes];
   let guard = 0;
   let radiusM = growthRadiusM;
-  while (availableFrontage(out) < requiredM * FRONTAGE_MARGIN && guard < MAX_INVENTED_LANES) {
+  // Only frontage inside the cluster counts, because only that stretch
+  // will be cut into lots (gate 5.1).
+  const owed = (): number => requiredM * FRONTAGE_MARGIN - availableFrontage(out, green, radiusM);
+  while (owed() > 0 && guard < MAX_INVENTED_LANES) {
     guard++;
-    if (!growOne(out, green, meanFrontageM, radiusM, rng)) {
+    // Dwellings still to house, derived from the frontage still owed, so
+    // each new street is sized to what is actually left.
+    const remainingDwellings = meanFrontageM > 0 ? owed() / meanFrontageM : 0;
+    if (!growOne(out, green, meanFrontageM, radiusM, rng, remainingDwellings)) {
       // The circle is full — cap reached, slots taken, street ends outside
       // it — but frontage is still owed. A real village fills its circle
       // and then the circle widens: step the radius and retry. The guard
@@ -551,5 +602,8 @@ export function addInventedLanes(
       radiusM *= GROWTH_RADIUS_STEP;
     }
   }
-  return out;
+  // The radius is returned, not just used: the lot cutter must apply the
+  // SAME cluster cut-off, or growth widens the circle while the cutter
+  // still refuses to fill it and the census can never be housed.
+  return { lanes: out, radiusM };
 }

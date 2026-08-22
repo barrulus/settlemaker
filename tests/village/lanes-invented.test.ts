@@ -31,15 +31,21 @@ describe('frontage arithmetic', () => {
 });
 
 describe('addInventedLanes', () => {
+  // Gate 5.1: addInventedLanes returns { lanes, radiusM } -- the cluster
+  // radius it actually reached must reach the lot cutter, which applies
+  // the same cut-off. Unwrapped here so the assertions below stay about
+  // the lanes.
+  const grow = (...args: Parameters<typeof addInventedLanes>): Lane[] => addInventedLanes(...args).lanes;
+
   it('adds nothing when the arms already provide enough frontage', () => {
     const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -500))];
-    const out = addInventedLanes(lanes, green, 500, 12, 500, new SeededRandom(1));
+    const out = grow(lanes, green, 500, 12, 500, new SeededRandom(1));
     expect(out).toHaveLength(1);
   });
 
   it('adds lanes until available frontage clears required x 1.15', () => {
     const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -110))];
-    const out = addInventedLanes(lanes, green, 2000, 12, 500, new SeededRandom(1));
+    const out = grow(lanes, green, 2000, 12, 500, new SeededRandom(1));
     expect(out.length).toBeGreaterThan(1);
     expect(availableFrontage(out)).toBeGreaterThanOrEqual(2000 * 1.15);
   });
@@ -49,7 +55,7 @@ describe('addInventedLanes', () => {
     // classes — market lanes connect market towns, they are not suburban
     // routes. A branch off a `main` road is a `local` street, never `market`.
     const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -60))];
-    const out = addInventedLanes(lanes, green, 800, 12, 500, new SeededRandom(3));
+    const out = grow(lanes, green, 800, 12, 500, new SeededRandom(3));
     // Excluded by original id, not by prefix: green-attached invented lanes
     // now use their own `lane-` id space (ruling R10), but excluding by id
     // is the more general check and doesn't depend on that detail.
@@ -61,7 +67,7 @@ describe('addInventedLanes', () => {
   });
 
   it('is deterministic for a seed', () => {
-    const mk = () => addInventedLanes(
+    const mk = () => grow(
       [lane('arm-000', new Point(0, -10), new Point(0, -60))], green, 900, 12, 500,
       new SeededRandom(11),
     );
@@ -70,7 +76,7 @@ describe('addInventedLanes', () => {
 
   it('gives green-attached invented lanes their own id space, distinct from arms (R10)', () => {
     const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -60))];
-    const out = addInventedLanes(lanes, green, 800, 12, 500, new SeededRandom(3));
+    const out = grow(lanes, green, 800, 12, 500, new SeededRandom(3));
     const invented = out.filter((l) => !lanes.some((orig) => orig.id === l.id));
     const greenAttached = invented.filter((l) => l.parentId === undefined);
     expect(greenAttached.length).toBeGreaterThan(0);
@@ -91,7 +97,7 @@ describe('addInventedLanes', () => {
     // percentage buckets can collide if the fallback probing is missing.
     for (const seed of [2, 5, 7, 13, 21, 42]) {
       const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -60))];
-      const out = addInventedLanes(lanes, green, 100000, 12, 500, new SeededRandom(seed));
+      const out = grow(lanes, green, 100000, 12, 500, new SeededRandom(seed));
       const ids = out.map((l) => l.id);
       expect(new Set(ids).size).toBe(ids.length);
     }
