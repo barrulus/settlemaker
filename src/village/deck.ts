@@ -232,6 +232,34 @@ export function meanOccupancy(deck: DeckEntry[]): number {
   return pool.reduce((s, e) => s + e.occupancy * e.weight, 0) / total;
 }
 
+/**
+ * GATE 6.9. The same deck with `tightenM` shaved off every entry's frontage
+ * demand, bounded below by the entry's own painted INK width.
+ *
+ * This exists because the escalation ladder's first rung is meaningless
+ * without it. `DECK_GAP_M` (0.5) is baked into every `minFrontage`, and the
+ * lot cutter floors at `minDwellingFrontageM` — so measured, the deck floor,
+ * not `gapForPopulation`, is what decides how wide a lot comes out (5.94 m
+ * against f0's 5.69 at pop 900). Tightening the gap term alone changed
+ * nothing at all. Tightening BOTH is what "one notch tighter" actually
+ * means, and the ink width is the floor it cannot pass: at zero gap two
+ * neighbours' painted walls touch, which is the terrace the owner's
+ * reference maps draw, and one centimetre further would be overlap.
+ *
+ * A pure transform — no `SeededRandom` is touched, so escalating cannot
+ * shift the draw sequence that chose the village's dwelling family.
+ */
+export function tightenDeck(deck: DeckEntry[], tightenM: number): DeckEntry[] {
+  if (tightenM <= 0) return deck;
+  return deck.map((e) => ({
+    ...e,
+    minFrontage: Math.max(
+      nominalInkWidthM(e.glyph) * e.sizeFactor,
+      e.minFrontage - tightenM,
+    ),
+  }));
+}
+
 export function eligible(entryValue: DeckEntry, site: Site, frontageM: number): boolean {
   if (frontageM < entryValue.minFrontage) return false;
   const req = entryValue.requires;

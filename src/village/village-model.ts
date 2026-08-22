@@ -10,19 +10,21 @@ import {
   clipLots, gapForPopulation, orderLots, scoreLots, subdivideGreen, subdivideLane,
 } from './parcels/lots.js';
 import { resolveConvergingLots } from './parcels/overlap.js';
+import { recutFreedGround } from './parcels/recut.js';
 import {
-  buildDeck, eligible, meanOccupancy, minDwellingFrontageM, ordinaryOccupancy, widestDwellingWidthM,
+  buildDeck, eligible, meanOccupancy, minDwellingFrontageM, ordinaryOccupancy, tightenDeck,
+  widestDwellingWidthM,
 } from './deck.js';
 import { intrudesOnLane, spendCensus, type SpendResult } from './dwellings.js';
 import { resetLotTrace, type LotTrace } from './lot-trace.js';
 import { dressVillage } from './dressing/index.js';
 import { closestPointOnSegment, dist } from './geometry.js';
 import {
-  ARM_LOT_RADIUS_SHARE, BRANCH_SPACING_M, FRONT_ON_LANE_EPS_M, GREEN_JOIN_RATIO,
-  HAMLET_RIBBON_POP,
+  ARM_LOT_RADIUS_SHARE, BRANCH_SPACING_M, FRONT_ON_LANE_EPS_M, GAP_TIGHTEN_STEP_M,
+  GREEN_JOIN_RATIO, HAMLET_RIBBON_POP,
   INITIAL_MEAN_FRONTAGE_FACTOR, LANE_EXTENT_FACTOR, LANE_SETBACK_M, LOT_DEPTH_M,
-  MAX_FEEDBACK_ROUNDS, MAX_LOT_FRONTAGE_RATIO, MEAN_LOT_AREA_M2, RING_SETBACK_M,
-  SATURATION_RING_STEP_M,
+  MAX_FEEDBACK_ROUNDS, MAX_LOT_FRONTAGE_RATIO, MEAN_LOT_AREA_M2, RECUT_MAX_PASSES,
+  DISC_ESCALATION_STEP_RATIO, RING_SETBACK_M,
 } from './constants.js';
 import type { Lane, Lot, VillageModel } from './types.js';
 import { classRank, type RouteType } from './route-class.js';
@@ -69,18 +71,25 @@ export function generateVillage(
   // Lots narrower than the deck's narrowest usable dwelling are dead on
   // arrival; the cutter floors at this so tightening the gap can never
   // manufacture unusable frontage.
-  const lotFloorM = minDwellingFrontageM(deck);
+  const nominalLotFloorM = minDwellingFrontageM(deck);
   // Gate 5.1: the hard cap on any lot's frontage -- a dwelling plus at most
   // about one house width of gap, independent of distance from the green.
   const lotCapM = widestDwellingM * MAX_LOT_FRONTAGE_RATIO;
-  // Gate 6.6: f0 is FIXED for the village. The old loop tightened the gap
-  // term one rung per round to squeeze more lots out of the same lanes;
-  // that made the cut width a moving target, and the disc is now sized
-  // FROM that width (`discRadiusFor` below), so a shifting f0 would mean a
-  // shifting disc — the round-to-round feedback area-first sizing exists to
-  // remove. The loop widens the disc instead, which is the honest lever:
-  // more ground for more houses, at one constant plot width.
-  const f0 = widestDwellingM + gapForPopulation(site.population);
+  // Gate 6.6 fixed f0 for the whole village, because the disc is sized FROM
+  // it and a moving cut width meant a moving disc.
+  //
+  // Gate 6.9 lets it move again, but only DOWNWARD and only against a disc
+  // that no longer moves at all: the closed form below is computed once,
+  // from the NOMINAL width, and becomes a hard cap. Tightening then buys
+  // houses inside fixed ground instead of buying more ground, which is the
+  // whole inversion this gate is about.
+  const nominalF0 = widestDwellingM + gapForPopulation(site.population);
+  // The ink floor: a lot exactly this wide puts two neighbours' painted
+  // walls in contact. Nothing may tighten past it.
+  const inkFloorM = widestDwellingM;
+  let f0 = nominalF0;
+  let lotFloorM = nominalLotFloorM;
+  let activeDeck = deck;
   let lanes = buildArms(site, green, laneExtentM, rng);
   let lots: Lot[] = [];
   // Annotated, not inferred: an empty literal would infer `never[]`.
@@ -90,7 +99,7 @@ export function generateVillage(
   // factor shrank with the gentler cluster gradient). Every later round
   // replaces this with the ACTUAL mean frontage of the lane lots the
   // previous round produced.
-  let measuredMeanFrontage = f0 * INITIAL_MEAN_FRONTAGE_FACTOR;
+  let measuredMeanFrontage = nominalF0 * INITIAL_MEAN_FRONTAGE_FACTOR;
   // Gate 6.6: reported, never fed back. seatEfficiency is measured against
   // DECK-USABLE lots -- those wide enough for some uncapped deck entry --
   // because a lot too narrow for any dwelling is a cutting artefact, not a
@@ -112,11 +121,27 @@ export function generateVillage(
   // dwelling) overrides f0 wherever it is wider, and then IT is what every
   // metre of frontage actually costs. Sizing the disc from f0 alone
   // under-counted the ground the same houses need.
-  const meanLotFrontageM = Math.max(f0, lotFloorM);
-  let targetRadiusM = Math.max(
+  const meanLotFrontageM = Math.max(nominalF0, nominalLotFloorM);
+  // GATE 6.9: THE CAP. Computed once, from the nominal cut width, and never
+  // recomputed as the ladder tightens — tightening is meant to fit the same
+  // census into the SAME ground, and a cap that shrank alongside it would
+  // hand back every metre the tightening won.
+  const cappedRadiusM = Math.max(
     discRadiusFor(dwellingsNeeded, meanLotFrontageM),
     green.diameter / 2 + BRANCH_SPACING_M + LOT_DEPTH_M,
   );
+  // How far the cut width may come down before two painted walls touch, in
+  // whole GAP_TIGHTEN_STEP_M notches.
+  const maxNotches = Math.max(
+    0, Math.floor((meanLotFrontageM - inkFloorM) / GAP_TIGHTEN_STEP_M),
+  );
+  // The escalation ladder's state. Rungs are climbed in this order and the
+  // census is re-spent after each: tighten, tighten, ... then terrace, then
+  // — and only then — one more saturation ring, with a diagnostic.
+  let notch = 0;
+  let terrace = false;
+  let extraRings = 0;
+  let targetRadiusM = cappedRadiusM;
   // The disc growth actually saturated, which is also the disc the lot
   // cutter fills and the reference for the frontage gradient. Everything
   // downstream of growth speaks about THIS radius, never the pre-fabric
@@ -124,6 +149,15 @@ export function generateVillage(
   let lotRadiusM = targetRadiusM;
 
   for (let round = 0; round <= MAX_FEEDBACK_ROUNDS; round++) {
+    // This round's rung of the ladder. `tightenM` comes off BOTH the gap
+    // term and the deck's own frontage demand: measured, the deck floor is
+    // what actually decides a lot's width (5.94 m against f0's 5.69 at pop
+    // 900), so tightening f0 alone moved nothing at all.
+    const tightenM = notch * GAP_TIGHTEN_STEP_M;
+    f0 = Math.max(inkFloorM, nominalF0 - tightenM);
+    lotFloorM = Math.max(inkFloorM, nominalLotFloorM - tightenM);
+    activeDeck = tightenDeck(deck, tightenM);
+    targetRadiusM = cappedRadiusM * (1 + extraRings * DISC_ESCALATION_STEP_RATIO);
     const grown = saturateDisc(lanes, green, measuredMeanFrontage, targetRadiusM, rng);
     lanes = grown.lanes;
     lotRadiusM = grown.radiusM;
@@ -161,6 +195,53 @@ export function generateVillage(
         if (!kept.has(l.id)) trace.fates.set(l.id, 'converging-claim');
       }
     }
+
+    // GATE 6.9 -- RE-CUT THE FREED GROUND. A lot killed just above leaves
+    // its frontage EMPTY, and the gate-6.7 histogram measured that as a
+    // third of everything the village cuts, concentrated at junction mouths
+    // and between parallel lanes. That emptiness IS the grass the owner
+    // keeps circling. So walk the lane sides again, find the stretches that
+    // are now free, and cut them shallow — down to MIN_BUILD_DEPTH_M, a
+    // house's ink and a sliver, with no garden behind it.
+    //
+    // Bounded, and it stops the moment a pass adds nothing. The new claims
+    // are built disjoint from the standing ones (see recut.ts), so §5.4's
+    // resolution is deliberately NOT re-run over them.
+    for (let pass = 1; pass <= RECUT_MAX_PASSES; pass++) {
+      const recut = recutFreedGround({
+        lanes,
+        green,
+        standing: lots,
+        builtRadiusM: lotRadiusM,
+        f0,
+        depthM: LOT_DEPTH_M,
+        floorM: lotFloorM,
+        maxFrontageM: lotCapM,
+        reachOf: (l) => lotReachFor(l, lotRadiusM, site.population),
+        pass,
+      });
+      if (recut.added.length === 0) break;
+      const kept = clipLots(recut.added, green, site.water);
+      if (trace) {
+        for (const l of recut.added) trace.cut.set(l.id, l.frontageM);
+        const alive = new Set(kept.map((l) => l.id));
+        for (const l of recut.added) if (!alive.has(l.id)) trace.fates.set(l.id, 'clipped');
+      }
+      if (kept.length === 0) break;
+      // Gardens that gave way so a new house could stand. Depths only ever
+      // shrink here, so applying them cannot disturb a pair settled earlier.
+      if (recut.trimmed.size > 0) {
+        lots = lots.map((l) => {
+          const d = recut.trimmed.get(l.id);
+          return d === undefined ? l : { ...l, depthM: d };
+        });
+      }
+      // Same denominator rule as the first cut (gate 6.6): every lot
+      // OFFERED, whether or not it survives to carry a house.
+      deckUsableLotCount += kept.filter((l) => l.frontageM >= lotFloorM).length;
+      lots = [...lots, ...kept];
+    }
+
     lots = orderLots(scoreLots(lots, green, laneTypes));
 
     // Measure this round's actual lane-lot frontage for the next round's
@@ -173,7 +254,7 @@ export function generateVillage(
       measuredMeanFrontage = laneLots.reduce((s, l) => s + l.frontageM, 0) / laneLots.length;
     }
 
-    spend = spendCensus(lots, deck, site, rng, lanes, trace?.fates);
+    spend = spendCensus(lots, activeDeck, site, rng, lanes, trace?.fates, terrace);
     if (spend.unhoused === 0) break;
 
     if (round === MAX_FEEDBACK_ROUNDS) {
@@ -184,10 +265,27 @@ export function generateVillage(
       );
       break;
     }
-    // Gate 6.6: the disc was saturated and spent, and someone is still
-    // unhoused. The ONLY remaining escalation is more ground -- one
-    // saturation ring wider, then saturate and spend again.
-    targetRadiusM += SATURATION_RING_STEP_M;
+    // GATE 6.9: THE LADDER. The disc was saturated, re-cut and spent, and
+    // someone is still unhoused. Gate 6.6 answered that with more ground,
+    // and more ground is what every "too much grass between the houses"
+    // verdict since has been describing: widening buys area as the square
+    // of the radius and frontage only as the radius, so the fabric gets
+    // THINNER exactly when it is already too thin.
+    //
+    // Tighten first, terrace next, widen last and say so.
+    if (notch < maxNotches) {
+      notch++;
+    } else if (!terrace) {
+      terrace = true;
+    } else {
+      extraRings++;
+      diagnostics.push(
+        `disc widened past its closed form: ${spend.unhoused} of ${site.population} `
+        + `still unhoused at the cap (R ${Math.round(cappedRadiusM)} m, cut width `
+        + `${f0.toFixed(2)} m at the ink floor, terraces on); `
+        + `+${Math.round(extraRings * DISC_ESCALATION_STEP_RATIO * 100)}%`,
+      );
+    }
   }
 
   // Gate 5.4: relaxation is COSMETIC -- it nudges lane points off houses by
@@ -265,7 +363,7 @@ export function generateVillage(
       ),
       green, finalLaneTypes,
     ));
-    spend = spendCensus(lots, deck, site, rng, relaxed, trace?.fates);
+    spend = spendCensus(lots, activeDeck, site, rng, relaxed, trace?.fates, terrace);
     // The re-seat moved houses, so the tails must follow them. Connectors
     // are exempt from trimming (both their ends are junctions), so this
     // cannot re-open what was just closed.

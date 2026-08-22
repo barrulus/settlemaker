@@ -235,9 +235,29 @@ export interface SpendResult {
  * ordinary entries down the score order until the census is housed.
  * Remaining lots stay empty — that absence is the straggle.
  */
+/**
+ * Where along its own frontage a dwelling may slide before the seat is
+ * given up, as a share of the lot's frontage. Nearest-first, so a house
+ * sits centred unless something is in the way.
+ *
+ * GATE 6.9, TERRACE ROWS. The ordinary ladder is five coarse positions; the
+ * terrace ladder is eleven, out to +/- half the frontage. That last rung is
+ * the whole point: at +/-0.5 two neighbouring houses are shoulder to
+ * shoulder, and `overlaps` deliberately tolerates touching (TOUCH_EPS_M).
+ * So when the census cannot otherwise be housed inside its capped disc, the
+ * escalation ladder turns this on and the fabric TERRACES rather than the
+ * disc widening — a row of joined houses being the medieval answer to the
+ * same problem, and a far better picture than the same houses spread over
+ * more grass.
+ */
+const SLIDE_SHARES = [0, 0.25, -0.25, 0.45, -0.45];
+const TERRACE_SLIDE_SHARES = [
+  0, 0.15, -0.15, 0.25, -0.25, 0.35, -0.35, 0.45, -0.45, 0.5, -0.5,
+];
+
 export function spendCensus(
   lots: Lot[], deck: DeckEntry[], site: Site, rng: SeededRandom, lanes: Lane[] = [],
-  fates?: Map<string, LotFate>,
+  fates?: Map<string, LotFate>, terrace = false,
 ): SpendResult {
   const ordered = orderLots(lots);
   const taken = new Set<string>();
@@ -262,7 +282,7 @@ export function spendCensus(
     const tangent = new Point(-facing.y, facing.x);
     let intrusionFails = 0;
     let overlapFails = 0;
-    for (const share of [0, 0.25, -0.25, 0.45, -0.45]) {
+    for (const share of terrace ? TERRACE_SLIDE_SHARES : SLIDE_SHARES) {
       const offset = share * lot.frontageM;
       const cand: Building = share === 0 ? b : {
         ...b,
