@@ -64,7 +64,10 @@ export function baseDeck(population: number, rng: SeededRandom): DeckEntry[] {
   const dwelling = hutFamily
     ? (rng.bool(0.5) ? 'sm-hut-straw' : 'sm-hut-round')
     : (rng.bool(0.7) ? 'sm-house' : 'sm-house-tiled');
-  const occupancy = hutFamily ? 3 : 5;
+  // Gate 5.1: a hut houses a FAMILY, 6, not 3 -- the owner's "3 people per
+  // house is completely unrealistic". A pop-60 hamlet therefore needs ~10
+  // huts rather than 20, which is what lets them all fit around the green.
+  const occupancy = hutFamily ? 6 : 5;
 
   const entries: DeckEntry[] = [entry(dwelling, occupancy, 100)];
   if (!hutFamily && population >= LONGHOUSE_MIN_POP) {
