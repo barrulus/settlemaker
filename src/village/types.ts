@@ -86,10 +86,16 @@ export interface Building {
 }
 
 /**
- * §5.6/§7.1: the enclosed garden strip behind a BUILT lot — toft -> croft ->
- * furlong is one continuous depth axis running back from the lane. Only a
- * lot with a dwelling seated on it gets a croft; an empty lot's straggle
- * stays absence, not a croft nobody tends.
+ * §5.6: the garden ground behind a BUILT lot. Only a lot with a dwelling
+ * seated on it gets one; an empty lot's straggle stays absence.
+ *
+ * Gate 5 (2026-08-22): a croft is now a CLAIM ONLY -- it is never painted
+ * and carries no boundary art. Owner's verdict on the hedged version:
+ * "huge private fields, nothing like what you would see in a village --
+ * you'd have fields AROUND the village, not INSIDE the village." What the
+ * claim still does is keep the vegetation scatter off the ground directly
+ * behind each house, which reads as a garden without drawing a fence round
+ * it. Ploughed land now lives in the outer ring (see `FieldStrip`).
  */
 export interface Croft {
   id: string;
@@ -98,9 +104,6 @@ export interface Croft {
    * edge first, matching the lot's own claim orientation). */
   polygon: Point[];
   depthM: number;
-  /** The three open sides (two flanks + back) stamped with the settlement
-   * edge style; the lot-facing side carries no boundary. */
-  boundary: EdgeStamp[];
 }
 
 /**

@@ -48,7 +48,7 @@ export function dressVillage(input: DressingInput): DressingResult {
   } = input;
 
   const edgeStyle = settlementEdgeStyle(site.biome, site.population, rng);
-  const crofts = buildCrofts(lots, buildings, green, lanes, site.water, builtRadiusM, f0, edgeStyle);
+  const crofts = buildCrofts(lots, buildings, green, lanes, site.water, builtRadiusM, f0);
   const {
     strips: fields, edges: fieldEdges, outerRadius: fieldsOuterRadius,
   } = buildFields(site, green, lanes, lots, crofts, edgeStyle, rng);

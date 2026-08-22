@@ -7,13 +7,12 @@ import { frontageAt, orderLots } from '../parcels/lots.js';
 import {
   lotObb, obbOverlap, pointInObb, type Obb,
 } from '../parcels/overlap.js';
-import { stampEdge } from './edges.js';
 import {
   CROFT_BEHIND_INK_M, CROFT_DEPTH_MAX_M, CROFT_MIN_DEPTH_M, CROFT_TIGHT_FRONTAGE_RATIO,
   GRADIENT_EXPONENT, GRADIENT_K, GRADIENT_RATIO_CAP, LANE_SETBACK_M,
 } from '../constants.js';
 import type {
-  Building, Croft, EdgeStyle, Green, Lane, Lot,
+  Building, Croft, Green, Lane, Lot,
 } from '../types.js';
 
 /** frontageAt's own ratio ceiling (frontageAt(d)/f0 when d/R hits
@@ -195,23 +194,22 @@ function croftPolygon(lot: Lot, nearOffset: number, depth: number): Point[] {
   return [near1, near2, far2, far1];
 }
 
-/** The three open sides -- both flanks plus the back -- as one polyline.
- * The house-facing side (near1-near2) is excluded: it runs across the
- * dwelling's own back door, not along the settlement's edge. */
-function croftBoundary(lot: Lot, nearOffset: number, depth: number): Point[] {
-  const [near1, near2, far2, far1] = croftPolygon(lot, nearOffset, depth);
-  return [near1, far1, far2, near2];
-}
-
 /**
- * §5.6/§7.1: one croft per BUILT lot, walked in the same score/id fill
- * order as pass 4 (`orderLots`) so truncation against already-placed
- * crofts is deterministic. An empty lot -- straggle -- gets none; neither
- * does a lot whose clipped depth truncates below CROFT_MIN_DEPTH_M.
+ * §5.6: one croft per BUILT lot, walked in the same score/id fill order as
+ * pass 4 (`orderLots`) so truncation against already-placed crofts is
+ * deterministic. An empty lot -- straggle -- gets none; neither does a lot
+ * whose clipped depth truncates below CROFT_MIN_DEPTH_M.
+ *
+ * Gate 5 (2026-08-22): crofts are CLAIMS ONLY now -- no boundary stamps are
+ * produced here and nothing paints the polygon. The claim's whole remaining
+ * job is to hold the vegetation scatter off the ground behind each house.
+ * `settlementEdgeStyle` is therefore no longer consumed here (it is still
+ * drawn once per village, in draw order, and still carried on the model),
+ * which is why this takes no `style`.
  */
 export function buildCrofts(
   lots: Lot[], buildings: Building[], green: Green, lanes: Lane[], water: Point[][],
-  builtRadiusM: number, f0: number, style: EdgeStyle,
+  builtRadiusM: number, f0: number,
 ): Croft[] {
   const buildingByLot = new Map(buildings.map((b) => [b.lotId, b]));
   const ordered = orderLots(lots).filter((l) => buildingByLot.has(l.id));
@@ -229,11 +227,10 @@ export function buildCrofts(
 
     const id = `croft:${lot.id}`;
     const polygon = croftPolygon(lot, nearOffset, depth);
-    const boundary = stampEdge(id, croftBoundary(lot, nearOffset, depth), style, lanes);
     // `depthM` stays the depth BEYOND the lot's claim -- the quantity
     // CROFT_MIN_DEPTH_M gates and the gradient targets. The polygon is
     // deeper than that by the lot's own unused back ground (V3).
-    crofts.push({ id, lotId: lot.id, polygon, depthM: depth, boundary });
+    crofts.push({ id, lotId: lot.id, polygon, depthM: depth });
     priorObbs.push(croftObbAt(lot, nearOffset, depth));
   }
   return crofts;

@@ -41,7 +41,7 @@ describe('renderVillage', () => {
     expect(parcel).toBeLessThan(structure);
   });
 
-  it('pass 5: parcel-fields band (fields/crofts/edges) paints before the route band, canopy after structure', () => {
+  it('pass 5: parcel-fields band (the field ring) paints before the route band, canopy after structure', () => {
     const parcelFields = svg.indexOf('data-band="parcel-fields"');
     const route = svg.indexOf('data-band="route"');
     const structure = svg.indexOf('data-band="structure"');
@@ -134,7 +134,6 @@ describe('renderVillage', () => {
     const usedGlyphs = new Set([
       ...model.buildings.map((b) => b.glyph),
       ...model.pois.map((p) => p.glyph),
-      ...model.crofts.flatMap((c) => c.boundary).map((e) => e.glyph),
       ...model.fieldEdges.map((e) => e.glyph),
       ...model.fields.map((f) => f.glyph),
       ...model.vegetation.map((v) => v.glyph),
@@ -218,7 +217,7 @@ describe('renderVillage', () => {
     }
   });
 
-  // --- Pass 5: parcel dressing (fields, crofts, edge stamps, trees) ---
+  // --- Pass 5: parcel dressing (the field ring and the tree scatter) ---
 
   it('emits a <pattern> def with explicit width/height/patternUnits for every field strip, and the strip references it', () => {
     if (model.fields.length === 0) return;
@@ -241,10 +240,17 @@ describe('renderVillage', () => {
     }
   });
 
-  it('paints crofts with the flat tint class, no field pattern', () => {
+  // Gate 5 (2026-08-22): crofts are CLAIMS ONLY -- never painted, no tint,
+  // no boundary stamps. Owner's verdict: hedged garden crofts read as "huge
+  // private fields ... you'd have fields AROUND the village, not INSIDE the
+  // village." The claim survives only to keep the tree scatter off the
+  // ground behind each house.
+  it('paints no croft at all: no tint class, no croft path, no croft-derived stamp', () => {
+    expect(model.crofts.length).toBeGreaterThan(0);
+    expect(svg).not.toContain('sm-croft');
+    expect(svg).not.toContain('data-croft=');
     for (const croft of model.crofts) {
-      const croftMarkup = svg.match(new RegExp(`data-croft="${escapeRegExp(croft.id)}"[^>]*class="sm-croft"`));
-      expect(croftMarkup).not.toBeNull();
+      expect(svg).not.toContain(croft.id);
     }
   });
 
@@ -252,7 +258,7 @@ describe('renderVillage', () => {
     const parcelFieldsBand = svg.slice(
       svg.indexOf('data-band="parcel-fields"'), svg.indexOf('</g>', svg.indexOf('data-band="parcel-fields"')),
     );
-    const edgeStamps = [...model.crofts.flatMap((c) => c.boundary), ...model.fieldEdges];
+    const edgeStamps = [...model.fieldEdges];
     for (const stamp of edgeStamps) {
       expect(parcelFieldsBand).toContain(`data-edge="${stamp.id}"`);
     }

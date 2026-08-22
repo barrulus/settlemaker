@@ -9,10 +9,6 @@ const SHADOW_OFFSET: [number, number] = [2.6, 3.6];
 const SHADOW_OPACITY = 0.2;
 const SHADOW_COLOR = '#46303c';
 const GROUND = '#a3c98d';
-/** Croft interior tint: a flat, low-contrast fill a touch darker/more
- * saturated than GROUND — not a field tile, just enough to read the
- * enclosure without competing with the crop patterns around it. */
-const CROFT_TINT = '#8fb877';
 
 /**
  * The refined set's own token values (symbols/refined/symbols.json →
@@ -87,9 +83,6 @@ const SM_STYLE = [
   // SM_FILL_INK_CLASSES closes for buildings — same fix, scoped the same
   // way since these paths carry no class either.
   `g[id^="sm-edge-"] path[fill^="var(--sm-"]{stroke:var(--sm-ink,#33262e);stroke-linejoin:round;stroke-linecap:round}`,
-  // Croft interior: flat tint, no stroke (parcel band casts/receives no
-  // shadow and the strip boundary is the edge stamp, not an outline).
-  `.sm-croft{fill:${CROFT_TINT};stroke:none}`,
 ].join('');
 
 function n(v: number): string {
@@ -130,7 +123,7 @@ function fieldPatternId(glyph: string, furrowBearingDeg: number): string {
 /**
  * Minimal renderer: enough for a render gate to judge the skeleton, the
  * green and the fabric. Band order (§8.2 + gate 2, after pass 5): parcel
- * fields/crofts/edges -> route -> parcel green (over the routes) ->
+ * field ring -> route -> parcel green (over the routes) ->
  * structure (buildings + POIs) -> canopy (trees).
  *
  * The output is standalone (ruling R17): a <defs> block carries a plain
@@ -149,20 +142,17 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
   // roughly builtRadius * 2 past the green whether or not anything is
   // built along them, so a lane can run well outside the built footprint.
   // All points, not just endpoints — a lane can wander outside the box
-  // between them. Pass 5 extends this the same way: fields, crofts,
+  // between them. Pass 5 extends this the same way: the field ring,
   // vegetation and POIs can all sit further out than the buildings/green.
   const lanePoints = model.lanes.flatMap((lane) => lane.points);
   const fieldPoints = model.fields.flatMap((f) => f.polygon);
-  const croftPoints = model.crofts.flatMap((c) => c.polygon);
-  // V2: crofts still carry their own three-sided boundary; the field system
-  // carries ONE stamped perimeter per surviving wedge block, on the model
-  // beside `fields` rather than on each strip.
-  const edgeStamps: EdgeStamp[] = [
-    ...model.crofts.flatMap((c) => c.boundary),
-    ...model.fieldEdges,
-  ];
+  // Gate 5: crofts are claims only -- never painted, so they neither
+  // contribute stamps nor drive the bounds. `model.fieldEdges` is the sole
+  // edge-stamp source and is empty in the current design (the ring's blocks
+  // carry no outline); the paint path below is kept live for future use.
+  const edgeStamps: EdgeStamp[] = [...model.fieldEdges];
   const dressingPoints = [
-    ...fieldPoints, ...croftPoints,
+    ...fieldPoints,
     ...edgeStamps.map((e) => e.position),
     ...model.vegetation.map((v) => v.position),
     ...model.pois.map((p) => p.position),
@@ -204,7 +194,7 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
   // trees) plus every glyph a pattern def <use>s as its tile content.
   const usedGlyphs = Array.from(new Set([...shadowGlyphs, ...edgeGlyphs, ...fieldGlyphs, ...treeGlyphs]));
   // -sil shadow twins: structure items and trees cast a shadow; parcel
-  // items (fields, crofts, edge stamps) do not (§8.2).
+  // items (field blocks, edge stamps) do not (§8.2).
   const silGlyphs = Array.from(new Set([...shadowGlyphs, ...treeGlyphs]));
 
   const greenGlyphId = `${model.green.shape}-${model.green.variant}`;
@@ -231,7 +221,7 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
   // actually used, so the def count stays bounded rather than one per strip.
   // Anchored to the world origin: patternUnits="userSpaceOnUse" with no x/y
   // and patternTransform="rotate(deg)" with no cx/cy both pivot on (0,0) of
-  // the painted element's user space, which every field/croft polygon
+  // the painted element's user space, which every field block polygon
   // shares — this <svg>'s single coordinate system, never re-based per
   // polygon — so neighbouring strips never visibly seam-shift.
   const patternIds = new Set<string>();
@@ -256,17 +246,15 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
   out.push(`<defs>${defs.join('')}${patternDefs.join('')}</defs>`);
   out.push(`<rect data-bg="paper" width="${n(w)}" height="${n(h)}" fill="${GROUND}"/>`);
 
-  // parcel-fields band — §7.2/§7.1: fields and crofts UNDER the route
-  // band, cast/receive no shadow. Strip boundaries are the edge stamps
-  // (hedge/wall/fence/ditch glyphs), not strokes on the polygon itself.
+  // parcel-fields band — §7.2: the field ring UNDER the route band,
+  // casting/receiving no shadow. A block is one pattern-filled polygon: the
+  // ploughed look comes from the crop tile's own furrow texture, not from
+  // any outline (gate 5 — no hedge outlines anywhere).
   out.push('<g data-band="parcel-fields">');
   for (const field of model.fields) {
     if (!REFINED_GLYPHS[field.glyph]) continue;
     const pid = fieldPatternId(field.glyph, field.furrowBearingDeg);
     out.push(`<path data-field="${field.id}" d="${polygonPath(field.polygon, X, Y)}" fill="url(#${pid})" stroke="none"/>`);
-  }
-  for (const croft of model.crofts) {
-    out.push(`<path data-croft="${croft.id}" class="sm-croft" d="${polygonPath(croft.polygon, X, Y)}"/>`);
   }
   for (const stamp of edgeStamps) {
     if (!REFINED_GLYPHS[stamp.glyph]) continue;
@@ -283,8 +271,8 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
   // to it". Lanes paint FIRST — widest class at the bottom so narrow paths
   // sit over broad roads at junctions — and the green paints over them, so
   // every lane visibly disappears beneath the turf (their geometry runs to
-  // GREEN_UNDERLAP_RATIO x radius inside it). Fields/crofts painted above
-  // go UNDER the routes; only the green rides above them.
+  // GREEN_UNDERLAP_RATIO x radius inside it). The field ring painted above
+  // goes UNDER the routes; only the green rides above them.
   out.push('<g data-band="route" fill="none" stroke="#8a6f4a" stroke-linecap="round">');
   const byWidth = [...model.lanes].sort((a, b) => (b.widthM - a.widthM) || a.id.localeCompare(b.id));
   for (const lane of byWidth) {

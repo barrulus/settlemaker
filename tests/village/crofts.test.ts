@@ -47,7 +47,7 @@ describe('croftDepthTarget', () => {
 describe('buildCrofts', () => {
   it('gives a built, far-from-green lot a nonzero-depth croft with the right id', () => {
     const far = lot('arm-090:R0', 150, 0);
-    const crofts = buildCrofts([far], [building('arm-090:R0')], green, [], [], 100, 5, 'hedge');
+    const crofts = buildCrofts([far], [building('arm-090:R0')], green, [], [], 100, 5);
     expect(crofts).toHaveLength(1);
     expect(crofts[0].id).toBe('croft:arm-090:R0');
     expect(crofts[0].lotId).toBe('arm-090:R0');
@@ -57,21 +57,14 @@ describe('buildCrofts', () => {
 
   it('gives an empty lot (no building) no croft', () => {
     const far = lot('arm-090:R0', 150, 0);
-    const crofts = buildCrofts([far], [], green, [], [], 100, 5, 'hedge');
+    const crofts = buildCrofts([far], [], green, [], [], 100, 5);
     expect(crofts).toHaveLength(0);
   });
 
   it('gives a built, tight (near-green) lot no croft', () => {
     const near = lot('arm-090:R0', 10, 0);
-    const crofts = buildCrofts([near], [building('arm-090:R0')], green, [], [], 100, 5, 'hedge');
+    const crofts = buildCrofts([near], [building('arm-090:R0')], green, [], [], 100, 5);
     expect(crofts).toHaveLength(0);
-  });
-
-  it('emits no boundary stamps for style "none"', () => {
-    const far = lot('arm-090:R0', 150, 0);
-    const crofts = buildCrofts([far], [building('arm-090:R0')], green, [], [], 100, 5, 'none');
-    expect(crofts).toHaveLength(1);
-    expect(crofts[0].boundary).toEqual([]);
   });
 
   it('truncates a croft rather than letting it cross a lane corridor', () => {
@@ -153,8 +146,8 @@ describe('buildCrofts', () => {
 
   it('is deterministic: identical inputs produce identical output', () => {
     const far = lot('arm-090:R0', 150, 0);
-    const a = buildCrofts([far], [building('arm-090:R0')], green, [], [], 100, 5, 'hedge');
-    const b = buildCrofts([far], [building('arm-090:R0')], green, [], [], 100, 5, 'hedge');
+    const a = buildCrofts([far], [building('arm-090:R0')], green, [], [], 100, 5);
+    const b = buildCrofts([far], [building('arm-090:R0')], green, [], [], 100, 5);
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 });
