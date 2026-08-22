@@ -87,7 +87,9 @@ describe('sizeFor', () => {
 
   it('grows into a generous fringe lot and shrinks into a tight one', () => {
     const wide = sizeFor(house, lot(40), new SeededRandom(4))[0];
-    const tight = sizeFor(house, lot(9), new SeededRandom(4))[0];
+    // Gate 5.2: fit is judged against PAINTED width (5.44 for sm-house),
+    // so a "tight" lot must be narrower than the ink, not the art box.
+    const tight = sizeFor(house, lot(5), new SeededRandom(4))[0];
     expect(wide).toBeGreaterThan(tight);
     expect(FIT_MAX).toBe(1.15);
   });

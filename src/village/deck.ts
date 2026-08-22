@@ -1,5 +1,5 @@
 import { SeededRandom } from '../utils/random.js';
-import { hasGlyph, nominalFootprint } from './glyphs.js';
+import { hasGlyph, nominalInkWidthM } from './glyphs.js';
 import {
   DECK_GAP_M, F0_WEIGHT_SHARE_MIN, FAMILY_HUT_MAX_POP, LONGHOUSE_MIN_POP,
 } from './constants.js';
@@ -32,7 +32,7 @@ function entry(
     weight,
     sizeFactor: extra.sizeFactor ?? 1,
     minFrontage: extra.minFrontage
-      ?? nominalFootprint(glyph)[0] * (extra.sizeFactor ?? 1) + DECK_GAP_M,
+      ?? nominalInkWidthM(glyph) * (extra.sizeFactor ?? 1) + DECK_GAP_M,
     cap: extra.cap,
     requires: extra.requires,
   };
@@ -165,7 +165,7 @@ export function widestDwellingWidthM(deck: DeckEntry[]): number {
     ? pool.filter((e) => e.weight / totalWeight >= F0_WEIGHT_SHARE_MIN)
     : [];
   const qualifying = common.length > 0 ? common : pool;
-  return Math.max(...qualifying.map((e) => nominalFootprint(e.glyph)[0] * e.sizeFactor));
+  return Math.max(...qualifying.map((e) => nominalInkWidthM(e.glyph) * e.sizeFactor));
 }
 
 /**

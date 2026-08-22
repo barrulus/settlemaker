@@ -60,3 +60,15 @@ export function inkExtent(
   const ratio = glyph.includes('hut') ? HUT_INK_RATIO : HOUSE_INK_RATIO;
   return { width: footprint[0] * ratio, depth: footprint[1] * ratio };
 }
+
+/**
+ * Gate 5.2 verdict ("look at the fucking spaces between the houses"): the
+ * frontage economy must run on PAINTED width, not the art box. The box
+ * carries ~15-32% transparent margin, so every lot cut at box width parks
+ * ~2.6 m of invisible grass between painted walls before the gap term even
+ * starts. Anything that budgets frontage — f0, minFrontage, the fit test —
+ * uses this; only physical drawing keeps the box.
+ */
+export function nominalInkWidthM(glyph: string): number {
+  return inkExtent(glyph, nominalFootprint(glyph)).width;
+}

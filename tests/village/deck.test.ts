@@ -5,7 +5,7 @@ import {
   widestDwellingWidthM,
 } from '../../src/village/deck.js';
 import type { DeckEntry } from '../../src/village/deck.js';
-import { hasGlyph, nominalFootprint } from '../../src/village/glyphs.js';
+import { hasGlyph, nominalFootprint, nominalInkWidthM } from '../../src/village/glyphs.js';
 import type { Site } from '../../src/village/types.js';
 
 const site = (over: Partial<Site> = {}): Site => ({
@@ -203,9 +203,9 @@ describe('widestDwellingWidthM (R21)', () => {
     const deck = deckFor('temperate', 400, new SeededRandom(1));
     const dwelling = deck.filter((e) => !e.cap)[0];
     const longhouse = deck.find((e) => e.glyph === 'sm-longhouse')!;
-    expect(nominalFootprint(longhouse.glyph)[0]).toBeGreaterThan(nominalFootprint(dwelling.glyph)[0]);
-    expect(widestDwellingWidthM(deck)).toBeCloseTo(nominalFootprint(dwelling.glyph)[0], 5);
-    expect(widestDwellingWidthM(deck)).not.toBeCloseTo(nominalFootprint(longhouse.glyph)[0], 5);
+    expect(nominalInkWidthM(longhouse.glyph)).toBeGreaterThan(nominalInkWidthM(dwelling.glyph));
+    expect(widestDwellingWidthM(deck)).toBeCloseTo(nominalInkWidthM(dwelling.glyph), 5);
+    expect(widestDwellingWidthM(deck)).not.toBeCloseTo(nominalInkWidthM(longhouse.glyph), 5);
   });
 
   it('lets a wide entry set f0 when it IS common (clears the threshold)', () => {
@@ -215,7 +215,7 @@ describe('widestDwellingWidthM (R21)', () => {
     ];
     // Here the longhouse is 90% of the pool — well above F0_WEIGHT_SHARE_MIN
     // — so it legitimately IS the common entry and must set f0.
-    expect(widestDwellingWidthM(fixtureDeck)).toBeCloseTo(nominalFootprint('sm-longhouse')[0], 5);
+    expect(widestDwellingWidthM(fixtureDeck)).toBeCloseTo(nominalInkWidthM('sm-longhouse'), 5);
   });
 
   it('falls back to the widest uncapped entry when nothing clears the threshold (degenerate deck)', () => {
@@ -226,6 +226,6 @@ describe('widestDwellingWidthM (R21)', () => {
     const fixtureDeck: DeckEntry[] = [
       { glyph: 'sm-house', occupancy: 5, weight: 1, sizeFactor: 1, minFrontage: 8 },
     ];
-    expect(widestDwellingWidthM(fixtureDeck)).toBeCloseTo(nominalFootprint('sm-house')[0], 5);
+    expect(widestDwellingWidthM(fixtureDeck)).toBeCloseTo(nominalInkWidthM('sm-house'), 5);
   });
 });

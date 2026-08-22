@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Point } from '../../src/types/point.js';
 import { SeededRandom } from '../../src/utils/random.js';
-import { spendCensus } from '../../src/village/dwellings.js';
+import { spendCensus, overlaps } from '../../src/village/dwellings.js';
 import { baseDeck } from '../../src/village/deck.js';
 import type { Lot, Site } from '../../src/village/types.js';
 
@@ -100,10 +100,39 @@ describe('spendCensus', () => {
       },
     ];
     const out = spendCensus(closeLots, DECK, site(20), new SeededRandom(3));
+    // Gate 5.2: a colliding seating may now SLIDE along its frontage before
+    // being given up (holes in a row were the owner's top complaint), so on
+    // these 30 m lots both R0 and R1 can legitimately end up occupied. The
+    // guard's real contract is unchanged and asserted directly: no two
+    // placed buildings may interpenetrate, slid or not.
+    for (let i = 0; i < out.buildings.length; i++) {
+      for (let j = i + 1; j < out.buildings.length; j++) {
+        expect(overlaps(out.buildings[i], out.buildings[j])).toBe(false);
+      }
+    }
+  });
+
+  it('still skips a lot when no slide can save it (narrow coincident lots)', () => {
+    // Frontage 6: the slide range is +/-0.45 x 6 = +/-2.7 m, far less than a
+    // house's ink width, so two coincident lots genuinely cannot both build.
+    const jammedLots: Lot[] = [
+      {
+        id: 'arm-090:R0', laneId: 'arm-090', side: 1, front: new Point(0, 0),
+        bearingDeg: 0, frontageM: 6, depthM: 25, score: 100,
+      },
+      {
+        id: 'arm-090:R1', laneId: 'arm-090', side: 1, front: new Point(0.5, 0),
+        bearingDeg: 0, frontageM: 6, depthM: 25, score: 99,
+      },
+    ];
+    const out = spendCensus(jammedLots, DECK, site(20), new SeededRandom(3));
     const used = new Set(out.buildings.map((b) => b.lotId));
-    // R0 and R1 sit almost on top of each other; the second seating must be
-    // rejected as an overlap, so both can never be occupied at once.
     expect(used.has('arm-090:R0') && used.has('arm-090:R1')).toBe(false);
+    for (let i = 0; i < out.buildings.length; i++) {
+      for (let j = i + 1; j < out.buildings.length; j++) {
+        expect(overlaps(out.buildings[i], out.buildings[j])).toBe(false);
+      }
+    }
   });
 
   // Ruling R14: Pass A must retry the next eligible lot when a capped

@@ -1,7 +1,7 @@
 import { Point } from '../types/point.js';
 import { SeededRandom } from '../utils/random.js';
 import {
-  bearingVector, closestPointOnSegment, dist, wrapDeg,
+  bearingVector, closestPointOnSegment, wrapDeg,
 } from './geometry.js';
 import { inkExtent, nominalFootprint, rotationOf } from './glyphs.js';
 import {
@@ -43,8 +43,14 @@ export function sizeFor(
   const [w, d] = nominalFootprint(entry.glyph);
   const semantic = entry.sizeFactor;
   const jitter = 1 + (rng.float() - 0.5) * 2 * SIZE_JITTER;
+  // Gate 5.2: the fit test compares the lot to the PAINTED width, matching
+  // the ink-based frontage economy (f0 and minFrontage are ink-based now).
+  // Judged against the art box, every ink-width lot read as "too narrow"
+  // and fit-shrank the whole village toward FIT_MIN — smaller houses, same
+  // gaps, the exact opposite of the verdict.
+  const inkW = inkExtent(entry.glyph, [w, d]).width;
   // How much of the lot's frontage the nominal building leaves spare.
-  const room = lot.frontageM / (w * semantic);
+  const room = lot.frontageM / (inkW * semantic);
   const fit = Math.min(FIT_MAX, Math.max(FIT_MIN, room > 1.6 ? FIT_MAX : Math.min(1, room)));
   const k = semantic * jitter * fit;
   return [w * k, d * k];
@@ -221,6 +227,27 @@ export function spendCensus(
   const buildings: Building[] = [];
   let housed = 0;
 
+  // Gate 5.2 ("look at the spaces between the houses"): a failed seating
+  // used to leave a silent hole in the row. Before giving a lot up, slide
+  // the building along its frontage — a real builder shifts a house a few
+  // metres before abandoning the plot. Deterministic offsets, nearest
+  // first; no rng, so the draw sequence is untouched.
+  const seatCleared = (b: Building, lot: Lot): Building | null => {
+    const facing = bearingVector(lot.bearingDeg);
+    const tangent = new Point(-facing.y, facing.x);
+    for (const share of [0, 0.25, -0.25, 0.45, -0.45]) {
+      const offset = share * lot.frontageM;
+      const cand: Building = share === 0 ? b : {
+        ...b,
+        position: new Point(b.position.x + tangent.x * offset, b.position.y + tangent.y * offset),
+      };
+      if (intrudesOnLane(cand, lanes)) continue;
+      if (buildings.some((other) => overlaps(cand, other))) continue;
+      return cand;
+    }
+    return null;
+  };
+
   // R14: a rejected seating must not abandon the landmark — walk the
   // eligible lots in score order and take the first whose seating clears
   // every already-placed building. Only when none clears is the landmark
@@ -230,9 +257,8 @@ export function spendCensus(
   for (const capped of deck.filter((e) => e.cap === 'one')) {
     for (const lot of ordered) {
       if (taken.has(lot.id) || !eligible(capped, site, lot.frontageM)) continue;
-      const b = seat(capped, lot, rng);
-      if (intrudesOnLane(b, lanes)) continue;
-      if (buildings.some((other) => overlaps(b, other))) continue;
+      const b = seatCleared(seat(capped, lot, rng), lot);
+      if (!b) continue;
       buildings.push(b);
       taken.add(lot.id);
       placedGlyphs.add(capped.glyph);
@@ -246,9 +272,8 @@ export function spendCensus(
     if (taken.has(lot.id)) continue;
     const entry = drawEntry(deck, site, lot.frontageM, placedGlyphs, rng);
     if (!entry) continue;
-    const b = seat(entry, lot, rng);
-    if (intrudesOnLane(b, lanes)) continue;
-    if (buildings.some((other) => overlaps(b, other))) continue;
+    const b = seatCleared(seat(entry, lot, rng), lot);
+    if (!b) continue;
     buildings.push(b);
     taken.add(lot.id);
     housed += b.occupancy;
