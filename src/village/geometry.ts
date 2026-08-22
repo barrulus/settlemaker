@@ -26,6 +26,17 @@ export function angularGap(a: number, b: number): number {
   return Math.abs(((wrapDeg(a) - wrapDeg(b) + 540) % 360) - 180);
 }
 
+/**
+ * The turn from bearing `a` to bearing `b`, SIGNED and in (-180, 180]:
+ * positive is clockwise (rightward, since bearings run 0 = north
+ * clockwise), negative anticlockwise. `angularGap` answers "how far apart",
+ * this answers "which way" — needed wherever a side of the road behaves
+ * differently on the inside of a bend from the outside.
+ */
+export function signedTurnDeg(a: number, b: number): number {
+  return ((wrapDeg(b) - wrapDeg(a) + 540) % 360) - 180;
+}
+
 export function unit(dx: number, dy: number): Point {
   const len = Math.hypot(dx, dy);
   return len === 0 ? new Point(0, 0) : new Point(dx / len, dy / len);

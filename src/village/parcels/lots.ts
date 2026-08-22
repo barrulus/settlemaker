@@ -1,8 +1,8 @@
 import { SeededRandom } from '../../utils/random.js';
 import { offsetPolyline } from './strip.js';
-import { arcLengths, bearingOf, dist, inAnyWater, sampleAt } from '../geometry.js';
+import { arcLengths, bearingOf, dist, inAnyWater, sampleAt, signedTurnDeg } from '../geometry.js';
 import {
-  F0_FLOOR_RATIO, FRONTAGE_JITTER, GAP_LOOSE_M, GAP_POP_HIGH, GAP_POP_LOW, GAP_TIGHT_M,
+  CLAIM_TOUCH_EPS_M, F0_FLOOR_RATIO, FRONTAGE_JITTER, GAP_LOOSE_M, GAP_POP_HIGH, GAP_POP_LOW, GAP_TIGHT_M,
   GRADIENT_EXPONENT, GRADIENT_K, GRADIENT_RATIO_CAP, GREEN_JOIN_RATIO, LANE_SETBACK_M,
   RING_MOUTH_CLEAR_FACTOR, RING_SETBACK_M,
   SCORE_BASE, SCORE_CLASS_WEIGHT, SCORE_DISTANCE_PENALTY_PER_M, SCORE_RING_BONUS,
@@ -116,7 +116,32 @@ export function subdivideLane(
         depthM,
         score: 0,
       });
-      s += frontage;
+      // Gate 6.6, CONVERGENCE PITCH. A claim is a RECTANGLE `depthM` deep,
+      // squared to the local bearing at its own midpoint. Two neighbours on
+      // the INSIDE of a bend therefore converge behind their fronts, however
+      // neatly those fronts abut -- and no amount of depth truncation
+      // separates them (they meet at the shared front corner and only
+      // diverge going forward), so resolveInnerCurves had no option but to
+      // DROP the later one. Measured at pop 300: 34 of 109 lots, every
+      // second lot along a curving lane, including 0.3 m overlaps on a lane
+      // curving barely 1 degree per plot -- a third of the whole village's
+      // frontage thrown away as an artefact of the rectangle model.
+      //
+      // The cure belongs here, not in resolution: on the converging side,
+      // advance by the extra pitch the convergence costs (depth x the turn
+      // across the plot), so the claims are disjoint as CUT. The outer side
+      // of the same bend needs nothing -- it fans open by itself.
+      const turnDeg = signedTurnDeg(
+        sampleAt(edge, edgeAcc, s).dirDeg,
+        sampleAt(edge, edgeAcc, Math.min(edgeTotal, s + frontage)).dirDeg,
+      );
+      const converging = side === 1 ? turnDeg > 0 : turnDeg < 0;
+      const convergePitch = converging
+        ? depthM * Math.abs((turnDeg * Math.PI) / 180)
+        : 0;
+      // Plus a hair, so two claims that abut EXACTLY are not read as
+      // overlapping by float noise: nine such drops in the same fixture.
+      s += frontage + convergePitch + CLAIM_TOUCH_EPS_M;
       ordinal++;
     }
   }
