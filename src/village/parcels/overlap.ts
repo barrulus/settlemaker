@@ -195,12 +195,24 @@ function resolveCrossStrip(lots: Lot[], lanes: Lane[], green: Green): Lot[] {
     for (let j = i + 1; j < sorted.length; j++) {
       const b0 = sorted[j];
       if (dropped.has(b0.id)) continue;
-      // Same lane, same side: handled by resolveInnerCurves, not here --
-      // unless it is the green ring, whose own fold-vs-fold pairs still
-      // need the SAT (mouths are pre-gapped, but the brief asks this be
-      // checked rather than assumed).
+      // Same lane, same side, ADJACENT ordinals: that pair is
+      // resolveInnerCurves's business (fold vs wander), not this pass's.
+      // The green ring is exempt from even that -- its own fold-vs-fold
+      // pairs still need the SAT (mouths are pre-gapped, but the brief
+      // asks this be checked rather than assumed).
+      //
+      // Gate 6.2: the skip used to cover EVERY same-strip pair, which left
+      // a hole. resolveInnerCurves only ever compares CONSECUTIVE ordinals,
+      // so when a lane curves far enough to lap back on itself, a later lot
+      // can overlap a much earlier one on the same side and nothing looked
+      // at it. Short meshed streets on smooth arcs made that reachable and
+      // the §5.7 net caught it: two pairs across the probe grid, L4 x L1
+      // and R4 x R1. Non-adjacent same-strip pairs are ordinary cross
+      // claims and are resolved here like any other.
       const sameStrip = a0.laneId === b0.laneId && a0.side === b0.side;
-      if (sameStrip && a0.laneId !== 'green') continue;
+      const adjacent = sameStrip
+        && Math.abs(ordinalOf(a0.id) - ordinalOf(b0.id)) === 1;
+      if (adjacent && a0.laneId !== 'green') continue;
 
       const a = effective(a0);
       const b = effective(b0);

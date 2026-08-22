@@ -37,10 +37,27 @@ describe('addInventedLanes', () => {
   // the lanes.
   const grow = (...args: Parameters<typeof addInventedLanes>): Lane[] => addInventedLanes(...args).lanes;
 
-  it('adds nothing when the arms already provide enough frontage', () => {
+  it('adds nothing when the arms already provide enough frontage INSIDE the ring', () => {
+    // Gate 6.2 (concentric saturation): frontage only counts where lots
+    // will actually be cut — inside the saturated disc, which starts just
+    // outside the green and widens only when its ring is full. A 490 m arm
+    // therefore no longer "provides" 980 m of frontage up front; almost all
+    // of it lies outside the first ring. The fixture is rewritten to match
+    // the rule rather than the old accounting: a SHORT arm, well inside the
+    // opening ring, supplying more than the small requirement asks for.
+    // The whole arm must lie inside the opening ring (green drawn radius
+    // + SATURATION_RING_START_M ~= 39 m here), or its outer segment is
+    // only half-counted and the budget is not met after all.
+    const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -35))];
+    const out = grow(lanes, green, 40, 12, 500, new SeededRandom(1));
+    expect(out).toHaveLength(1);
+  });
+
+  // The other half of the same rule, which is the point of the change.
+  it('does NOT count distant frontage: a long arm alone cannot satisfy the budget', () => {
     const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -500))];
     const out = grow(lanes, green, 500, 12, 500, new SeededRandom(1));
-    expect(out).toHaveLength(1);
+    expect(out.length).toBeGreaterThan(1);
   });
 
   it('adds lanes until available frontage clears required x 1.15', () => {
