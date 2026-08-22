@@ -134,18 +134,50 @@ export const GREEN_UNDERLAP_RATIO = 0.35;
 export const RELAX_ITERATIONS = 3;
 export const RELAX_MAX_DISPLACEMENT_M = 1.5;
 export const RELAX_CLEARANCE_M = 0.5;
-export const TAIL_STUB_M = 12;
+/**
+ * How much lane is left past the last housed building when a tail is
+ * trimmed. Gate 5.1: 12 -> 6, so a lane ends just past its last house
+ * instead of running on for most of another plot's width.
+ */
+export const TAIL_STUB_M = 6;
 
 // --- Parcels -----------------------------------------------------------
-export const GAP_LOOSE_M = 1.2;
+/**
+ * Gate 5.1: 1.2 -> 0.8. The owner's rule, restated three gates running:
+ * "we STILL have houses with 1+ house-width gaps between them -- ALWAYS
+ * too much." The gap term feeds f0 directly, so every metre here is a
+ * metre between every pair of neighbours.
+ */
+export const GAP_LOOSE_M = 0.8;
 export const GAP_TIGHT_M = 0.4;
 export const GAP_POP_LOW = 100;
 export const GAP_POP_HIGH = 900;
 export const GRADIENT_EXPONENT = 1.5;
-export const GRADIENT_K = 0.6;
+/**
+ * Gate 5.1: 0.6 -> 0.1. The frontage gradient was the engine of the
+ * sprawl. Widening plots with distance is a real phenomenon, but at k=0.6
+ * it dominated: "the open spaces force this all to remain far too sparse
+ * -- at small pops the empty space is ugly, at large pops it forces a very
+ * spread-out settlement with far too uniform spacing." At 0.1 a lot stays
+ * within ~10% of f0 everywhere and the fringe no longer visibly widens.
+ *
+ * The variation the owner DOES want now comes only from FRONTAGE_JITTER
+ * and from occasional seat failures -- from noise, not from a distance
+ * law, which is exactly why the result stopped reading as uniform.
+ */
+export const GRADIENT_K = 0.1;
 /** Caps how wide a plot can get past the built radius: ratio d/R clamps here before the exponent. */
 export const GRADIENT_RATIO_CAP = 1.2;
 export const FRONTAGE_JITTER = 0.25;
+/**
+ * Gate 5.1, the owner's hard rule: "the gap between neighbouring houses
+ * must never exceed ~1 house width." A lot is a dwelling plus its gap, so
+ * capping every lot at this multiple of the village's widest dwelling caps
+ * the gap at (ratio - 1) house widths. Enforced at the CUTTER, after
+ * jitter and independent of distance from the green -- a cap a gradient
+ * cannot argue with.
+ */
+export const MAX_LOT_FRONTAGE_RATIO = 2;
 /** A lot may be cut down to this fraction of f0. With fit-sizing able to
  * grow a dwelling into its lot, this is what lets neighbours actually
  * touch — the owner's rule: not everything uniformly separated, touching

@@ -17,14 +17,15 @@ const straightLane: Lane = {
 
 describe('gapForPopulation', () => {
   it('is loose in a hamlet and tight in a big village', () => {
-    // Gate-3 density verdict: gaps tightened again (2.4/1.0 -> 1.6/0.6 -> 1.2/0.4).
-    expect(gapForPopulation(100)).toBeCloseTo(1.2, 1);
+    // Density verdicts, gate by gate: 2.4/1.0 -> 1.6/0.6 -> 1.2/0.4 ->
+    // 0.8/0.4 (gate 5.1, "we STILL have houses with 1+ house-width gaps").
+    expect(gapForPopulation(100)).toBeCloseTo(0.8, 1);
     expect(gapForPopulation(900)).toBeCloseTo(0.4, 1);
     expect(gapForPopulation(900)).toBeLessThan(gapForPopulation(100));
   });
 
   it('clamps outside the village band', () => {
-    expect(gapForPopulation(10)).toBeCloseTo(1.2, 1);
+    expect(gapForPopulation(10)).toBeCloseTo(0.8, 1);
     expect(gapForPopulation(5000)).toBeCloseTo(0.4, 1);
   });
 });
@@ -34,12 +35,15 @@ describe('frontageAt', () => {
     expect(frontageAt(0, 100, 10)).toBeCloseTo(10, 5);
   });
 
-  it('grows gently toward the fringe (gate-2 density: ~1.6x f0)', () => {
-    // Gate 2 flattened the gradient again — the settlement must be denser
-    // as a whole, so even fringe plots stay near their dwellings' width.
+  it('barely grows toward the fringe at all (gate 5.1: k = 0.1)', () => {
+    // Gate 5.1 all but switched the gradient off. The owner's verdict was
+    // that the widening WAS the sprawl: "at large pops it forces a very
+    // spread-out settlement with far too uniform spacing." A fringe plot
+    // now stays within ~10% of f0, and the variation the render shows
+    // comes from FRONTAGE_JITTER and seat failures instead.
     const fringe = frontageAt(100, 100, 10);
-    expect(fringe).toBeGreaterThan(14);
-    expect(fringe).toBeLessThan(18);
+    expect(fringe).toBeGreaterThan(10);
+    expect(fringe).toBeLessThanOrEqual(11);
   });
 
   it('grows monotonically outward', () => {

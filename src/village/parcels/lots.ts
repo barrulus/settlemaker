@@ -44,10 +44,15 @@ export function frontageAt(distanceM: number, builtRadiusM: number, f0: number):
  * its start (s=0, which sits at lane.points[0], the green end) numbers
  * lots 0, 1, 2... green-outward too. Adding a lot further out only appends
  * a higher ordinal; it never renumbers the ones already nearer the green.
+ *
+ * `maxFrontageM` caps every lot regardless of distance (gate 5.1's
+ * one-house-width gap rule); `maxDistanceM` stops the lane carrying lots
+ * beyond the cluster, without shortening the lane itself.
  */
 export function subdivideLane(
   lane: Lane, green: Green, builtRadiusM: number, f0: number, depthM: number,
   rng: SeededRandom, floorM: number = 0,
+  maxFrontageM: number = Infinity, maxDistanceM: number = Infinity,
 ): Lot[] {
   const lots: Lot[] = [];
   const setback = lane.widthM / 2 + (LANE_SETBACK_M[lane.type] ?? 2);
@@ -73,8 +78,15 @@ export function subdivideLane(
       // caller knows it) is the harder floor: below it a lot is dead on
       // arrival — no deck entry can ever seat there, so cutting it just
       // burns frontage the census needed.
-      const frontage = Math.max(floorM, f0 * F0_FLOOR_RATIO,
-        frontageAt(d, builtRadiusM, f0) * jitter);
+      // Gate 5.1: the CAP, applied after jitter and independent of `d`.
+      // A lot is a dwelling plus its gap, so capping the lot caps the gap
+      // -- the owner's rule that no two neighbours may sit more than about
+      // one house width apart. `floorM` still wins if the two ever cross,
+      // because a lot narrower than the deck's narrowest dwelling is dead
+      // on arrival and cutting it just burns frontage the census needed.
+      const cap = Math.max(floorM, maxFrontageM);
+      const frontage = Math.min(cap, Math.max(floorM, f0 * F0_FLOOR_RATIO,
+        frontageAt(d, builtRadiusM, f0) * jitter));
       if (s + frontage > edgeTotal) break;
       const mid = sampleAt(edge, edgeAcc, s + frontage / 2);
       // Inward normal: the lot faces back across the strip to its lane.
@@ -82,6 +94,18 @@ export function subdivideLane(
       // rotating the edge's direction of travel by -90 turns it to face
       // north, back toward the lane. side=-1 mirrors it: +90, facing south.
       const bearingDeg = (mid.dirDeg + (side === 1 ? -90 : 90) + 360) % 360;
+      // Gate 5.1: lots are cut only within the CLUSTER. An FMG arm is
+      // still DRAWN to the map's edge (R15) -- it just stops carrying
+      // plots once it leaves the growth circle, so a hamlet no longer
+      // grows a line of huts marching out along a trunk road. The ordinal
+      // still advances for a skipped position, so a lot nearer the green
+      // never renumbers because something further out was dropped (ids may
+      // therefore skip, the same convention `EdgeStamp` uses).
+      if (d > maxDistanceM) {
+        s += frontage;
+        ordinal++;
+        continue;
+      }
       lots.push({
         id: lotId(lane.id, side, ordinal),
         laneId: lane.id,
