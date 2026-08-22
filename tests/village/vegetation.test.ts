@@ -14,7 +14,7 @@ import {
 } from '../../src/village/constants.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 import type {
-  Croft, FieldStrip, Green, Lane, Lot, Site,
+  Croft, FieldBlock, Green, Lane, Lot, Site,
 } from '../../src/village/types.js';
 
 const site = (over: Partial<Site> = {}): Site => ({
@@ -43,7 +43,7 @@ const lane = (id: string, bearingDeg: number, len = 150, over: Partial<Lane> = {
 
 const emptyLots: Lot[] = [];
 const emptyCrofts: Croft[] = [];
-const emptyFields: FieldStrip[] = [];
+const emptyFields: FieldBlock[] = [];
 
 describe('buildVegetation', () => {
   it('is deterministic: same inputs and seed produce identical output', () => {
@@ -182,7 +182,7 @@ describe('vegetation geometric invariants (real village fixtures)', () => {
 
   const pointInAnyCroft = (p: Point, crofts: Croft[]): boolean => crofts.some((c) => pointInPolygon(p, c.polygon));
 
-  const pointInAnyField = (p: Point, fields: FieldStrip[]): boolean => fields.some(
+  const pointInAnyField = (p: Point, fields: FieldBlock[]): boolean => fields.some(
     (f) => pointInPolygon(p, f.polygon),
   );
 

@@ -11,7 +11,7 @@ import {
   VEG_SCALE_MAX, VEG_SCALE_MIN,
 } from '../constants.js';
 import type {
-  Croft, FieldStrip, Green, Lane, Lot, Site, Vegetation,
+  Croft, FieldBlock, Green, Lane, Lot, Site, Vegetation,
 } from '../types.js';
 
 /**
@@ -57,7 +57,7 @@ function distToWaterEdge(p: Point, water: Point[][]): number {
  * are neutral -- no bonus, no extra avoidance.
  */
 function isRejected(
-  p: Point, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldStrip[],
+  p: Point, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldBlock[],
   water: Point[][], shorefrontReachM: number,
 ): boolean {
   if (dist(p, green.centre) < greenDrawnRadius(green)) return true;
@@ -129,7 +129,7 @@ function pickGlyph(biome: string, rng: SeededRandom): string {
  * (fabric radius x SHOREFRONT_REACH_FACTOR), passed in rather than derived.
  */
 export function buildVegetation(
-  site: Site, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldStrip[],
+  site: Site, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldBlock[],
   innerEdgeM: number, shorefrontReachM: number, rng: SeededRandom,
 ): Vegetation[] {
   const rim = innerEdgeM + VEG_BAND_DEPTH_M;

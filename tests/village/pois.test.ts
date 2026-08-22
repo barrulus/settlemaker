@@ -14,7 +14,7 @@ import {
 } from '../../src/village/constants.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 import type {
-  Croft, FieldStrip, Green, Lane, Lot, Site,
+  Croft, FieldBlock, Green, Lane, Lot, Site,
 } from '../../src/village/types.js';
 
 const site = (over: Partial<Site> = {}): Site => ({
@@ -43,7 +43,7 @@ const lane = (id: string, bearingDeg: number, len = 150, over: Partial<Lane> = {
 
 const emptyLots: Lot[] = [];
 const emptyCrofts: Croft[] = [];
-const emptyFields: FieldStrip[] = [];
+const emptyFields: FieldBlock[] = [];
 
 describe('placeWell', () => {
   it('sits at the green centre when no lane runs under it', () => {
@@ -221,7 +221,7 @@ describe('placeBoathouse', () => {
   it('slides along the shore when the nearest point is claimed', () => {
     // Block a wide band of the shore right at the nearest point (x=15,
     // y=0) with a field strip, forcing the search to slide.
-    const blockingField: FieldStrip = {
+    const blockingField: FieldBlock = {
       id: 'field:test:S0', wedgeId: 'test', glyph: 'sm-field-plough',
       polygon: [
         new Point(0, -10), new Point(20, -10), new Point(20, 10), new Point(0, 10),

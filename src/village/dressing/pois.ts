@@ -16,7 +16,7 @@ import {
   WELL_LANE_CLEAR_M, WELL_MIN_POP, WELL_NUDGE_CAP_RATIO, WELL_NUDGE_STEP_M,
 } from '../constants.js';
 import type {
-  Croft, FieldStrip, Green, Lane, Lot, Poi, Site, Vegetation,
+  Croft, FieldBlock, Green, Lane, Lot, Poi, Site, Vegetation,
 } from '../types.js';
 
 /**
@@ -134,7 +134,7 @@ function circleIntersectsPolygon(centre: Point, radius: number, polygon: Point[]
 }
 
 function circleClearOfClaims(
-  centre: Point, radius: number, lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldStrip[],
+  centre: Point, radius: number, lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldBlock[],
 ): boolean {
   for (const lane of lanes) {
     if (distanceToLane(centre, lane) < radius + lane.widthM / 2) return false;
@@ -171,7 +171,7 @@ function circleClearOfClaims(
  */
 export function placeStoneCircle(
   green: Green, dressedRadiusM: number, lanes: Lane[], lots: Lot[], crofts: Croft[],
-  fields: FieldStrip[], water: Point[][], vegetation: Vegetation[], rng: SeededRandom,
+  fields: FieldBlock[], water: Point[][], vegetation: Vegetation[], rng: SeededRandom,
 ): Poi | null {
   if (!rng.bool(STONE_CIRCLE_CHANCE)) return null;
   const glyph = 'sm-stone-circle';
@@ -264,7 +264,7 @@ function slideOffsets(range: number, step: number): number[] {
  */
 export function placeBoathouse(
   site: Site, green: Green, shorefrontReachM: number,
-  lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldStrip[],
+  lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldBlock[],
 ): Poi | null {
   if (site.water.length === 0) return null;
   const nearest = nearestShorePoint(green.centre, site.water);
@@ -315,7 +315,7 @@ export function placeBoathouse(
  * SHOREFRONT_REACH_FACTOR is the boathouse's shore reach.
  */
 export function buildPois(
-  site: Site, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldStrip[],
+  site: Site, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldBlock[],
   vegetation: Vegetation[], dressedRadiusM: number, shorefrontReachM: number, rng: SeededRandom,
 ): Poi[] {
   const pois: Poi[] = [];

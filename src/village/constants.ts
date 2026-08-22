@@ -299,24 +299,27 @@ export const CROFT_BEHIND_INK_M = 1;
  * fabric (lots + crofts) well past the prediction, so a factor on
  * builtRadiusM alone closed the gate in every real-pipeline fixture --
  * `computeFabricRadius`'s global max always exceeded it. `FIELD_RADIUS_
- * FACTOR` retired; see `fieldOuterRadius` in `dressing/fields.ts`.
+ * FACTOR` retired; see `blockOuterRadius` in `dressing/fields.ts`.
  */
 export const FIELD_M2_PER_CAPITA = 150;
-/** The field band's depth (outerRadius - innerRadius) is clamped to
- * [FIELD_BAND_DEPTH_MIN_M, this] -- capped so a huge census doesn't run
- * fields out to the horizon. */
-export const FIELD_BAND_DEPTH_MAX_M = 90;
 /**
- * Depth floor. TWO furrow widths, not one: a band exactly one furrow deep
- * cannot actually hold a furrow, because the strips are cut in a
- * furrow-aligned frame and every sample across a strip's full width must
- * land inside the CURVED annulus -- so a hamlet's 13 m band produced no
- * strip at all in the real pipeline (measured: pop 40 got zero fields at
- * both probe seeds). Two widths leaves the curvature somewhere to go.
+ * Gate 5 (2026-08-22): the ploughed land is an OUTER RING of large chunky
+ * blocks around the whole settlement, separated from the fabric by an open
+ * green belt, with the roads passing out between the blocks. Owner's
+ * verdict on the previous 12 m furlong strips woven through the fabric:
+ * "you'd have fields AROUND the village, not INSIDE the village."
+ *
+ * A block is one annular-sector polygon, pattern-filled -- the ploughed
+ * look comes from the crop tile's own furrow texture, not from thin strips
+ * and not from any outline. FURROW_WIDTH_M, FURROW_MIN_LENGTH_M and
+ * FIELD_SAMPLE_STEP_M are RETIRED with the strip walk they served.
  */
-export const FIELD_BAND_DEPTH_MIN_M = 24;
-/** Furlong strip width, metres. */
-export const FURROW_WIDTH_M = 12;
+/** A block's radial depth is clamped to [FIELD_BLOCK_DEPTH_MIN_M, this].
+ * The cap stops a huge census running the ring out to the horizon. */
+export const FIELD_BLOCK_DEPTH_MAX_M = 90;
+/** Depth floor: below this a block stops reading as a chunky field and
+ * starts reading as the thin strip gate 5 rejected. */
+export const FIELD_BLOCK_DEPTH_MIN_M = 40;
 /**
  * V1: each wedge measures its OWN inner radius from the lot claims and
  * crofts it contains. A claim counts as "in" the wedge when the bearing of
@@ -328,50 +331,51 @@ export const FURROW_WIDTH_M = 12;
  */
 export const FIELD_WEDGE_CLAIM_MARGIN_DEG = 10;
 /**
- * W3: a wedge's field band starts at THIS percentile of the back-edge
- * distances of the claims the wedge contains -- not at their max.
+ * The ring's inner edge in a wedge sits at THIS percentile of the back-edge
+ * distances of the claims the wedge contains, plus FIELD_BELT_GAP_M.
  *
- * The max exiles the band past the sector's single deepest ribbon lot: a
- * wedge flanking a long FMG arm carries lots out to ~300 m, so its band
- * started out there and floated remotely, and since that band set the
- * global fields-outer it dragged the vegetation edge and the canvas with
- * it. Real villages do the reverse -- fields fill the ground BESIDE the
- * road ribbons and BETWEEN the fabric arms, close in. A low percentile puts
- * the inner edge just past the BULK of the fabric and leaves the strip
- * walk's existing sampled clipping to carve around the minority of claims
- * reaching further, so strips nestle into those gaps instead of clearing
- * them.
+ * History, because this constant has been both things: W3 (2026-08-21) set
+ * it LOW (0.35) to pull strips in among the fabric. Gate 5 reverses that
+ * intent -- the ring belongs outside the settlement -- so it is HIGH again,
+ * clearing all but the few deepest ribbon lots. Those few are still clipped
+ * around, which is what opens the road passes between blocks.
  */
-export const FIELD_INNER_PERCENTILE = 0.35;
+export const FIELD_INNER_PERCENTILE = 0.85;
+/**
+ * Gate 5: the open green belt between the fabric and the ring, metres. The
+ * reference map reads as houses, then open common, then the ploughed ring;
+ * without a deliberate gap the blocks butt against the back of the lots and
+ * the ring stops reading as a ring.
+ */
+export const FIELD_BELT_GAP_M = 25;
 /** Clearance added on top of the green's drawn radius plus RING_SETBACK_M
  * when a wedge has no claims at all (or a percentile below the turf) --
- * the floor a field band may start at. */
+ * the floor a field block may start at. */
 export const FIELD_INNER_FLOOR_PAD_M = 2;
 /**
- * V4: a wedge's whole field block is culled when its strips together cover
- * less than this. Below it the block reads as a dropped rug -- a couple of
- * disconnected slivers floating in open ground -- rather than as farmland.
- *
- * LOOSENED at W3 (2026-08-22), 600 -> 400, deliberately and not silently.
- * 600 was calibrated when bands were laid OUTSIDE the fabric, where even a
- * hamlet's block was large. W3 starts them at a low percentile INSIDE it,
- * so the same village legitimately yields smaller blocks carved around its
- * own claims -- measured on the probe, pop 40 seed 2's three wedges came
- * out at 578, 414 and 404 m2 and ALL THREE were culled, leaving the hamlet
- * with no fields at all. Keeping the number while changing what it measures
- * would not have been keeping the rule the same. 400 m2 is still a bit over
- * three minimum-length furrows (FURROW_MIN_LENGTH_M x FURROW_WIDTH_M =
- * 120 m2), so a block of one or two slivers -- the dropped rug V4 named --
- * still dies.
+ * Gate 5: a wedge's ring segment is cut into this many blocks at most, one
+ * per FIELD_BLOCK_SPAN_TARGET_DEG of span (rounded, floored at 1), with
+ * angular gaps of open green between them. Chunky blocks with gaps, not one
+ * continuous annulus -- the reference map's ring is visibly a ring of
+ * separate fields.
  */
-export const FIELD_MIN_BUNDLE_AREA_M2 = 400;
-/** A clipped strip fragment shorter than this (along its furrow direction)
- * is dropped rather than kept as a sliver. */
-export const FURROW_MIN_LENGTH_M = 10;
-/** Sampling pitch for the strip-clipping walk, matching the codebase's
- * ~2 m sampling convention (edges.ts's lane-corridor breaks, crofts.ts's
- * lane-within-obb walk). */
-export const FIELD_SAMPLE_STEP_M = 2;
+export const FIELD_BLOCK_MAX_PER_WEDGE = 3;
+export const FIELD_BLOCK_SPAN_TARGET_DEG = 45;
+/** Share of a wedge's span left as open green between its blocks (and as
+ * half-gaps at each end, so a block never butts against the bounding lane
+ * -- that lane is a road passing out through the ring). */
+export const FIELD_BLOCK_GAP_SHARE = 0.2;
+/** Angular pitch at which a nominal block is tested against claims/lanes/
+ * water. Maximal runs of clear slices become the blocks actually emitted,
+ * so a ribbon of lots reaching through the ring splits a block in two and
+ * leaves a road pass between them. */
+export const FIELD_BLOCK_SLICE_DEG = 2;
+/**
+ * A block covering less than this is culled -- the "dropped rug" V4 named,
+ * a sliver of plough floating in open ground rather than a field. At the
+ * 40 m depth floor this is a block barely 10 m of arc wide.
+ */
+export const FIELD_MIN_BLOCK_AREA_M2 = 400;
 /** Jitter range (degrees) added to a wedge's furrow bearing: rng.float() *
  * this - this/2, one draw per wedge. */
 export const FIELD_JITTER_RANGE_DEG = 30;
@@ -430,7 +434,7 @@ export const VEG_CELL_M = 9;
  * inside a canvas of ~1300 m, crushing the settlement into a corner of
  * mostly empty grass. A scatter band is a fringe of countryside around the
  * fields; its depth does not grow with the village's size, so it is a
- * distance, not a ratio. Same shape as FIELD_BAND_DEPTH_MAX_M, which caps
+ * distance, not a ratio. Same shape as FIELD_BLOCK_DEPTH_MAX_M, which caps
  * the field band for the same reason.
  */
 export const VEG_BAND_DEPTH_M = 70;

@@ -95,7 +95,7 @@ export interface Building {
  * you'd have fields AROUND the village, not INSIDE the village." What the
  * claim still does is keep the vegetation scatter off the ground directly
  * behind each house, which reads as a garden without drawing a fence round
- * it. Ploughed land now lives in the outer ring (see `FieldStrip`).
+ * it. Ploughed land now lives in the outer ring (see `FieldBlock`).
  */
 export interface Croft {
   id: string;
@@ -107,28 +107,28 @@ export interface Croft {
 }
 
 /**
- * §7.2: one furlong strip within a wedge (the angular sector between two
- * adjacent green-attached lanes). `wedgeId` groups strips that share a
- * furrow direction; `id` is `field:<wedgeId>:S<i>F<k>` -- `i` the band's
- * ordinal within its wedge (ordinals may skip where a band was clipped away
- * entirely, the same convention as `EdgeStamp` ids in edges.ts), `k` the
- * fragment's index within that band. A band keeps EVERY fragment long
- * enough to survive FURROW_MIN_LENGTH_M, so one furlong cut in two by an
- * arm ribbon yields two strips (W3).
+ * §7.2: one block of the field RING -- an annular sector of ploughed land
+ * lying outside the settlement, beyond the open green belt. `wedgeId` groups
+ * the blocks of one wedge (the angular sector between two adjacent
+ * green-attached lanes), which share a furrow bearing; `id` is
+ * `field:<wedgeId>:S<i>`, `i` the block's ordinal within its wedge.
  *
- * A strip carries NO boundary of its own (fix wave, V2): outlining every
- * 12 m strip turned the render into caterpillar chains of hedge glyphs.
- * Strip separation is carried by the alternating crop tiles; the block's
- * outside edge is stamped once per bundle and lives on
- * `VillageModel.fieldEdges`.
+ * Gate 5 (2026-08-22) replaced the previous 12 m furlong STRIPS, woven
+ * through the fabric and outlined in hedge stamps, with these. Owner's
+ * verdict on that design: "you'd have fields AROUND the village, not INSIDE
+ * the village." A block is a single pattern-filled polygon and carries no
+ * outline of any kind -- the ploughed look is the crop tile's own furrow
+ * texture.
  */
-export interface FieldStrip {
+export interface FieldBlock {
   id: string;
   wedgeId: string;
   glyph: string;
-  /** Quad corners, already clipped to the wedge sector and field band. */
+  /** Annular-sector corners: outer arc forward, inner arc back. */
   polygon: Point[];
   furrowBearingDeg: number;
+  /** The sector's area in m^2, as sized against the census. */
+  areaM2: number;
 }
 
 /**
@@ -171,10 +171,11 @@ export interface VillageModel {
    * every boundary consumer (crofts, fields, vegetation, POIs). */
   edgeStyle: EdgeStyle;
   crofts: Croft[];
-  fields: FieldStrip[];
-  /** §7.2/V2: the field system's boundary art -- one stamped perimeter per
-   * surviving wedge BLOCK, not per strip. Kept beside `fields` rather than
-   * on each strip because the perimeter belongs to the block. */
+  fields: FieldBlock[];
+  /** Gate 5: EMPTY, and expected to stay so -- no hedge, wall, fence or
+   * ditch is drawn on a field any more. Kept on the model, and painted by
+   * the renderer, so the edge machinery stays wired for a future design
+   * that wants boundary art back. */
   fieldEdges: EdgeStamp[];
   vegetation: Vegetation[];
   pois: Poi[];

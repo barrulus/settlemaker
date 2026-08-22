@@ -6,7 +6,7 @@ import { buildVegetation } from './vegetation.js';
 import { buildPois } from './pois.js';
 import { SHOREFRONT_REACH_FACTOR } from '../constants.js';
 import type {
-  Building, Croft, EdgeStamp, EdgeStyle, FieldStrip, Green, Lane, Lot, Poi, Site, Vegetation,
+  Building, Croft, EdgeStamp, EdgeStyle, FieldBlock, Green, Lane, Lot, Poi, Site, Vegetation,
 } from '../types.js';
 
 export interface DressingInput {
@@ -23,7 +23,7 @@ export interface DressingInput {
 export interface DressingResult {
   edgeStyle: EdgeStyle;
   crofts: Croft[];
-  fields: FieldStrip[];
+  fields: FieldBlock[];
   fieldEdges: EdgeStamp[];
   vegetation: Vegetation[];
   pois: Poi[];
@@ -50,8 +50,8 @@ export function dressVillage(input: DressingInput): DressingResult {
   const edgeStyle = settlementEdgeStyle(site.biome, site.population, rng);
   const crofts = buildCrofts(lots, buildings, green, lanes, site.water, builtRadiusM, f0);
   const {
-    strips: fields, edges: fieldEdges, outerRadius: fieldsOuterRadius,
-  } = buildFields(site, green, lanes, lots, crofts, edgeStyle, rng);
+    blocks: fields, edges: fieldEdges, outerRadius: fieldsOuterRadius,
+  } = buildFields(site, green, lanes, lots, crofts, rng);
 
   // THE fix-wave rule (2026-08-21): after pass 3, nothing keys off
   // `builtRadiusM` -- the PREDICTED built radius under-reports the real
