@@ -383,11 +383,14 @@ export const FIELD_M2_PER_CAPITA = 150;
  * FIELD_SAMPLE_STEP_M are RETIRED with the strip walk they served.
  */
 /** A block's radial depth is clamped to [FIELD_BLOCK_DEPTH_MIN_M, this].
- * The cap stops a huge census running the ring out to the horizon. */
-export const FIELD_BLOCK_DEPTH_MAX_M = 90;
+ * The cap stops a huge census running the ring out to the horizon. Gate
+ * 5.3 widened the range 40-90 -> 50-110: chunkier blocks, and with the
+ * belt pulled in they start closer, so the ring as a whole still sits
+ * tighter to the village than before. */
+export const FIELD_BLOCK_DEPTH_MAX_M = 110;
 /** Depth floor: below this a block stops reading as a chunky field and
  * starts reading as the thin strip gate 5 rejected. */
-export const FIELD_BLOCK_DEPTH_MIN_M = 40;
+export const FIELD_BLOCK_DEPTH_MIN_M = 50;
 /**
  * V1: each wedge measures its OWN inner radius from the lot claims and
  * crofts it contains. A claim counts as "in" the wedge when the bearing of
@@ -410,12 +413,15 @@ export const FIELD_WEDGE_CLAIM_MARGIN_DEG = 10;
  */
 export const FIELD_INNER_PERCENTILE = 0.85;
 /**
- * Gate 5: the open green belt between the fabric and the ring, metres. The
- * reference map reads as houses, then open common, then the ploughed ring;
- * without a deliberate gap the blocks butt against the back of the lots and
- * the ring stops reading as a ring.
+ * The open green belt between the fabric and the ring, metres.
+ *
+ * Gate 5 set this at 25 so the ring would separate from the fabric at all.
+ * Gate 5.3 pulls it to 10: against watabou's St Aldusa, ours read as a
+ * village marooned in its own lawn. A belt is still wanted -- houses, then
+ * a little common, then plough -- but a narrow one, so the fields hug the
+ * village instead of standing off from it.
  */
-export const FIELD_BELT_GAP_M = 25;
+export const FIELD_BELT_GAP_M = 10;
 /** Clearance added on top of the green's drawn radius plus RING_SETBACK_M
  * when a wedge has no claims at all (or a percentile below the turf) --
  * the floor a field block may start at. */
@@ -427,12 +433,17 @@ export const FIELD_INNER_FLOOR_PAD_M = 2;
  * continuous annulus -- the reference map's ring is visibly a ring of
  * separate fields.
  */
-export const FIELD_BLOCK_MAX_PER_WEDGE = 3;
+export const FIELD_BLOCK_MAX_PER_WEDGE = 4;
 export const FIELD_BLOCK_SPAN_TARGET_DEG = 45;
 /** Share of a wedge's span left as open green between its blocks (and as
  * half-gaps at each end, so a block never butts against the bounding lane
- * -- that lane is a road passing out through the ring). */
-export const FIELD_BLOCK_GAP_SHARE = 0.2;
+ * -- that lane is a road passing out through the ring).
+ *
+ * Gate 5.3: 0.2 -> 0.08. A fifth of the ring given over to grass was most
+ * of what made the fields read as scattered patches rather than as a ring
+ * of farmland. Enough gap to keep the road passes and the block seams
+ * legible, no more. */
+export const FIELD_BLOCK_GAP_SHARE = 0.08;
 /** Angular pitch at which a nominal block is tested against claims/lanes/
  * water. Maximal runs of clear slices become the blocks actually emitted,
  * so a ribbon of lots reaching through the ring splits a block in two and
