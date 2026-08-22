@@ -10,6 +10,7 @@ import {
 } from './constants.js';
 import { buildingId, type Building, type Lane, type Lot, type Site } from './types.js';
 import { drawEntry, eligible, type DeckEntry } from './deck.js';
+import type { LotFate } from './lot-trace.js';
 import { orderLots } from './parcels/lots.js';
 
 /**
@@ -236,6 +237,7 @@ export interface SpendResult {
  */
 export function spendCensus(
   lots: Lot[], deck: DeckEntry[], site: Site, rng: SeededRandom, lanes: Lane[] = [],
+  fates?: Map<string, LotFate>,
 ): SpendResult {
   const ordered = orderLots(lots);
   const taken = new Set<string>();
@@ -248,21 +250,31 @@ export function spendCensus(
   // the building along its frontage — a real builder shifts a house a few
   // metres before abandoning the plot. Deterministic offsets, nearest
   // first; no rng, so the draw sequence is untouched.
-  const seatCleared = (b: Building, lot: Lot): Building | null => {
+  //
+  // Gate 6.7: when every offset fails, the caller is told WHICH check did
+  // the killing, so `probe-lots` can separate a junction-mouth corridor
+  // from a neighbour standing in the way. Classified by which check
+  // rejected the most offsets (ties to the corridor, which is the harder
+  // constraint) — a lot rejected 3 ways by the corridor and twice by a
+  // neighbour is a corridor casualty.
+  const seatCleared = (b: Building, lot: Lot): Building | LotFate => {
     const facing = bearingVector(lot.bearingDeg);
     const tangent = new Point(-facing.y, facing.x);
+    let intrusionFails = 0;
+    let overlapFails = 0;
     for (const share of [0, 0.25, -0.25, 0.45, -0.45]) {
       const offset = share * lot.frontageM;
       const cand: Building = share === 0 ? b : {
         ...b,
         position: new Point(b.position.x + tangent.x * offset, b.position.y + tangent.y * offset),
       };
-      if (intrudesOnLane(cand, lanes)) continue;
-      if (buildings.some((other) => overlaps(cand, other))) continue;
+      if (intrudesOnLane(cand, lanes)) { intrusionFails++; continue; }
+      if (buildings.some((other) => overlaps(cand, other))) { overlapFails++; continue; }
       return cand;
     }
-    return null;
+    return intrusionFails >= overlapFails ? 'lane-intrusion' : 'building-overlap';
   };
+  const seated = (r: Building | LotFate): r is Building => typeof r !== 'string';
 
   // R14: a rejected seating must not abandon the landmark — walk the
   // eligible lots in score order and take the first whose seating clears
@@ -273,12 +285,16 @@ export function spendCensus(
   for (const capped of deck.filter((e) => e.cap === 'one')) {
     for (const lot of ordered) {
       if (taken.has(lot.id) || !eligible(capped, site, lot.frontageM)) continue;
-      const b = seatCleared(seat(capped, lot, rng), lot);
-      if (!b) continue;
-      buildings.push(b);
+      const r = seatCleared(seat(capped, lot, rng), lot);
+      // A landmark walks the WHOLE lot list looking for a home, so its
+      // rejections say nothing about the lot it passed over — the ordinary
+      // loop below will try that lot again and record what happens then.
+      if (!seated(r)) continue;
+      buildings.push(r);
       taken.add(lot.id);
       placedGlyphs.add(capped.glyph);
-      housed += b.occupancy;
+      fates?.set(lot.id, 'seated');
+      housed += r.occupancy;
       break;
     }
   }
@@ -287,12 +303,20 @@ export function spendCensus(
     if (housed >= site.population) break;
     if (taken.has(lot.id)) continue;
     const entry = drawEntry(deck, site, lot.frontageM, placedGlyphs, rng);
-    if (!entry) continue;
-    const b = seatCleared(seat(entry, lot, rng), lot);
-    if (!b) continue;
-    buildings.push(b);
+    if (!entry) { fates?.set(lot.id, 'no-deck-entry'); continue; }
+    const r = seatCleared(seat(entry, lot, rng), lot);
+    if (!seated(r)) { fates?.set(lot.id, r); continue; }
+    buildings.push(r);
     taken.add(lot.id);
-    housed += b.occupancy;
+    fates?.set(lot.id, 'seated');
+    housed += r.occupancy;
+  }
+
+  // Everything the loop never reached: the census ran out first. Not a
+  // failure — the fringe staying empty IS the straggle — but it must be
+  // counted separately from the lots that were tried and lost.
+  if (fates) {
+    for (const lot of ordered) if (!fates.has(lot.id)) fates.set(lot.id, 'census-satisfied');
   }
 
   return { buildings, housed, unhoused: Math.max(0, site.population - housed) };

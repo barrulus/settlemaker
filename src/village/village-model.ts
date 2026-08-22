@@ -14,6 +14,7 @@ import {
   buildDeck, eligible, meanOccupancy, minDwellingFrontageM, ordinaryOccupancy, widestDwellingWidthM,
 } from './deck.js';
 import { intrudesOnLane, spendCensus, type SpendResult } from './dwellings.js';
+import { resetLotTrace, type LotTrace } from './lot-trace.js';
 import { dressVillage } from './dressing/index.js';
 import { closestPointOnSegment, dist } from './geometry.js';
 import {
@@ -37,7 +38,9 @@ function isConnectorLane(laneId: string): boolean {
   return laneId.endsWith('/c');
 }
 
-export function generateVillage(input: AzgaarBurgInput, seed: number): VillageModel {
+export function generateVillage(
+  input: AzgaarBurgInput, seed: number, trace?: LotTrace,
+): VillageModel {
   const rng = new SeededRandom(seed);
   const site = buildSite(input);
   const diagnostics: string[] = [];
@@ -139,9 +142,25 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
     // green-interior lots, so cross-strip claims still overlapped where
     // lanes converge. resolveConvergingLots makes the surviving claims
     // disjoint before scoring/ordering ever sees them.
+    // Gate 6.7: the diagnostic channel, filled per round and overwritten —
+    // only the FINAL round's lots are the model's. See lot-trace.ts.
+    if (trace) {
+      resetLotTrace(trace);
+      for (const l of lots) trace.cut.set(l.id, l.frontageM);
+    }
     const clipped = clipLots(lots, green, site.water);
+    if (trace) {
+      const kept = new Set(clipped.map((l) => l.id));
+      for (const id of trace.cut.keys()) if (!kept.has(id)) trace.fates.set(id, 'clipped');
+    }
     deckUsableLotCount = clipped.filter((l) => l.frontageM >= lotFloorM).length;
-    lots = resolveConvergingLots(clipped, lanes, green);
+    lots = resolveConvergingLots(clipped, lanes, green, trace?.convergeDetail);
+    if (trace) {
+      const kept = new Set(lots.map((l) => l.id));
+      for (const l of clipped) {
+        if (!kept.has(l.id)) trace.fates.set(l.id, 'converging-claim');
+      }
+    }
     lots = orderLots(scoreLots(lots, green, laneTypes));
 
     // Measure this round's actual lane-lot frontage for the next round's
@@ -154,7 +173,7 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
       measuredMeanFrontage = laneLots.reduce((s, l) => s + l.frontageM, 0) / laneLots.length;
     }
 
-    spend = spendCensus(lots, deck, site, rng, lanes);
+    spend = spendCensus(lots, deck, site, rng, lanes, trace?.fates);
     if (spend.unhoused === 0) break;
 
     if (round === MAX_FEEDBACK_ROUNDS) {
@@ -246,7 +265,7 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
       ),
       green, finalLaneTypes,
     ));
-    spend = spendCensus(lots, deck, site, rng, relaxed);
+    spend = spendCensus(lots, deck, site, rng, relaxed, trace?.fates);
     // The re-seat moved houses, so the tails must follow them. Connectors
     // are exempt from trimming (both their ends are junctions), so this
     // cannot re-open what was just closed.
@@ -284,6 +303,13 @@ export function generateVillage(input: AzgaarBurgInput, seed: number): VillageMo
     if (!lane) return false;
     return frontLiesOnLane(l, lane);
   });
+
+  if (trace) {
+    const kept = new Set(survivingLots.map((l) => l.id));
+    for (const id of trace.cut.keys()) if (!kept.has(id) && trace.fates.get(id) !== 'clipped') {
+      if (trace.fates.get(id) !== 'converging-claim') trace.staleAfterTrim.add(id);
+    }
+  }
 
   // Gate 6.6: reported every village, because it is the number that told
   // the last four gates a lie. Measured against deck-usable lots (wide

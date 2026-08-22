@@ -402,6 +402,30 @@ export const INNER_CURVE_FRONT_RATIO = 0.8;
  * no dwelling could ever seat on is worse than no lot at all. */
 export const MIN_LOT_DEPTH_M = 4;
 /**
+ * Gate 6.7, THE BUILD BAND -- the front slice of a lot where the DWELLING
+ * actually stands. The rest of `LOT_DEPTH_M` is garden.
+ *
+ * This exists because the gate-6.7 lot-death histogram found that 19-29% of
+ * every lot the village cuts -- the single largest death cause, five to ten
+ * times bigger than anything else -- dies in cross-strip resolution at a
+ * junction mouth, and roughly half those deaths are a full 12 m claim from
+ * one lane laid across another lane's frontage. What is actually in dispute
+ * at a junction is one house's BACK GARDEN against another house's FRONT
+ * DOOR, and the old rule settled that by deleting the house.
+ *
+ * So resolution now asks a narrower question: do the two BUILD BANDS
+ * conflict? If they do, one lot must go, as before. If only the gardens
+ * overlap, both houses stand and the gardens give way -- see
+ * `resolveCrossStrip`.
+ *
+ * 8 m: the deepest ordinary dwelling's ink (4.9 m for the longhouse, 6.9 m
+ * for the large house) at its largest fit multiplier, plus the seating
+ * setback. Landmarks are deeper still (the inn is 10.2 m) and there are at
+ * most three of them per village; they take the ordinary treatment and are
+ * not worth widening the band for.
+ */
+export const BUILD_BAND_DEPTH_M = 8;
+/**
  * Gate 6.6: the sliver of clear ground the cutter leaves between two
  * neighbouring claims. Claims that abut EXACTLY read as overlapping under
  * float noise, and §5.4's resolution then drops one of them outright --

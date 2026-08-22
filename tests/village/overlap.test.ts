@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   lotObb, obbOverlap, resolveConvergingLots, resolveInnerCurves,
 } from '../../src/village/parcels/overlap.js';
-import { MIN_LOT_DEPTH_M } from '../../src/village/constants.js';
+import { BUILD_BAND_DEPTH_M, MIN_LOT_DEPTH_M } from '../../src/village/constants.js';
 import { Point } from '../../src/types/point.js';
 import type { Green, Lane, Lot } from '../../src/village/types.js';
 
@@ -96,7 +96,21 @@ describe('resolveConvergingLots (§5.4 rule 3)', () => {
     expect(result.map((l) => l.id)).toEqual(['main:R0']);
   });
 
-  it('truncates the loser depthM to the bisector when its front is outside the winner claim', () => {
+  // REWRITTEN at gate 6.7, and its old premise is genuinely false now.
+  //
+  // It used to assert that only the LOSER gives way: the winner keeps its
+  // full claim and the loser's depth is truncated to the bisector. The
+  // gate-6.7 lot-death histogram found that rule was throwing away 19-29% of
+  // every lot the village cuts, because the thing in dispute at a junction
+  // is one lot's back GARDEN against another lot's front DOOR, and deleting
+  // the house to protect the garden is the wrong way round. So when the two
+  // BUILD BANDS clear each other, both gardens now give way and both houses
+  // stand.
+  //
+  // The property is therefore no longer "the loser shrinks"; it is "both
+  // survive, both keep the depth a dwelling needs, and the claims are
+  // disjoint". Asserting the old version would be asserting the bug.
+  it('shrinks BOTH gardens and keeps both houses when only the gardens overlap', () => {
     const winnerLot = lot({
       id: 'main:R0', laneId: 'main', front: new Point(0, 0), bearingDeg: 0, frontageM: 6, depthM: 16,
     });
@@ -105,12 +119,18 @@ describe('resolveConvergingLots (§5.4 rule 3)', () => {
       id: 'trail:R0', laneId: 'trail', front: new Point(10, 10), bearingDeg: 90, frontageM: 4, depthM: 16,
     });
     const result = resolveConvergingLots([winnerLot, loserLot], [mainLane, trailLane], green);
+    const winner = result.find((l) => l.id === 'main:R0');
     const survivor = result.find((l) => l.id === 'trail:R0');
+    expect(winner).toBeDefined();
     expect(survivor).toBeDefined();
-    expect(survivor!.depthM).toBeLessThan(16);
+    // Both keep at least the band a dwelling stands on...
+    expect(winner!.depthM).toBeGreaterThanOrEqual(BUILD_BAND_DEPTH_M - 1e-6);
+    expect(survivor!.depthM).toBeGreaterThanOrEqual(BUILD_BAND_DEPTH_M - 1e-6);
     expect(survivor!.depthM).toBeGreaterThanOrEqual(MIN_LOT_DEPTH_M - 1e-6);
-    // The truncated claim really does clear the winner now.
-    expect(obbOverlap(lotObb(winnerLot), lotObb(survivor!))).toBe(false);
+    // ...at least one garden really did give way...
+    expect(Math.min(winner!.depthM, survivor!.depthM)).toBeLessThan(16);
+    // ...and §5.7's disjointness still holds over the RESULTING claims.
+    expect(obbOverlap(lotObb(winner!), lotObb(survivor!))).toBe(false);
   });
 
   it('drops the loser when truncation would leave it under MIN_LOT_DEPTH_M', () => {

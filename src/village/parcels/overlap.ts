@@ -1,7 +1,7 @@
 import { Point } from '../../types/point.js';
-import { bearingVector, dist } from '../geometry.js';
+import { bearingVector, closestPointOnSegment, dist } from '../geometry.js';
 import { classRank, type RouteType } from '../route-class.js';
-import { INNER_CURVE_FRONT_RATIO, MIN_LOT_DEPTH_M } from '../constants.js';
+import { BUILD_BAND_DEPTH_M, INNER_CURVE_FRONT_RATIO, MIN_LOT_DEPTH_M } from '../constants.js';
 import type { Green, Lane, Lot } from '../types.js';
 
 /**
@@ -77,6 +77,15 @@ export function pointInObb(p: Point, obb: Obb, margin = 0): boolean {
 }
 
 /**
+ * The front `BUILD_BAND_DEPTH_M` of a lot's claim — the slice the DWELLING
+ * occupies, as opposed to the garden behind it. Never deeper than the claim
+ * itself, so an already-truncated lot's band is its whole remaining claim.
+ */
+export function buildBandObb(lot: Lot): Obb {
+  return lotObb({ ...lot, depthM: Math.min(lot.depthM, BUILD_BAND_DEPTH_M) });
+}
+
+/**
  * The largest depth <= `lot.depthM` whose claim no longer overlaps
  * `winner`, floored at 0. ~8 bisections is plenty at metre precision.
  */
@@ -112,7 +121,7 @@ function ordinalOf(id: string): number {
  * (mirroring rule 3) rather than discard frontage the census needs, and
  * only drop it if truncation cannot leave a usable depth.
  */
-export function resolveInnerCurves(lots: Lot[]): Lot[] {
+export function resolveInnerCurves(lots: Lot[], reasons?: Map<string, string>): Lot[] {
   const dropped = new Set<string>();
   const depthOverride = new Map<string, number>();
   const groups = new Map<string, Lot[]>();
@@ -131,6 +140,7 @@ export function resolveInnerCurves(lots: Lot[]): Lot[] {
       const cur = sorted[i];
       if (dist(prev.front, cur.front) < threshold) {
         dropped.add(cur.id);
+        reasons?.set(cur.id, 'inner-fold');
         continue;
       }
       const prevObb = lotObb(prev);
@@ -138,9 +148,21 @@ export function resolveInnerCurves(lots: Lot[]): Lot[] {
         prev = cur;
         continue;
       }
+      // Gate 6.7, as in `resolveCrossStrip`: if the two BUILD BANDS clear
+      // each other, this is a garden dispute behind two perfectly good
+      // fronts. Pull both gardens back rather than deleting a house.
+      if (!obbOverlap(buildBandObb(prev), buildBandObb(cur))) {
+        const prevDepth = maxDepthClearOf(prev, buildBandObb(cur));
+        depthOverride.set(prev.id, prevDepth);
+        const curDepth = maxDepthClearOf(cur, lotObb({ ...prev, depthM: prevDepth }));
+        depthOverride.set(cur.id, curDepth);
+        prev = { ...cur, depthM: curDepth };
+        continue;
+      }
       const clearDepth = maxDepthClearOf(cur, prevObb);
       if (clearDepth < MIN_LOT_DEPTH_M) {
         dropped.add(cur.id);
+        reasons?.set(cur.id, 'inner-wander');
       } else {
         depthOverride.set(cur.id, clearDepth);
         prev = { ...cur, depthM: clearDepth };
@@ -174,8 +196,11 @@ function priorityOf(laneId: string, laneTypeById: Map<string, RouteType>): numbe
  * Iterates an id-sorted copy so resolution never depends on array order,
  * then returns the surviving/truncated lots in the ORIGINAL order.
  */
-function resolveCrossStrip(lots: Lot[], lanes: Lane[], green: Green): Lot[] {
+function resolveCrossStrip(
+  lots: Lot[], lanes: Lane[], green: Green, reasons?: Map<string, string>,
+): Lot[] {
   const laneTypeById = new Map<string, RouteType>(lanes.map((l) => [l.id, l.type]));
+  const laneById = new Map<string, Lane>(lanes.map((l) => [l.id, l]));
   const distToGreen = (l: Lot): number => dist(l.front, green.centre);
   // Conservative bounding radius from `front` to the claim's far corner --
   // cheap prefilter before the full SAT.
@@ -237,14 +262,43 @@ function resolveCrossStrip(lots: Lot[], lanes: Lane[], green: Green): Lot[] {
         }
       }
 
+      const note = (mode: string): void => {
+        if (reasons) reasons.set(loser.id, `${crossReason(loser, winner, laneById)}/${mode}`);
+      };
+
+      // GATE 6.7: gardens give way to houses, whatever the lane class.
+      //
+      // When only the two BUILD BANDS are clear of each other, nothing
+      // about this collision requires a house to die: it is one lot's back
+      // garden lying across another lot's frontage. The winner's garden is
+      // pulled back to clear the loser's band, then the loser's is pulled
+      // back to clear whatever the winner still holds. Both keep at least
+      // their band (a claim cut to the band depth is clear by construction,
+      // so the bisection can never return less), and the pair comes out
+      // disjoint, which §5.7 requires.
+      //
+      // Depths only ever SHRINK here, so a pair settled earlier in the walk
+      // stays settled when one of its members is trimmed again later.
+      if (!obbOverlap(buildBandObb(winner), buildBandObb(loser))) {
+        const winnerDepth = maxDepthClearOf(winner, buildBandObb(loser));
+        depthOverride.set(winner.id, winnerDepth);
+        const loserDepth = maxDepthClearOf(loser, lotObb({ ...winner, depthM: winnerDepth }));
+        depthOverride.set(loser.id, loserDepth);
+        continue;
+      }
+
+      // The bands themselves conflict: one of these two houses cannot
+      // stand, and class priority decides which.
       const winnerObb = lotObb(winner);
       if (pointInObb(loser.front, winnerObb)) {
         dropped.add(loser.id);
+        note('front-inside');
         continue;
       }
       const clearDepth = maxDepthClearOf(loser, winnerObb);
       if (clearDepth < MIN_LOT_DEPTH_M) {
         dropped.add(loser.id);
+        note('too-shallow');
       } else {
         depthOverride.set(loser.id, clearDepth);
       }
@@ -261,6 +315,35 @@ function resolveCrossStrip(lots: Lot[], lanes: Lane[], green: Green): Lot[] {
  * then cross-strip claim resolution. Call once per feedback round, right
  * after `clipLots`.
  */
-export function resolveConvergingLots(lots: Lot[], lanes: Lane[], green: Green): Lot[] {
-  return resolveCrossStrip(resolveInnerCurves(lots), lanes, green);
+export function resolveConvergingLots(
+  lots: Lot[], lanes: Lane[], green: Green, reasons?: Map<string, string>,
+): Lot[] {
+  return resolveCrossStrip(resolveInnerCurves(lots, reasons), lanes, green, reasons);
+}
+
+/**
+ * Gate 6.7 DIAGNOSTIC ONLY -- why this cross-strip pair collided. Nothing
+ * reads it back; it exists so `probe-lots` can say whether the claims a
+ * village throws away die at JUNCTION MOUTHS (where two lanes meet, the
+ * cause the last gate suspected) or along stretches where two lanes simply
+ * run near each other, or across a single lane against its own far side.
+ */
+const JUNCTION_REACH_M = 20;
+
+function crossReason(loser: Lot, winner: Lot, laneById: Map<string, Lane>): string {
+  if (loser.laneId === winner.laneId) return 'cross-same-lane';
+  if (winner.laneId === 'green' || loser.laneId === 'green') return 'cross-green-ring';
+  const a = laneById.get(loser.laneId);
+  const b = laneById.get(winner.laneId);
+  if (!a || !b) return 'cross-other-lane';
+  // The nearest point at which the two lanes actually touch: their junction,
+  // if they have one.
+  let junction = Infinity;
+  for (let i = 1; i < a.points.length; i++) {
+    for (let j = 0; j < b.points.length; j++) {
+      const q = closestPointOnSegment(b.points[j], a.points[i - 1], a.points[i]);
+      if (dist(b.points[j], q) <= 1.5) junction = Math.min(junction, dist(loser.front, q));
+    }
+  }
+  return junction <= JUNCTION_REACH_M ? 'cross-junction-mouth' : 'cross-parallel-lanes';
 }
