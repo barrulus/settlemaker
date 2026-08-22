@@ -303,12 +303,25 @@ describe('vegetation geometric invariants (real village fixtures)', () => {
       }
       expect(edge).toBeGreaterThan(0);
       const rim = edge + VEG_BAND_DEPTH_M;
+      // Gate 6.6: "inside" is GROVE COUNTRY -- the built fabric -- not
+      // everything within the fields' outer edge. The generator's own
+      // grove pass stops at the fabric radius and thins beyond it, so
+      // counting the whole field ring as "inside" measured the wrong
+      // region: it silently mixed the thinned belt between the houses and
+      // the fields into the grove figure. That went unnoticed while the
+      // fabric was 1.4x too wide (gate 6.6's finding) and filled most of
+      // the field disc; with the disc sized from the census the belt is a
+      // real fraction of the area and the artefact dominated the ratio.
+      // The p95 building radius is the fabric edge every other acceptance
+      // metric in this suite uses.
+      const bd = m.buildings.map((b) => dist(b.position, m.green.centre)).sort((a, c) => a - c);
+      const fabricEdge = bd[Math.floor(bd.length * 0.95)];
       let inside = 0;
       let outside = 0;
       for (const t of m.vegetation) {
         const d = dist(t.position, m.green.centre);
-        if (d < edge) inside += 1;
-        else if (d <= rim) outside += 1;
+        if (d < fabricEdge) inside += 1;
+        else if (d > edge && d <= rim) outside += 1;
       }
       // Gate 6.2: the interior denominator is the OPEN ground, not the
       // whole disc. "Grove country" means the trees fill the gaps BETWEEN
@@ -320,10 +333,10 @@ describe('vegetation geometric invariants (real village fixtures)', () => {
       const OPEN_M = 10;
       const STEP = 4;
       let openCells = 0;
-      for (let x = -edge; x <= edge; x += STEP) {
-        for (let y = -edge; y <= edge; y += STEP) {
+      for (let x = -fabricEdge; x <= fabricEdge; x += STEP) {
+        for (let y = -fabricEdge; y <= fabricEdge; y += STEP) {
           const p = new Point(m.green.centre.x + x, m.green.centre.y + y);
-          if (dist(p, m.green.centre) > edge) continue;
+          if (dist(p, m.green.centre) > fabricEdge) continue;
           if (m.buildings.some((b) => dist(p, b.position) <= OPEN_M)) continue;
           openCells += 1;
         }
