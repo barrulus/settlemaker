@@ -730,10 +730,13 @@ export function connectDeadEnds(lanes: Lane[], green: Green): Lane[] {
     if (target.distance > CONNECT_MAX_M || target.distance < CONNECT_MIN_M) continue;
 
     const points = [end, target.point];
-    // Everything except this lane and the connector itself: the connector
-    // legitimately touches its own lane at the start and its target at the
-    // end, and `segmentIntersection` ignores both as endpoint touches.
-    if (crossesAnyLane(points, out.filter((l) => l.id !== lane.id))) continue;
+    // Tested against EVERY lane including its own parent. The connector
+    // legitimately touches its parent at the start and its target at the
+    // end, and `segmentIntersection` ignores both as endpoint touches --
+    // so no lane needs excluding, and excluding the parent (as this first
+    // did) lets a connector curl back and cut across the very lane it
+    // grew from. Measured as one crossing at pop 900 seed 2.
+    if (crossesAnyLane(points, out)) continue;
     // Under the green's turf every radial shares the ground and no crossing
     // is visible; a connector there would be invisible clutter.
     if (dist(target.point, green.centre) <= green.diameter / 2) continue;

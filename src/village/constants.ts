@@ -223,8 +223,14 @@ export const TAIL_STUB_M = 6;
  * too much." The gap term feeds f0 directly, so every metre here is a
  * metre between every pair of neighbours.
  */
-export const GAP_LOOSE_M = 0.8;
-export const GAP_TIGHT_M = 0.4;
+/**
+ * Gate 6.3: 0.8 -> 0.5 loose, 0.4 -> 0.25 tight. The owner's houses sit
+ * nearly touching in continuous double-sided rows. The gap term feeds f0
+ * directly, so every centimetre here is a centimetre between every pair of
+ * neighbours. FRONTAGE_JITTER is untouched -- the variation stays.
+ */
+export const GAP_LOOSE_M = 0.5;
+export const GAP_TIGHT_M = 0.25;
 export const GAP_POP_LOW = 100;
 export const GAP_POP_HIGH = 900;
 export const GRADIENT_EXPONENT = 1.5;
@@ -336,7 +342,18 @@ export const SEATING_BEARING_JITTER_DEG = 8;
  * draw count never depends on the outcome.
  */
 export const SEATING_GABLE_CHANCE = 0.1;
-export const DECK_GAP_M = 1.5;
+/**
+ * Slack above a glyph's INK width in `minFrontage` -- the narrowest lot an
+ * entry will accept.
+ *
+ * Gate 6.3: 1.5 -> 0.5. This is the second gap in the system, and it was
+ * three to six times the first: f0 is `ink width + gapForPopulation`
+ * (0.5 loose, 0.25 tight), so a 1.5 m deck slack meant the DECK floor, not
+ * the gap term, decided how wide a lot came out -- flagged as a concern at
+ * gate 5.1 and now closed. Matched to GAP_LOOSE_M so the two agree, with
+ * SIZE_JITTER's growth still having somewhere to go.
+ */
+export const DECK_GAP_M = 0.5;
 
 /** One dwelling family per village (the village-rows rule, restored at the
  * 2026-08-21 gate): mud/straw huts for tiny hamlets below this population,

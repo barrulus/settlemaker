@@ -165,16 +165,24 @@ export function trimTails(lanes: Lane[], buildings: Building[]): Lane[] {
       continue;
     }
 
+    // Gate 6.3: a lane with a CONNECTOR on it passes through whole, houses
+    // or not. Two reasons, both measured:
+    //  - dropping it (no houses) leaves the connector linking from nowhere,
+    //    and dropping the connector in turn orphans the lots cut along it,
+    //    a cascade that broke §2's stable-id invariant both ways round;
+    //  - TRIMMING it detaches the connector, which was built to meet this
+    //    lane's END. Trim the end away and the connector now starts out in
+    //    space and its straight run back can cut across the shortened
+    //    parent -- seen as exactly one lane crossing at pop 900 seed 2.
+    // A lane carrying part of the web is structural, like a connector.
+    if (connectorParents.has(lane.id)) {
+      result.push(lane);
+      continue;
+    }
+
     const mine = buildingsOf(lane, buildings);
     if (mine.length === 0) {
-      // Gate 6.3: unless a CONNECTOR hangs off it. Dropping such a lane
-      // would leave the connector linking from nowhere, and dropping the
-      // connector in turn would orphan the lots cut along it -- a cascade
-      // that broke §2's stable-id invariant both ways round when tried.
-      // A lane carrying part of the web is structural even with no house
-      // on it, exactly as a connector is.
-      if (!connectorParents.has(lane.id)) continue;
-      result.push(lane);
+      // Invented purely to supply frontage; none was used, so it is not drawn.
       continue;
     }
 

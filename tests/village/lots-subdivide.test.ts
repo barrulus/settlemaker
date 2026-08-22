@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { Point } from '../../src/types/point.js';
 import { SeededRandom } from '../../src/utils/random.js';
-import { F0_FLOOR_RATIO } from '../../src/village/constants.js';
+import {
+  F0_FLOOR_RATIO, GAP_LOOSE_M, GAP_TIGHT_M,
+} from '../../src/village/constants.js';
 import { frontageAt, gapForPopulation, subdivideLane } from '../../src/village/parcels/lots.js';
 import type { Green, Lane } from '../../src/village/types.js';
 
@@ -18,15 +20,17 @@ const straightLane: Lane = {
 describe('gapForPopulation', () => {
   it('is loose in a hamlet and tight in a big village', () => {
     // Density verdicts, gate by gate: 2.4/1.0 -> 1.6/0.6 -> 1.2/0.4 ->
-    // 0.8/0.4 (gate 5.1, "we STILL have houses with 1+ house-width gaps").
-    expect(gapForPopulation(100)).toBeCloseTo(0.8, 1);
-    expect(gapForPopulation(900)).toBeCloseTo(0.4, 1);
+    // 0.8/0.4 (gate 5.1) -> 0.5/0.25 (gate 6.3, "his houses sit nearly
+    // touching in continuous double-sided rows"). Taken from the constants
+    // rather than restated, so the next verdict moves one place, not two.
+    expect(gapForPopulation(100)).toBeCloseTo(GAP_LOOSE_M, 5);
+    expect(gapForPopulation(900)).toBeCloseTo(GAP_TIGHT_M, 5);
     expect(gapForPopulation(900)).toBeLessThan(gapForPopulation(100));
   });
 
   it('clamps outside the village band', () => {
-    expect(gapForPopulation(10)).toBeCloseTo(0.8, 1);
-    expect(gapForPopulation(5000)).toBeCloseTo(0.4, 1);
+    expect(gapForPopulation(10)).toBeCloseTo(GAP_LOOSE_M, 5);
+    expect(gapForPopulation(5000)).toBeCloseTo(GAP_TIGHT_M, 5);
   });
 });
 
