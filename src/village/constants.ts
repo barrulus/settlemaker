@@ -474,7 +474,7 @@ export const VEG_BAND_DEPTH_M = 70;
  * ground, so a high number here fills the gaps between houses rather than
  * burying them.
  */
-export const VEG_INTERIOR_DENSITY = 0.28;
+export const VEG_INTERIOR_DENSITY = 0.42;
 /**
  * Survival chance just OUTSIDE the fabric edge, thinning linearly to 0 at
  * the rim. Deliberately an order below the interior: the ring belt and the
