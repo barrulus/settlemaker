@@ -19,7 +19,19 @@ export const GREEN_WATER_MARGIN_M = 6;
 
 // --- Lanes -------------------------------------------------------------
 export const LANE_SAMPLE_STEP_M = 12;
-export const LANE_WANDER_M = 3.5;
+/**
+ * Gate 5 (2026-08-22): a lane bends by ONE smooth curve over its whole
+ * length, not by a fresh random kick at every 12 m sample. This is the
+ * maximum lateral offset, metres, at a lane's far end; the offset grows as
+ * the square of the distance along, so the lane leaves its junction
+ * straight and curves away gently -- the shape a real road takes.
+ *
+ * `LANE_WANDER_M` (a per-step random walk) is RETIRED. Its accumulated
+ * kinks were what made the fabric read as scribble at village scale, and a
+ * random walk also wanders further the longer the lane, which is backwards:
+ * a long street is straighter than a short one, not less straight.
+ */
+export const LANE_CURVE_MAX_M = 10;
 export const MIN_ARM_SEPARATION_DEG = 35;
 export const MAX_INVENTED_LANES = 60;
 export const FRONTAGE_MARGIN = 1.15;
@@ -49,16 +61,25 @@ export const GREEN_ARM_MAX = 4;
 
 /** Pitch between branch slots along a parent lane. Every lane — arms and
  * branches alike — offers an attach point this often, so branches branch
- * again and the fabric fills instead of raying. */
-export const BRANCH_SPACING_M = 28;
+ * again and the fabric fills instead of raying.
+ *
+ * Gate 5 widened this 28 -> 40. At 28 m a pop-900 village grew 50-67 lanes,
+ * a thicket of short stubs; the census is better served by fewer, longer
+ * streets, which is also what a real village looks like. */
+export const BRANCH_SPACING_M = 40;
 /** A branch is sized to the lots it must host (both sides), not run to the
- * horizon: length = (target/2) x mean frontage, clamped below. */
-export const BRANCH_LOTS_TARGET = 8;
+ * horizon: length = (target/2) x mean frontage, clamped below.
+ *
+ * Gate 5 raised the target 8 -> 14 lots and the cap 90 -> 150 m, for the
+ * same reason as BRANCH_SPACING_M: the same census laid along fewer, longer
+ * streets. A branch below BRANCH_MIN_M after truncation is now REJECTED
+ * outright rather than kept as a stub. */
+export const BRANCH_LOTS_TARGET = 14;
 export const BRANCH_MIN_M = 24;
-export const BRANCH_MAX_M = 90;
+export const BRANCH_MAX_M = 150;
 /** Invented green-attached arms are longer than a branch by this factor —
  * they are the village's own streets, not culs-de-sac. */
-export const INVENTED_ARM_LENGTH_FACTOR = 2;
+export const INVENTED_ARM_LENGTH_FACTOR = 1.2;
 /** A branch whose end passes within this of another lane snaps onto it,
  * forming a loop. The connector drops one further class (a footpath cut
  * between two streets), per the owner's rule that loops are made at a

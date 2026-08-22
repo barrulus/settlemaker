@@ -9,7 +9,7 @@ import {
   BRANCH_LOTS_TARGET, BRANCH_MAX_M, BRANCH_MIN_M, BRANCH_SPACING_M, FRONTAGE_MARGIN,
   GREEN_ARM_MAX, GREEN_ARM_MIN, GREEN_ARM_SPACING_M, GREEN_UNDERLAP_RATIO,
   GROWTH_RADIUS_STEP, INVENTED_ARM_LENGTH_FACTOR, JUNCTION_CLEAR_M, LANE_SAMPLE_STEP_M,
-  LANE_WANDER_M, LOOP_SNAP_M, MAX_INVENTED_LANES, MIN_ARM_SEPARATION_DEG,
+  LANE_CURVE_MAX_M, LOOP_SNAP_M, MAX_INVENTED_LANES, MIN_ARM_SEPARATION_DEG,
 } from '../constants.js';
 import {
   armLaneId, branchLaneId, inventedLaneId, type Green, type Lane, type Site, type SiteRoute,
@@ -26,8 +26,9 @@ export { polylineLength };
  * R4: the point is pushed BEFORE the drift accumulates for next time, so
  * the first sample lands exactly on the green's rim. Accumulating drift
  * before the first push (as the brief originally had it) starts the arm
- * up to LANE_WANDER_M off the rim, leaving a visible gap between the
- * green's edge and the road that feeds it.
+ * up off the rim, leaving a visible gap between the green's edge and the
+ * road that feeds it. (The curve now starts at zero anyway, but the
+ * ordering is kept: it is the rule, not an accident of the shape.)
  */
 function runArm(
   green: Green, bearingDeg: number, extentM: number, rng: SeededRandom,
@@ -39,32 +40,55 @@ function runArm(
   // road visibly disappears beneath the turf rather than stopping at (or
   // worse, just short of) the rim.
   const start = (green.diameter / 2) * GREEN_UNDERLAP_RATIO;
+  const curve = laneCurve(rng);
   const points: Point[] = [];
-  let drift = 0;
   for (let d = start; d <= start + extentM; d += LANE_SAMPLE_STEP_M) {
+    const offset = curveOffsetM(curve, d - start, extentM);
     points.push(new Point(
-      green.centre.x + dir.x * d + normal.x * drift,
-      green.centre.y + dir.y * d + normal.y * drift,
+      green.centre.x + dir.x * d + normal.x * offset,
+      green.centre.y + dir.y * d + normal.y * offset,
     ));
-    drift += (rng.float() - 0.5) * 2 * LANE_WANDER_M;
   }
   return points;
 }
 
-/** A wandering polyline from `from` along `bearingDeg` for `lengthM`. */
+/**
+ * Gate 5: ONE smooth curve per lane, not a random kick per sample.
+ *
+ * `laneCurve` spends a single rng.float for the whole lane, giving a signed
+ * strength in [-1, 1]; `curveOffsetM` turns it into a lateral offset that
+ * grows as the SQUARE of the distance travelled, normalised so the offset
+ * reaches at most LANE_CURVE_MAX_M at the lane's far end. The lane
+ * therefore leaves its junction dead straight -- which is what keeps a
+ * T-junction reading as a junction -- and bends away gently after that.
+ *
+ * The retired per-step random walk accumulated a fresh kink every 12 m, and
+ * wandered FURTHER the longer the lane; both are backwards for a road.
+ */
+function laneCurve(rng: SeededRandom): number {
+  return rng.float() * 2 - 1;
+}
+
+function curveOffsetM(curve: number, travelledM: number, totalM: number): number {
+  if (!(totalM > 0)) return 0;
+  const t = Math.min(1, Math.max(0, travelledM / totalM));
+  return curve * LANE_CURVE_MAX_M * t * t;
+}
+
+/** A gently curving polyline from `from` along `bearingDeg` for `lengthM`. */
 function runLine(
   from: Point, bearingDeg: number, lengthM: number, rng: SeededRandom,
 ): Point[] {
   const dir = bearingVector(bearingDeg);
   const normal = new Point(-dir.y, dir.x);
+  const curve = laneCurve(rng);
   const points: Point[] = [];
-  let drift = 0;
   for (let d = 0; d <= lengthM; d += LANE_SAMPLE_STEP_M) {
+    const offset = curveOffsetM(curve, d, lengthM);
     points.push(new Point(
-      from.x + dir.x * d + normal.x * drift,
-      from.y + dir.y * d + normal.y * drift,
+      from.x + dir.x * d + normal.x * offset,
+      from.y + dir.y * d + normal.y * offset,
     ));
-    drift += (rng.float() - 0.5) * 2 * LANE_WANDER_M;
   }
   return points;
 }
@@ -360,6 +384,43 @@ function endsOnAnotherLane(lane: Lane, out: Lane[]): boolean {
   return false;
 }
 
+/**
+ * Lengthen the shortest extendable street whose length is still under
+ * `maxLengthM`, from its end along its end direction. FMG arms are never
+ * extended — they already run to the map's edge. Shortest-first keeps the
+ * cluster balanced instead of streaming out one long tentacle.
+ */
+function extendOne(
+  out: Lane[], green: Green, meanFrontageM: number, growthRadiusM: number,
+  rng: SeededRandom, maxLengthM: number,
+): boolean {
+  const extendable = out
+    .filter((l) => !l.id.startsWith('arm-') && l.points.length >= 2
+      && polylineLength(l.points) < maxLengthM
+      // Gate 3: extension is confined to the cluster — a street whose end
+      // has left the growth circle stops growing outward.
+      && dist(l.points[l.points.length - 1], green.centre) <= growthRadiusM
+      // Gate 4: a truncated or loop-snapped lane ENDS at a junction on
+      // another lane. Extending it from there walks straight across that
+      // lane — segmentIntersection's endpoint-touch exclusion cannot even
+      // see the hop — which is precisely the untidy crossing the growth
+      // rules exist to prevent. A street that ends at a junction is done.
+      && !endsOnAnotherLane(l, out))
+    .sort((a, b) => (polylineLength(a.points) - polylineLength(b.points))
+      || a.id.localeCompare(b.id));
+  for (const lane of extendable) {
+    const n = lane.points.length;
+    const endDir = bearingOf(lane.points[n - 2], lane.points[n - 1]);
+    const extension = truncateAtFirstCrossing(
+      runLine(lane.points[n - 1], endDir, branchLengthM(meanFrontageM), rng),
+      out.filter((l) => l.id !== lane.id), green);
+    if (extension.length < 2) continue;
+    lane.points = [...lane.points, ...extension.slice(1)];
+    return true;
+  }
+  return false;
+}
+
 /** One growth step. Returns false when there is nowhere left to grow. */
 function growOne(
   out: Lane[], green: Green, meanFrontageM: number, growthRadiusM: number, rng: SeededRandom,
@@ -404,7 +465,17 @@ function growOne(
     // No free bearing: fall through to branching.
   }
 
-  // 2. Branch at the nearest-the-green free slot.
+  // 2. Gate 5: LENGTHEN BEFORE BRANCHING. Any existing street still
+  //    shorter than a full branch length gets extended first, so the
+  //    village grows a few proper streets rather than a thicket of stubs.
+  //    Only once every street has reached full length does a new branch
+  //    open. This, BRANCH_SPACING_M 28 -> 40 and BRANCH_LOTS_TARGET 8 -> 14
+  //    are one change: the same census laid along fewer, longer roads.
+  if (extendOne(out, green, meanFrontageM, growthRadiusM, rng, branchLengthM(meanFrontageM))) {
+    return true;
+  }
+
+  // 3. Branch at the nearest-the-green free slot.
   const slots = branchSlots(out, green, growthRadiusM);
   for (const slot of slots) {
     // branchLaneId formats `at` as a 2-digit percent (~100 buckets per
@@ -433,7 +504,11 @@ function growOne(
     if (snap || points.length < assembled) {
       cls = stepDown(cls, 'footpath');
     }
-    if (points.length < 2) continue;
+    // Gate 5: a branch cut down to a stub is not a street. Truncation at a
+    // crossing (or a loop snap that lands almost at once) can leave a few
+    // metres of road going nowhere, which is exactly the litter the owner
+    // saw. Reject it and try the next slot rather than keeping it.
+    if (points.length < 2 || polylineLength(points) < BRANCH_MIN_M) continue;
     out.push({
       id,
       type: cls,
@@ -444,37 +519,11 @@ function growOne(
     return true;
   }
 
-  // 3. Every slot is taken: the village grows the way a real one does —
-  //    by LENGTHENING its own streets. Extend the shortest invented lane
-  //    from its end along its end direction; the new length carries fresh
-  //    frontage AND fresh branch slots, so growth cannot deadlock while
-  //    the census is unhoused. FMG arms are never extended — they already
-  //    run to the map's edge. Shortest-first keeps the cluster balanced
-  //    instead of streaming out one long tentacle.
-  const extendable = out
-    .filter((l) => !l.id.startsWith('arm-') && l.points.length >= 2
-      // Gate 3: extension is also confined to the cluster — a street whose
-      // end has left the growth circle stops growing outward.
-      && dist(l.points[l.points.length - 1], green.centre) <= growthRadiusM
-      // Gate 4: a truncated or loop-snapped lane ENDS at a junction on
-      // another lane. Extending it from there walks straight across that
-      // lane — segmentIntersection's endpoint-touch exclusion cannot even
-      // see the hop — which is precisely the untidy crossing the growth
-      // rules exist to prevent. A street that ends at a junction is done.
-      && !endsOnAnotherLane(l, out))
-    .sort((a, b) => (polylineLength(a.points) - polylineLength(b.points))
-      || a.id.localeCompare(b.id));
-  for (const lane of extendable) {
-    const n = lane.points.length;
-    const endDir = bearingOf(lane.points[n - 2], lane.points[n - 1]);
-    const extension = truncateAtFirstCrossing(
-      runLine(lane.points[n - 1], endDir, branchLengthM(meanFrontageM), rng),
-      out.filter((l) => l.id !== lane.id), green);
-    if (extension.length < 2) continue;
-    lane.points = [...lane.points, ...extension.slice(1)];
-    return true;
-  }
-  return false;
+  // 4. Last resort: every slot is taken and every street is already at
+  //    full length, so lengthen one anyway. The new length carries fresh
+  //    frontage AND fresh branch slots, so growth cannot deadlock while the
+  //    census is unhoused.
+  return extendOne(out, green, meanFrontageM, growthRadiusM, rng, Infinity);
 }
 
 /**

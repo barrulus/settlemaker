@@ -49,10 +49,10 @@ describe('buildVegetation', () => {
   it('is deterministic: same inputs and seed produce identical output', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
     const a = buildVegetation(
-      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, new SeededRandom(77),
+      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, 60, new SeededRandom(77),
     );
     const b = buildVegetation(
-      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, new SeededRandom(77),
+      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, 60, new SeededRandom(77),
     );
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
@@ -60,14 +60,14 @@ describe('buildVegetation', () => {
   it('never throws with zero lanes, zero lots, zero crofts, zero fields', () => {
     const rng = new SeededRandom(1);
     expect(() => buildVegetation(
-      site(), green, [], [], [], [], 40, 40, rng,
+      site(), green, [], [], [], [], 40, 40, 60, rng,
     )).not.toThrow();
   });
 
   it('produces some trees for a plausible built radius', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
     const trees = buildVegetation(
-      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, new SeededRandom(5),
+      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, 60, new SeededRandom(5),
     );
     expect(trees.length).toBeGreaterThan(0);
   });
@@ -75,7 +75,7 @@ describe('buildVegetation', () => {
   it('emits ids as veg:<cellX>x<cellY>, and clump children as veg:<cellX>x<cellY>:<j>', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
     const trees = buildVegetation(
-      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, new SeededRandom(5),
+      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, 60, new SeededRandom(5),
     );
     expect(trees.length).toBeGreaterThan(0);
     const parentIds = new Set<string>();
@@ -97,7 +97,7 @@ describe('buildVegetation', () => {
     let checkedAny = false;
     for (let seed = 1; seed <= 10; seed++) {
       const trees = buildVegetation(
-        site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, new SeededRandom(seed),
+        site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, 60, new SeededRandom(seed),
       );
       const byId = new Map(trees.map((t) => [t.id, t]));
       for (const t of trees) {
@@ -115,7 +115,7 @@ describe('buildVegetation', () => {
   it('scale jitter stays within VEG_SCALE_MIN..VEG_SCALE_MAX', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
     const trees = buildVegetation(
-      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, new SeededRandom(9),
+      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, 60, new SeededRandom(9),
     );
     expect(trees.length).toBeGreaterThan(0);
     for (const t of trees) {
@@ -125,12 +125,13 @@ describe('buildVegetation', () => {
   });
 
   it('density falls with distance from the fabric edge (binned counts, generous tolerance)', () => {
-    // No lanes/fields: fabric edge (innerEdge) is passed directly, scatter
-    // rim == innerEdge + VEG_BAND_DEPTH_M. Outside the fabric edge the
-    // profile thins linearly to nothing at the rim (gate 5 lowered the
-    // level, but the slope is unchanged), so the half of the scatter band
-    // closer to the fabric edge should carry noticeably more trees than
-    // the half closer to the rim.
+    // Zone 3 (the outer scatter) is what this measures, so the grove edge
+    // sits at the same radius as the field edge: no belt, straight from
+    // fabric to scatter, rim == innerEdge + VEG_BAND_DEPTH_M. Out there the
+    // profile thins linearly to nothing at the rim, so the half of the band
+    // nearer the fabric must carry noticeably more trees than the outer
+    // half.
+    const groveEdge = 60;
     const innerEdge = 60;
     const rim = innerEdge + VEG_BAND_DEPTH_M;
     const mid = (innerEdge + rim) / 2;
@@ -138,7 +139,7 @@ describe('buildVegetation', () => {
     let far = 0;
     for (const seed of [1, 2, 3, 55, 91, 104]) {
       const trees = buildVegetation(
-        site(), green, [], emptyLots, emptyCrofts, emptyFields, innerEdge, innerEdge, new SeededRandom(seed),
+        site(), green, [], emptyLots, emptyCrofts, emptyFields, groveEdge, innerEdge, innerEdge, new SeededRandom(seed),
       );
       for (const t of trees) {
         const d = dist(t.position, green.centre);
@@ -320,6 +321,9 @@ describe('shorefront suppression (§8.4, coastal fixture)', () => {
   // past `reach`, or "beyond the reach, scatter resumes" has no band to
   // resume in.
   const innerEdgeM = 60;
+  // Grove country stops well short of the field edge in this fixture, so
+  // the shorefront band is exercised against the low outer density.
+  const groveEdgeM = 30;
 
   const nearestWaterEdge = (p: Point): number => {
     let best = Infinity;
@@ -337,7 +341,7 @@ describe('shorefront suppression (§8.4, coastal fixture)', () => {
     let checked = 0;
     for (let seed = 1; seed <= 10; seed++) {
       const trees = buildVegetation(
-        coastalSite, green, [], emptyLots, emptyCrofts, emptyFields, innerEdgeM, reach, new SeededRandom(seed),
+        coastalSite, green, [], emptyLots, emptyCrofts, emptyFields, groveEdgeM, innerEdgeM, reach, new SeededRandom(seed),
       );
       for (const tree of trees) {
         const d = dist(tree.position, green.centre);
@@ -353,7 +357,7 @@ describe('shorefront suppression (§8.4, coastal fixture)', () => {
     let allowedNearWater = 0;
     for (let seed = 1; seed <= 10; seed++) {
       const trees = buildVegetation(
-        coastalSite, green, [], emptyLots, emptyCrofts, emptyFields, innerEdgeM, reach, new SeededRandom(seed),
+        coastalSite, green, [], emptyLots, emptyCrofts, emptyFields, groveEdgeM, innerEdgeM, reach, new SeededRandom(seed),
       );
       for (const tree of trees) {
         const d = dist(tree.position, green.centre);

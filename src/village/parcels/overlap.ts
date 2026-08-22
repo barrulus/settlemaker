@@ -104,7 +104,7 @@ function ordinalOf(id: string): number {
  * ordinal and keep comparing the next lot against the last SURVIVOR, so a
  * multi-lot fold collapses fully.
  *
- * Short of that threshold, ordinary lane wander (LANE_WANDER_M) still
+ * Short of that threshold, a lane's own gentle curvature (LANE_CURVE_MAX_M) still
  * turns the local bearing a few degrees between neighbouring samples,
  * which at LOT_DEPTH_M is enough for two otherwise unremarkable claims
  * (fronts comfortably spaced, nothing folded) to cross further back. That

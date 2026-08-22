@@ -74,21 +74,30 @@ function isRejected(
 }
 
 /**
- * Density(d): VEG_INTERIOR_DENSITY inside `innerEdge` -- grove country, the
- * leftover ground between lanes and claims -- then VEG_OUTER_DENSITY just
- * outside it, thinning linearly to 0 at `rim`.
+ * Density(d), in the three zones the owner's reference map actually has:
  *
- * Gate 5 (2026-08-22) flipped the emphasis. The old profile put a thin
- * infill inside and a full-strength plateau outside, which rendered as a
- * sparse village inside a forest fringe. The owner's reference is the
- * reverse: groves crowding the gaps between the houses, and only specks of
- * scatter out in the country beyond the field ring. The rejection tests
- * above -- lanes, lot claims, croft claims, field blocks, the green, water
- * -- are what keep the interior density confined to genuinely open ground,
- * so a high number here fills the gaps rather than burying the fabric.
+ *  1. `d < groveEdge` -- INSIDE the fabric, among the houses:
+ *     VEG_INTERIOR_DENSITY. Grove country. The rejection tests above
+ *     (lanes, lot claims, croft claims, field blocks, the green, water) are
+ *     what confine this to genuinely open ground, so a high number here
+ *     fills the gaps between the houses rather than burying them.
+ *  2. `groveEdge <= d < innerEdge` -- the OPEN GREEN BELT between the last
+ *     houses and the field ring: VEG_OUTER_DENSITY, flat. It is common, and
+ *     common is open; a few trees, not a wood.
+ *  3. `innerEdge <= d <= rim` -- the ring and the country beyond: the same
+ *     low level, thinning linearly to nothing at the rim. Specks.
+ *
+ * Gate 5 (2026-08-22) both flipped the emphasis and split zone 1 from
+ * zone 2. The old profile put a thin infill inside and a full-strength
+ * plateau outside -- a sparse village inside a forest fringe, the exact
+ * reverse of the reference. Keying "interior" to the FIELD radius rather
+ * than the fabric was the second half of the mistake: on a hamlet the field
+ * ring stands well clear of the houses, so grove density was being applied
+ * to a wide belt of empty ground and a 14-building hamlet grew ~700 trees.
  */
-function densityAt(d: number, innerEdge: number, rim: number): number {
-  if (d < innerEdge) return VEG_INTERIOR_DENSITY;
+function densityAt(d: number, groveEdge: number, innerEdge: number, rim: number): number {
+  if (d < groveEdge) return VEG_INTERIOR_DENSITY;
+  if (d < innerEdge) return VEG_OUTER_DENSITY;
   if (!(rim > innerEdge)) return 0;
   if (d > rim) return 0;
   const t = (d - innerEdge) / (rim - innerEdge);
@@ -111,9 +120,10 @@ function pickGlyph(biome: string, rng: SeededRandom): string {
  * dressing stages (after edgeStyle/crofts/fields), so every rng draw here
  * comes after all of theirs -- never reordered or interleaved.
  *
- * `innerEdgeM` is the MEASURED fabric edge the density ramp starts at: the
- * field system's own outer radius when fields exist, or the measured fabric
- * radius (lot claims + crofts) when there are none. Never a prediction --
+ * `groveEdgeM` is the MEASURED fabric radius -- where the houses stop and
+ * grove country ends. `innerEdgeM` is the field ring's own outer radius
+ * (or the fabric radius when there are no fields at all): beyond it the
+ * scatter thins to the rim. Both measured, never predicted --
  * see the fix-wave rule: after pass 3 nothing keys off `predictedBuiltRadius`.
  * The scatter rim, and with it the grid's own extent, is
  * `innerEdgeM + VEG_BAND_DEPTH_M`, so the grid always reaches past the
@@ -126,7 +136,7 @@ function pickGlyph(biome: string, rng: SeededRandom): string {
  */
 export function buildVegetation(
   site: Site, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldBlock[],
-  innerEdgeM: number, shorefrontReachM: number, rng: SeededRandom,
+  groveEdgeM: number, innerEdgeM: number, shorefrontReachM: number, rng: SeededRandom,
 ): Vegetation[] {
   const rim = innerEdgeM + VEG_BAND_DEPTH_M;
   if (!(rim > 0)) return [];
@@ -144,7 +154,7 @@ export function buildVegetation(
         cellOrigin.x + VEG_CELL_M / 2,
         cellOrigin.y + VEG_CELL_M / 2,
       );
-      const density = densityAt(dist(cellCentre, green.centre), innerEdgeM, rim);
+      const density = densityAt(dist(cellCentre, green.centre), groveEdgeM, innerEdgeM, rim);
 
       const survives = rng.float() < density;
       if (!survives) continue;
@@ -169,7 +179,7 @@ export function buildVegetation(
       // Interior clumps are bigger -- that is what makes a GROVE rather
       // than a lone tree. Exactly one rng.int is drawn either way, so the
       // draw budget never depends on which side of the edge this landed.
-      const [clumpMin, clumpMaxExcl] = dist(position, green.centre) < innerEdgeM
+      const [clumpMin, clumpMaxExcl] = dist(position, green.centre) < groveEdgeM
         ? VEG_CLUMP_INTERIOR
         : VEG_CLUMP_OUTER;
       const clumpCount = rng.int(clumpMin, clumpMaxExcl);

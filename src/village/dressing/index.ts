@@ -64,7 +64,7 @@ export function dressVillage(input: DressingInput): DressingResult {
   const vegInnerEdgeM = fields.length > 0 ? fieldsOuterRadius : fabricRadiusM;
   const shorefrontReachM = fabricRadiusM * SHOREFRONT_REACH_FACTOR;
   const vegetation = buildVegetation(
-    site, green, lanes, lots, crofts, fields, vegInnerEdgeM, shorefrontReachM, rng,
+    site, green, lanes, lots, crofts, fields, fabricRadiusM, vegInnerEdgeM, shorefrontReachM, rng,
   );
   const dressedRadiusM = Math.max(fieldsOuterRadius, fabricRadiusM);
   const pois = buildPois(
