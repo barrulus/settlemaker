@@ -98,6 +98,44 @@ function runLine(
   return points;
 }
 
+/**
+ * GATE 6.7, STREETS RATHER THAN STUBS -- how far a new invented street runs
+ * before anything else gets a say.
+ *
+ * Growth used to give every branch one `branchLengthM` (24-30 m as measured
+ * at gate 6.7) whatever lay in front of it, so the fabric filled with short
+ * stubs hanging off stubs: measured junction pitch 17-19 m at pop 900,
+ * against the 24 m the slot pitch nominally sets. That matters because the
+ * lot-death histogram put 19-29% of every lot the village cuts -- the
+ * largest single cause by five to ten times -- on cross-strip collisions at
+ * a JUNCTION MOUTH, where two lanes' claims fight over the same corner. The
+ * sterile ground is per junction, so a mesh of stubs is self-defeating: it
+ * adds junctions faster than frontage.
+ *
+ * A street now runs to the EDGE OF THE RING BEING SATURATED, and stops
+ * earlier only for a reason: `truncateAtFirstCrossing` cuts it at the first
+ * lane it meets (turning a crossing into a T-junction) and `loopSnap` joins
+ * it to a neighbour it passes close to. So it runs until it joins something
+ * or leaves the ring -- which is what makes the streets long, the junctions
+ * few, and the ground between them read as blocks.
+ *
+ * Ring-bounded, not disc-bounded, so concentric saturation still holds: the
+ * interior fills before growth moves outward, and a street laid in an early
+ * ring is lengthened by `extendOne` as the rings widen.
+ */
+function streetRunM(from: Point, bearingDeg: number, green: Green, ringRadiusM: number): number {
+  // Ray/circle intersection: how far along `bearingDeg` from `from` the ring
+  // boundary lies. `from` is inside the ring in every caller here.
+  const dir = bearingVector(bearingDeg);
+  const cx = from.x - green.centre.x;
+  const cy = from.y - green.centre.y;
+  const b = cx * dir.x + cy * dir.y;
+  const c = cx * cx + cy * cy - ringRadiusM * ringRadiusM;
+  const disc = b * b - c;
+  const reach = disc <= 0 ? 0 : -b + Math.sqrt(disc);
+  return Math.min(BRANCH_MAX_M, Math.max(BRANCH_MIN_M, reach));
+}
+
 interface ArmEmission {
   route: SiteRoute;
   bearingDeg: number;
@@ -638,7 +676,8 @@ function extendOne(
     const n = lane.points.length;
     const endDir = bearingOf(lane.points[n - 2], lane.points[n - 1]);
     const extension = truncateAtFirstCrossing(
-      runLine(lane.points[n - 1], endDir, branchLengthM(meanFrontageM), rng),
+      runLine(lane.points[n - 1], endDir,
+        streetRunM(lane.points[n - 1], endDir, green, satRadiusM), rng),
       out.filter((l) => l.id !== lane.id), green);
     if (extension.length < 2) continue;
     // Gate 5.4: an extension leaves from the lane's OLD END -- which is
@@ -704,7 +743,7 @@ function growOne(
       const lengthJitter = 0.7 + rng.float() * 0.6;
       const points = truncateAtFirstCrossing(
         runLine(start, candidate,
-          branchLengthM(meanFrontageM) * INVENTED_ARM_LENGTH_FACTOR * lengthJitter, rng),
+          streetRunM(start, candidate, green, satRadiusM) * lengthJitter, rng),
         out, green);
       // Gate 6.6: a radial that never leaves its neighbours' ground only
       // splits the same frontage in two -- see `earnsItsSpace`.
@@ -748,7 +787,10 @@ function growOne(
       // where the empty land was. One rng.int as before, wider range.
       const branchBearing = (slot.dirDeg + side * (70 + rng.int(0, 31)) + 360) % 360;
       let cls = inventedChildClass(slot.parent.type);
-      let points = runLine(slot.anchor, branchBearing, branchLengthM(meanFrontageM), rng);
+      // Gate 6.7: to the ring's edge, not one stub length -- see `streetRunM`.
+      let points = runLine(
+        slot.anchor, branchBearing, streetRunM(slot.anchor, branchBearing, green, satRadiusM), rng,
+      );
       // Loop rule first: an end passing near another lane joins it. Then ONE
       // crossing pass over the fully assembled polyline — snap tail included —
       // so no segment of the final lane crosses anything. Either cut means the
@@ -791,7 +833,7 @@ function growOne(
   // 3. Nothing new to open in this ring, so lengthen what is here -- still
   //    only streets whose end lies inside it.
   if (extendOne(out, green, meanFrontageM, growthRadiusM, rng,
-    branchLengthM(meanFrontageM), satRadiusM)) {
+    satRadiusM * 2, satRadiusM)) {
     return true;
   }
 
@@ -1169,12 +1211,16 @@ export function saturateDisc(
   const budgetM = laneBudgetFor(targetRadiusM);
   while (guard < MAX_INVENTED_LANES && laneLengthWithin(out, green, targetRadiusM) < budgetM) {
     guard++;
-    if (growOne(out, green, meanFrontageM, targetRadiusM, rng, satRadiusM)) continue;
-    // Gate 6.4: growth found nothing to do -- but "nothing to do" is
-    // measured over slots that only exist ON lanes, so an empty sector
-    // looks exactly like a full one. Check angular coverage BEFORE
-    // widening, and seed into the biggest hole if there is one.
+    // Gate 6.7: coverage comes FIRST, not last. Gate 6.4 added this check
+    // as a last resort before widening, which was enough while every street
+    // was a 24 m stub and the budget bought dozens of them. Streets that run
+    // to the ring's edge spend the same budget on far fewer lanes, so the
+    // budget can now run out while a whole sector is still empty -- measured
+    // as a 66 deg laneless sector at pop 300, over the 60 deg bar. Coverage
+    // is a hard constraint on the shape; meshing an already-covered ring is
+    // discretionary, so the constraint goes first.
     if (seedCoverageLane(out, green, meanFrontageM, satRadiusM, rng)) continue;
+    if (growOne(out, green, meanFrontageM, targetRadiusM, rng, satRadiusM)) continue;
     // Gate 6.5: and even with every bearing covered, a RADIAL tree leaves
     // widening wedges of untouched ground between its tendrils -- the
     // spider. Measure the GROUND, not the network: if anywhere in the disc
