@@ -2,9 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { Point } from '../../src/types/point.js';
 import { SeededRandom } from '../../src/utils/random.js';
 import {
-  availableFrontage, discRadiusFor, laneBudgetFor, polylineLength, saturateDisc,
+  availableFrontage, discRadiusFor, laneBudgetFor, laneLengthNeededM, polylineLength,
+  saturateDisc,
 } from '../../src/village/skeleton/lanes.js';
-import { DISC_MARGIN, VOID_SPACING_M } from '../../src/village/constants.js';
+import {
+  DISC_MARGIN, LANE_SEATING_YIELD, LANE_TILE_SPACING_M,
+} from '../../src/village/constants.js';
 import type { Green, Lane } from '../../src/village/types.js';
 
 const green: Green = {
@@ -30,10 +33,29 @@ describe('frontage arithmetic', () => {
   // and then saturated. The property below is that closed form, stated as
   // arithmetic rather than as a pinned number.
   it('sizes the disc from the house count and the plot width', () => {
-    // 60 dwellings x 14 m = 840 m of frontage = 420 m of lane (both sides),
-    // tiled at VOID_SPACING_M, in a circle, plus the margin.
-    const expected = Math.sqrt((420 * VOID_SPACING_M) / Math.PI) * DISC_MARGIN;
+    // 60 dwellings x 14 m = 840 m of frontage = 420 m of lane (both sides).
+    // GATE 6.10: that is the lane the houses STAND on, not the lane a
+    // village has to lay — only LANE_SEATING_YIELD of what it cuts is ever
+    // seated — so the road needed is that over the yield, tiled at
+    // LANE_TILE_SPACING_M.
+    const needed = 420 / LANE_SEATING_YIELD;
+    expect(laneLengthNeededM(60, 14)).toBeCloseTo(needed, 5);
+    const expected = Math.sqrt((needed * LANE_TILE_SPACING_M) / Math.PI) * DISC_MARGIN;
     expect(discRadiusFor(60, 14)).toBeCloseTo(expected, 5);
+  });
+
+  it('sizes the radius by the ratio of the two measured terms', () => {
+    // The radius depends on LANE_TILE_SPACING_M / LANE_SEATING_YIELD and on
+    // nothing else the split introduced; the BUDGET depends on the spacing
+    // alone. That is what makes them two calibrations rather than one, and
+    // it is the property to hold on to when either is re-measured: gate 6.9
+    // had this ratio at 26 (spacing 26, yield implicitly 1.0), and gate 6.10
+    // measures it at 29 against a fabric that now contains arcs.
+    const ratio = LANE_TILE_SPACING_M / LANE_SEATING_YIELD;
+    expect(discRadiusFor(60, 14))
+      .toBeCloseTo(Math.sqrt((420 * ratio) / Math.PI) * DISC_MARGIN, 5);
+    expect(ratio).toBeGreaterThan(20);
+    expect(ratio).toBeLessThan(40);
   });
 
   it('grows the disc as the square root of the house count', () => {
@@ -41,10 +63,17 @@ describe('frontage arithmetic', () => {
     expect(discRadiusFor(240, 14) / discRadiusFor(60, 14)).toBeCloseTo(2, 5);
   });
 
-  it('reads its own lane budget back out of the radius, at one density', () => {
-    // laneBudgetFor is discRadiusFor inverted: the lane a disc of that
-    // radius holds at VOID_SPACING_M. Round-trip them.
-    expect(laneBudgetFor(discRadiusFor(60, 14))).toBeCloseTo(420, 5);
+  it('reads the lane the CENSUS needs back out of the radius', () => {
+    // GATE 6.10, and this is the premise gate 6.9 had wrong. The round-trip
+    // used to land on 420 m — the frontage the houses stand on — so growth
+    // bought half the road the census needs, stopped early, and the
+    // escalation ladder widened the disc purely to buy budget (+42% at pop
+    // 300, +48% at pop 900: the disc was a cap in name only). The budget a
+    // disc affords is now the lane its census actually has to lay.
+    expect(laneBudgetFor(discRadiusFor(60, 14)))
+      .toBeCloseTo(laneLengthNeededM(60, 14), 5);
+    expect(laneBudgetFor(discRadiusFor(60, 14)))
+      .toBeCloseTo(420 / LANE_SEATING_YIELD, 5);
   });
 });
 

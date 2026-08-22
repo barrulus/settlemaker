@@ -13,7 +13,7 @@ import {
   ARM_LOT_RADIUS_SHARE, CONNECT_MAX_M, CONNECT_MIN_M, HAMLET_RIBBON_POP, LANE_CURVE_MAX_M,
   LOOP_SNAP_M, MAX_INVENTED_LANES, MIN_ARM_SEPARATION_DEG, SATURATION_RING_START_M,
   SATURATION_RING_STEP_M, SECTOR_COVERAGE_DEG, SECTOR_SAMPLE_DEG,
-  VOID_SCAN_STEP_M, VOID_SPACING_M,
+  VOID_SCAN_STEP_M, VOID_SPACING_M, LANE_SEATING_YIELD, LANE_TILE_SPACING_M,
 } from '../constants.js';
 import {
   armLaneId, branchLaneId, inventedLaneId,
@@ -418,8 +418,21 @@ export function availableFrontage(
  * exactly the round-to-round feedback this removes.
  */
 export function discRadiusFor(dwellings: number, meanLotFrontageM: number): number {
-  const laneLengthM = (Math.max(1, dwellings) * meanLotFrontageM) / 2;
-  return Math.sqrt((laneLengthM * VOID_SPACING_M) / Math.PI) * DISC_MARGIN;
+  return Math.sqrt((laneLengthNeededM(dwellings, meanLotFrontageM)
+    * LANE_TILE_SPACING_M) / Math.PI) * DISC_MARGIN;
+}
+
+/**
+ * GATE 6.10: how much LANE a census needs, yield included.
+ *
+ * `dwellings x frontage / 2` is the frontage the houses stand on. It is not
+ * the road that has to be laid to supply it, because only
+ * LANE_SEATING_YIELD of what a village cuts is ever seated -- see that
+ * constant. Gate 6.9's budget omitted the term, bought half the road, and
+ * the escalation ladder made up the difference by widening the disc.
+ */
+export function laneLengthNeededM(dwellings: number, meanLotFrontageM: number): number {
+  return (Math.max(1, dwellings) * meanLotFrontageM) / (2 * LANE_SEATING_YIELD);
 }
 
 /**
@@ -429,7 +442,7 @@ export function discRadiusFor(dwellings: number, meanLotFrontageM: number): numb
  * ever finer. Inverse of `discRadiusFor` by construction.
  */
 export function laneBudgetFor(radiusM: number): number {
-  return (Math.PI * radiusM * radiusM) / (VOID_SPACING_M * DISC_MARGIN * DISC_MARGIN);
+  return (Math.PI * radiusM * radiusM) / (LANE_TILE_SPACING_M * DISC_MARGIN * DISC_MARGIN);
 }
 
 /** Lane length inside `radiusM` of the green, segment by segment. */

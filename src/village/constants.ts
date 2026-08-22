@@ -167,6 +167,7 @@ export const SECTOR_COVERAGE_DEG = 50;
  * coarse enough that one stray lane point does not mask one. */
 export const SECTOR_SAMPLE_DEG = 2;
 
+
 /**
  * Gate 6.5, VOID FILLING -- the fix for the spider.
  *
@@ -259,6 +260,43 @@ export const JUNCTION_CLEAR_M = 6;
  * green's own footprint mean a disc cannot be tiled to the last metre.
  */
 export const DISC_MARGIN = 1.1;
+
+/**
+ * GATE 6.10 -- the measured share of CUT frontage that ends up under a
+ * house, and the tiling spacing that goes with it.
+ *
+ * The closed form above assumed every metre of cut frontage seats a
+ * dwelling. It does not: a junction mouth sterilises both lanes' claims,
+ * two facing strips fight over the same ground, and §5.4 resolution drops
+ * one of each pair. Measured over five in-band fixtures at gate 6.9, 48-55%
+ * of the lots a village cuts are seated -- call it half.
+ *
+ * The consequence was NOT a wrong radius. Gate 6.9 measured the achieved
+ * fabric radius at +0 to +6% of the closed form, which is as good a
+ * prediction as this engine has. What was wrong was the LANE BUDGET read
+ * off the same form: `laneBudgetFor` bought only half the road the census
+ * needs, growth stopped early, the census went unhoused, and the escalation
+ * ladder widened the disc purely to buy budget -- +42% at pop 300, +48% at
+ * pop 900. The disc was a cap in name only.
+ *
+ * So the one number is split into the two it was always doing the work of:
+ *
+ *   laneLength = dwellings x frontage / (2 x LANE_SEATING_YIELD)
+ *   area       = laneLength x LANE_TILE_SPACING_M
+ *   R          = sqrt(area / PI) x DISC_MARGIN
+ *
+ * `LANE_TILE_SPACING_M` is the spacing lanes ACTUALLY end up at once the
+ * fabric is meshed -- well under VOID_SPACING_M, which is a MAXIMUM
+ * (nowhere further than this from a lane), never a mean. LANE_TILE_SPACING_M
+ * x (1 / LANE_SEATING_YIELD) reproduces the old VOID_SPACING_M exactly, so
+ * `discRadiusFor` returns what it returned at gate 6.9 to the metre and the
+ * only thing that moves is the budget, which doubles. That is the whole
+ * correction, and it is why the disc becomes a real cap.
+ */
+export const LANE_SEATING_YIELD = 0.4;
+/** See LANE_SEATING_YIELD: VOID_SPACING_M x LANE_SEATING_YIELD. */
+export const LANE_TILE_SPACING_M = 11.6;
+
 /** Round-0 estimate of mean lot frontage as a multiple of f0, before the
  * loop has cut real lots to measure. The gradient tops out at ~2x f0, so
  * the mean sits well under the old 1.8. */
