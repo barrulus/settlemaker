@@ -8,11 +8,11 @@ import {
 } from '../geometry.js';
 import {
   BRANCH_LOTS_TARGET, BRANCH_MAX_M, BRANCH_MIN_M, BRANCH_SPACING_M, DISC_MARGIN,
-  GREEN_ARM_MAX, GREEN_ARM_MIN, GREEN_ARM_SPACING_M, GREEN_UNDERLAP_RATIO,
+  GREEN_UNDERLAP_RATIO, RIB_COUNT_MAX, RIB_COUNT_MIN, RIB_SPACING_M, SLOT_PITCH_MIN_M,
   INVENTED_ARM_LENGTH_FACTOR, JUNCTION_CLEAR_M, LANE_MIN_SPACING_M, LANE_SAMPLE_STEP_M,
   ARM_LOT_RADIUS_SHARE, CONNECT_MAX_M, CONNECT_MIN_M, HAMLET_RIBBON_POP, LANE_CURVE_MAX_M,
   LOOP_SNAP_M, MAX_INVENTED_LANES, MIN_ARM_SEPARATION_DEG, SATURATION_RING_START_M,
-  SATURATION_RING_STEP_M, SECTOR_COVERAGE_DEG, SECTOR_SAMPLE_DEG,
+  SATURATION_RING_STEP_M, SECTOR_SAMPLE_DEG,
   VOID_SCAN_STEP_M, VOID_SPACING_M, LANE_SEATING_YIELD, LANE_TILE_SPACING_M,
   ARC_MAX_SWEEP_DEG, ARC_NEIGHBOURHOOD_M, ARC_RADIAL_TOL_DEG, LANE_PARALLEL_TOL_DEG,
 } from '../constants.js';
@@ -266,16 +266,59 @@ function isGreenAttached(lane: Lane): boolean {
 }
 
 /**
- * How many lanes the green can host, derived from the green itself: one
- * per GREEN_ARM_SPACING_M of circumference, clamped to [GREEN_ARM_MIN,
- * GREEN_ARM_MAX] — "never more than a handful". A crossroads green whose
- * FMG routes alone exceed the cap keeps them all (FMG arms always join);
- * the cap only limits what the village may ADD.
+ * GATE 6.11: HOW MANY RIBS A DISC WANTS — one number, used by both rules
+ * that were quietly deciding it.
+ *
+ * The rib count used to be settled twice and never on purpose. `greenArmCap`
+ * derived it from the GREEN's own circumference (one per 30 m, capped at 4),
+ * which is a fact about the turf and says nothing about the village; and the
+ * coverage rule derived it from a flat 50 deg threshold, which forces about
+ * eight radials whatever the disc's size. Eight is right for a pop-900 disc
+ * and absurd for a pop-300 one: measured at gate 6.10, eight ribs converging
+ * inside a 51 m disc spend the whole capped lane budget, leave wedges too
+ * narrow for an arc to cross with lots on both sides, and add sixteen
+ * junction mouths — which is the whole of that gate's converging-claim
+ * regression.
+ *
+ * So: one rib per RIB_SPACING_M of circumference AT MID-RADIUS, the radius
+ * where ribs sit as far apart as they will average, clamped to
+ * [RIB_COUNT_MIN, RIB_COUNT_MAX]. A 51 m disc asks for three, an 87 m disc
+ * for five.
+ *
+ * A crossroads green whose FMG routes alone exceed the count keeps them all
+ * (FMG arms always join); the count only limits what the village may ADD.
  */
-function greenArmCap(green: Green): number {
-  const circumference = Math.PI * green.diameter;
-  return Math.min(GREEN_ARM_MAX,
-    Math.max(GREEN_ARM_MIN, Math.round(circumference / GREEN_ARM_SPACING_M)));
+export function ribCountFor(radiusM: number): number {
+  const midCircumference = Math.PI * Math.max(0, radiusM);
+  return Math.min(RIB_COUNT_MAX,
+    Math.max(RIB_COUNT_MIN, Math.round(midCircumference / RIB_SPACING_M)));
+}
+
+/**
+ * GATE 6.11: the coverage threshold, derived from the same count. A disc
+ * that wants three ribs is covered when no sector wider than 120 deg is
+ * empty — and it will not stay that way, because an ARC sweeping across a
+ * sector serves it too (see `angularCoverage`), so the fabric ends up with
+ * a few ribs and a ring rather than eight ribs and nothing.
+ */
+export function coverageThresholdDeg(radiusM: number): number {
+  return 360 / ribCountFor(radiusM);
+}
+
+/**
+ * GATE 6.11: the branch-slot pitch, likewise scaled to the disc.
+ *
+ * A flat BRANCH_SPACING_M (24 m) gives a pop-300 rib — which runs from the
+ * green's rim at ~8 m out to ~51 m — EXACTLY ONE usable slot ring, at r=28,
+ * and every arc such a village could ever offer had to start there, packed
+ * between converging ribs. Gate 6.10's concern 3. A rib now always offers at
+ * least three slots along its reach, so a small disc gets two or more slot
+ * rings; BRANCH_SPACING_M survives as the MAXIMUM, which is what it has
+ * always really been (the pitch a big village settles at).
+ */
+function slotPitchFor(green: Green, radiusM: number): number {
+  const reach = Math.max(0, radiusM - greenDrawnRadius(green));
+  return Math.min(BRANCH_SPACING_M, Math.max(SLOT_PITCH_MIN_M, reach / 3));
 }
 
 /**
@@ -472,26 +515,26 @@ interface BranchSlot {
 
 /**
  * Every lane — arm, street, branch — offers an attach point every
- * BRANCH_SPACING_M along it, and the nearest-the-green free slot is taken
- * first. This is the heart of the cluster rework: the old rule branched
+ * `slotPitchFor` metres along it, and the nearest-the-green free slot is
+ * taken first. This is the heart of the cluster rework: the old rule branched
  * once, far out, off the longest lane, and produced a starburst; slots
  * make branches branch again, near the centre, until the wedges fill.
  * A slot is occupied if any existing lane already starts nearby.
  */
 function branchSlots(
-  out: Lane[], green: Green, growthRadiusM: number,
+  out: Lane[], green: Green, growthRadiusM: number, pitch: number,
 ): BranchSlot[] {
   const slots: BranchSlot[] = [];
   for (const parent of out) {
     const acc = arcLengths(parent.points);
     const total = acc[acc.length - 1];
-    if (total < BRANCH_SPACING_M * 1.25) continue;
+    if (total < pitch * 1.25) continue;
     // Gate 6.2: one pitch everywhere -- the whole fabric is mesh now.
-    let s = BRANCH_SPACING_M;
-    while (s <= total - BRANCH_SPACING_M * 0.5) {
+    // Gate 6.11: and that one pitch is scaled to the disc, not fixed.
+    let s = pitch;
+    while (s <= total - pitch * 0.5) {
       const { p, dirDeg } = sampleAt(parent.points, acc, s);
       const distToGreen = dist(p, green.centre);
-      const pitch = BRANCH_SPACING_M;
       // Gate 3: "sprawl should be clustered around the green" — a slot
       // outside the growth circle never spawns a branch, so a long FMG
       // road cannot sprout satellite webs half a map away.
@@ -543,9 +586,17 @@ function truncateAtFirstCrossing(
   // starting near some unrelated lane paint straight over it. Only two
   // exemptions remain, each a genuine junction rather than a crossing:
   //  - the branch's own PARENT, within JUNCTION_CLEAR_M of the start
-  //    (that is the junction the branch exists to make);
-  //  - anything under the green's turf, where the radial streets all share
-  //    the painted-over ground and no crossing is ever visible.
+  //    (that is the junction the branch exists to make).
+  //
+  // GATE 6.11 REMOVED THE SECOND EXEMPTION. It forgave any crossing within
+  // `green.diameter / 2` of the centre, on the grounds that the radials all
+  // share the painted-over ground there and no crossing is visible. Two
+  // things were wrong with it. The turf is DRAWN at GREEN_JOIN_RATIO of the
+  // nominal radius, so the exemption reached past the paint; and once arcs
+  // and rungs exist, lanes that are not radials pass through that annulus --
+  // measured, two visible crossings at pop 600 seed 2, at r = 11.5 and 12.9
+  // against a painted radius of 10.7. The radials do not need the exemption
+  // anyway: they leave the centre at different bearings and diverge.
   const start = points[0];
   for (let i = 1; i < points.length; i++) {
     let best: { q: Point; t: number } | null = null;
@@ -579,6 +630,17 @@ function truncateAtFirstCrossing(
  * and more than one intersection with it means this is not a junction, it
  * is a crossing. The caller rejects the slot and tries the next.
  */
+/** Do these two polylines properly cross anywhere? Endpoint touches are
+ * junctions and `segmentIntersection` already excludes them. */
+function crossesLanePoints(a: Point[], b: Point[]): boolean {
+  for (let i = 1; i < a.length; i++) {
+    for (let j = 1; j < b.length; j++) {
+      if (segmentIntersection(a[i - 1], a[i], b[j - 1], b[j])) return true;
+    }
+  }
+  return false;
+}
+
 function crossesParentTwice(points: Point[], parent: Lane | undefined): boolean {
   if (!parent) return false;
   let hits = 0;
@@ -642,17 +704,31 @@ function foldedGap(a: number, b: number): number {
 }
 
 /**
- * GATE 6.10: the same rule, but only lanes running ALONGSIDE the candidate
- * count against it -- see LANE_PARALLEL_TOL_DEG.
+ * GATE 6.10: only lanes running ALONGSIDE the candidate count against it
+ * -- see LANE_PARALLEL_TOL_DEG. The clearance this guards is a LOT-STRIP
+ * clearance: two lanes closer than the spacing and pointing the same way
+ * have facing rows that fight, and one of every pair dies in §5.4
+ * resolution. Two lanes that MEET at an angle share no strip except at the
+ * mouth. Measuring against every lane regardless of heading made the rule
+ * forbid, by construction, every street whose whole purpose is to tie two
+ * others together -- arcs, cross-links, block ends.
  *
- * The clearance `earnsItsSpace` guards is a LOT-STRIP clearance: two lanes
- * closer than LANE_MIN_SPACING_M and pointing the same way have facing rows
- * that fight, and one of every pair dies in §5.4 resolution. Two lanes that
- * MEET at an angle share no strip except at the mouth. Measuring against
- * every lane regardless of heading made the rule forbid, by construction,
- * every street whose whole purpose is to tie two others together -- arcs,
- * cross-links, block ends -- because such a street is a block's width from
- * its neighbours everywhere along it and can never "open new ground".
+ * GATE 6.11 tried and REJECTED a polar version of this floor -- ribs spaced
+ * at RIB_SPACING_M, rings at LANE_MIN_SPACING_M, blended by how
+ * circumferentially the candidate runs. It works, in the sense that it does
+ * what it says: measured, it took the converging-claim death share from
+ * 39-46% to 29-33%, because a rib is a strip neighbour not of the rib beside
+ * it but of the ring it CROSSES, and what it costs that ring is a junction
+ * mouth. It also thinned the fabric to 11-21 lanes, took land use to 58-69%,
+ * turned pop 900 into concentric onion rings with grass bands between them,
+ * and lost half the enclosed blocks. The exchange rate between claim deaths
+ * and filled ground is roughly constant across every configuration measured
+ * this gate, and the owner judges the filled ground. The experiment is
+ * preserved on branch `gate-6.11-wip` rather than described.
+ *
+ * `spacingScale` is the half of that work which SHIPPED: growth relaxes this
+ * floor as a ladder rung before the disc is allowed to widen, so a village
+ * that cannot house its census meshes tighter rather than spreading thinner.
  */
 function earnsItsSpace(
   points: Point[], out: Lane[], parentId?: string, alongsideOnly = false,
@@ -680,7 +756,8 @@ function earnsItsSpace(
   // The MEDIAN, not the best point: a lane that hugs a neighbour for most of
   // its length and only escapes at the tip splits one street's frontage in
   // two instead of opening new ground, and every lot along the shared
-  // stretch dies in resolution.
+  // stretch dies in resolution. The floor is taken at the median too, so a
+  // lane that is a rib for half its length is judged as one.
   gaps.sort((a, b) => a - b);
   return gaps[Math.floor(gaps.length / 2)] >= LANE_MIN_SPACING_M;
 }
@@ -758,16 +835,18 @@ function growOne(
   out: Lane[], green: Green, meanFrontageM: number, growthRadiusM: number,
   rng: SeededRandom, satRadiusM: number,
 ): boolean {
-  // 1. The green may still host a street of its own: an invented arm, up
-  //    to the circumference-derived cap, at a bearing clear of every
+  // 1. The green may still host a street of its own: an invented rib, up
+  //    to the DISC-derived rib count (gate 6.11 -- see `ribCountFor`; it
+  //    used to come off the green's own circumference, which says nothing
+  //    about the village the rib has to serve), at a bearing clear of every
   //    existing green-attached lane. Class is `local` — wagons reach the
   //    green — and it is street-length, not a road to the horizon.
-  // The cap governs what the village ADDS: only invented radials (their
+  // The count governs what the village ADDS: only invented radials (their
   // ids live in the `lane-` space, R10) count against it. Gate 4: counting
   // FMG's own arms let two incoming routes eat a cap of 3, leaving a
   // pop-900 green a single radial and a dead quadrant.
   if (out.filter((l) => isGreenAttached(l) && l.id.startsWith('lane-')).length
-      < greenArmCap(green)) {
+      < ribCountFor(growthRadiusM)) {
     const taken = out.filter(isGreenAttached).map((l) => laneBearing(green, l));
     for (let attempt = 0; attempt < 36; attempt++) {
       const candidate = Math.round(widestGapBearing(taken, rng)) % 360;
@@ -805,7 +884,8 @@ function growOne(
   // ring currently being filled are candidates. Growth reticulates there
   // until nothing more can be done, and only then does the caller widen the
   // ring. No ring is left until it is genuinely full.
-  const slots = branchSlots(out, green, growthRadiusM)
+  const slots = branchSlots(out, green, growthRadiusM,
+    slotPitchFor(green, growthRadiusM))
     .filter((sl) => sl.distToGreen <= satRadiusM);
 
   /** Try each candidate slot in order; returns true once one takes. */
@@ -860,9 +940,39 @@ function growOne(
       // crossing (or a loop snap that lands almost at once) can leave a few
       // metres of road going nowhere, which is exactly the litter the owner
       // saw. Reject it and try the next slot rather than keeping it.
+      //
+      // GATE 6.11 SPLITS THE FLOOR, and this is what turns concentric rings
+      // into blocks. A stub is a road going NOWHERE; a short run that JOINS
+      // two streets is the RUNG of a ladder, and once the fabric is rings
+      // the rungs between them are exactly `VOID_SPACING_M`-ish long — some
+      // 20 m, under BRANCH_MIN_M's 24. So no rung between two adjacent rings
+      // could EVER be built, and pop 900 came out as an onion: five or six
+      // concentric streets with grass bands between them and nothing tying
+      // them. (Gate 6.8 found the same thing about block ends and the
+      // finding was lost with that revert.) A run that ends ON another lane
+      // is floored at CONNECT_MIN_M instead; one that ends in open ground
+      // still has to be a street.
       if (points.length < 2 || polylineLength(points) < BRANCH_MIN_M) continue;
+      // GATE 6.11: a run that JOINS at both ends takes no mouth exemption.
+      // `truncateAtFirstCrossing` forgives one crossing of the parent within
+      // JUNCTION_CLEAR_M of the start -- that is the junction an ordinary
+      // branch exists to make -- and `crossesParentTwice` then allows
+      // exactly one. A rung is SHORT, so its whole length can sit inside
+      // that tolerance and it crosses its parent for free: measured as one
+      // crossing at pop 900 seed 1 the moment the rung floor let short runs
+      // through. A rung meets its lanes at its ENDS, which
+      // `segmentIntersection` excludes anyway, so for it a single
+      // registered intersection with the parent is one too many. Same
+      // reasoning, and the same rule, as gate 6.10 applied to the arc.
       if (crossesParentTwice(points, slot.parent)) continue;
       // Gate 6.6: and it must open ground the existing lanes cannot reach.
+      // GATE 6.11: a run that JOINS at both ends is judged by the same
+      // alongside-only rule an arc gets, and for the identical reason — a
+      // rung between two rings is a block's side, not a competitor for
+      // either ring's lot strip, and the direction-blind form of the rule
+      // forbids it by construction. Without this the polar floor rejects
+      // every rung and the fabric stays an onion however short a rung is
+      // allowed to be.
       if (!earnsItsSpace(points, out, slot.parent.id)) continue;
       out.push({
         id,
@@ -1259,13 +1369,7 @@ function seedArcThrough(
   if (!host) return false;
   // Not `crossesParentTwice`: an arc meets its host at an ENDPOINT, so a
   // single properly-registered intersection with it is already one too many.
-  for (let i = 1; i < points.length; i++) {
-    for (let j = 1; j < host.points.length; j++) {
-      if (segmentIntersection(points[i - 1], points[i], host.points[j - 1], host.points[j])) {
-        return false;
-      }
-    }
-  }
+  if (crossesLanePoints(points, host.points)) return false;
   // ALONGSIDE ONLY. An arc crosses the ribs it ties at nearly a right
   // angle, so it is a block's width from each of them by construction and
   // can never "open new ground" as the unconditional rule means it — which
@@ -1330,7 +1434,8 @@ function seedArcThrough(
  * slots, extensions and sector coverage are exhausted.
  */
 function seedVoidLane(
-  out: Lane[], green: Green, meanFrontageM: number, satRadiusM: number, rng: SeededRandom,
+  out: Lane[], green: Green, meanFrontageM: number, satRadiusM: number,
+  rng: SeededRandom,
 ): boolean {
   const void_ = widestVoid(out, green, satRadiusM);
   if (!void_ || void_.distance <= VOID_SPACING_M) return false;
@@ -1389,6 +1494,41 @@ function seedVoidLane(
 }
 
 /**
+ * GATE 6.11: the mean radius at which a lane runs, weighted by length --
+ * an arc's ring radius, and a rib's midpoint. Used to CONTINUE a ring:
+ * a new arc seeded at the radius of the ring already there extends it round
+ * the next sector instead of starting a second, concentric one.
+ */
+function meanRadiusOf(lane: Lane, green: Green): number {
+  let sum = 0;
+  let weight = 0;
+  for (let i = 1; i < lane.points.length; i++) {
+    const a = lane.points[i - 1];
+    const b = lane.points[i];
+    const w = dist(a, b);
+    sum += ((dist(a, green.centre) + dist(b, green.centre)) / 2) * w;
+    weight += w;
+  }
+  return weight === 0 ? dist(lane.points[0], green.centre) : sum / weight;
+}
+
+/** GATE 6.11: how far a lane runs ACROSS the radius rather than along it,
+ * length-weighted and folded to [0, 90] -- 0 is a rib, 90 is a ring. */
+function circumferentialityDeg(lane: Lane, green: Green): number {
+  let sum = 0;
+  let weight = 0;
+  for (let i = 1; i < lane.points.length; i++) {
+    const a = lane.points[i - 1];
+    const b = lane.points[i];
+    const mid = new Point((a.x + b.x) / 2, (a.y + b.y) / 2);
+    const w = dist(a, b);
+    sum += foldedGap(bearingOf(a, b), bearingOf(green.centre, mid)) * w;
+    weight += w;
+  }
+  return weight === 0 ? 0 : sum / weight;
+}
+
+/**
  * Gate 6.4: fill the biggest hole in the ring's angular coverage.
  *
  * Growth is otherwise sector-blind -- branch slots exist only ON lanes, so
@@ -1396,20 +1536,55 @@ function seedVoidLane(
  * itself full while empty. This is what the owner saw as a laneless western
  * half. Called before any ring widening; returns true if it seeded a lane.
  *
- * The seed starts at the GREEN's ring, because an uncovered sector by
- * definition has no lane anywhere along that bearing -- including next to
- * the green -- so the green's edge is both the nearest available start and
- * the one that fills the sector from the centre outward.
+ * GATE 6.11: AN ARC MAY PAY FOR COVERAGE, AND IS ASKED FIRST.
  *
- * Deliberately NOT subject to `greenArmCap`: that cap governs how the
- * green's own ring LOOKS, and a village with an empty quadrant needs a lane
- * there whatever the green already carries. See the note at GREEN_ARM_MAX.
+ * The old rule could only answer an empty sector with another RIB out of the
+ * green, so the threshold alone decided the rib count -- eight of them at a
+ * flat 50 deg, converging inside a pop-300 disc, spending the whole capped
+ * budget and adding sixteen junction mouths. But a sector is not asking for
+ * a RADIAL, it is asking to be SERVED: lots hang off both sides of a
+ * circumferential street exactly as they do off a radial one, and an arc
+ * sweeping across a sector covers every bearing in it at once.
+ *
+ * So the gap is offered to `seedArcThrough` before any rib is seeded, at a
+ * point on the gap's bisector. Candidate radii, in order:
+ *  1. the radius of any RING already near this gap -- which CONTINUES that
+ *     ring round the next sector rather than starting a concentric second
+ *     one, and is what closes the ring toward 360 deg;
+ *  2. outer to inner across the saturated ring, because wedges widen
+ *     outward, so an arc laid out there has the most room for lots on both
+ *     of its sides and the best chance of clearing its neighbours.
+ * `seedArcThrough` declines unless the fabric there is genuinely radial and
+ * the arc reaches a lane, so a village with nothing to tie still gets its
+ * rib. Where an arc takes, the rib is never seeded and never paid for.
+ *
+ * The threshold itself is now `coverageThresholdDeg(satRadiusM)` -- derived
+ * from the disc, see `ribCountFor`.
  */
 function seedCoverageLane(
-  out: Lane[], green: Green, meanFrontageM: number, satRadiusM: number, rng: SeededRandom,
+  out: Lane[], green: Green, meanFrontageM: number, satRadiusM: number,
+  rng: SeededRandom,
 ): boolean {
   const gap = widestGap(angularCoverage(out, green, satRadiusM));
-  if (gap.widthDeg <= SECTOR_COVERAGE_DEG) return false;
+  if (gap.widthDeg <= coverageThresholdDeg(satRadiusM)) return false;
+
+  // 1. Serve it circumferentially if anything is there to tie.
+  const ringRadii = out
+    .filter((l) => circumferentialityDeg(l, green) >= 60)
+    .map((l) => meanRadiusOf(l, green))
+    .filter((r) => r > greenDrawnRadius(green) && r <= satRadiusM)
+    .sort((a, b) => b - a);
+  const inner = greenDrawnRadius(green) + BRANCH_MIN_M / 2;
+  const scanned = [0.9, 0.75, 0.6, 0.45]
+    .map((f) => satRadiusM * f)
+    .filter((r) => r > inner);
+  for (const radiusM of [...ringRadii, ...scanned]) {
+    const dir = bearingVector(gap.bisectorDeg);
+    const at = new Point(
+      green.centre.x + dir.x * radiusM, green.centre.y + dir.y * radiusM,
+    );
+    if (seedArcThrough(out, green, at, undefined)) return true;
+  }
 
   const reach = Math.max(0, satRadiusM - greenDrawnRadius(green));
   if (reach < BRANCH_MIN_M) return false;

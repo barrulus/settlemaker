@@ -42,28 +42,23 @@ export const MAX_INVENTED_LANES = 60;
 // CLUSTER: a few roads at the green, then short side-lanes branching
 // early and often, branching again, threading between the houses.
 
-/** One green-attached arm per this many metres of green circumference. A
- * 22 m green earns ~3 arms, a 38 m green ~5. FMG's own routes always join
- * regardless; this only governs how many extra arms the village may add. */
-export const GREEN_ARM_SPACING_M = 30;
-export const GREEN_ARM_MIN = 2;
-/** "Never more than a handful" — the hard ceiling on INVENTED green-
- * attached lanes, beyond what FMG's routes demand. Gate 2 tightened this
- * from 5 (an even radial fan read as contrived); gate 4 raised it back to
- * 4 AND stopped counting FMG's own arms against it — the old accounting
- * let two incoming routes eat the whole cap, leaving a pop-900 green with
- * a single radial and a dead quadrant the owner circled ("the green
- * should have at least three sub roads coming off it"). Radials now also
- * aim into the widest empty gap, so they fill quadrants instead of
- * fanning evenly. */
-export const GREEN_ARM_MAX = 4;
 /*
- * NOTE (gate 6.4): this cap is an AESTHETIC rule about the green's own ring
- * -- how many radials may fan off the turf before it reads as contrived.
- * It is NOT a coverage limiter, and coverage seeding (below) deliberately
- * ignores it: a village with an empty western half needs a lane there
- * whatever the green already carries. Conflating the two is what let the
- * cap silently cause the hole it had no business governing.
+ * GATE 6.11 RETIRED GREEN_ARM_SPACING_M, GREEN_ARM_MIN and GREEN_ARM_MAX.
+ *
+ * They sized the green's radial fan from the GREEN's own circumference --
+ * one arm per 30 m of turf edge, capped at four -- which is a fact about the
+ * turf and says nothing about the village those radials have to serve. The
+ * rib count is now derived from the DISC by `ribCountFor` (see RIB_SPACING_M
+ * below), and RIB_COUNT_MIN / RIB_COUNT_MAX carry the old floor and "never
+ * more than a handful" ceiling forward to the thing they were always really
+ * about.
+ *
+ * The gate-6.4 note that used to live here -- that the green's cap is an
+ * aesthetic rule and NOT a coverage limiter, so coverage seeding ignores it
+ * -- is retired with the constants. Gate 6.11 makes the opposite true on
+ * purpose: one derived rib count governs both, because a village that wants
+ * three ribs wants three ribs however the question is asked, and letting
+ * coverage overrule it is what produced the eight-rib pop-300 starfish.
  */
 
 /**
@@ -78,6 +73,20 @@ export const GREEN_ARM_MAX = 4;
  * left are the FMG arms, which are drawn rather than grown.
  */
 export const BRANCH_SPACING_M = 24;
+/**
+ * GATE 6.11: BRANCH_SPACING_M is the MAXIMUM pitch, and `slotPitchFor`
+ * scales it down for a small disc. A flat 24 m gave a pop-300 rib -- which
+ * runs from the green's rim at ~8 m out to ~51 m -- EXACTLY ONE usable slot
+ * ring, at r=28, so every arc that village could offer had to start there,
+ * cramped between converging ribs (gate 6.10's concern 3). A rib now always
+ * offers at least three slots along its reach.
+ *
+ * This floor is a lane width plus two shallow build bands: below it two
+ * junction mouths on the same lane overlap and neither side can seat a
+ * house between them, which is meshing that houses nobody.
+ */
+export const SLOT_PITCH_MIN_M = 14;
+
 /**
  * Lots a new street is sized to carry across its two sides:
  * length = (target/2) x mean frontage, clamped to [BRANCH_MIN_M,
@@ -158,11 +167,38 @@ export const SATURATION_RING_STEP_M = 20;
  * empty, and the radius widened past a hole it could not see.
  *
  * So before any widening, the bearings inside the ring are swept: a
- * contiguous sector wider than this with no lane point in it gets a lane
- * SEEDED toward its bisector. Only when coverage is satisfied AND no slot
- * remains may the ring widen.
+ * contiguous sector wider than the threshold with no lane point in it gets
+ * a lane SEEDED toward its bisector. Only when coverage is satisfied AND no
+ * slot remains may the ring widen.
+ *
+ * GATE 6.11 RE-EXPRESSES THE THRESHOLD. It was a flat 50 deg, which forces
+ * roughly 360/50 = 8 RADIALS into a disc whatever its size -- and eight ribs
+ * is right for a pop-900 disc and absurd for a pop-300 one, where they
+ * converge to a spider, eat the whole capped lane budget before anything
+ * else can grow, and leave no room between them for the arcs that would tie
+ * them together. Measured at gate 6.10, that single constant is the root of
+ * all three of that gate's concerns: the bimodal pop-300 land use, the
+ * cramped arcs, and the converging-claim regression (every rib adds two
+ * junction mouths, and a junction mouth is where claims die).
+ *
+ * The threshold is now DERIVED: `ribCountFor` puts one rib every
+ * RIB_SPACING_M around the circumference at MID-RADIUS -- the radius where
+ * ribs are, on average, as far apart as they will ever be judged -- and the
+ * coverage angle is 360 / that count. A 51 m disc asks for three ribs, an
+ * 87 m disc for five.
+ *
+ * RIB_SPACING_M is two void spacings plus slack: two ribs that far apart
+ * leave a wedge an ARC can cross with lots on both of its own sides, which
+ * is precisely what a narrower spacing denies.
  */
-export const SECTOR_COVERAGE_DEG = 50;
+export const RIB_SPACING_M = 40;
+/** Floor and ceiling on the derived rib count. Two is the fewest that reads
+ * as a crossroads rather than a ribbon; the ceiling is GREEN_ARM_MAX's
+ * "never more than a handful", now applied to the DISC rather than to the
+ * green's own circumference, because it was always the disc the rule was
+ * really about. */
+export const RIB_COUNT_MIN = 2;
+export const RIB_COUNT_MAX = 6;
 /** Bearing bucket width for that sweep. Fine enough to locate a hole,
  * coarse enough that one stray lane point does not mask one. */
 export const SECTOR_SAMPLE_DEG = 2;
