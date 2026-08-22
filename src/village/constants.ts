@@ -438,26 +438,38 @@ export const VEG_CELL_M = 9;
  * the field band for the same reason.
  */
 export const VEG_BAND_DEPTH_M = 70;
-/** §7.3 "thinning outward from the fabric": the first share of the scatter
- * band beyond the inner edge holds full VEG_BASE_DENSITY (the peak sits
- * just OUTSIDE the fields, where a village's scrub actually crowds), and
- * only the remainder thins linearly to nothing at the rim. */
-export const VEG_RAMP_PEAK_SHARE = 0.25;
 /**
- * Density ceiling: the survival chance a cell rolls against on the ramp's
- * peak plateau (the densest ring), before any per-cell reduction.
- *
- * Fix wave (2026-08-21, C2): retuned 0.55 -> 0.10. 0.55 was calibrated
- * while the ramp was UNREACHABLE, so it only ever governed the flat infill
- * inside the fabric (0.55 x VEG_INFILL_SHARE). With the ramp live it
- * governs a genuinely large annulus as well, and 0.55 there put ~3400 trees
- * on a pop-900 village -- a closed forest, not a scatter.
+ * Gate 5 (2026-08-22) flips where the trees are. Owner's reference map has
+ * GROVES filling the leftover ground between the lanes inside the village,
+ * and only light scatter out in the country; the previous profile did the
+ * opposite -- a thin interior infill and a dense fringe that read as a
+ * forest ring. VEG_BASE_DENSITY, VEG_INFILL_SHARE and VEG_RAMP_PEAK_SHARE
+ * are RETIRED and replaced by two plain, absolute densities.
  */
-export const VEG_BASE_DENSITY = 0.10;
-/** Density share allowed on LEFTOVER wedge ground -- inside the fabric
- * edge, but not claimed by any lot, croft, field strip, or lane corridor
- * -- where §7.3 wants the odd clump of trees to land. */
-export const VEG_INFILL_SHARE = 0.35;
+/**
+ * Survival chance for a grid cell INSIDE the fabric edge -- grove country.
+ * The rejection tests (lane corridors, lot claims, croft claims, field
+ * blocks, the green, water) are what confine this to genuinely unclaimed
+ * ground, so a high number here fills the gaps between houses rather than
+ * burying them.
+ */
+export const VEG_INTERIOR_DENSITY = 0.28;
+/**
+ * Survival chance just OUTSIDE the fabric edge, thinning linearly to 0 at
+ * the rim. Deliberately an order below the interior: the ring belt and the
+ * country beyond get specks, not a forest fringe, and the field blocks must
+ * not be crowded out (trees avoid them outright as well).
+ */
+export const VEG_OUTER_DENSITY = 0.035;
+/**
+ * Clump neighbours drawn per accepted tree, as [min, maxExclusive] for
+ * `rng.int`. Interior clumps are bigger, which is what turns the interior
+ * scatter into GROVES rather than lone trees; outside they stay small.
+ * Exactly one rng.int is drawn per accepted tree either way, so the draw
+ * budget does not depend on which side of the edge the tree landed.
+ */
+export const VEG_CLUMP_INTERIOR = [2, 6] as const;
+export const VEG_CLUMP_OUTER = [0, 3] as const;
 /** Clearance added on top of a lane's own half-width for the vegetation
  * rejection test (flat across every lane class, unlike LANE_SETBACK_M --
  * a tree that close to any lane reads as blocking it). */

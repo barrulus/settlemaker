@@ -6,8 +6,9 @@ import {
 } from '../geometry.js';
 import { lotObb, pointInObb } from '../parcels/overlap.js';
 import {
-  CLUMP_RADIUS_M, SHOREFRONT_BAND_M, VEG_BASE_DENSITY, VEG_CELL_M,
-  VEG_BAND_DEPTH_M, VEG_GLYPHS, VEG_INFILL_SHARE, VEG_LANE_CLEAR_M, VEG_RAMP_PEAK_SHARE,
+  CLUMP_RADIUS_M, SHOREFRONT_BAND_M, VEG_BAND_DEPTH_M, VEG_CELL_M,
+  VEG_CLUMP_INTERIOR, VEG_CLUMP_OUTER, VEG_GLYPHS,
+  VEG_INTERIOR_DENSITY, VEG_LANE_CLEAR_M, VEG_OUTER_DENSITY,
   VEG_SCALE_MAX, VEG_SCALE_MIN,
 } from '../constants.js';
 import type {
@@ -73,30 +74,25 @@ function isRejected(
 }
 
 /**
- * Density(d): 0 beyond `rim`; a flat "leftover ground" share inside
- * `innerEdge` (VEG_INFILL_SHARE -- the rejection tests above are what
- * actually confine this to genuinely unclaimed ground); and, per §7.3's
- * "thinning outward from the fabric", a full-strength PLATEAU just outside
- * `innerEdge` (the first VEG_RAMP_PEAK_SHARE of the band, where a real
- * village's scrub and copses crowd the field backs) that then thins
- * linearly to 0 at `rim`.
+ * Density(d): VEG_INTERIOR_DENSITY inside `innerEdge` -- grove country, the
+ * leftover ground between lanes and claims -- then VEG_OUTER_DENSITY just
+ * outside it, thinning linearly to 0 at `rim`.
  *
- * Fix wave (2026-08-21, C2): `rim` used to be `builtRadius x
- * VEG_RADIUS_FACTOR`, which -- once fields were re-keyed off the MEASURED
- * fabric -- was always BELOW `innerEdge`, so this function collapsed to its
- * first line and the whole ramp was dead code: not one tree could land
- * beyond the field band. `rim` is now keyed off `innerEdge` itself, as a
- * fixed depth beyond it (W1) rather than a multiple of it.
+ * Gate 5 (2026-08-22) flipped the emphasis. The old profile put a thin
+ * infill inside and a full-strength plateau outside, which rendered as a
+ * sparse village inside a forest fringe. The owner's reference is the
+ * reverse: groves crowding the gaps between the houses, and only specks of
+ * scatter out in the country beyond the field ring. The rejection tests
+ * above -- lanes, lot claims, croft claims, field blocks, the green, water
+ * -- are what keep the interior density confined to genuinely open ground,
+ * so a high number here fills the gaps rather than burying the fabric.
  */
 function densityAt(d: number, innerEdge: number, rim: number): number {
-  if (d < innerEdge) return VEG_BASE_DENSITY * VEG_INFILL_SHARE;
+  if (d < innerEdge) return VEG_INTERIOR_DENSITY;
   if (!(rim > innerEdge)) return 0;
   if (d > rim) return 0;
-  const band = rim - innerEdge;
-  const peakEnd = innerEdge + band * VEG_RAMP_PEAK_SHARE;
-  if (d <= peakEnd) return VEG_BASE_DENSITY;
-  const t = (d - peakEnd) / (rim - peakEnd);
-  return VEG_BASE_DENSITY * Math.max(0, 1 - t);
+  const t = (d - innerEdge) / (rim - innerEdge);
+  return VEG_OUTER_DENSITY * Math.max(0, 1 - t);
 }
 
 function pickGlyph(biome: string, rng: SeededRandom): string {
@@ -170,7 +166,13 @@ export function buildVegetation(
         id, glyph, position, scale,
       });
 
-      const clumpCount = rng.int(0, 3);
+      // Interior clumps are bigger -- that is what makes a GROVE rather
+      // than a lone tree. Exactly one rng.int is drawn either way, so the
+      // draw budget never depends on which side of the edge this landed.
+      const [clumpMin, clumpMaxExcl] = dist(position, green.centre) < innerEdgeM
+        ? VEG_CLUMP_INTERIOR
+        : VEG_CLUMP_OUTER;
+      const clumpCount = rng.int(clumpMin, clumpMaxExcl);
       for (let j = 1; j <= clumpCount; j++) {
         // r is NOT scaled by sqrt(rng.float()), so this is NOT uniform in
         // the disc -- it is deliberately biased toward the parent, which is

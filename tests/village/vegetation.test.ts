@@ -126,8 +126,9 @@ describe('buildVegetation', () => {
 
   it('density falls with distance from the fabric edge (binned counts, generous tolerance)', () => {
     // No lanes/fields: fabric edge (innerEdge) is passed directly, scatter
-    // rim == innerEdge + VEG_BAND_DEPTH_M. §7.3: densest just outside the
-    // fabric edge, thinning to the rim -- so the half of the scatter band
+    // rim == innerEdge + VEG_BAND_DEPTH_M. Outside the fabric edge the
+    // profile thins linearly to nothing at the rim (gate 5 lowered the
+    // level, but the slope is unchanged), so the half of the scatter band
     // closer to the fabric edge should carry noticeably more trees than
     // the half closer to the rim.
     const innerEdge = 60;
@@ -233,6 +234,42 @@ describe('vegetation geometric invariants (real village fixtures)', () => {
     const m = generateVillage(bare, 1);
     expect(Array.isArray(m.vegetation)).toBe(true);
   });
+
+  // Gate 5 regression net (2026-08-22): the emphasis is FLIPPED. The owner's
+  // reference has groves crowding the leftover ground between the lanes
+  // INSIDE the village and only specks out in the country; the previous
+  // profile did the reverse and rendered as a sparse village inside a
+  // forest fringe. Density is compared per unit of area, not by raw count,
+  // because the outer band is the larger region -- on the pre-flip
+  // constants this ratio is well below 1.
+  it('scatters far denser INSIDE the fabric than outside it (grove country)', () => {
+    const popInput = (population: number): AzgaarBurgInput => ({
+      name: 'Groves', population, port: false, citadel: false, walls: false,
+      plaza: false, temple: false, shanty: false, capital: false,
+      roadBearings: [{ bearing_deg: 225, kind: 'road' }],
+    });
+    for (const population of [300, 900]) {
+      const m = generateVillage(popInput(population), 1);
+      // The fields' own outer edge is the boundary the profile switches at.
+      let edge = 0;
+      for (const b of m.fields) {
+        for (const p of b.polygon) edge = Math.max(edge, dist(p, m.green.centre));
+      }
+      expect(edge).toBeGreaterThan(0);
+      const rim = edge + VEG_BAND_DEPTH_M;
+      let inside = 0;
+      let outside = 0;
+      for (const t of m.vegetation) {
+        const d = dist(t.position, m.green.centre);
+        if (d < edge) inside += 1;
+        else if (d <= rim) outside += 1;
+      }
+      const insideArea = Math.PI * edge * edge;
+      const outsideArea = Math.PI * (rim * rim - edge * edge);
+      expect(inside).toBeGreaterThan(0);
+      expect(inside / insideArea).toBeGreaterThan(3 * (outside / outsideArea));
+    }
+  }, 20000);
 
   // Fix wave regression net (2026-08-21, I1a): the previous net asserted
   // only ABSENCE -- no tree on a claim -- which an empty scatter satisfies
