@@ -237,6 +237,30 @@ for (const [pop, seed] of FIXTURES) {
     return { index: frac / (2 * r - r * r), frac, span };
   };
   const conc = concOf(inners);
+  // GATE 8.3: the SHAPE-AGNOSTIC reading of the same quantity. The block
+  // above finds a parcel's inner edge by index arithmetic that only works
+  // for an annular sector emitted by `sectorPolygon` (outer arc forward,
+  // inner arc back, so index k and n-1-k share a bearing). A planar
+  // subdivision emits ordinary polygons with any vertex count, so the inner
+  // boundary is found geometrically instead: the vertex nearest the green.
+  // For an annular sector that vertex IS on the inner arc, which is why the
+  // two readings agree at gate 8.2 -- that agreement is what validates the
+  // generalisation, and it is printed as `concG` beside `conc` for exactly
+  // that reason.
+  const innersG: Array<{ u: number; deg: number }> = [];
+  for (const f of m.fields) {
+    if (f.polygon.length < 3) continue;
+    let best = f.polygon[0]; let bestD = dist2(c, best);
+    for (const p of f.polygon) {
+      const d = dist2(c, p);
+      if (d < bestD) { bestD = d; best = p; }
+    }
+    const deg = bearing(c, best);
+    const ref = ringInnerAt(deg);
+    if (ref === null) continue;
+    innersG.push({ u: bestD - ref, deg });
+  }
+  const concG = concOf(innersG);
   // INTERIOR boundaries only. The belt's own inner edge is REQUIRED to hug
   // the built edge (gate 8.1's bar, and it is what a real village does), so
   // the blocks standing on it necessarily share a radius all round the
@@ -247,6 +271,7 @@ for (const [pop, seed] of FIXTURES) {
   // line up into courses?
   const CONC_BELT_M = 16;
   const concIn = concOf(inners.filter((x) => x.u > CONC_BELT_M));
+  const concGIn = concOf(innersG.filter((x) => x.u > CONC_BELT_M));
 
   let discTot = 0; let discHit = 0; let bodyTot = 0; let bodyHit = 0;
   const step = 1;
@@ -265,6 +290,107 @@ for (const [pop, seed] of FIXTURES) {
       if (inBody) { bodyTot++; if (near) bodyHit++; }
     }
   }
+
+  // --- POLAR-NESS OF THE PARCELS THEMSELVES (gate 8.3).
+  //
+  // The concentricity index above asks whether parcel BOUNDARIES pile onto
+  // shared radii. It cannot see the defect gate 8.2 reported and refused
+  // its own bar over: that every parcel is an ANNULAR SECTOR -- both its
+  // long edges curving about the green, its short edges pointing at it --
+  // so the whole belt is drawn in polar coordinates and looks it. A ring
+  // whose courses are perfectly broken still reads as polar if every
+  // parcel is a piece of arc.
+  //
+  // Two readings, both over every edge SEGMENT of every parcel polygon,
+  // weighted by segment length:
+  //
+  //  (a) POLAR SHARE. For each segment, the angle between its direction and
+  //      the RADIAL direction at its midpoint, folded into [0, 90]. A
+  //      segment within POLAR_TOL_DEG of 0 is radial (a sector's side); one
+  //      within POLAR_TOL_DEG of 90 is tangential (a sector's arc). The
+  //      share of perimeter that is one or the other is ~1.0 for a polar
+  //      frame BY CONSTRUCTION, and 4*TOL/180 = 0.22 for edges laid at
+  //      bearings unrelated to the green.
+  //  (b) ARC SAGITTA. Vertices are merged into SIDES at corners (turn >
+  //      CORNER_DEG); for each side the maximum perpendicular deviation
+  //      from the straight chord joining its endpoints, over the chord
+  //      length. A straight-edged parcel reads 0; an arc of span t reads
+  //      about t/8 radians (0.05 for a 25-degree sector). Reported as the
+  //      length-weighted mean, and as the share of perimeter lying on sides
+  //      that bow by more than SAG_TOL of their own length.
+  //
+  // Both are validated against gate 8.2's own output -- the render its
+  // author described as "every parcel is an annular sector" -- before being
+  // trusted, which is gate 8.2's concern 2 made into procedure.
+  const POLAR_TOL_DEG = 10;
+  const CORNER_DEG = 25;
+  const SAG_TOL = 0.01;
+  let perim = 0; let polarLen = 0; let bowedLen = 0; let sagWeighted = 0;
+  for (const f of m.fields) {
+    const poly = f.polygon;
+    const n = poly.length;
+    if (n < 3) continue;
+    for (let i = 0; i < n; i++) {
+      const a = poly[i]; const b = poly[(i + 1) % n];
+      const L = dist2(a, b);
+      if (L < 1e-9) continue;
+      perim += L;
+      const mx = (a.x + b.x) / 2 - c.x; const my = (a.y + b.y) / 2 - c.y;
+      const rl = Math.hypot(mx, my);
+      if (rl < 1e-9) continue;
+      const dot = Math.abs(((b.x - a.x) * mx + (b.y - a.y) * my) / (L * rl));
+      const ang = (Math.acos(Math.min(1, dot)) * 180) / Math.PI;
+      if (ang <= POLAR_TOL_DEG || ang >= 90 - POLAR_TOL_DEG) polarLen += L;
+    }
+    // Sides: split the ring of vertices at corners.
+    const turnAt = (i: number): number => {
+      const p0 = poly[(i - 1 + n) % n]; const p1 = poly[i]; const p2 = poly[(i + 1) % n];
+      const a1 = Math.atan2(p1.y - p0.y, p1.x - p0.x);
+      const a2 = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+      let d = ((a2 - a1) * 180) / Math.PI;
+      while (d > 180) d -= 360;
+      while (d < -180) d += 360;
+      return Math.abs(d);
+    };
+    const corners: number[] = [];
+    for (let i = 0; i < n; i++) if (turnAt(i) > CORNER_DEG) corners.push(i);
+    const starts = corners.length >= 2 ? corners : [0, Math.floor(n / 2)];
+    for (let k = 0; k < starts.length; k++) {
+      const i0 = starts[k]; const i1 = starts[(k + 1) % starts.length];
+      const chain: typeof poly = [];
+      for (let i = i0; ; i = (i + 1) % n) {
+        chain.push(poly[i]);
+        if (i === i1) break;
+      }
+      if (chain.length < 2) continue;
+      const A = chain[0]; const B = chain[chain.length - 1];
+      const chord = dist2(A, B);
+      if (chord < 1e-6) continue;
+      let sag = 0;
+      for (const q of chain) {
+        const cross = Math.abs((B.x - A.x) * (A.y - q.y) - (A.x - q.x) * (B.y - A.y)) / chord;
+        sag = Math.max(sag, cross);
+      }
+      const ratio = sag / chord;
+      sagWeighted += ratio * chord;
+      if (ratio > SAG_TOL) bowedLen += chord;
+    }
+  }
+  const polarShare = perim > 0 ? polarLen / perim : NaN;
+  const sagMean = perim > 0 ? sagWeighted / perim : NaN;
+  const bowedShare = perim > 0 ? bowedLen / perim : NaN;
+
+  // --- census ground actually delivered (gate 8.2 section 5).
+  const shoelace = (poly: Array<{ x: number; y: number }>): number => {
+    let s2 = 0;
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i]; const b = poly[(i + 1) % poly.length];
+      s2 += a.x * b.y - b.x * a.y;
+    }
+    return Math.abs(s2) / 2;
+  };
+  const fieldArea = m.fields.reduce((s2, f) => s2 + shoelace(f.polygon), 0);
+  const demandM2 = pop * 150;
 
   // --- crossings
   let crossings = 0;
@@ -387,6 +513,9 @@ for (const [pop, seed] of FIXTURES) {
     `field inner ratio ${fStats.ratio.toFixed(2)} cv ${fStats.cv.toFixed(3)} (${fStats.bins}/24)`,
     `blockdepth ${depths.length ? depths[0].toFixed(0) : 'n/a'}/${median(depths).toFixed(0)}/${depths.length ? depths[depths.length - 1].toFixed(0) : 'n/a'} ratio ${depthRatio.toFixed(2)} (n=${depths.length})`,
     `conc ${conc.index.toFixed(2)} (frac ${conc.frac.toFixed(3)}, span ${conc.span.toFixed(0)}m, n=${inners.length}) interior ${concIn.index.toFixed(2)} (n=${inners.filter((x) => x.u > CONC_BELT_M).length})`,
+    `concG ${concG.index.toFixed(2)} interior ${concGIn.index.toFixed(2)} (n=${innersG.length})`,
+    `polar ${(100 * polarShare).toFixed(0)}% sag ${sagMean.toFixed(4)} bowed ${(100 * bowedShare).toFixed(0)}%`,
+    `fieldarea ${(fieldArea / 1000).toFixed(1)}k/${(demandM2 / 1000).toFixed(0)}k = ${(100 * fieldArea / demandM2).toFixed(0)}%`,
     `vegdepth ${vDepths.length ? vDepths[0].toFixed(0) : 'n/a'}/${median(vDepths).toFixed(0)}/${vDepths.length ? vDepths[vDepths.length - 1].toFixed(0) : 'n/a'} rimratio ${vStats.ratio.toFixed(2)}`,
     `landuse disc ${(100 * discHit / discTot).toFixed(0)}% body ${(100 * bodyHit / bodyTot).toFixed(0)}%`,
     `blocks ${blocks}`,
