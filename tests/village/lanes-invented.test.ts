@@ -181,6 +181,52 @@ describe('saturateDisc', () => {
     }
   });
 
+  it('does not starve invented growth when many FMG arms already crowd the budget', () => {
+    // Task 1's diagnosis: `laneLengthWithin` summed every FMG arm into the
+    // SAME budget `saturateDisc`'s growth loop spends against, so a village
+    // with several incoming routes starved growth before it invented a
+    // single street. Reproduces `hub` (Task 1 report, pop 300: 5 routes at
+    // its exact bearings 12/78/155/231/304deg, 6 arm-lanes incl. one
+    // through-echo, arms alone at 115% of the round-0 budget) at the same
+    // round-0 radius (~52 m), against one arm at the bearing set's first
+    // member, same target disc and seed -- and compares how much INVENTED
+    // (non-arm) lane each grows. Before this fix: many-arm invented is 0 m
+    // (the exact "zero blocks, starfish" symptom); one arm alone gets
+    // ~366 m.
+    const targetR = 52;
+    const armEnd = (bearingDeg: number, lengthM: number): Point => {
+      const rad = (bearingDeg * Math.PI) / 180;
+      const dir = { x: Math.sin(rad), y: -Math.cos(rad) };
+      return new Point(dir.x * lengthM, dir.y * lengthM);
+    };
+    const armAt = (id: string, bearingDeg: number): Lane =>
+      lane(id, armEnd(bearingDeg, 10), armEnd(bearingDeg, 400));
+    const bearings = [12, 78, 155, 231, 304];
+
+    const inventedLength = (out: Lane[], armIds: Set<string>) => out
+      .filter((l) => !armIds.has(l.id))
+      .reduce((sum, l) => sum + polylineLength(l.points), 0);
+
+    const singleArms = [armAt('arm-012', 12)];
+    const singleOut = grow(singleArms, green, 12, circularProfile(targetR), new SeededRandom(9));
+    const singleInvented = inventedLength(
+      singleOut, new Set(singleArms.map((l) => l.id)),
+    );
+
+    const manyArms = bearings.map((b) => armAt(`arm-${String(Math.round(b)).padStart(3, '0')}`, b));
+    const manyOut = grow(manyArms, green, 12, circularProfile(targetR), new SeededRandom(9));
+    const manyInvented = inventedLength(manyOut, new Set(manyArms.map((l) => l.id)));
+
+    // Five arms must not starve invented growth to nothing, nor to a small
+    // fraction of what one arm gets on the identical disc -- the budget is
+    // meant to be spent on ground the census needs housed, not eaten by
+    // however many routes FMG happened to draw. (Measured post-fix: ~59%
+    // of the single-arm figure -- some falloff is real, since five arms
+    // legitimately leave less clear ground than one; the bar here is
+    // "not starved to zero", not parity.)
+    expect(manyInvented).toBeGreaterThan(singleInvented * 0.4);
+  });
+
   it('GATE 8: saturates the PROFILE, not a circle', () => {
     // The property the whole gate turns on: hand growth an elongated body
     // and the lanes come out elongated the same way. Measured as the extent

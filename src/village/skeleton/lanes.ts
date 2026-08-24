@@ -526,6 +526,17 @@ export function laneBudgetFor(radiusM: number): number {
   return (Math.PI * radiusM * radiusM) / (LANE_TILE_SPACING_M * DISC_MARGIN * DISC_MARGIN);
 }
 
+/**
+ * True for a lane that IS an FMG arm itself -- not a branch or extension
+ * grown off one. Arm ids live in the `arm-` space (`armLaneId`) and never
+ * contain `/b` (`branchLaneId`'s separator); a branch off an arm keeps the
+ * `arm-` prefix as its parent id but is invented growth all the same, so it
+ * must not be exempted. Same distinction `isFmgArm` makes in `relax.ts`.
+ */
+function isFmgArm(laneId: string): boolean {
+  return laneId.startsWith('arm-') && !laneId.includes('/b');
+}
+
 /** Lane length inside the profile BODY, segment by segment (gate 8: the
  * budget is spent on ground inside the village, and the village is not a
  * circle). */
@@ -1748,8 +1759,20 @@ export function saturateDisc(
   // multiply, and a junction sterilises frontage on BOTH lanes (the claims
   // round it collide and §5.4 resolution drops them). Measured at gate 6.5,
   // that is where two thirds of every village's cut frontage went.
+  // Task 2 (2026-08-24): the budget counts only INVENTED lane -- an FMG
+  // arm never counts against it, mirroring the invented-rib cap's own
+  // distinction (`growOne`'s comment above: "the count governs what the
+  // village ADDS: only invented radials... count against it"). Without
+  // this, a village with several incoming routes spends its whole budget
+  // on arms FMG already drew before growth invents a single street (a
+  // 5-route village measured at 115% of round-0 budget spent by arms
+  // alone, an 8-route one at 172%) -- the census then starves for want of
+  // an interior mesh no matter how many arms it has. The arm length itself
+  // is unbounded by design (it is FMG's road, not ours to shorten); what
+  // must not shrink is how much the VILLAGE gets to build around it.
   const budgetM = laneBudgetFor(targetRadiusM);
-  while (guard < MAX_INVENTED_LANES && laneLengthWithin(out, green, target) < budgetM) {
+  while (guard < MAX_INVENTED_LANES
+    && laneLengthWithin(out.filter((l) => !isFmgArm(l.id)), green, target) < budgetM) {
     guard++;
     // Gate 6.7: coverage comes FIRST, not last. Gate 6.4 added this check
     // as a last resort before widening, which was enough while every street
