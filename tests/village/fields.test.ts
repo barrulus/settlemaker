@@ -7,7 +7,7 @@ import { generateVillage } from '../../src/village/village-model.js';
 import { lotObb, obbOverlap } from '../../src/village/parcels/overlap.js';
 import { closestPointOnSegment, dist, angularGap } from '../../src/village/geometry.js';
 import {
-  FIELD_BLOCK_DEPTH_MAX_M, FIELD_BLOCK_DEPTH_MIN_M, FIELD_CROPS, FIELD_MIN_BLOCK_AREA_M2,
+  FIELD_BLOCK_DEPTH_MAX_M, FIELD_DEPTH_JITTER, FIELD_BLOCK_DEPTH_MIN_M, FIELD_CROPS, FIELD_MIN_BLOCK_AREA_M2,
   GREEN_JOIN_RATIO, LANE_SETBACK_M, RING_SETBACK_M,
 } from '../../src/village/constants.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
@@ -195,8 +195,21 @@ describe('buildFields', () => {
       // arc back, so first and last points share a bearing.
       const outerR = dist(s.polygon[0], green.centre);
       const innerR = dist(s.polygon[s.polygon.length - 1], green.centre);
-      expect(outerR - innerR).toBeGreaterThanOrEqual(FIELD_BLOCK_DEPTH_MIN_M - 1e-6);
-      expect(outerR - innerR).toBeLessThanOrEqual(FIELD_BLOCK_DEPTH_MAX_M + 1e-6);
+      // GATE 8 restates the bound the jitter is measured against, and the
+      // reason is the picture: a census that asks for more depth than
+      // FIELD_BLOCK_DEPTH_MAX_M pinned EVERY block in EVERY wedge to
+      // exactly the cap, so the ring's outer edge came out a perfect
+      // circle -- the last one left once the inner edge followed the body.
+      // The depth jitter is now applied AFTER the clamp rather than inside
+      // it, so a block may sit one jitter step either side of the clamped
+      // range. The clamp still governs the SIZE of a block; what it may no
+      // longer do is make every block identical.
+      expect(outerR - innerR).toBeGreaterThanOrEqual(
+        FIELD_BLOCK_DEPTH_MIN_M * (1 - FIELD_DEPTH_JITTER) - 1e-6,
+      );
+      expect(outerR - innerR).toBeLessThanOrEqual(
+        FIELD_BLOCK_DEPTH_MAX_M * (1 + FIELD_DEPTH_JITTER) + 1e-6,
+      );
     }
   });
 

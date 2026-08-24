@@ -472,10 +472,18 @@ function buildWedgeBlocks(
     // The depth clamp still governs: jitter varies the depth WITHIN
     // [FIELD_BLOCK_DEPTH_MIN_M, FIELD_BLOCK_DEPTH_MAX_M], never through it.
     // A block below the floor is the thin strip gate 5 rejected.
+    // GATE 8: the jitter is applied AFTER the clamp, not inside it. A big
+    // census asks for more depth than FIELD_BLOCK_DEPTH_MAX_M allows, so
+    // every slot in every wedge came out at exactly the cap and the ring's
+    // OUTER edge was a perfect circle -- the one that survived making the
+    // inner edge follow the body, and the most conspicuous circle left in
+    // the picture at pop 300. The clamp still governs the SIZE of a block
+    // (a thin one is the strip gate 5 rejected, a huge one runs to the
+    // horizon); what it may not do any more is make every block identical.
     const jDepth = Math.min(
       FIELD_BLOCK_DEPTH_MAX_M,
-      Math.max(FIELD_BLOCK_DEPTH_MIN_M, (outerRadius - innerRadius) * depthMul),
-    );
+      Math.max(FIELD_BLOCK_DEPTH_MIN_M, outerRadius - innerRadius),
+    ) * depthMul;
     const outerAt = (deg: number): number => innerAt(deg) + jDepth;
     if (!(jDepth > 0)) continue;
     // The span is scaled about the slot's own mid-bearing. The skew needs
