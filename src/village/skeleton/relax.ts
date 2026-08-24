@@ -142,11 +142,104 @@ function isConnector(laneId: string): boolean {
   return laneId.endsWith('/c');
 }
 
-export function trimTails(lanes: Lane[], buildings: Building[]): Lane[] {
+// Task 5 (2026-08-24): `connectorParents` above protects only ONE closure
+// mechanism -- `connectDeadEnds`'s own `/c` lanes, added AFTER this first
+// trim already ran once. Growth itself closes loops too, earlier and far
+// more often (measured, task-5-report.md Part A): `growOne`'s rungs (a
+// branch whose far end lands on a neighbour via `loopSnap` or
+// `truncateAtFirstCrossing`, GATE 6.11's own "rung of a ladder") and
+// `seedArcThrough`'s joined arcs both build a real, crossing-free junction
+// on another lane -- but nothing marked that junction as anything other
+// than an ordinary invented lane. Two failures followed, both silent: a
+// rung earning no building of its own was DROPPED outright by the rule
+// below (same as any other empty invented lane), and even a rung that
+// survived could have its TARGET trimmed back past the exact point it
+// welded onto -- the id lives on, the junction does not. Measured directly
+// (task-5-report.md): at a failing pop-300 fixture, 4 of 12 growth-time
+// rungs were dropped outright and a further 4 of the 8 survivors had a
+// broken join, leaving zero of the fabric's real closures intact in the
+// shipped geometry despite growth having built them.
+//
+// The fix generalises the SAME protection `/c` connectors already get to
+// every growth-time join, purely from the geometry `trimTails` already has
+// -- no new field on `Lane`, nothing growth has to remember to tag. A join
+// is any point where one lane's END lands within WELD_EPS_M of ANOTHER
+// lane's polyline: exactly the weld `blockAreas` (skeleton/blocks.ts) uses
+// to trace enclosed faces in the first place, so a join this misses is a
+// join `blockAreas` would not have counted either, and a join this keeps
+// is one `blockAreas` can still trace after trimming.
+const WELD_EPS_M = 1.5;
+
+/**
+ * For every lane, the furthest arc-length ALONG IT where some other lane's
+ * FAR END welds on -- the point trimming must never cut shorter than,
+ * whatever that lane's own building count says. Also returns the set of
+ * lanes that are themselves a join (their OWN far end welds onto another
+ * lane): like a `/c` connector, such a lane is structural regardless of
+ * whether it earned a dwelling, because dropping it reopens the junction
+ * it made.
+ *
+ * Deliberately the LAST point only, not the first: a branch's first point
+ * is its anchor on its parent BY CONSTRUCTION (that is what makes it a
+ * branch, not a join), so treating that as a weld would exempt nearly
+ * every ordinary invented lane from ever being dropped -- the join this
+ * fixes is specifically the one `growOne`'s rung/arc primitives build at a
+ * lane's FAR end (via `loopSnap` or `truncateAtFirstCrossing`), which is
+ * always that lane's last point by construction.
+ */
+function weldJoins(lanes: Lane[]): { floorS: Map<string, number>; joiners: Set<string> } {
+  const floorS = new Map<string, number>();
+  const joiners = new Set<string>();
+  for (const other of lanes) {
+    if (other.points.length < 2) continue;
+    const end = other.points[other.points.length - 1];
+    for (const host of lanes) {
+      if (host.id === other.id) continue;
+      const acc = arcLengths(host.points);
+      let bestD = WELD_EPS_M;
+      let bestS = -1;
+      for (let i = 1; i < host.points.length; i++) {
+        const q = closestPointOnSegment(end, host.points[i - 1], host.points[i]);
+        const d = dist(end, q);
+        if (d < bestD) { bestD = d; bestS = acc[i - 1] + dist(host.points[i - 1], q); }
+      }
+      if (bestS >= 0) {
+        floorS.set(host.id, Math.max(floorS.get(host.id) ?? 0, bestS));
+        joiners.add(other.id);
+      }
+    }
+  }
+  return { floorS, joiners };
+}
+
+/**
+ * `weld` defaults true (the two REAL calls in `village-model.ts` -- the
+ * geometry that actually ships). `village-model.ts`'s round loop also runs
+ * `trimTails` a THIRD time, every round, purely as a read-only TRIAL to
+ * estimate whether blocks already clear the population's floor (that
+ * call's own comment already documents it as "not a guarantee... but
+ * close enough" -- an approximation, not the shipped truth). `weldJoins`
+ * is an O(lanes^2) pass, the same order of cost `blockAreas`'s own weld
+ * step already pays once per round for that same trial (see
+ * `blocks.ts`) -- paying it TWICE every round, across a whole escalation
+ * ladder, measured directly as the difference between a large-population
+ * stress fixture finishing in ~70s and it no longer finishing inside a
+ * 120s test timeout at all. The trial does not need this precision (an
+ * under-count there costs at most one extra, already-capped chase round,
+ * not a wrong shipped fabric -- see `BLOCK_CHASE_ROUND_CAP`), so
+ * `weld: false` skips it there while the two calls that decide what ships
+ * keep it on.
+ */
+export function trimTails(
+  lanes: Lane[], buildings: Building[], opts: { weld?: boolean } = {},
+): Lane[] {
+  const { weld = true } = opts;
   const result: Lane[] = [];
   const connectorParents = new Set(
     lanes.filter((l) => isConnector(l.id) && l.parentId !== undefined).map((l) => l.parentId!),
   );
+  const { floorS: weldFloorS, joiners } = weld
+    ? weldJoins(lanes) : { floorS: new Map<string, number>(), joiners: new Set<string>() };
 
   for (const lane of lanes) {
     if (isFmgArm(lane.id)) {
@@ -180,8 +273,24 @@ export function trimTails(lanes: Lane[], buildings: Building[]): Lane[] {
       continue;
     }
 
+    // Task 5: a GROWTH-TIME join is structural for the identical reason a
+    // `/c` connector is -- see `weldJoins`'s comment. Its far end already
+    // IS the junction, so (unlike a connector) there is no separate host
+    // to detach from by trimming; passing it through whole just keeps that
+    // junction rather than deleting the lane that makes it.
+    if (joiners.has(lane.id)) {
+      result.push(lane);
+      continue;
+    }
+
     const mine = buildingsOf(lane, buildings);
-    if (mine.length === 0) {
+    // Task 5: a lane earning no dwelling of its own is still kept if it is
+    // the HOST of a growth-time join -- some other (surviving, per the
+    // `joiners` check above) lane's far end welds onto it. Dropping the
+    // host would orphan that join exactly as dropping the joiner itself
+    // would; see `weldJoins`'s comment for the full mechanism.
+    const weldFloor = weldFloorS.get(lane.id) ?? 0;
+    if (mine.length === 0 && weldFloor === 0) {
       // Invented purely to supply frontage; none was used, so it is not drawn.
       continue;
     }
@@ -202,7 +311,11 @@ export function trimTails(lanes: Lane[], buildings: Building[]): Lane[] {
     // always a leading piece of the original and can never take a new path.
     const acc = arcLengths(lane.points);
     const furthestS = mine.reduce((best, b) => Math.max(best, arcLengthOf(b.position, lane.points, acc)), 0);
-    const cutoff = furthestS + TAIL_STUB_M;
+    // Task 5: never trim shorter than a point another (surviving) lane
+    // welded onto -- see `weldJoins`. A lane may earn its keep from its own
+    // buildings alone, from hosting a junction alone, or both; the cutoff
+    // is whichever reaches further.
+    const cutoff = Math.max(furthestS + TAIL_STUB_M, weldFloor);
     let k = lane.points.length;
     while (k > 2 && acc[k - 1] > cutoff) k -= 1;
 

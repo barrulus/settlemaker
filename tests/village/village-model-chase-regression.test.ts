@@ -33,13 +33,20 @@ import { generateVillage } from '../../src/village/village-model.js';
 
 const mockedSpendCensus = vi.mocked(spendCensus);
 
-// Five mixed-class routes (the report's "hub" probe scenario): the extra
-// arms keep round-0 growth sparse enough that round 0's real block count is
-// well under the pop-900 floor of 6, so the loop does not break immediately
-// on the forced-housed first round -- it is what lets rounds 1..12 run at
-// all under the forced-unhoused override below.
+// Five mixed-class routes (the report's "hub" probe scenario) at pop 300,
+// seed 38: Task 5's trimTails weld fix (see relax.ts) closes far more of
+// growth's own loops into the SHIPPED geometry than before, which raises
+// round 0's real block count comfortably over the floor for nearly every
+// seed this suite otherwise samples -- so this test was re-pointed at a
+// seed that STILL falls short (measured directly with a one-off seed
+// sweep run during this task, not kept in scripts/: seed 38 is the one
+// hit in a 200-seed sweep of this exact scenario whose round-0 fabric
+// stays under its own
+// pop-300 floor of 2, letting rounds 1..N still run under the
+// forced-unhoused override below). The seed choice is load-bearing for
+// the MOCK to reach the code path at all; it is not otherwise special.
 const base: AzgaarBurgInput = {
-  name: 'Wick', population: 900, port: false, citadel: false, walls: false,
+  name: 'Wick', population: 300, port: false, citadel: false, walls: false,
   plaza: false, temple: false, shanty: false, capital: false,
   roadBearings: [
     { bearing_deg: 12, kind: 'royal', through: true, route_id: 'r-royal' },
@@ -67,7 +74,7 @@ describe('generateVillage: block-chase overflow-arm regression (finding #1)', ()
         : { ...real, unhoused: Math.max(1, real.unhoused) };
     });
 
-    const m = generateVillage(base, 1);
+    const m = generateVillage(base, 38);
 
     // The bug: shipping the unhoused final round and discarding the
     // housed one silently. The fix: restore the first-housed round and

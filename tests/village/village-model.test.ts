@@ -822,9 +822,17 @@ describe('block-aware chase (fix round: three review findings)', () => {
   });
 
   // hub (five mixed-class routes, the probe scenario Task 2's report names)
-  // at pop 300, seed 3: census houses at a round whose fabric encloses only
+  // at pop 300, seed 38: census houses at a round whose fabric encloses only
   // 1 block against the 2-block floor. This is the chase branch itself:
   // `blockChaseRounds` increments, the loop does not break on housing alone.
+  //
+  // Re-pointed from seed 3 by Task 5 (2026-08-24): the trimTails weld fix
+  // (`relax.ts`, `weldJoins`) closes far more of growth's own loops into
+  // the SHIPPED geometry, so seed 3 now clears the floor at round 0 and no
+  // longer exercises the chase at all -- measured directly, a one-off
+  // seed sweep (run during this task, not kept in scripts/) over seeds
+  // 1-200 of this exact scenario found seed 38 the only one whose round-0
+  // fabric still falls short of its own floor.
   const hubInput = (population: number): AzgaarBurgInput => ({
     name: 'Probe', population, port: false, citadel: false, walls: false,
     plaza: false, temple: false, shanty: false, capital: false,
@@ -838,7 +846,7 @@ describe('block-aware chase (fix round: three review findings)', () => {
   });
 
   it('enters the block chase when a housed round falls short of the floor', () => {
-    const m = generateVillage(hubInput(300), 3);
+    const m = generateVillage(hubInput(300), 38);
     const blocks = blockAreas(m.lanes, m.green).length;
     expect(blocks).toBeLessThan(blockFloorFor(300));
     // The chase ran (not an immediate break on housing) and gave up
@@ -869,16 +877,29 @@ describe('block-aware chase (fix round: three review findings)', () => {
     }
   });
 
-  // Finding #1 + the other half of finding #3, together: hub pop 900,
-  // seed 3. Housing itself needs several genuine widen rounds (unhoused
-  // 160, 92, 92, 32, 16, 56, 64, 44 across rounds 0-7, measured directly),
-  // so by the round the census FIRST houses (round 8) the ladder is
-  // already maxed. Round 9 is also housed and still short of the blocks
-  // floor, so `blockChaseRounds` exceeds `BLOCK_CHASE_ROUND_CAP` and the
-  // loop restores round 8's snapshot -- exercising the restore path and
-  // the diagnostics truncation across it.
-  it('restores cleanly and reports the honest shortfall, not an overflow', () => {
-    const m = generateVillage(hubInput(900), 3);
+  // Finding #1 + the other half of finding #3, together: originally hub
+  // pop 900 seed 3, which needed several genuine widen rounds before
+  // housing, then one more housed-but-short round the chase cap forced a
+  // restore on.
+  //
+  // Re-pointed by Task 5 (2026-08-24): the trimTails weld fix makes block
+  // closure so much more reliable that a swept search (one-off scripts run
+  // during this task, not kept: 150 seeds each of hub and fan at pop 300,
+  // plus 120 seeds each of hub and fan at pop 900) found ZERO seeds that
+  // still produce a real `restored:` diagnostic post-fix -- the shortfall
+  // this test
+  // originally exercised is, empirically, gone for these scenarios. The
+  // control-flow path itself (restore-on-regression, finding #1) is still
+  // covered deterministically by the MOCKED test in
+  // `village-model-chase-regression.test.ts`, which forces the exact
+  // sequence a real seed no longer reliably produces. This test is
+  // re-pointed to hub pop 300 seed 38 -- the one seed found short of its
+  // OWN floor at all (see the test above) -- to keep a REAL, non-mocked
+  // check that a genuinely short village reports honestly (`blocks
+  // short:`, never `overflow:`) rather than asserting a restore shape
+  // that no longer occurs naturally.
+  it('reports the honest shortfall, not an overflow, for a real seed the chase cannot clear', () => {
+    const m = generateVillage(hubInput(300), 38);
     for (const d of m.diagnostics) {
       const widened = d.match(/^disc widened past its closed form: (\d+) of \d+ still unhoused/);
       if (widened) expect(Number(widened[1])).toBeGreaterThan(0);

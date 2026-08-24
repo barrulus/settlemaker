@@ -156,4 +156,79 @@ describe('trimTails', () => {
     const out = trimTails([branch], []);
     expect(out).toHaveLength(0);
   });
+
+  describe('growth-time joins (Task 5: rungs, not just /c connectors, are structural)', () => {
+    // Task 1's arm-exemption fix and Task 2's block-aware chase mesh the
+    // interior with growth-time closure lanes (growOne's rungs -- a branch
+    // whose FAR end lands, via loopSnap or truncateAtFirstCrossing, on a
+    // NEIGHBOUR lane -- and seedArcThrough's arcs). Measured directly on
+    // the failing multi-route fixtures (Task 5 report, Part A): growth
+    // genuinely closes loops this way, but trimTails only ever protected
+    // the ONE closure mechanism that already carries a `/c` id
+    // (connectDeadEnds' own connectors, added after this first trim even
+    // runs) -- a growth-time rung earning no building of its own was
+    // simply DROPPED (same rule as any other empty invented lane), and
+    // even a SURVIVING rung's target could be trimmed back past the exact
+    // point the rung welded onto, silently reopening the loop growth just
+    // closed. Neither failure shows up as a crash or a thrown error --
+    // only as a `blocks` count that reads lower than the fabric's own
+    // geometry would otherwise support.
+    const laneA = (): Lane => ({
+      id: 'lane-000',
+      type: 'local',
+      widthM: 5,
+      points: [
+        new Point(0, 0), new Point(20, 0), new Point(40, 0), new Point(60, 0), new Point(80, 0),
+      ],
+    });
+    // Welds EXACTLY onto laneA's point at (40, 0) -- s=40 along laneA --
+    // the way loopSnap/truncateAtFirstCrossing actually land a join: on
+    // the target polyline, not near it.
+    const rung = (): Lane => ({
+      id: 'lane-000/b50',
+      type: 'footpath',
+      widthM: 4,
+      points: [new Point(40, 20), new Point(40, 0)],
+    });
+
+    it("a rung whose far end welds onto another lane survives even though it earns no building of its own", () => {
+      const out = trimTails([laneA(), rung()], []);
+      expect(out.find((l) => l.id === 'lane-000/b50')).toBeDefined();
+    });
+
+    it('does not trim a lane back past a point another lane welded onto it', () => {
+      // laneA's only building sits near its start (furthestS=10), so
+      // WITHOUT the weld floor its tail would be cut to
+      // 10 + TAIL_STUB_M(12) = 22 -- short of the rung's join at s=40.
+      const buildingNearStart = building(10, 0, 'bld:a', 'lane-000:R0');
+      const out = trimTails([laneA(), rung()], [buildingNearStart]);
+      const trimmedA = out.find((l) => l.id === 'lane-000')!;
+      expect(trimmedA).toBeDefined();
+      const lastPoint = trimmedA.points[trimmedA.points.length - 1];
+      // Must reach at least as far as the weld point (40, 0), not stop at
+      // the pre-weld-floor cutoff of 22.
+      expect(lastPoint.x).toBeGreaterThanOrEqual(40 - 1e-9);
+    });
+
+    it('a HOST with no buildings of its own is kept when a rung welds onto it', () => {
+      // laneA earns no dwelling at all here -- under the pre-fix rule it
+      // would simply be dropped, orphaning the rung's join even though the
+      // rung itself is protected as a joiner.
+      const out = trimTails([laneA(), rung()], []);
+      expect(out.find((l) => l.id === 'lane-000')).toBeDefined();
+    });
+
+    it('a rung earning no building AND welding onto nothing (both ends free) is still dropped', () => {
+      // The generalisation must not blanket-protect every empty invented
+      // lane -- only ones a surviving junction actually depends on.
+      const freeFloating: Lane = {
+        id: 'lane-000/b70',
+        type: 'footpath',
+        widthM: 4,
+        points: [new Point(200, 200), new Point(200, 220)],
+      };
+      const out = trimTails([laneA(), freeFloating], []);
+      expect(out.find((l) => l.id === 'lane-000/b70')).toBeUndefined();
+    });
+  });
 });

@@ -402,8 +402,18 @@ export function generateVillage(
     // had no reason to run. Still not a guarantee of the exact shipped
     // number (the rarer post-reseat second trim is not replayed here), but
     // close enough that a round which is already fine reads as fine.
+    //
+    // Task 5: `{ weld: false }` -- this trial's own trimTails call skips
+    // the growth-time join protection the two REAL calls below use (see
+    // `trimTails`'s doc comment): paying that O(lanes^2) cost every round
+    // of the escalation ladder, on top of `blockAreas`'s own weld pass
+    // right after it, measured as the difference between a large-village
+    // stress fixture finishing and it no longer finishing inside a 120s
+    // test timeout. An under-count here costs at most one extra, already-
+    // capped chase round -- not a wrong shipped fabric.
     const blocksNow = blockAreas(
-      connectDeadEnds(trimTails(lanes, spend.buildings), green, spend.buildings), green,
+      connectDeadEnds(trimTails(lanes, spend.buildings, { weld: false }), green, spend.buildings),
+      green,
     ).length;
     const blockFloor = blockFloorFor(site.population);
 
