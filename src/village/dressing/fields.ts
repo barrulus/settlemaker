@@ -14,8 +14,9 @@ import {
   FIELD_BLOCK_SPAN_TARGET_DEG, FIELD_CROPS, FIELD_FURROW_MIN_SEPARATION_DEG,
   FIELD_INNER_FLOOR_PAD_M, FIELD_INNER_PERCENTILE, FIELD_JITTER_RANGE_DEG,
   FIELD_M2_PER_CAPITA, FIELD_MIN_BLOCK_AREA_M2, FIELD_ORCHARD_VINE_CHANCE,
-  FIELD_WEDGE_CLAIM_MARGIN_DEG, LANE_SETBACK_M, RING_SETBACK_M,
+  FIELD_WEDGE_CLAIM_MARGIN_DEG, EXTENT_BIN_DEG, LANE_SETBACK_M, RING_SETBACK_M,
 } from '../constants.js';
+import { radialExtent, type RadialExtent } from './extent.js';
 import type {
   Croft, EdgeStamp, FieldBlock, Green, Lane, Lot, Site,
 } from '../types.js';
@@ -195,42 +196,49 @@ export function computeFabricRadius(
 }
 
 /**
- * Where THIS wedge's ring segment starts: a HIGH percentile
- * (FIELD_INNER_PERCENTILE) of the back-edge distances of the claims the
- * wedge contains, plus FIELD_BELT_GAP_M of open green, floored just outside
- * the green ring. A claim belongs to a wedge when the bearing of its own
- * centre (the claim OBB's centre, a croft's polygon centroid) from the
- * green falls inside the wedge's span widened by
- * FIELD_WEDGE_CLAIM_MARGIN_DEG.
+ * Where the ring's inner edge runs, BEARING BY BEARING.
  *
- * Three rounds of history, because the percentile has been both extremes:
+ * The percentile rule is gate 5's and unchanged: a HIGH percentile
+ * (FIELD_INNER_PERCENTILE) of the back-edge distances of the claims at that
+ * bearing, floored just outside the green ring, with the handful of ribbon
+ * claims beyond it clipped around -- which is precisely what opens the road
+ * passes through the ring.
  *
- * V1 (2026-08-21) replaced a GLOBAL max with a per-wedge one, so a wedge
- * was no longer exiled past the deepest lane in the whole village.
+ * What GATE 8 changes is the RESOLUTION it is measured at. It used to be
+ * one number per WEDGE (the sector between two green-attached lanes): four
+ * to six steps around the whole village. That was invisible while the
+ * fabric was a disc and is glaring beside an irregular body -- the houses
+ * wander in and out and the furrows do not follow them, so the eye gets a
+ * near-circular ring drawn right beside a blob to compare it against. It is
+ * now a `RadialExtent`: the same percentile per EXTENT_BIN_DEG bin,
+ * smoothed and interpolated, and the block polygons walk it directly, so
+ * the ring's inner edge is a wandering curve rather than an arc.
  *
- * W3 (2026-08-21) dropped it to a LOW percentile (0.35) so strips would
- * nestle in among the fabric.
- *
- * Gate 5 (2026-08-22) reverses W3's intent, on the owner's verdict: the
- * ploughed land belongs AROUND the village, not inside it. The percentile
- * is high again (0.85) and a deliberate green belt is added on top, so the
- * ring clears the settlement with open common between. The handful of
- * ribbon lots beyond the 85th percentile are still clipped around, and that
- * is precisely what opens the road passes through the ring.
+ * Three rounds of history on the percentile itself, because it has been
+ * both extremes: V1 (2026-08-21) replaced a GLOBAL max with a per-wedge
+ * one; W3 (2026-08-21) dropped it to 0.35 so strips would nestle in among
+ * the fabric; gate 5 (2026-08-22) reversed W3 on the owner's verdict --
+ * the ploughed land belongs AROUND the village, not inside it.
  */
-function wedgeInnerRadius(
-  green: Green, lots: Lot[], crofts: Croft[], wedge: Wedge,
-  housedLotIds?: ReadonlySet<string>,
-): number {
+function ringInnerEdge(
+  green: Green, lots: Lot[], crofts: Croft[], housedLotIds?: ReadonlySet<string>,
+): RadialExtent {
   const floor = greenDrawnRadius(green) + RING_SETBACK_M + FIELD_INNER_FLOOR_PAD_M;
-  const distances = claimBackEdgeDistances(green, lots, crofts, wedge, housedLotIds);
-  if (distances.length === 0) return floor;
-  distances.sort((a, b) => a - b);
-  const idx = Math.min(
-    distances.length - 1,
-    Math.max(0, Math.round(FIELD_INNER_PERCENTILE * (distances.length - 1))),
+  return radialExtent(
+    green.centre, builtEdgePoints(lots, crofts, housedLotIds), floor, FIELD_INNER_PERCENTILE,
   );
-  return Math.max(floor, distances[idx]);
+}
+
+/** The wedge's NOMINAL inner radius -- the mean of the edge across its own
+ * span. Only the census arithmetic (how deep the ring must be to feed the
+ * village) uses it; every polygon walks the edge itself. */
+function wedgeInnerRadius(edge: RadialExtent, wedge: Wedge): number {
+  const steps = Math.max(2, Math.ceil(wedge.spanDeg / EXTENT_BIN_DEG));
+  let sum = 0;
+  for (let i = 0; i < steps; i++) {
+    sum += edge.atBearing(wedge.bearingA + (wedge.spanDeg * (i + 0.5)) / steps);
+  }
+  return sum / steps;
 }
 
 /**
@@ -340,7 +348,8 @@ function blockSlots(wedge: Wedge): Slot[] {
  * block's edge graze a lot claim.
  */
 function sectorPolygon(
-  green: Green, fromDeg: number, toDeg: number, inner: number, outer: number,
+  green: Green, fromDeg: number, toDeg: number,
+  innerAt: (deg: number) => number, outerAt: (deg: number) => number,
   skew: number = 0,
 ): Point[] {
   const span = toDeg - fromDeg;
@@ -359,17 +368,20 @@ function sectorPolygon(
   // angle from the outer). That put the shrunk arc's vertices on bearings
   // BETWEEN the tested slices, and the §5.7 net duly caught a vertex inside
   // a lot claim. Bearings are not ours to invent here; radii are.
-  const depth = outer - inner;
   const mag = Math.abs(skew) * 0.5;
   const lean = (t: number): number => (skew >= 0 ? t : 1 - t);
   const pts: Point[] = [];
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
-    pts.push(at(fromDeg + span * t, outer - depth * mag * lean(t)));
+    const deg = fromDeg + span * t;
+    const depth = outerAt(deg) - innerAt(deg);
+    pts.push(at(deg, outerAt(deg) - depth * mag * lean(t)));
   }
   for (let i = steps; i >= 0; i--) {
     const t = i / steps;
-    pts.push(at(fromDeg + span * t, inner + depth * mag * lean(1 - t)));
+    const deg = fromDeg + span * t;
+    const depth = outerAt(deg) - innerAt(deg);
+    pts.push(at(deg, innerAt(deg) + depth * mag * lean(1 - t)));
   }
   return pts;
 }
@@ -387,16 +399,19 @@ function sectorArea(spanDeg: number, inner: number, outer: number): number {
  * block is split either side of the road.
  */
 function clipSlotToRuns(
-  green: Green, slot: Slot, inner: number, outer: number,
+  green: Green, slot: Slot,
+  innerAt: (deg: number) => number, outerAt: (deg: number) => number,
   lots: Lot[], crofts: Croft[], lanes: Lane[], water: Point[][],
 ): Slot[] {
   const span = slot.toDeg - slot.fromDeg;
   const slices = Math.max(1, Math.ceil(span / FIELD_BLOCK_SLICE_DEG));
-  const depth = outer - inner;
-  const radii = [0, 0.25, 0.5, 0.75, 1].map((t) => inner + depth * t);
   const clearAt = (deg: number): boolean => {
     const d = bearingVector(deg);
-    return radii.every((r) => isClearGround(
+    const inner = innerAt(deg);
+    const depth = outerAt(deg) - inner;
+    // GATE 8: the tested radii follow the edge at THIS bearing, because the
+    // block's own inner and outer arcs do.
+    return [0, 0.25, 0.5, 0.75, 1].map((t) => inner + depth * t).every((r) => isClearGround(
       new Point(green.centre.x + d.x * r, green.centre.y + d.y * r), lots, crofts, lanes, water,
     ));
   };
@@ -423,10 +438,11 @@ function clipSlotToRuns(
 interface WedgeRing { blocks: FieldBlock[]; outerRadius: number }
 
 function buildWedgeBlocks(
-  wedge: Wedge, green: Green, innerRadius: number, population: number,
+  wedge: Wedge, green: Green, edge: RadialExtent, population: number,
   furrowBearingDeg: number, lots: Lot[], crofts: Croft[], lanes: Lane[], water: Point[][],
   crops: string[], allowOrchardVine: boolean, rng: SeededRandom, toggle: { n: number },
 ): WedgeRing {
+  const innerRadius = wedgeInnerRadius(edge, wedge);
   const slots = blockSlots(wedge);
   const coverageRad = slots.reduce((sum, s) => sum + ((s.toDeg - s.fromDeg) * Math.PI) / 180, 0);
   // This wedge's share of the census demand, by span -- the same
@@ -449,7 +465,10 @@ function buildWedgeBlocks(
     const spanMul = 1 + (rng.float() * 2 - 1) * FIELD_SPAN_JITTER;
     const skew = (rng.float() * 2 - 1) * FIELD_SKEW_JITTER;
 
-    const jInner = innerRadius + beltOffset;
+    // GATE 8: the block's inner arc IS the measured edge, bearing by
+    // bearing, offset by this slot's belt jitter -- so the ring wanders
+    // with the body instead of being an arc struck about the green.
+    const innerAt = (deg: number): number => edge.atBearing(deg) + beltOffset;
     // The depth clamp still governs: jitter varies the depth WITHIN
     // [FIELD_BLOCK_DEPTH_MIN_M, FIELD_BLOCK_DEPTH_MAX_M], never through it.
     // A block below the floor is the thin strip gate 5 rejected.
@@ -457,8 +476,8 @@ function buildWedgeBlocks(
       FIELD_BLOCK_DEPTH_MAX_M,
       Math.max(FIELD_BLOCK_DEPTH_MIN_M, (outerRadius - innerRadius) * depthMul),
     );
-    const jOuter = jInner + jDepth;
-    if (!(jOuter > jInner)) continue;
+    const outerAt = (deg: number): number => innerAt(deg) + jDepth;
+    if (!(jDepth > 0)) continue;
     // The span is scaled about the slot's own mid-bearing. The skew needs
     // no allowance here because it only ever shrinks an arc (see
     // `sectorPolygon`), so both arcs stay inside what the clip tested.
@@ -466,9 +485,13 @@ function buildWedgeBlocks(
     const jSpan = (slot.toDeg - slot.fromDeg) * spanMul;
     const jSlot: Slot = { fromDeg: slotMid - jSpan / 2, toDeg: slotMid + jSpan / 2 };
 
-    for (const run of clipSlotToRuns(green, jSlot, jInner, jOuter, lots, crofts, lanes, water)) {
+    for (const run of clipSlotToRuns(green, jSlot, innerAt, outerAt, lots, crofts, lanes, water)) {
       const spanDeg = run.toDeg - run.fromDeg;
-      const area = sectorArea(spanDeg, jInner, jOuter);
+      // Area at the run's mid-bearing: the block is an irregular ribbon
+      // now, and this is the cull for a block too small to be a field, not
+      // the census arithmetic (which is `blockOuterRadius`, above).
+      const midDeg = (run.fromDeg + run.toDeg) / 2;
+      const area = sectorArea(spanDeg, innerAt(midDeg), outerAt(midDeg));
       // A block this small is the dropped rug, not a field.
       if (area < FIELD_MIN_BLOCK_AREA_M2) continue;
       // Gate 5.4: verify the POLYGON, not just the sample grid.
@@ -481,7 +504,7 @@ function buildWedgeBlocks(
       // measured village out of forty, inside a lot claim. Rather than try
       // to keep two samplings in phase, the emitted geometry is checked
       // directly: if any vertex is on claimed ground the block is dropped.
-      const polygon = sectorPolygon(green, run.fromDeg, run.toDeg, jInner, jOuter, skew);
+      const polygon = sectorPolygon(green, run.fromDeg, run.toDeg, innerAt, outerAt, skew);
       if (!polygon.every((p) => isClearGround(p, lots, crofts, lanes, water))) continue;
       const glyph = pickCropGlyph(crops, blocks.length, blocks.length === 0, allowOrchardVine, rng, toggle);
       blocks.push({
@@ -493,10 +516,28 @@ function buildWedgeBlocks(
         areaM2: area,
       });
       ordinal += 1;
-      reach = Math.max(reach, jOuter);
+      for (const p of polygon) reach = Math.max(reach, dist(green.centre, p));
     }
   }
   return { blocks, outerRadius: Math.max(outerRadius, reach) };
+}
+
+/**
+ * GATE 8: every point that marks the built-up edge -- the corners of each
+ * HOUSED lot claim and the vertices of each croft. `computeFabricRadius`
+ * is the max of their distances; `radialExtent` bins them by bearing, and
+ * that is what the vegetation band follows now that the body is irregular.
+ */
+export function builtEdgePoints(
+  lots: Lot[], crofts: Croft[], housedLotIds?: ReadonlySet<string>,
+): Point[] {
+  const out: Point[] = [];
+  for (const lot of lots) {
+    if (housedLotIds && !housedLotIds.has(lot.id)) continue;
+    out.push(...obbCorners(lotObb(lot)));
+  }
+  for (const croft of crofts) out.push(...croft.polygon);
+  return out;
 }
 
 export interface FieldsResult {
@@ -598,10 +639,10 @@ export function buildFields(
   // a fixed order too.
   const blocks: FieldBlock[] = [];
   let outerRadius = fabricRadius;
+  const edge = ringInnerEdge(green, lots, crofts, housedLotIds);
   for (const wedge of wedges) {
-    const innerRadius = wedgeInnerRadius(green, lots, crofts, wedge, housedLotIds);
     const ring = buildWedgeBlocks(
-      wedge, green, innerRadius, site.population, bearingByWedge.get(wedge.id) ?? 0,
+      wedge, green, edge, site.population, bearingByWedge.get(wedge.id) ?? 0,
       lots, crofts, lanes, site.water, crops, allowOrchardVine, rng, toggle,
     );
     if (ring.blocks.length === 0) continue;

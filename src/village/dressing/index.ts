@@ -1,10 +1,12 @@
 import { SeededRandom } from '../../utils/random.js';
 import { buildCrofts } from './crofts.js';
 import { settlementEdgeStyle } from './edges.js';
-import { buildFields, computeFabricRadius } from './fields.js';
+import { builtEdgePoints, buildFields, computeFabricRadius } from './fields.js';
+import { radialExtent } from './extent.js';
 import { buildVegetation } from './vegetation.js';
 import { buildPois } from './pois.js';
 import { SHOREFRONT_REACH_FACTOR } from '../constants.js';
+import { greenDrawnRadius } from '../geometry.js';
 import type {
   Building, Croft, EdgeStamp, EdgeStyle, FieldBlock, Green, Lane, Lot, Poi, Site, Vegetation,
 } from '../types.js';
@@ -65,10 +67,23 @@ export function dressVillage(input: DressingInput): DressingResult {
   // (pass 3's own prediction, which is the right input there) and is
   // deliberately not passed any further.
   const fabricRadiusM = computeFabricRadius(green, lots, crofts, housedLotIds);
-  const vegInnerEdgeM = fields.length > 0 ? fieldsOuterRadius : fabricRadiusM;
+  // GATE 8: the two edges vegetation works between are measured PER
+  // BEARING. `fabricRadiusM` survives only where a single number is
+  // genuinely wanted (the shorefront reach, and the POI ring below).
+  const builtExtent = radialExtent(
+    green.centre, builtEdgePoints(lots, crofts, housedLotIds), greenDrawnRadius(green),
+  );
+  // A bearing whose fields were all clipped away (a road pass, water) must
+  // not pull the tree line INSIDE the houses: the band starts at whichever
+  // edge is further out.
+  const vegInnerExtent = radialExtent(
+    green.centre,
+    [...builtEdgePoints(lots, crofts, housedLotIds), ...fields.flatMap((f) => f.polygon)],
+    greenDrawnRadius(green),
+  );
   const shorefrontReachM = fabricRadiusM * SHOREFRONT_REACH_FACTOR;
   const vegetation = buildVegetation(
-    site, green, lanes, lots, crofts, fields, fabricRadiusM, vegInnerEdgeM, shorefrontReachM, rng,
+    site, green, lanes, lots, crofts, fields, builtExtent, vegInnerExtent, shorefrontReachM, rng,
   );
   const dressedRadiusM = Math.max(fieldsOuterRadius, fabricRadiusM);
   const pois = buildPois(

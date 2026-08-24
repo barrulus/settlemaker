@@ -11,6 +11,7 @@ import {
   VEG_PATCH_CELL_M, VEG_PATCH_CHANCE, VEG_PATCH_RADIUS_M, VEG_PATCH_TREES,
   VEG_SCALE_MAX, VEG_SCALE_MIN,
 } from '../constants.js';
+import type { RadialExtent } from './extent.js';
 import type {
   Croft, FieldBlock, Green, Lane, Lot, Site, Vegetation,
 } from '../types.js';
@@ -114,13 +115,13 @@ function pickGlyph(biome: string, rng: SeededRandom): string {
  * dressing stages (after edgeStyle/crofts/fields), so every rng draw here
  * comes after all of theirs -- never reordered or interleaved.
  *
- * `groveEdgeM` is the MEASURED fabric radius -- where the houses stop and
- * grove country ends. `innerEdgeM` is the field ring's own outer radius
- * (or the fabric radius when there are no fields at all): beyond it the
- * scatter thins to the rim. Both measured, never predicted --
+ * `groveEdge` is the MEASURED built-up edge, per bearing -- where the
+ * houses stop and grove country ends. `innerEdge` is the field ring's own
+ * outer edge, likewise per bearing (the built-up edge where a bearing has
+ * no fields at all): beyond it the scatter thins to the rim. Both measured, never predicted --
  * see the fix-wave rule: after pass 3 nothing keys off `predictedBuiltRadius`.
  * The scatter rim, and with it the grid's own extent, is
- * `innerEdgeM + VEG_BAND_DEPTH_M`, so the grid always reaches past the
+ * `innerEdge + VEG_BAND_DEPTH_M` at every bearing, so the grid always reaches past the
  * fields it is supposed to thin out beyond -- by a fixed depth, so the
  * scatter (and with it the renderer's bounds, which include every tree)
  * cannot outgrow the village it surrounds (W1).
@@ -130,10 +131,15 @@ function pickGlyph(biome: string, rng: SeededRandom): string {
  */
 export function buildVegetation(
   site: Site, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldBlock[],
-  groveEdgeM: number, innerEdgeM: number, shorefrontReachM: number, rng: SeededRandom,
+  groveEdge: RadialExtent, innerEdge: RadialExtent, shorefrontReachM: number, rng: SeededRandom,
 ): Vegetation[] {
-  const rim = innerEdgeM + VEG_BAND_DEPTH_M;
-  if (!(rim > 0)) return [];
+  // GATE 8: both edges are PER BEARING. They used to be two scalars, and a
+  // fixed band beyond a scalar is a circle: an irregular village ringed by
+  // a perfectly round tree line reads worse than a round one, because the
+  // circle is right there to compare the blob against.
+  const rimExtent = innerEdge.plus(VEG_BAND_DEPTH_M);
+  const rimMaxM = rimExtent.maxM;
+  if (!(rimMaxM > 0)) return [];
 
   const trees: Vegetation[] = [];
 
@@ -141,7 +147,7 @@ export function buildVegetation(
   // every cell's survival, so the draw count never depends on how many
   // trees land. The grid only spans the interior now: outside it, pass 2
   // does the placing.
-  const halfCells = Math.max(0, Math.ceil(groveEdgeM / VEG_CELL_M));
+  const halfCells = Math.max(0, Math.ceil(groveEdge.maxM / VEG_CELL_M));
   for (let cellX = -halfCells; cellX <= halfCells; cellX++) {
     for (let cellY = -halfCells; cellY <= halfCells; cellY++) {
       const cellOrigin = new Point(
@@ -152,7 +158,9 @@ export function buildVegetation(
         cellOrigin.x + VEG_CELL_M / 2,
         cellOrigin.y + VEG_CELL_M / 2,
       );
-      const density = interiorDensityAt(dist(cellCentre, green.centre), groveEdgeM);
+      const density = interiorDensityAt(
+        dist(cellCentre, green.centre), groveEdge.at(cellCentre),
+      );
 
       const survives = rng.float() < density;
       if (!survives) continue;
@@ -213,7 +221,7 @@ export function buildVegetation(
   // offsets, one rng.int tree count, and per tree two offsets plus a glyph
   // and a scale float. A tree rejected by the geometry tests discards the
   // tree, never the draws already spent on it -- the same rule pass 1 uses.
-  const patchHalf = Math.max(0, Math.ceil(rim / VEG_PATCH_CELL_M));
+  const patchHalf = Math.max(0, Math.ceil(rimMaxM / VEG_PATCH_CELL_M));
   for (let cellX = -patchHalf; cellX <= patchHalf; cellX++) {
     for (let cellY = -patchHalf; cellY <= patchHalf; cellY++) {
       const cellOrigin = new Point(
@@ -224,7 +232,9 @@ export function buildVegetation(
         cellOrigin.x + VEG_PATCH_CELL_M / 2,
         cellOrigin.y + VEG_PATCH_CELL_M / 2,
       );
-      const chance = patchChanceAt(dist(cellCentre, green.centre), groveEdgeM, rim);
+      const chance = patchChanceAt(
+        dist(cellCentre, green.centre), groveEdge.at(cellCentre), rimExtent.at(cellCentre),
+      );
       if (!(rng.float() < chance)) continue;
 
       const seed = new Point(
