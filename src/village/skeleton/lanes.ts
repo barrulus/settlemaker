@@ -11,7 +11,7 @@ import {
   GREEN_UNDERLAP_RATIO, RIB_COUNT_MAX, RIB_COUNT_MIN, RIB_SPACING_M, SLOT_PITCH_MIN_M,
   INVENTED_ARM_LENGTH_FACTOR, JUNCTION_CLEAR_M, LANE_MIN_SPACING_M, LANE_SAMPLE_STEP_M,
   ARM_LOT_RADIUS_SHARE, CONNECT_MAX_M, CONNECT_MIN_M, HAMLET_RIBBON_POP, LANE_CURVE_MAX_M,
-  LOOP_SNAP_M, MAX_INVENTED_LANES, MIN_ARM_SEPARATION_DEG, SATURATION_RING_START_M,
+  INCOMING_ARM_MERGE_DEG, LOOP_SNAP_M, MAX_INVENTED_LANES, MIN_ARM_SEPARATION_DEG, SATURATION_RING_START_M,
   SATURATION_RING_STEP_M, SECTOR_SAMPLE_DEG,
   VOID_SCAN_STEP_M, VOID_SPACING_M, LANE_SEATING_YIELD, LANE_TILE_SPACING_M,
   ARC_MAX_SWEEP_DEG, ARC_NEIGHBOURHOOD_M, ARC_RADIAL_TOL_DEG, LANE_PARALLEL_TOL_DEG,
@@ -159,11 +159,108 @@ function insideRing(
   return d <= profile.ringAt(nominalRadiusM, bearingOf(green.centre, p));
 }
 
+/**
+ * Task 3: one INCOMING arm after near-duplicate bearings have been merged.
+ * `sourceRouteIds` is set only when more than one FMG route fed this arm.
+ */
+interface MergedRoute {
+  bearingDeg: number;
+  type: RouteType;
+  through: boolean;
+  routeId?: string;
+  sourceRouteIds?: string[];
+}
+
 interface ArmEmission {
-  route: SiteRoute;
+  route: MergedRoute;
   bearingDeg: number;
   /** True for a `through` route's far-side echo, not the route itself. */
   isFarSide: boolean;
+}
+
+/**
+ * Task 3: FMG routes whose incoming bearings are near-duplicates (`fan`'s
+ * 90.0/90.5/91.2 trio) collapse into ONE arm rather than three near-parallel
+ * roads. Clustering rule: sort incoming routes by bearing, then walk the
+ * sorted list merging each route into the current cluster while its gap to
+ * the PREVIOUS route (not the cluster's first member) is under
+ * `INCOMING_ARM_MERGE_DEG` — pairwise-adjacent, so a long chain of
+ * routes each within threshold of its neighbour merges as one cluster even
+ * if its ends are far apart, and a route just past the threshold starts a
+ * new one. A final wrap check merges the last cluster into the first when
+ * the circular gap (e.g. 358 degrees to 2 degrees) is also under threshold,
+ * so the merge is bearing-space-circular like everything else here.
+ *
+ * Survivor selection mirrors `buildArms`'s own bucket-collision rule
+ * (below) for the same reason: the highest road class present wins — never
+ * a demotion, per the owner's ruling that a king's road absorbed into a
+ * track should not become a track — and ties break on the lexically
+ * smallest `routeId` (falling back to the bearing when FMG left it out),
+ * so the outcome depends only on cluster CONTENT, never on input order.
+ * `through` is inherited if ANY merged route is through, since the
+ * survivor now stands in for every road that arrives near that bearing.
+ *
+ * The clustering itself needs routes sorted by bearing, but the RETURNED
+ * order is the ORIGINAL input order (each cluster takes the position of
+ * whichever member appeared earliest in `routes`) — not the sorted one.
+ * `buildArms` draws from `rng` once per emission in array order, so an
+ * arm's exact curve depends on where it falls in that sequence; reordering
+ * routes that never merge would silently redraw every OTHER arm's geometry
+ * too, for no reason connected to this task. Keeping input order when
+ * nothing merges makes this a true no-op for every route set with no
+ * near-duplicate pair, which is what "must not regress" requires.
+ */
+function mergeIncomingRoutes(routes: SiteRoute[]): MergedRoute[] {
+  if (routes.length <= 1) {
+    return routes.map((r) => ({
+      bearingDeg: r.bearingDeg, type: r.type, through: r.through, routeId: r.routeId,
+    }));
+  }
+  const indexed = routes.map((r, i) => ({ r, i }));
+  const sorted = [...indexed].sort((a, b) => a.r.bearingDeg - b.r.bearingDeg);
+  const clusters: Array<typeof indexed> = [[sorted[0]]];
+  for (let i = 1; i < sorted.length; i++) {
+    const gap = angularGap(sorted[i].r.bearingDeg, sorted[i - 1].r.bearingDeg);
+    if (gap < INCOMING_ARM_MERGE_DEG) {
+      clusters[clusters.length - 1].push(sorted[i]);
+    } else {
+      clusters.push([sorted[i]]);
+    }
+  }
+  if (clusters.length > 1) {
+    const first = clusters[0][0].r.bearingDeg;
+    const lastCluster = clusters[clusters.length - 1];
+    const last = lastCluster[lastCluster.length - 1].r.bearingDeg;
+    if (angularGap(first, last) < INCOMING_ARM_MERGE_DEG) {
+      clusters[0] = [...lastCluster, ...clusters[0]];
+      clusters.pop();
+    }
+  }
+  const merged = clusters.map((cluster) => {
+    const minIndex = Math.min(...cluster.map((c) => c.i));
+    if (cluster.length === 1) {
+      const r = cluster[0].r;
+      return { minIndex, route: { bearingDeg: r.bearingDeg, type: r.type, through: r.through, routeId: r.routeId } };
+    }
+    const routeKey = (r: SiteRoute): string => r.routeId ?? String(r.bearingDeg);
+    const survivor = [...cluster].sort((a, b) => {
+      const rankDiff = classRank(a.r.type) - classRank(b.r.type);
+      if (rankDiff !== 0) return rankDiff;
+      const aKey = routeKey(a.r); const bKey = routeKey(b.r);
+      return aKey < bKey ? -1 : aKey > bKey ? 1 : 0;
+    })[0].r;
+    return {
+      minIndex,
+      route: {
+        bearingDeg: survivor.bearingDeg,
+        type: survivor.type,
+        through: cluster.some((c) => c.r.through),
+        routeId: survivor.routeId,
+        sourceRouteIds: cluster.map((c) => routeKey(c.r)).sort(),
+      },
+    };
+  });
+  return merged.sort((a, b) => a.minIndex - b.minIndex).map((m) => m.route);
 }
 
 /**
@@ -204,8 +301,9 @@ interface ArmEmission {
 export function buildArms(
   site: Site, green: Green, extentM: number, rng: SeededRandom,
 ): Lane[] {
+  const merged = mergeIncomingRoutes(site.routes);
   const emissions: ArmEmission[] = [];
-  for (const r of site.routes) {
+  for (const r of merged) {
     emissions.push({ route: r, bearingDeg: r.bearingDeg, isFarSide: false });
     if (r.through) emissions.push({ route: r, bearingDeg: (r.bearingDeg + 180) % 360, isFarSide: true });
   }
@@ -258,6 +356,7 @@ export function buildArms(
     type: e.route.type,
     points: runArm(green, e.bearingDeg, extentM, rng),
     widthM: laneWidth(e.route.type),
+    ...(e.route.sourceRouteIds ? { sourceRouteIds: e.route.sourceRouteIds } : {}),
   }));
 }
 

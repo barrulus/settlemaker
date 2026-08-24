@@ -42,6 +42,15 @@ export interface Lane {
   points: Point[];
   widthM: number;
   parentId?: string;
+  /**
+   * Task 3: set only when this arm is the survivor of a near-duplicate
+   * bearing merge (`INCOMING_ARM_MERGE_DEG`) — the `routeId` (or, absent
+   * that, the bearing) of every FMG route the merge folded into it, sorted
+   * lexically for a deterministic read. Cheap provenance for a future
+   * GeoJSON `route_id` echo; absent on every lane that did not merge,
+   * including an unmerged single-route arm.
+   */
+  sourceRouteIds?: string[];
 }
 
 export interface Lot {

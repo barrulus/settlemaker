@@ -35,6 +35,20 @@ export const LANE_CURVE_MAX_M = 10;
 export const MIN_ARM_SEPARATION_DEG = 35;
 export const MAX_INVENTED_LANES = 60;
 
+/**
+ * Task 3: incoming FMG routes whose bearings land closer together than
+ * this merge into ONE arm rather than three near-parallel roads a hair's
+ * width apart (the AFMG `fan` fixture's 90.0/90.5/91.2 trio). This is
+ * deliberately NOT `MIN_ARM_SEPARATION_DEG` — that constant governs the
+ * spacing this village INVENTS for its own ribs, and reusing it here would
+ * also swallow `fan`'s real ~38.8 degree junction gaps, which FMG's data is
+ * authoritative about: those are distinct roads, not survey noise. 5
+ * degrees clears the near-duplicate trio (max gap 1.2 degrees) with room
+ * to spare while sitting well under the smallest genuine gap in the
+ * scenario matrix (38.8 degrees, nearly 8x the threshold).
+ */
+export const INCOMING_ARM_MERGE_DEG = 5;
+
 // --- Cluster growth (2026-08-21 gate rework) ---------------------------
 // The first render gate rejected the starburst the original growth rule
 // produced: ten radial spokes off the green with empty wedges between
