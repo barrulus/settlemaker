@@ -145,6 +145,28 @@ describe('buildArms', () => {
       expect(solo[0].sourceRouteIds).toBeUndefined();
     });
 
+    it('regression guard: a non-merging route\'s geometry depends on its INPUT position, not on bearing-sorted position', () => {
+      // Two routes, well outside the merge threshold, deliberately given in
+      // an order that DISAGREES with ascending bearing (200 before 20):
+      // this is the exact case a bearing-sort-then-return implementation
+      // gets wrong, because `buildArms` draws from `rng` once per emission
+      // in array order and a bearing sort would move the 20-degree route's
+      // draw ahead of the 200-degree route's. A solo build of the
+      // 200-degree route alone is the ground truth for "first draw"; the
+      // 200-degree arm inside the two-route build (where it is still
+      // first in the INPUT) must match it exactly, point for point.
+      const routeA: SiteRoute = { bearingDeg: 200, type: 'main', through: false, routeId: 'a' };
+      const routeB: SiteRoute = { bearingDeg: 20, type: 'main', through: false, routeId: 'b' };
+
+      const solo = buildArms(site([routeA]), green, 150, new SeededRandom(42));
+      const pair = buildArms(site([routeA, routeB]), green, 150, new SeededRandom(42));
+
+      const pairArmA = pair.find((l) => l.id === solo[0].id);
+      expect(pairArmA).toBeDefined();
+      expect(pairArmA!.points.map((p) => [p.x, p.y]))
+        .toEqual(solo[0].points.map((p) => [p.x, p.y]));
+    });
+
     it('merges across the 0/360 wrap, same as anywhere else on the circle', () => {
       const lanes = buildArms(site([
         { bearingDeg: 358, type: 'main', through: false, routeId: 'a' },
