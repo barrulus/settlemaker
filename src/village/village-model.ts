@@ -56,7 +56,7 @@ export const VILLAGE_POP_CEILING = 1000;
  * standing bars name no floor, so the flat extension of the nearer named
  * anchor is used rather than inventing an unstated one.
  */
-function blockFloorFor(population: number): number {
+export function blockFloorFor(population: number): number {
   if (population < HAMLET_RIBBON_POP) return 0;
   if (population < 900) return 2;
   return 6;
@@ -251,9 +251,15 @@ export function generateVillage(
   // place -- every producer above returns a fresh array/object), so
   // capturing the current reference is a true snapshot of that round's
   // state, no cloning needed.
+  // `diagnostics` is the model's honesty channel, and a restored round must
+  // not keep the lines a discarded round pushed -- those describe geometry
+  // that no longer ships. Captured as a length, not a copy: entries before
+  // the snapshot belong to the model regardless of what the chase does
+  // afterward, so restoring truncates back to exactly that length.
   const snapshotChase = () => ({
     lanes, lots, spend, f0, lotFloorM, activeDeck, lotRadiusM, lotProfile,
     deckUsableLotCount, measuredMeanFrontage, notch, terrace, spacingRung, extraRings,
+    diagnosticsLength: diagnostics.length,
   });
   let firstHousedSnapshot: ReturnType<typeof snapshotChase> | null = null;
   const restoreFirstHoused = (): void => {
@@ -262,6 +268,7 @@ export function generateVillage(
       lanes, lots, spend, f0, lotFloorM, activeDeck, lotRadiusM, lotProfile,
       deckUsableLotCount, measuredMeanFrontage, notch, terrace, spacingRung, extraRings,
     } = firstHousedSnapshot);
+    diagnostics.length = firstHousedSnapshot.diagnosticsLength;
   };
 
   for (let round = 0; round <= MAX_FEEDBACK_ROUNDS; round++) {
@@ -423,11 +430,28 @@ export function generateVillage(
     }
 
     if (round === MAX_FEEDBACK_ROUNDS) {
-      if (spend.unhoused > 0) {
+      if (spend.unhoused > 0 && firstHousedSnapshot === null) {
         diagnostics.push(
           `overflow: ${spend.unhoused} of ${site.population} unhoused after `
           + `${MAX_FEEDBACK_ROUNDS} rounds (available frontage `
           + `${Math.round(availableFrontage(lanes))} m)`,
+        );
+      } else if (spend.unhoused > 0) {
+        // A round found earlier DID house the census (`firstHousedSnapshot`
+        // is set), but a later block-chasing rung (notch/terrace/spacing/
+        // widen) reshaped the fabric enough to un-house it again before the
+        // ladder ran out. A found-housed village must never be lost to a
+        // worse round tried afterward: restore the round that worked rather
+        // than ship the unhoused one the ladder ended on, and say so --
+        // shipping unhoused geometry silently here was the bug (a fully
+        // housed round found and then discarded without a trace).
+        const regressedUnhoused = spend.unhoused;
+        restoreFirstHoused();
+        diagnostics.push(
+          `restored: census was housed at an earlier round but the block `
+          + `chase reshaped the fabric back to ${regressedUnhoused} of `
+          + `${site.population} unhoused by round ${MAX_FEEDBACK_ROUNDS}; `
+          + `shipping the earlier housed round instead`,
         );
       } else {
         // Housed, chasing blocks right up to the round cap, and still
@@ -453,13 +477,25 @@ export function generateVillage(
       spacingRung++;
     } else {
       extraRings++;
-      diagnostics.push(
-        `disc widened past its closed form: ${spend.unhoused} of ${site.population} `
-        + `still unhoused at the cap (R ${Math.round(cappedRadiusM)} m, cut width `
-        + `${f0.toFixed(2)} m at the ink floor, terraces on, lane spacing at `
-        + `${Math.round(spacingScale() * 100)}% of the polar floor); `
-        + `+${Math.round(extraRings * DISC_ESCALATION_STEP_RATIO * 100)}%`,
-      );
+      // A chase round (census already housed, still short of the blocks
+      // floor) reaches this same rung -- widening is also its last resort.
+      // But "0 of N still unhoused" is not a widen-for-housing event, it is
+      // a widen-for-blocks event, and printing the unhoused line for it
+      // would be false on its face. Only report when someone actually is.
+      // (This CANNOT be relied on to be erased by the restore/truncation
+      // below: a round that pushes this falsely can still be followed by a
+      // round that genuinely re-houses AND clears the blocks floor, which
+      // ships LIVE with no restore at all -- see the test that reproduces
+      // exactly that shape, hub pop 300 seed 28.)
+      if (spend.unhoused > 0) {
+        diagnostics.push(
+          `disc widened past its closed form: ${spend.unhoused} of ${site.population} `
+          + `still unhoused at the cap (R ${Math.round(cappedRadiusM)} m, cut width `
+          + `${f0.toFixed(2)} m at the ink floor, terraces on, lane spacing at `
+          + `${Math.round(spacingScale() * 100)}% of the polar floor); `
+          + `+${Math.round(extraRings * DISC_ESCALATION_STEP_RATIO * 100)}%`,
+        );
+      }
     }
   }
 

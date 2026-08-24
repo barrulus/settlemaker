@@ -767,7 +767,16 @@ export const DISC_ESCALATION_STEP_RATIO = 0.06;
  * need zero extra rounds once the block check itself is accurate) without
  * letting an unfixable one burn the whole ladder for nothing.
  */
-export const BLOCK_CHASE_ROUND_CAP = 1;
+// Typed `number`, not inferred as the literal `1`: `village-model.ts` compares
+// this against `1` to pick a pluralised word in a diagnostic message, and a
+// literal-typed const makes that comparison a compile error the instant this
+// value is tuned to anything else (TS2367, "no overlap" between two disjoint
+// literal types) -- a real trap this file's own bisection history hit once
+// already (see the constant's own comment above) while walking this value
+// through 3, 2, 1 and back. Widening the type here, once, makes every future
+// retune safe regardless of which literal the comparison in that message is
+// written against.
+export const BLOCK_CHASE_ROUND_CAP: number = 1;
 
 /**
  * How far an arm/lane extends past the green, as a multiple of the

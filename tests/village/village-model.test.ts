@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { Point } from '../../src/types/point.js';
-import { generateVillage, VILLAGE_POP_CEILING } from '../../src/village/village-model.js';
+import {
+  blockFloorFor, generateVillage, VILLAGE_POP_CEILING,
+} from '../../src/village/village-model.js';
 // Gate 6.4 moved the trunk-reach rule to `skeleton/lanes.ts`, where
 // `availableFrontage` needs it too -- the budget must count only frontage
 // this rule will let the cutter use.
@@ -799,5 +801,93 @@ describe('enclosed blocks (gate 6.10: a bar, not a column)', () => {
     });
     expect(counts.filter((n) => n >= 6).length).toBeGreaterThanOrEqual(4);
     expect(Math.min(...counts)).toBeGreaterThanOrEqual(4);
+  });
+});
+
+/**
+ * Code review of ab72dbf..6b34262 (Task 2's fix round) found three Important
+ * defects in the block-aware chase this section covers. None of the gated
+ * fixtures above ever enter the chase branch (`village-model.ts`'s
+ * `blockChaseRounds` path), so it shipped with zero assertions on: the
+ * `blockFloorFor` boundaries, the restore-on-regression arm, and the
+ * diagnostics channel's honesty across a rolled-back round. This section
+ * closes that gap.
+ */
+describe('block-aware chase (fix round: three review findings)', () => {
+  it('blockFloorFor: 0 below HAMLET_RIBBON_POP, 2 through 899, 6 from 900 up', () => {
+    expect(blockFloorFor(HAMLET_RIBBON_POP - 1)).toBe(0);
+    expect(blockFloorFor(HAMLET_RIBBON_POP)).toBe(2);
+    expect(blockFloorFor(899)).toBe(2);
+    expect(blockFloorFor(900)).toBe(6);
+  });
+
+  // hub (five mixed-class routes, the probe scenario Task 2's report names)
+  // at pop 300, seed 3: census houses at a round whose fabric encloses only
+  // 1 block against the 2-block floor. This is the chase branch itself:
+  // `blockChaseRounds` increments, the loop does not break on housing alone.
+  const hubInput = (population: number): AzgaarBurgInput => ({
+    name: 'Probe', population, port: false, citadel: false, walls: false,
+    plaza: false, temple: false, shanty: false, capital: false,
+    roadBearings: [
+      { bearing_deg: 12, kind: 'royal', through: true, route_id: 'r-royal' },
+      { bearing_deg: 78, kind: 'main', route_id: 'r-main' },
+      { bearing_deg: 155, kind: 'town', route_id: 'r-town' },
+      { bearing_deg: 231, kind: 'trail', route_id: 'r-trail' },
+      { bearing_deg: 304, kind: 'footpath', route_id: 'r-foot' },
+    ],
+  });
+
+  it('enters the block chase when a housed round falls short of the floor', () => {
+    const m = generateVillage(hubInput(300), 3);
+    const blocks = blockAreas(m.lanes, m.green).length;
+    expect(blocks).toBeLessThan(blockFloorFor(300));
+    // The chase ran (not an immediate break on housing) and gave up
+    // honestly rather than silently shipping a short fabric.
+    expect(m.diagnostics.some((d) => d.startsWith('blocks short:'))).toBe(true);
+    expect(m.diagnostics.some((d) => d.startsWith('overflow:'))).toBe(false);
+  });
+
+  // Finding #3, isolated from any restore: hub pop 300, seed 28. Measured
+  // directly, the census first houses at a round where the ladder is
+  // already maxed (notch/terrace/spacing all exhausted from real widening
+  // rounds before it), so that round's own fallthrough lands on the
+  // `extraRings` rung with `spend.unhoused === 0` -- exactly the false-
+  // diagnostic shape ("disc widened ... 0 of 300 still unhoused"). Two
+  // MORE genuine widen rounds follow (still unhoused, 118 then 114) before
+  // a later round re-houses AND genuinely clears the blocks floor, which
+  // ships LIVE with no restore at all. Diagnostics-truncation-on-restore
+  // (the other half of finding #3) CANNOT save this case, because no
+  // restore ever happens here: this is the shape that specifically requires
+  // the guard on the diagnostic push itself, not just the snapshot. Without
+  // it, the shipped diagnostics falsely claim "0 of 300 still unhoused" for
+  // a round that was fully housed.
+  it('does not print a false unhoused count for a housed round that later ships live', () => {
+    const m = generateVillage(hubInput(300), 28);
+    expect(blockAreas(m.lanes, m.green).length).toBeGreaterThanOrEqual(blockFloorFor(300));
+    for (const d of m.diagnostics) {
+      expect(d).not.toMatch(/^disc widened past its closed form: 0 of/);
+    }
+  });
+
+  // Finding #1 + the other half of finding #3, together: hub pop 900,
+  // seed 3. Housing itself needs several genuine widen rounds (unhoused
+  // 160, 92, 92, 32, 16, 56, 64, 44 across rounds 0-7, measured directly),
+  // so by the round the census FIRST houses (round 8) the ladder is
+  // already maxed. Round 9 is also housed and still short of the blocks
+  // floor, so `blockChaseRounds` exceeds `BLOCK_CHASE_ROUND_CAP` and the
+  // loop restores round 8's snapshot -- exercising the restore path and
+  // the diagnostics truncation across it.
+  it('restores cleanly and reports the honest shortfall, not an overflow', () => {
+    const m = generateVillage(hubInput(900), 3);
+    for (const d of m.diagnostics) {
+      const widened = d.match(/^disc widened past its closed form: (\d+) of \d+ still unhoused/);
+      if (widened) expect(Number(widened[1])).toBeGreaterThan(0);
+    }
+    // Housed (a "blocks short" line, not "overflow") and the shipped
+    // geometry is the restored round, not a discarded later one: no line
+    // in the final diagnostics describes a round of 0 unhoused blocks
+    // widening that a subsequent round then quietly overwrote.
+    expect(m.diagnostics.some((d) => d.startsWith('overflow:'))).toBe(false);
+    expect(m.diagnostics.some((d) => d.startsWith('blocks short:'))).toBe(true);
   });
 });
