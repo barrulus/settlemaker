@@ -3,14 +3,15 @@ import { Point } from '../../src/types/point.js';
 import { pointInPolygon } from '../../src/geom/point-in-polygon.js';
 import { SeededRandom } from '../../src/utils/random.js';
 import {
-  blockOuterRadius, buildFields, buildWedges, ringRows,
+  blockOuterRadius, blockSlots, buildFields, buildWedges, slotCourses,
 } from '../../src/village/dressing/fields.js';
 import { generateVillage } from '../../src/village/village-model.js';
 import { lotObb, obbOverlap } from '../../src/village/parcels/overlap.js';
 import { closestPointOnSegment, dist, angularGap } from '../../src/village/geometry.js';
 import {
-  FIELD_BLOCK_DEPTH_MAX_M, FIELD_DEPTH_JITTER, FIELD_BLOCK_DEPTH_MIN_M, FIELD_CROPS, FIELD_MIN_BLOCK_AREA_M2,
-  FIELD_BLOCK_MIN_ASPECT, FIELD_BLOCK_ROW_DEPTH_TARGET_M, FIELD_BLOCK_ROW_GAP_M, FIELD_BLOCK_ROWS_MAX,
+  FIELD_BLOCK_DEPTH_MAX_M, FIELD_BLOCK_DEPTH_MIN_M, FIELD_CROPS, FIELD_MIN_BLOCK_AREA_M2,
+  FIELD_BLOCK_GAP_SHARE, FIELD_BLOCK_MIN_ASPECT, FIELD_BLOCK_ROW_DEPTH_MAX_M,
+  FIELD_BLOCK_ROW_DEPTH_MIN_M, FIELD_BLOCK_ROW_GAP_M, FIELD_BLOCK_ROWS_MAX, FIELD_SKEW_JITTER,
   GREEN_JOIN_RATIO, LANE_SETBACK_M, RING_SETBACK_M,
 } from '../../src/village/constants.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
@@ -192,36 +193,38 @@ describe('buildFields', () => {
     const rng = new SeededRandom(11);
     const { blocks } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, rng);
     expect(blocks.length).toBeGreaterThan(0);
-    // GATE 8.1 RESTATES THIS PREMISE, which is genuinely false now.
+    // GATE 8.1 RESTATED THIS PREMISE, which was genuinely false then, and
+    // GATE 8.2 restates it again for the same kind of reason.
     //
     // It used to read "none thinner than FIELD_BLOCK_DEPTH_MIN_M less the
-    // jitter". That constant no longer describes a BLOCK: it clamps the
-    // depth of the whole RING, which is then cut into courses (`ringRows`)
-    // so that a block's depth is comparable to its arc width. A block at
-    // pop 400 is now ~33 m deep, not ~110, and asserting the old bound
-    // would be asserting the petal the owner rejected.
+    // jitter". That constant does not describe a BLOCK: it clamps the depth
+    // of the whole RING, which is then cut into courses so that a block's
+    // depth is comparable to its arc width. A block at pop 400 is ~33 m
+    // deep, not ~110, and asserting the old bound would be asserting the
+    // petal the owner rejected.
     //
-    // What is still true, and is what this pins: a block's depth is one
-    // COURSE of a ring whose total depth is inside the old clamp, plus the
-    // jitter. The bound is derived from `ringRows` over the clamp range
-    // rather than written down, because the row count steps (a deeper ring
-    // gets MORE courses and therefore SHALLOWER blocks, so the extremes are
-    // not at the ends of the range).
-    let minRow = Infinity;
-    let maxRow = 0;
-    for (let d = FIELD_BLOCK_DEPTH_MIN_M; d <= FIELD_BLOCK_DEPTH_MAX_M; d += 0.5) {
-      const { rowDepth } = ringRows(d);
-      minRow = Math.min(minRow, rowDepth);
-      maxRow = Math.max(maxRow, rowDepth);
-    }
+    // Gate 8.1 then derived the bound from `ringRows` over the clamp range.
+    // That derivation is dead too: the subdivision is per SLOT now, its row
+    // count is DRAWN from every count the band admits, and its shares are
+    // drawn as well -- so there is no function of the ring depth left to
+    // read a bound off. What replaced it is a stronger statement, and the
+    // one gate 8.2 is judged on: `slotCourses` clamps every course into
+    // [FIELD_BLOCK_ROW_DEPTH_MIN_M, FIELD_BLOCK_ROW_DEPTH_MAX_M], whatever
+    // the census asks for and however the dice fall. The only slack is the
+    // SKEW, which shrinks one end of a block by up to half of
+    // FIELD_SKEW_JITTER and so pulls the measured depth at a polygon's END
+    // bearings below the floor (never above the ceiling).
+    const skewSlack = 1 - FIELD_SKEW_JITTER / 2;
     for (const s of blocks) {
       expect(s.areaM2).toBeGreaterThanOrEqual(FIELD_MIN_BLOCK_AREA_M2);
       // Radial depth: the polygon is the outer arc forward then the inner
       // arc back, so first and last points share a bearing.
       const outerR = dist(s.polygon[0], green.centre);
       const innerR = dist(s.polygon[s.polygon.length - 1], green.centre);
-      expect(outerR - innerR).toBeGreaterThanOrEqual(minRow * (1 - FIELD_DEPTH_JITTER) - 1e-6);
-      expect(outerR - innerR).toBeLessThanOrEqual(maxRow * (1 + FIELD_DEPTH_JITTER) + 1e-6);
+      expect(outerR - innerR).toBeGreaterThanOrEqual(
+        FIELD_BLOCK_ROW_DEPTH_MIN_M * skewSlack - 1e-6,
+      );
+      expect(outerR - innerR).toBeLessThanOrEqual(FIELD_BLOCK_ROW_DEPTH_MAX_M + 1e-6);
     }
   });
 
@@ -247,20 +250,67 @@ describe('buildFields', () => {
     }
   });
 
-  it('ringRows partitions the ring depth exactly, into courses near the target depth', () => {
-    for (let d = FIELD_BLOCK_DEPTH_MIN_M; d <= FIELD_BLOCK_DEPTH_MAX_M; d += 0.5) {
-      const { rows, rowDepth, gap } = ringRows(d);
-      expect(rows).toBeGreaterThanOrEqual(1);
-      expect(rows).toBeLessThanOrEqual(FIELD_BLOCK_ROWS_MAX);
-      expect(gap).toBe(rows > 1 ? FIELD_BLOCK_ROW_GAP_M : 0);
-      // Exact partition: the census bought this depth and the courses spend
-      // all of it, headlands included. Nothing is invented and nothing lost.
-      expect(rows * rowDepth + gap * (rows - 1)).toBeCloseTo(d, 6);
-      // And a course is a field-sized thing, not a slab: within a factor of
-      // two of the target either way across the whole clamp range.
-      expect(rowDepth).toBeGreaterThan(FIELD_BLOCK_ROW_DEPTH_TARGET_M / 2);
-      expect(rowDepth).toBeLessThan(FIELD_BLOCK_ROW_DEPTH_TARGET_M * 2);
+  // GATE 8.2: gate 8.1's `ringRows` test, rewritten for `slotCourses`. The
+  // exactness premise survives word for word -- it is the one that keeps
+  // the census arithmetic honest. What is added is the BAND, which is how
+  // "block depth max/min <= 2.5" is met by construction rather than by
+  // luck, and the fixed draw count, which is what §8.1 requires of any
+  // stage whose rng sequence must not depend on geometry.
+  it('slotCourses partitions a slot depth exactly, into band-clamped courses', () => {
+    // Over every depth a slot can present: the ring clamp either way, plus
+    // FIELD_SLOT_DEPTH_JITTER. The band's own tiling rule (MAX >= 2*MIN +
+    // the headland) is what guarantees a legal row count at every one of
+    // them, so this range walking without a gap IS that rule under test.
+    for (let d = FIELD_BLOCK_DEPTH_MIN_M * 0.75; d <= FIELD_BLOCK_DEPTH_MAX_M * 1.25; d += 0.5) {
+      for (let seed = 1; seed <= 6; seed++) {
+        const { depths, gap } = slotCourses(d, new SeededRandom(seed));
+        expect(depths.length).toBeGreaterThanOrEqual(1);
+        expect(depths.length).toBeLessThanOrEqual(FIELD_BLOCK_ROWS_MAX);
+        expect(gap).toBe(depths.length > 1 ? FIELD_BLOCK_ROW_GAP_M : 0);
+        // Exact partition: the census bought this depth and the courses
+        // spend all of it, headlands included. Nothing invented, none lost.
+        const spent = depths.reduce((a, b) => a + b, 0) + gap * (depths.length - 1);
+        expect(spent).toBeCloseTo(d, 6);
+        // Band: no course is a strip and none is a petal.
+        for (const depth of depths) {
+          expect(depth).toBeGreaterThanOrEqual(FIELD_BLOCK_ROW_DEPTH_MIN_M - 1e-6);
+          expect(depth).toBeLessThanOrEqual(FIELD_BLOCK_ROW_DEPTH_MAX_M + 1e-6);
+        }
+      }
     }
+  });
+
+  // GATE 8.2: neighbouring slots must not agree on their subdivision --
+  // that agreement IS the concentric ring the owner objected to. Over a
+  // depth every wedge in a pop-900 village sees, the draws must produce
+  // more than one row count and a spread of course depths.
+  it('slotCourses gives different slots different subdivisions', () => {
+    const counts = new Set<number>();
+    const firstDepths: number[] = [];
+    const rng = new SeededRandom(3);
+    for (let i = 0; i < 40; i++) {
+      const { depths } = slotCourses(100, rng);
+      counts.add(depths.length);
+      firstDepths.push(depths[0]);
+    }
+    expect(counts.size).toBeGreaterThanOrEqual(2);
+    expect(Math.max(...firstDepths) - Math.min(...firstDepths)).toBeGreaterThan(8);
+  });
+
+  // GATE 8.2: and the angular axis is not a regular grid either.
+  it('blockSlots cuts a wedge into slots of DIFFERENT widths, spending the same span', () => {
+    const rng = new SeededRandom(5);
+    const wedge = { id: 'w0', bearingA: 0, bearingB: 120, spanDeg: 120, bisectorDeg: 60 };
+    const slots = blockSlots(wedge as never, rng);
+    expect(slots.length).toBeGreaterThan(2);
+    const widths = slots.map((s) => s.toDeg - s.fromDeg);
+    expect(Math.max(...widths) / Math.min(...widths)).toBeGreaterThan(1.2);
+    // The wedge's span, and its FIELD_BLOCK_GAP_SHARE of open green, are
+    // spent exactly as before: only the division changed.
+    const spanned = widths.reduce((a, b) => a + b, 0);
+    expect(spanned).toBeCloseTo(wedge.spanDeg * (1 - FIELD_BLOCK_GAP_SHARE), 6);
+    expect(slots[0].fromDeg).toBeGreaterThanOrEqual(wedge.bearingA);
+    expect(slots[slots.length - 1].toDeg).toBeLessThanOrEqual(wedge.bearingB + 1e-6);
   });
 
   // The depth clamp guarantees a positive band at any census, so the only

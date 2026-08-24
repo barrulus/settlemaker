@@ -8,11 +8,14 @@ import {
 import { lotObb, pointInObb, type Obb } from '../parcels/overlap.js';
 import {
   FIELD_BELT_GAP_M, FIELD_BELT_JITTER_MAX_M, FIELD_BELT_JITTER_MIN_M,
-  FIELD_BLOCK_DEPTH_MAX_M, FIELD_BLOCK_DEPTH_MIN_M, FIELD_DEPTH_JITTER,
+  FIELD_BLOCK_DEPTH_MAX_M, FIELD_BLOCK_DEPTH_MIN_M,
   FIELD_SKEW_JITTER, FIELD_SPAN_JITTER,
   FIELD_BLOCK_GAP_SHARE, FIELD_BLOCK_MAX_PER_WEDGE, FIELD_BLOCK_MIN_ASPECT,
+  FIELD_BLOCK_ROW_DEPTH_MAX_M, FIELD_BLOCK_ROW_DEPTH_MIN_M,
   FIELD_BLOCK_ROW_DEPTH_TARGET_M, FIELD_BLOCK_ROW_GAP_M, FIELD_BLOCK_ROWS_MAX,
-  FIELD_BLOCK_SLICE_DEG,
+  FIELD_BLOCK_SLICE_DEG, FIELD_BLOCK_SPAN_SPREAD,
+  FIELD_ROW_DEPTH_SPREAD, FIELD_ROW_SPLIT_CHANCE, FIELD_ROW_SPLIT_GAP_SHARE,
+  FIELD_ROW_STAGGER_JITTER, FIELD_SLOT_DEPTH_JITTER,
   FIELD_BLOCK_SPAN_TARGET_DEG, FIELD_CROPS, FIELD_FURROW_MIN_SEPARATION_DEG,
   FIELD_INNER_FLOOR_PAD_M, FIELD_INNER_PERCENTILE, FIELD_JITTER_RANGE_DEG,
   FIELD_M2_PER_CAPITA, FIELD_MIN_BLOCK_AREA_M2, FIELD_ORCHARD_VINE_CHANCE,
@@ -314,7 +317,7 @@ function pickCropGlyph(
 }
 
 /** An angular window of the ring, degrees, before clipping. */
-interface Slot { fromDeg: number; toDeg: number }
+export interface Slot { fromDeg: number; toDeg: number }
 
 /**
  * Gate 5: a wedge's span cut into 1-FIELD_BLOCK_MAX_PER_WEDGE nominal
@@ -325,17 +328,31 @@ interface Slot { fromDeg: number; toDeg: number }
  * out through the ring, and the reference map shows them running between
  * blocks, not into the side of one.
  */
-function blockSlots(wedge: Wedge): Slot[] {
+export function blockSlots(wedge: Wedge, rng: SeededRandom): Slot[] {
   const n = Math.max(
     1,
     Math.min(FIELD_BLOCK_MAX_PER_WEDGE, Math.round(wedge.spanDeg / FIELD_BLOCK_SPAN_TARGET_DEG)),
   );
-  const gapEach = (wedge.spanDeg * FIELD_BLOCK_GAP_SHARE) / n;
-  const blockSpan = (wedge.spanDeg * (1 - FIELD_BLOCK_GAP_SHARE)) / n;
-  const slots: Slot[] = [];
+  // GATE 8.2: the slots are no longer all one width. Gate 8.1 cut a wedge
+  // into n equal slots, so once the radial axis varied the ring was still a
+  // regular grid in the angular axis -- every furlong the same breadth, all
+  // the way round. One rng float per slot, drawn here (i.e. before any of
+  // that slot's own draws), gives each a weight; the weights are normalised
+  // so the wedge's span and its FIELD_BLOCK_GAP_SHARE of open green are
+  // spent EXACTLY as before. Only the division changes.
+  const weights: number[] = [];
   for (let i = 0; i < n; i++) {
-    const from = wedge.bearingA + gapEach / 2 + i * (blockSpan + gapEach);
-    slots.push({ fromDeg: from, toDeg: from + blockSpan });
+    weights.push(1 + (rng.float() * 2 - 1) * FIELD_BLOCK_SPAN_SPREAD);
+  }
+  const total = weights.reduce((a, b) => a + b, 0);
+  const gapEach = (wedge.spanDeg * FIELD_BLOCK_GAP_SHARE) / n;
+  const spanBudget = wedge.spanDeg * (1 - FIELD_BLOCK_GAP_SHARE);
+  const slots: Slot[] = [];
+  let cursor = wedge.bearingA + gapEach / 2;
+  for (let i = 0; i < n; i++) {
+    const blockSpan = (spanBudget * weights[i]) / total;
+    slots.push({ fromDeg: cursor, toDeg: cursor + blockSpan });
+    cursor += blockSpan + gapEach;
   }
   return slots;
 }
@@ -455,13 +472,98 @@ interface WedgeRing { blocks: FieldBlock[]; outerRadius: number }
  * The census is NOT touched: `ringDepth` is exactly what `blockOuterRadius`
  * solved for, and the rows partition it. The only land given up is the
  * headlands, which is why `buildWedgeBlocks` asks the solve for them back.
+ *
+ * GATE 8.2 keeps every word of that and takes away the one thing that made
+ * the result read as CONCENTRIC COURSES: that it was computed once per
+ * WEDGE. It is now `slotCourses`, drawn per SLOT.
+ *
+ * Which row counts are legal for a given depth: every count whose EVEN
+ * share would land inside [FIELD_BLOCK_ROW_DEPTH_MIN_M,
+ * FIELD_BLOCK_ROW_DEPTH_MAX_M]. A 120 m slot may be three courses or four;
+ * an 80 m slot two or three. The fallback (nothing legal, which only
+ * happens for a ring shallower than the minimum or deeper than
+ * FIELD_BLOCK_ROWS_MAX * the maximum) is gate 8.1's target-depth rounding.
  */
-export function ringRows(ringDepth: number): { rows: number; rowDepth: number; gap: number } {
-  const rows = Math.max(1, Math.min(
-    FIELD_BLOCK_ROWS_MAX, Math.round(ringDepth / FIELD_BLOCK_ROW_DEPTH_TARGET_M),
-  ));
+export function courseCandidates(ringDepth: number): number[] {
+  const out: number[] = [];
+  for (let rows = 1; rows <= FIELD_BLOCK_ROWS_MAX; rows++) {
+    const gap = rows > 1 ? FIELD_BLOCK_ROW_GAP_M : 0;
+    const even = (ringDepth - gap * (rows - 1)) / rows;
+    if (even >= FIELD_BLOCK_ROW_DEPTH_MIN_M && even <= FIELD_BLOCK_ROW_DEPTH_MAX_M) out.push(rows);
+  }
+  if (out.length === 0) {
+    out.push(Math.max(1, Math.min(
+      FIELD_BLOCK_ROWS_MAX, Math.round(ringDepth / FIELD_BLOCK_ROW_DEPTH_TARGET_M),
+    )));
+  }
+  return out;
+}
+
+/**
+ * GATE 8.2: one slot's own radial subdivision -- how many courses, and how
+ * deep each of them is, from the inside out.
+ *
+ * Three properties, all of them load-bearing and all of them pinned by
+ * test:
+ *  - EXACT. `sum(depths) + gap * (depths.length - 1) === ringDepth`. The
+ *    census arithmetic is still `blockOuterRadius`'s alone; this only
+ *    decides how its ground is divided.
+ *  - UNEVEN. The shares are drawn (FIELD_ROW_DEPTH_SPREAD), so a slot's
+ *    courses run 45/30/25 rather than 33/33/33. That is the merge and the
+ *    split the owner asked for, arrived at as ONE mechanism: a dominant
+ *    share IS two courses merged into a deep parcel, a pair of small ones
+ *    IS a course split into strips, and neither needs a special case that
+ *    would break the exact partition.
+ *  - BOUNDED. Every depth is clamped into the band, with the residual
+ *    handed back to the courses that still have headroom, so the ratio
+ *    between the deepest and shallowest block the ring can ever draw is
+ *    FIELD_BLOCK_ROW_DEPTH_MAX_M / FIELD_BLOCK_ROW_DEPTH_MIN_M = 2.26 --
+ *    the acceptance bar, satisfied by construction rather than by luck.
+ *
+ * Because both the count and the shares are per slot, the boundary between
+ * course 1 and course 2 lands at a different radius in every slot, and
+ * neighbouring slots do not even agree on how many boundaries there are.
+ * That is what stops the eye joining them into a ring.
+ *
+ * RNG: exactly 1 + FIELD_BLOCK_ROWS_MAX floats, always, whatever the depth
+ * -- the row pick, then one share per possible course with the unused tail
+ * spent anyway. A draw count that varied with geometry would make the
+ * sequence depend on the census (§8.1 forbids that).
+ */
+export function slotCourses(
+  ringDepth: number, rng: SeededRandom,
+): { depths: number[]; gap: number } {
+  const candidates = courseCandidates(ringDepth);
+  const pick = Math.min(candidates.length - 1, Math.floor(rng.float() * candidates.length));
+  const rows = candidates[pick];
+  const shares: number[] = [];
+  for (let i = 0; i < FIELD_BLOCK_ROWS_MAX; i++) {
+    const w = 1 + (rng.float() * 2 - 1) * FIELD_ROW_DEPTH_SPREAD;
+    if (i < rows) shares.push(w);
+  }
   const gap = rows > 1 ? FIELD_BLOCK_ROW_GAP_M : 0;
-  return { rows, gap, rowDepth: (ringDepth - gap * (rows - 1)) / rows };
+  const budget = ringDepth - gap * (rows - 1);
+  const total = shares.reduce((a, b) => a + b, 0);
+  const depths = shares.map((w) => (budget * w) / total);
+  // Clamp into the band and hand the residual back to whichever courses
+  // still have room, repeatedly, so the sum stays EXACTLY `budget`. Two
+  // passes settle every case the band admits; the third is belt and braces
+  // for a budget that sits against a bound.
+  const lo = Math.min(FIELD_BLOCK_ROW_DEPTH_MIN_M, budget / rows);
+  const hi = Math.max(FIELD_BLOCK_ROW_DEPTH_MAX_M, budget / rows);
+  for (let pass = 0; pass < 3; pass++) {
+    for (let i = 0; i < rows; i++) depths[i] = Math.min(hi, Math.max(lo, depths[i]));
+    const residual = budget - depths.reduce((a, b) => a + b, 0);
+    if (Math.abs(residual) < 1e-9) break;
+    const room = depths.map((d) => (residual > 0 ? hi - d : d - lo));
+    const roomTotal = room.reduce((a, b) => a + b, 0);
+    if (roomTotal < 1e-9) {
+      for (let i = 0; i < rows; i++) depths[i] += residual / rows;
+      break;
+    }
+    for (let i = 0; i < rows; i++) depths[i] += (residual * room[i]) / roomTotal;
+  }
+  return { depths, gap };
 }
 
 function buildWedgeBlocks(
@@ -470,17 +572,14 @@ function buildWedgeBlocks(
   crops: string[], allowOrchardVine: boolean, rng: SeededRandom, toggle: { n: number },
 ): WedgeRing {
   const innerRadius = wedgeInnerRadius(edge, wedge);
-  const slots = blockSlots(wedge);
+  const slots = blockSlots(wedge, rng);
   const coverageRad = slots.reduce((sum, s) => sum + ((s.toDeg - s.fromDeg) * Math.PI) / 180, 0);
   // This wedge's share of the census demand, by span -- the same
   // distribution across wedges the band used before gate 5.
   const demand = Math.max(0, population) * FIELD_M2_PER_CAPITA * (wedge.spanDeg / 360);
   const outerRadius = blockOuterRadius(innerRadius, demand, coverageRad);
   if (!(outerRadius > innerRadius)) return { blocks: [], outerRadius: innerRadius };
-  // GATE 8.1: the depth the census bought, spent as COURSES rather than as
-  // one slab. `rowDepth` is what a block is actually deep now, and it is
-  // the number the depth-clamp bound below is stated against.
-  const { rows, rowDepth, gap: rowGap } = ringRows(outerRadius - innerRadius);
+  const ringDepth = outerRadius - innerRadius;
 
   const blocks: FieldBlock[] = [];
   let ordinal = 0;
@@ -491,89 +590,127 @@ function buildWedgeBlocks(
     // gets drawn. Jittering a cleared block afterwards would push it onto
     // ground nothing ever checked.
     //
-    // GATE 8.1 draw order, fixed: one belt float for the SLOT (the belt is
-    // where the whole course starts, and it must not step between rows of
-    // the same slot), then depth/span/skew for EACH ROW from the inside
-    // out. A row draws its own span and skew so the courses are not three
-    // identical blocks stacked radially, which reads as a spoke.
+    // GATE 8.2 draw order per slot, fixed, and every count independent of
+    // geometry: one belt float (the belt is where the whole slot starts,
+    // and it must not step between courses of the same slot), one slot
+    // depth float, then `slotCourses` (1 + FIELD_BLOCK_ROWS_MAX floats),
+    // then FOUR floats per course drawn -- span, skew, stagger, split.
+    //
+    // Gate 8.1 drew the belt, then depth/span/skew per row, and read its
+    // course count off the WEDGE. Reading it off the wedge is exactly what
+    // made three courses appear at the same three radii all the way round
+    // the village; the depth float has moved out to the slot because it is
+    // now the thing that makes neighbouring slots qualify for different
+    // course counts, and the partition itself carries the depth variation.
     const beltOffset = FIELD_BELT_JITTER_MIN_M
       + rng.float() * (FIELD_BELT_JITTER_MAX_M - FIELD_BELT_JITTER_MIN_M);
-    for (let row = 0; row < rows; row++) {
-      const depthMul = 1 + (rng.float() * 2 - 1) * FIELD_DEPTH_JITTER;
+    // GATE 8.2: this slot's own total depth. The census solved for the
+    // wedge; a slot may be up to FIELD_SLOT_DEPTH_JITTER short of or beyond
+    // it, symmetrically, so the ring's OUTER edge steps from slot to slot
+    // instead of running level -- an outer boundary is a ring boundary too.
+    const slotDepth = ringDepth * (1 + (rng.float() * 2 - 1) * FIELD_SLOT_DEPTH_JITTER);
+    const { depths: courseDepths, gap: rowGap } = slotCourses(slotDepth, rng);
+    const slotSpan = slot.toDeg - slot.fromDeg;
+
+    let base = beltOffset;
+    for (let row = 0; row < courseDepths.length; row++) {
+      const jDepth = courseDepths[row];
       const spanMul = 1 + (rng.float() * 2 - 1) * FIELD_SPAN_JITTER;
       const skew = (rng.float() * 2 - 1) * FIELD_SKEW_JITTER;
+      const staggerRoll = rng.float();
+      const splitRoll = rng.float();
+      const rowBase = base;
+      base += jDepth + rowGap;
+      if (!(jDepth > 0)) continue;
 
       // GATE 8: the block's inner arc IS the measured edge, bearing by
       // bearing, offset by this slot's belt jitter -- so the ring wanders
       // with the body instead of being an arc struck about the green.
-      // GATE 8.1: plus the courses already laid inside this one.
-      const base = beltOffset + row * (rowDepth + rowGap);
-      const innerAt = (deg: number): number => edge.atBearing(deg) + base;
+      // GATE 8.1: plus the courses already laid inside this one, which
+      // GATE 8.2 makes this SLOT's courses rather than the wedge's.
+      const innerAt = (deg: number): number => edge.atBearing(deg) + rowBase;
       // The depth clamp still governs the RING (`blockOuterRadius`); what a
-      // BLOCK is deep is that depth divided among the courses, jittered.
+      // BLOCK is deep is this slot's share of that depth (`slotCourses`),
+      // band-clamped.
       // GATE 8: the jitter is applied AFTER the clamp, not inside it. A big
       // census asks for more depth than FIELD_BLOCK_DEPTH_MAX_M allows, so
       // every slot in every wedge came out at exactly the cap and the
       // ring's OUTER edge was a perfect circle.
-      const jDepth = rowDepth * depthMul;
       const outerAt = (deg: number): number => innerAt(deg) + jDepth;
-      if (!(jDepth > 0)) continue;
       // The span is scaled about the slot's own mid-bearing. The skew needs
       // no allowance here because it only ever shrinks an arc (see
       // `sectorPolygon`), so both arcs stay inside what the clip tested.
-      // GATE 8.1 STAGGER: an odd course is turned half a slot, so the gaps
-      // between blocks do NOT line up from one course to the next. Left
-      // aligned, the courses' seams read as green SPOKES running the whole
-      // depth of the ring -- the pinwheel returning by another route. Real
-      // open fields are laid in furlongs that break joint. The shifted
-      // bearings go through `clipSlotToRuns` like any other, so nothing is
-      // drawn on ground that was not tested.
-      const slotMid = (slot.fromDeg + slot.toDeg) / 2
-        + (row % 2 === 1 ? (slot.toDeg - slot.fromDeg) / 2 : 0);
-      const jSpan = (slot.toDeg - slot.fromDeg) * spanMul;
-      const jSlot: Slot = { fromDeg: slotMid - jSpan / 2, toDeg: slotMid + jSpan / 2 };
+      // GATE 8.1 STAGGER, GATE 8.2 randomised: an odd course is turned half
+      // a slot, plus up to FIELD_ROW_STAGGER_JITTER of a slot either way.
+      // Left aligned, the courses' seams read as green SPOKES running the
+      // whole depth of the ring -- the pinwheel returning by another route.
+      // Alternating by exactly half a slot cured that but put every odd
+      // course's seams on one set of bearings and every even course's on
+      // another, so the seams still lined up radially two courses at a
+      // time. Real open fields break joint everywhere; so do these now.
+      // The shifted bearings go through `clipSlotToRuns` like any other, so
+      // nothing is drawn on ground that was not tested.
+      const stagger = (row % 2 === 1 ? 0.5 : 0)
+        + (staggerRoll - 0.5) * FIELD_ROW_STAGGER_JITTER;
+      const rowMid = (slot.fromDeg + slot.toDeg) / 2 + stagger * slotSpan;
+      const jSpan = slotSpan * spanMul;
+      // GATE 8.2: occasionally this one course is cut ANGULARLY into two
+      // narrower strips with a baulk between -- the odd pair of narrow
+      // parcels beside the broad ones that a real field system shows, and
+      // another set of block edges that no neighbouring slot shares.
+      const nominal: Slot[] = [];
+      if (splitRoll < FIELD_ROW_SPLIT_CHANCE) {
+        const baulk = jSpan * FIELD_ROW_SPLIT_GAP_SHARE;
+        const half = (jSpan - baulk) / 2;
+        nominal.push({ fromDeg: rowMid - jSpan / 2, toDeg: rowMid - jSpan / 2 + half });
+        nominal.push({ fromDeg: rowMid + jSpan / 2 - half, toDeg: rowMid + jSpan / 2 });
+      } else {
+        nominal.push({ fromDeg: rowMid - jSpan / 2, toDeg: rowMid + jSpan / 2 });
+      }
 
-      for (const run of clipSlotToRuns(green, jSlot, innerAt, outerAt, lots, crofts, lanes, water)) {
-        const spanDeg = run.toDeg - run.fromDeg;
-        // Area at the run's mid-bearing: the block is an irregular ribbon
-        // now, and this is the cull for a block too small to be a field,
-        // not the census arithmetic (which is `blockOuterRadius`, above).
-        const midDeg = (run.fromDeg + run.toDeg) / 2;
-        const rIn = innerAt(midDeg);
-        const rOut = outerAt(midDeg);
-        const area = sectorArea(spanDeg, rIn, rOut);
-        // A block this small is the dropped rug, not a field.
-        if (area < FIELD_MIN_BLOCK_AREA_M2) continue;
-        // GATE 8.1: and a block this NARROW is a radial sliver -- the
-        // offcut left either side of a road pass. Far out in the ring one
-        // of those clears the area cull comfortably while reading as a
-        // spoke, which is exactly what pop 900 was drawing.
-        const arcW = ((spanDeg * Math.PI) / 180) * ((rIn + rOut) / 2);
-        if (arcW < FIELD_BLOCK_MIN_ASPECT * (rOut - rIn)) continue;
-        // Gate 5.4: verify the POLYGON, not just the sample grid.
-        //
-        // `clipSlotToRuns` proves a set of bearings clear at a fixed slice
-        // pitch; `sectorPolygon` emits vertices at its own pitch across the
-        // surviving run. Those two pitches only coincide when the run's
-        // span is an exact multiple of the slice -- which the span jitter
-        // made untrue, so a vertex could land between tested bearings and,
-        // in one measured village out of forty, inside a lot claim. Rather
-        // than try to keep two samplings in phase, the emitted geometry is
-        // checked directly: if any vertex is on claimed ground the block is
-        // dropped.
-        const polygon = sectorPolygon(green, run.fromDeg, run.toDeg, innerAt, outerAt, skew);
-        if (!polygon.every((p) => isClearGround(p, lots, crofts, lanes, water))) continue;
-        const glyph = pickCropGlyph(crops, blocks.length, blocks.length === 0, allowOrchardVine, rng, toggle);
-        blocks.push({
-          id: `field:${wedge.id}:S${ordinal}`,
-          wedgeId: wedge.id,
-          glyph,
-          polygon,
-          furrowBearingDeg,
-          areaM2: area,
-        });
-        ordinal += 1;
-        for (const p of polygon) reach = Math.max(reach, dist(green.centre, p));
+      for (const jSlot of nominal) {
+        for (const run of clipSlotToRuns(green, jSlot, innerAt, outerAt, lots, crofts, lanes, water)) {
+          const spanDeg = run.toDeg - run.fromDeg;
+          // Area at the run's mid-bearing: the block is an irregular ribbon
+          // now, and this is the cull for a block too small to be a field,
+          // not the census arithmetic (which is `blockOuterRadius`, above).
+          const midDeg = (run.fromDeg + run.toDeg) / 2;
+          const rIn = innerAt(midDeg);
+          const rOut = outerAt(midDeg);
+          const area = sectorArea(spanDeg, rIn, rOut);
+          // A block this small is the dropped rug, not a field.
+          if (area < FIELD_MIN_BLOCK_AREA_M2) continue;
+          // GATE 8.1: and a block this NARROW is a radial sliver -- the
+          // offcut left either side of a road pass. Far out in the ring one
+          // of those clears the area cull comfortably while reading as a
+          // spoke, which is exactly what pop 900 was drawing.
+          const arcW = ((spanDeg * Math.PI) / 180) * ((rIn + rOut) / 2);
+          if (arcW < FIELD_BLOCK_MIN_ASPECT * (rOut - rIn)) continue;
+          // Gate 5.4: verify the POLYGON, not just the sample grid.
+          //
+          // `clipSlotToRuns` proves a set of bearings clear at a fixed slice
+          // pitch; `sectorPolygon` emits vertices at its own pitch across the
+          // surviving run. Those two pitches only coincide when the run's
+          // span is an exact multiple of the slice -- which the span jitter
+          // made untrue, so a vertex could land between tested bearings and,
+          // in one measured village out of forty, inside a lot claim. Rather
+          // than try to keep two samplings in phase, the emitted geometry is
+          // checked directly: if any vertex is on claimed ground the block is
+          // dropped.
+          const polygon = sectorPolygon(green, run.fromDeg, run.toDeg, innerAt, outerAt, skew);
+          if (!polygon.every((p) => isClearGround(p, lots, crofts, lanes, water))) continue;
+          const glyph = pickCropGlyph(crops, blocks.length, blocks.length === 0, allowOrchardVine, rng, toggle);
+          blocks.push({
+            id: `field:${wedge.id}:S${ordinal}`,
+            wedgeId: wedge.id,
+            glyph,
+            polygon,
+            furrowBearingDeg,
+            areaM2: area,
+          });
+          ordinal += 1;
+          for (const p of polygon) reach = Math.max(reach, dist(green.centre, p));
+        }
       }
     }
   }

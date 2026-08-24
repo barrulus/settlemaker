@@ -216,25 +216,37 @@ for (const [pop, seed] of FIXTURES) {
     if (ref === null) continue;
     inners.push({ u: dist2(c, innerP) - ref, deg });
   }
-  let concIndex = NaN; let concFrac = NaN; let concSpan = NaN;
-  if (inners.length >= 4) {
-    const us = inners.map((x) => x.u);
-    concSpan = Math.max(...us) - Math.min(...us);
+  const concOf = (set: Array<{ u: number; deg: number }>): {
+    index: number; frac: number; span: number;
+  } => {
+    if (set.length < 4) return { index: NaN, frac: NaN, span: NaN };
+    const us = set.map((x) => x.u);
+    const span = Math.max(...us) - Math.min(...us);
     let pairs = 0; let aligned = 0;
-    for (let i = 0; i < inners.length; i++) {
-      for (let j = i + 1; j < inners.length; j++) {
-        const dd = Math.abs(inners[i].deg - inners[j].deg);
+    for (let i = 0; i < set.length; i++) {
+      for (let j = i + 1; j < set.length; j++) {
+        const dd = Math.abs(set[i].deg - set[j].deg);
         if (Math.min(dd, 360 - dd) < CONC_SEP_DEG) continue;
         pairs++;
-        if (Math.abs(inners[i].u - inners[j].u) <= CONC_TOL_M) aligned++;
+        if (Math.abs(set[i].u - set[j].u) <= CONC_TOL_M) aligned++;
       }
     }
-    if (pairs > 0 && concSpan > CONC_TOL_M) {
-      concFrac = aligned / pairs;
-      const r = CONC_TOL_M / concSpan;
-      concIndex = concFrac / (2 * r - r * r);
-    }
-  }
+    if (pairs === 0 || span <= CONC_TOL_M) return { index: NaN, frac: NaN, span };
+    const frac = aligned / pairs;
+    const r = CONC_TOL_M / span;
+    return { index: frac / (2 * r - r * r), frac, span };
+  };
+  const conc = concOf(inners);
+  // INTERIOR boundaries only. The belt's own inner edge is REQUIRED to hug
+  // the built edge (gate 8.1's bar, and it is what a real village does), so
+  // the blocks standing on it necessarily share a radius all round the
+  // circle and the full index above charges the ring for a feature nobody
+  // wants removed. This second reading drops them -- everything within
+  // CONC_BELT_M of the ring's inner edge -- and asks the narrower question
+  // the gate 8.2 brief actually asks: do the boundaries INSIDE the belt
+  // line up into courses?
+  const CONC_BELT_M = 16;
+  const concIn = concOf(inners.filter((x) => x.u > CONC_BELT_M));
 
   let discTot = 0; let discHit = 0; let bodyTot = 0; let bodyHit = 0;
   const step = 1;
@@ -374,7 +386,7 @@ for (const [pop, seed] of FIXTURES) {
     `bldg smooth ratio ${bSmooth.ratio.toFixed(2)} cv ${bSmooth.cv.toFixed(3)}`,
     `field inner ratio ${fStats.ratio.toFixed(2)} cv ${fStats.cv.toFixed(3)} (${fStats.bins}/24)`,
     `blockdepth ${depths.length ? depths[0].toFixed(0) : 'n/a'}/${median(depths).toFixed(0)}/${depths.length ? depths[depths.length - 1].toFixed(0) : 'n/a'} ratio ${depthRatio.toFixed(2)} (n=${depths.length})`,
-    `conc ${concIndex.toFixed(2)} (frac ${concFrac.toFixed(3)}, span ${concSpan.toFixed(0)}m, n=${inners.length})`,
+    `conc ${conc.index.toFixed(2)} (frac ${conc.frac.toFixed(3)}, span ${conc.span.toFixed(0)}m, n=${inners.length}) interior ${concIn.index.toFixed(2)} (n=${inners.filter((x) => x.u > CONC_BELT_M).length})`,
     `vegdepth ${vDepths.length ? vDepths[0].toFixed(0) : 'n/a'}/${median(vDepths).toFixed(0)}/${vDepths.length ? vDepths[vDepths.length - 1].toFixed(0) : 'n/a'} rimratio ${vStats.ratio.toFixed(2)}`,
     `landuse disc ${(100 * discHit / discTot).toFixed(0)}% body ${(100 * bodyHit / bodyTot).toFixed(0)}%`,
     `blocks ${blocks}`,

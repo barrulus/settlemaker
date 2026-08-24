@@ -926,7 +926,84 @@ export const FIELD_BLOCK_SPAN_TARGET_DEG = 25;
  * reads as field boundaries.
  */
 export const FIELD_BLOCK_ROW_DEPTH_TARGET_M = 40;
-export const FIELD_BLOCK_ROWS_MAX = 3;
+/**
+ * GATE 8.2 (2026-08-24): 3 -> 4. The row count is now chosen PER SLOT from
+ * every count whose mean course depth falls inside the band below, and
+ * raising the cap is what gives the deepest slots a genuine choice (a 120 m
+ * slot can be three courses of 36 or four of 26) instead of one legal
+ * answer that every neighbouring slot also has to take.
+ */
+export const FIELD_BLOCK_ROWS_MAX = 4;
+/**
+ * GATE 8.2, THE COURSE-DEPTH BAND. A course is never shallower than the
+ * first or deeper than the second, and both the per-slot row count and the
+ * uneven partition below are clamped to it.
+ *
+ * This is the bar "block depth max/min <= 2.5" expressed as a constraint
+ * rather than hoped for: 52/23 = 2.26 is the WORST ratio the ring can
+ * produce, whatever the census asks for and however the dice fall (the
+ * SKEW then shrinks one end of a block by up to half of
+ * FIELD_SKEW_JITTER, which takes the measured worst case to 2.44). Gate
+ * 8.1 held 1.37-1.44 by making every course in a wedge identical, which is
+ * precisely what read as concentric bands; the spread is the point now,
+ * and the band is what keeps it from becoming petals again.
+ *
+ * The two numbers are not independent: MAX must be at least 2*MIN +
+ * FIELD_BLOCK_ROW_GAP_M or there are ring depths no row count can divide
+ * inside the band (with MIN 23 that is 52 exactly, and the row counts then
+ * tile every depth from 23 m up to FIELD_BLOCK_ROWS_MAX courses' worth
+ * with no gap). `slotCourses` falls back to gate 8.1's target rounding
+ * outside that range and relaxes the band to fit, which is why the ratio
+ * above is a promise about villages rather than about the function.
+ */
+export const FIELD_BLOCK_ROW_DEPTH_MIN_M = 23;
+export const FIELD_BLOCK_ROW_DEPTH_MAX_M = 52;
+/**
+ * GATE 8.2: how unevenly one slot's ring depth is shared out among its
+ * courses, as a +/- fraction of an even share (before the band clamp). At
+ * 0.45 a three-course slot routinely draws something like 45/30/25 rather
+ * than 33/33/33, which is what puts a deep parcel next to a shallow one --
+ * the merge and the split the owner asked for, expressed as one mechanism
+ * rather than two special cases bolted onto an even partition.
+ */
+export const FIELD_ROW_DEPTH_SPREAD = 0.45;
+/**
+ * GATE 8.2: how much a SLOT's total ring depth may differ from the depth
+ * its wedge's census solve bought, as a +/- fraction. This is gate 5.4's
+ * FIELD_DEPTH_JITTER moved from the block to the slot, and it does two
+ * things at once: the ring's OUTER edge steps from slot to slot instead of
+ * running level (the outer boundary is a ring boundary too, and the gate
+ * 8.1 metric never looked at it), and neighbouring slots see different
+ * depths, so they qualify for different row counts.
+ */
+export const FIELD_SLOT_DEPTH_JITTER = 0.2;
+/**
+ * GATE 8.2: how unevenly a wedge's span is shared out among its slots,
+ * as a +/- fraction of an even share. Gate 8.1 cut every wedge into slots
+ * of one width, so the ring was a regular grid in the angular axis even
+ * once the radial axis varied. Real furlongs are not of one width.
+ */
+export const FIELD_BLOCK_SPAN_SPREAD = 0.3;
+/**
+ * GATE 8.2: chance that a single course inside one slot is cut ANGULARLY
+ * into two narrower strips with a baulk between them -- the odd pair of
+ * narrow parcels a real field system shows beside its broad ones. Drawn
+ * per course; the split fraction is drawn unconditionally beside it so the
+ * number of rng draws per course never depends on the roll.
+ */
+export const FIELD_ROW_SPLIT_CHANCE = 0.28;
+/** GATE 8.2: the baulk between the two halves of a split course, as a
+ * share of the course's span. */
+export const FIELD_ROW_SPLIT_GAP_SHARE = 0.1;
+/**
+ * GATE 8.2: how far a course may be turned about its slot's mid bearing,
+ * as a +/- share of the slot's span, ON TOP of gate 8.1's alternating
+ * half-slot stagger. The half-slot stagger alone put every odd course's
+ * seams on the same bearings as every other odd course's, which is a ring
+ * seam by another name; a random component means no two courses in the ring
+ * break joint at the same place.
+ */
+export const FIELD_ROW_STAGGER_JITTER = 0.35;
 /** Open headland between two radial courses of blocks -- the track a cart
  * turns on. Narrow: the courses are one estate, not scattered patches. */
 export const FIELD_BLOCK_ROW_GAP_M = 6;
@@ -983,9 +1060,12 @@ export const FIELD_MIN_BLOCK_AREA_M2 = 400;
  * (that is what stops the ring's inner edge being an offset copy of the
  * built edge), just not by more than a house plot. */
 export const FIELD_BELT_JITTER_MIN_M = 4;
-export const FIELD_BELT_JITTER_MAX_M = 16;
-/** Per-block multipliers: depth +/-15%, angular span +/-25%. */
-export const FIELD_DEPTH_JITTER = 0.15;
+export const FIELD_BELT_JITTER_MAX_M = 20;
+/** Per-block angular span multiplier, +/-25%. (The depth multiplier that
+ * stood beside it is gone: GATE 8.2 spends the ring depth as an uneven,
+ * band-clamped partition into courses, which is a depth jitter that also
+ * keeps the partition EXACT, and moves the remaining per-slot depth
+ * variation to FIELD_SLOT_DEPTH_JITTER.) */
 export const FIELD_SPAN_JITTER = 0.25;
 /**
  * SKEW: the inner arc's angular span differs from the outer's by up to
