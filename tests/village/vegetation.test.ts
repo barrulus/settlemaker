@@ -3,6 +3,7 @@ import { Point } from '../../src/types/point.js';
 import { pointInPolygon } from '../../src/geom/point-in-polygon.js';
 import { SeededRandom } from '../../src/utils/random.js';
 import { buildVegetation } from '../../src/village/dressing/vegetation.js';
+import { circularExtent } from '../../src/village/dressing/extent.js';
 import { generateVillage } from '../../src/village/village-model.js';
 import { hasGlyph } from '../../src/village/glyphs.js';
 import { lotObb, obbOverlap } from '../../src/village/parcels/overlap.js';
@@ -41,6 +42,12 @@ const lane = (id: string, bearingDeg: number, len = 150, over: Partial<Lane> = {
   };
 };
 
+// GATE 8: the two edges vegetation works between are per-bearing extents
+// now, because the village body is irregular and a fixed band beyond a
+// single radius is a circle. These tests are about the SCATTER, not the
+// shape, so they hand it the extent that IS the radius they used to pass.
+const circ = (radiusM: number) => circularExtent(green.centre, radiusM);
+
 const emptyLots: Lot[] = [];
 const emptyCrofts: Croft[] = [];
 const emptyFields: FieldBlock[] = [];
@@ -49,10 +56,10 @@ describe('buildVegetation', () => {
   it('is deterministic: same inputs and seed produce identical output', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
     const a = buildVegetation(
-      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, 60, new SeededRandom(77),
+      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, circ(40), circ(40), 60, new SeededRandom(77),
     );
     const b = buildVegetation(
-      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, 60, new SeededRandom(77),
+      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, circ(40), circ(40), 60, new SeededRandom(77),
     );
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
@@ -60,14 +67,14 @@ describe('buildVegetation', () => {
   it('never throws with zero lanes, zero lots, zero crofts, zero fields', () => {
     const rng = new SeededRandom(1);
     expect(() => buildVegetation(
-      site(), green, [], [], [], [], 40, 40, 60, rng,
+      site(), green, [], [], [], [], circ(40), circ(40), 60, rng,
     )).not.toThrow();
   });
 
   it('produces some trees for a plausible built radius', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
     const trees = buildVegetation(
-      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, 60, new SeededRandom(5),
+      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, circ(40), circ(40), 60, new SeededRandom(5),
     );
     expect(trees.length).toBeGreaterThan(0);
   });
@@ -75,7 +82,7 @@ describe('buildVegetation', () => {
   it('emits ids as veg:<cellX>x<cellY> / veg:...:<j> for groves, wood:<cellX>x<cellY>:<j> for woods', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
     const trees = buildVegetation(
-      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, 60, new SeededRandom(5),
+      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, circ(40), circ(40), 60, new SeededRandom(5),
     );
     expect(trees.length).toBeGreaterThan(0);
     const parentIds = new Set<string>();
@@ -101,7 +108,7 @@ describe('buildVegetation', () => {
     let checkedAny = false;
     for (let seed = 1; seed <= 10; seed++) {
       const trees = buildVegetation(
-        site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, 60, new SeededRandom(seed),
+        site(), green, lanes, emptyLots, emptyCrofts, emptyFields, circ(40), circ(40), 60, new SeededRandom(seed),
       );
       const byId = new Map(trees.map((t) => [t.id, t]));
       for (const t of trees) {
@@ -119,7 +126,7 @@ describe('buildVegetation', () => {
   it('scale jitter stays within VEG_SCALE_MIN..VEG_SCALE_MAX', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
     const trees = buildVegetation(
-      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, 40, 40, 60, new SeededRandom(9),
+      site(), green, lanes, emptyLots, emptyCrofts, emptyFields, circ(40), circ(40), 60, new SeededRandom(9),
     );
     expect(trees.length).toBeGreaterThan(0);
     for (const t of trees) {
@@ -143,7 +150,7 @@ describe('buildVegetation', () => {
     let far = 0;
     for (const seed of [1, 2, 3, 55, 91, 104]) {
       const trees = buildVegetation(
-        site(), green, [], emptyLots, emptyCrofts, emptyFields, groveEdge, innerEdge, innerEdge, new SeededRandom(seed),
+        site(), green, [], emptyLots, emptyCrofts, emptyFields, circ(groveEdge), circ(innerEdge), innerEdge, new SeededRandom(seed),
       );
       for (const t of trees) {
         const d = dist(t.position, green.centre);
@@ -428,7 +435,7 @@ describe('shorefront suppression (§8.4, coastal fixture)', () => {
     let checked = 0;
     for (let seed = 1; seed <= 10; seed++) {
       const trees = buildVegetation(
-        coastalSite, green, [], emptyLots, emptyCrofts, emptyFields, groveEdgeM, innerEdgeM, reach, new SeededRandom(seed),
+        coastalSite, green, [], emptyLots, emptyCrofts, emptyFields, circ(groveEdgeM), circ(innerEdgeM), reach, new SeededRandom(seed),
       );
       for (const tree of trees) {
         const d = dist(tree.position, green.centre);
@@ -444,7 +451,7 @@ describe('shorefront suppression (§8.4, coastal fixture)', () => {
     let allowedNearWater = 0;
     for (let seed = 1; seed <= 10; seed++) {
       const trees = buildVegetation(
-        coastalSite, green, [], emptyLots, emptyCrofts, emptyFields, groveEdgeM, innerEdgeM, reach, new SeededRandom(seed),
+        coastalSite, green, [], emptyLots, emptyCrofts, emptyFields, circ(groveEdgeM), circ(innerEdgeM), reach, new SeededRandom(seed),
       );
       for (const tree of trees) {
         const d = dist(tree.position, green.centre);

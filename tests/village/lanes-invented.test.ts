@@ -5,6 +5,11 @@ import {
   availableFrontage, discRadiusFor, laneBudgetFor, laneLengthNeededM, polylineLength,
   saturateDisc,
 } from '../../src/village/skeleton/lanes.js';
+// GATE 8: growth takes a RADIUS PROFILE, not a radius. These tests are
+// about saturation, not shape, so they hand it the profile that IS the disc
+// they used to pass -- `circularProfile`. The anisotropy the profile exists
+// for has its own tests in `profile.test.ts` and `village-model.test.ts`.
+import { buildRadiusProfile, circularProfile } from '../../src/village/skeleton/profile.js';
 import {
   DISC_MARGIN, LANE_SEATING_YIELD, LANE_TILE_SPACING_M,
 } from '../../src/village/constants.js';
@@ -90,13 +95,13 @@ describe('saturateDisc', () => {
     // still opens the green's own radials (that ring is what makes a green
     // a green), but the lane budget stops it there -- no fabric.
     const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -35))];
-    const out = grow(lanes, green, 12, 8, new SeededRandom(1));
+    const out = grow(lanes, green, 12, circularProfile(8), new SeededRandom(1));
     expect(out.length).toBeLessThanOrEqual(3);
   });
 
   it('fills a real disc with streets', () => {
     const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -110))];
-    const out = grow(lanes, green, 12, 120, new SeededRandom(1));
+    const out = grow(lanes, green, 12, circularProfile(120), new SeededRandom(1));
     expect(out.length).toBeGreaterThan(1);
   });
 
@@ -108,7 +113,7 @@ describe('saturateDisc', () => {
     // and the FMG arm is drawn to the map edge whatever growth does.
     const arm = lane('arm-000', new Point(0, -10), new Point(0, -400));
     const targetR = 120;
-    const out = grow([arm], green, 12, targetR, new SeededRandom(5));
+    const out = grow([arm], green, 12, circularProfile(targetR), new SeededRandom(5));
     const inventedLength = out
       .filter((l) => l.id !== 'arm-000')
       .reduce((sum, l) => sum + polylineLength(l.points), 0);
@@ -118,7 +123,7 @@ describe('saturateDisc', () => {
   it('never saturates past the disc it was given', () => {
     const out = saturateDisc(
       [lane('arm-000', new Point(0, -10), new Point(0, -400))],
-      green, 12, 90, new SeededRandom(2),
+      green, 12, circularProfile(90), new SeededRandom(2),
     );
     expect(out.radiusM).toBeLessThanOrEqual(90);
   });
@@ -128,7 +133,7 @@ describe('saturateDisc', () => {
     // classes — market lanes connect market towns, they are not suburban
     // routes. A branch off a `main` road is a `local` street, never `market`.
     const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -60))];
-    const out = grow(lanes, green, 12, 120, new SeededRandom(3));
+    const out = grow(lanes, green, 12, circularProfile(120), new SeededRandom(3));
     // Excluded by original id, not by prefix: green-attached invented lanes
     // now use their own `lane-` id space (ruling R10), but excluding by id
     // is the more general check and doesn't depend on that detail.
@@ -141,15 +146,15 @@ describe('saturateDisc', () => {
 
   it('is deterministic for a seed', () => {
     const mk = () => grow(
-      [lane('arm-000', new Point(0, -10), new Point(0, -60))], green, 12, 120,
-      new SeededRandom(11),
+      [lane('arm-000', new Point(0, -10), new Point(0, -60))], green, 12,
+      circularProfile(120), new SeededRandom(11),
     );
     expect(JSON.stringify(mk())).toBe(JSON.stringify(mk()));
   });
 
   it('gives green-attached invented lanes their own id space, distinct from arms (R10)', () => {
     const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -60))];
-    const out = grow(lanes, green, 12, 120, new SeededRandom(3));
+    const out = grow(lanes, green, 12, circularProfile(120), new SeededRandom(3));
     const invented = out.filter((l) => !lanes.some((orig) => orig.id === l.id));
     const greenAttached = invented.filter((l) => l.parentId === undefined);
     expect(greenAttached.length).toBeGreaterThan(0);
@@ -170,9 +175,37 @@ describe('saturateDisc', () => {
     // the fallback probing is missing.
     for (const seed of [2, 5, 7, 13, 21, 42]) {
       const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -60))];
-      const out = grow(lanes, green, 12, 600, new SeededRandom(seed));
+      const out = grow(lanes, green, 12, circularProfile(600), new SeededRandom(seed));
       const ids = out.map((l) => l.id);
       expect(new Set(ids).size).toBe(ids.length);
     }
+  });
+
+  it('GATE 8: saturates the PROFILE, not a circle', () => {
+    // The property the whole gate turns on: hand growth an elongated body
+    // and the lanes come out elongated the same way. Measured as the extent
+    // of the fabric along the profile's long axis against its short one --
+    // the profile below is a pure cos(2 theta) ellipse-ish body at 0 deg,
+    // so north-south is long and east-west is short.
+    const profile = buildRadiusProfile({
+      centre: green.centre,
+      radiusM: 120,
+      trunkBearingsDeg: [0, 180],
+      water: [],
+      rng: new SeededRandom(4),
+    });
+    const out = grow(
+      [lane('arm-000', new Point(0, -10), new Point(0, -110))], green, 12,
+      profile, new SeededRandom(4),
+    );
+    let along = 0;
+    let across = 0;
+    for (const l of out.filter((x) => x.id !== 'arm-000')) {
+      for (const p of l.points) {
+        along = Math.max(along, Math.abs(p.y - green.centre.y));
+        across = Math.max(across, Math.abs(p.x - green.centre.x));
+      }
+    }
+    expect(along / across).toBeGreaterThan(1.2);
   });
 });
