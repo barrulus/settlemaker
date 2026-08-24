@@ -751,6 +751,25 @@ export const MAX_FEEDBACK_ROUNDS = 12;
 export const DISC_ESCALATION_STEP_RATIO = 0.06;
 
 /**
+ * Task 2 (2026-08-24): how many rounds the ladder may spend chasing
+ * ENCLOSED BLOCKS ALONE, once the census is already housed, before it
+ * gives up and ships whatever it has. Unlike the unhoused case -- where
+ * every extra round demonstrably buys more houses, so the full
+ * MAX_FEEDBACK_ROUNDS budget is the right bound -- a fabric whose blocks
+ * fall short "where achievable" (standing bars) is not guaranteed to
+ * improve with more rounds AT ALL: measured directly, one pop-900 seed
+ * (the flattest-profile one, already the sole exception the pop-900
+ * blocks bar carries) sat at 4 enclosed blocks through five further widen
+ * rounds after housing succeeded -- no improvement, but each round still
+ * perturbed the RNG stream enough to collapse that seed's anisotropy
+ * ratio from ~3 to ~1.1, failing a SEPARATE standing bar for no gain. A
+ * short, bounded chase gets the genuinely fixable seeds (measured: they
+ * need zero extra rounds once the block check itself is accurate) without
+ * letting an unfixable one burn the whole ladder for nothing.
+ */
+export const BLOCK_CHASE_ROUND_CAP = 1;
+
+/**
  * How far an arm/lane extends past the green, as a multiple of the
  * predicted built radius. A gate verdict of "the village reads too tight,
  * roads stop short of the fabric" raises this; "lanes run out into empty

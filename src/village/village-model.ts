@@ -7,6 +7,7 @@ import {
   availableFrontage, buildArms, connectDeadEnds, discRadiusFor, lotReachAt, saturateDisc,
 } from './skeleton/lanes.js';
 import { buildRadiusProfile, type RadiusProfile } from './skeleton/profile.js';
+import { blockAreas } from './skeleton/blocks.js';
 import { relaxLanes, trimTails } from './skeleton/relax.js';
 import {
   clipLots, gapForPopulation, orderLots, scoreLots, subdivideGreen, subdivideLane,
@@ -22,7 +23,8 @@ import { resetLotTrace, type LotTrace } from './lot-trace.js';
 import { dressVillage } from './dressing/index.js';
 import { closestPointOnSegment, dist, segmentIntersection } from './geometry.js';
 import {
-  ARM_LOT_RADIUS_SHARE, BRANCH_SPACING_M, FRONT_ON_LANE_EPS_M, GAP_TIGHTEN_STEP_M,
+  ARM_LOT_RADIUS_SHARE, BLOCK_CHASE_ROUND_CAP, BRANCH_SPACING_M, FRONT_ON_LANE_EPS_M,
+  GAP_TIGHTEN_STEP_M,
   GREEN_JOIN_RATIO, HAMLET_RIBBON_POP,
   INITIAL_MEAN_FRONTAGE_FACTOR, LANE_EXTENT_FACTOR, LANE_SETBACK_M, LOT_DEPTH_M,
   MAX_FEEDBACK_ROUNDS, MAX_LOT_FRONTAGE_RATIO, MEAN_LOT_AREA_M2, RECUT_MAX_PASSES,
@@ -34,6 +36,31 @@ import { classRank, type RouteType } from './route-class.js';
 
 /** The band this engine serves. Above it, the existing engine runs. */
 export const VILLAGE_POP_CEILING = 1000;
+
+/**
+ * Task 2 (2026-08-24): THE STANDING BAR, READ BACK AS A TRIGGER. The
+ * standing bars (docs/superpowers/plans/2026-08-24-village-afmg-readiness.md)
+ * require enclosed blocks >= 2 at pop 300 and >= 6 at pop 900. Before this,
+ * block closure at pop 300 was never something growth aimed at -- it was an
+ * ACCIDENT of census-driven widening: a village whose census came up short
+ * would widen its disc for more houses, and the wider disc happened, some
+ * seeds, to close a loop the un-widened one never would have. Exempting FMG
+ * arms from the growth budget (see `saturateDisc`) fixed the starvation
+ * that drove that widening in the first place, so villages now typically
+ * house their census within round 0 -- and lose the accidental extra
+ * width some seeds relied on to clear the blocks bar. This makes the bar
+ * an explicit trigger instead of a side effect of a different one.
+ *
+ * Below HAMLET_RIBBON_POP a ribbon hamlet has no block structure to speak
+ * of and none is asked for. Between there and 300, and above 900, the
+ * standing bars name no floor, so the flat extension of the nearer named
+ * anchor is used rather than inventing an unstated one.
+ */
+function blockFloorFor(population: number): number {
+  if (population < HAMLET_RIBBON_POP) return 0;
+  if (population < 900) return 2;
+  return 6;
+}
 
 // Every tunable below comes from constants.ts. VILLAGE_POP_CEILING lives
 // here because it is a routing decision, not a value a gate would tune.
@@ -168,6 +195,9 @@ export function generateVillage(
     SPACING_RELAX_FLOOR, 1 - spacingRung * SPACING_RELAX_STEP,
   );
   let extraRings = 0;
+  // Task 2: rounds spent escalating for enclosed blocks ALONE, once the
+  // census is already housed -- see `BLOCK_CHASE_ROUND_CAP`.
+  let blockChaseRounds = 0;
   // GATE 8: THE DISC IS A PROFILE. `cappedRadiusM` is now the profile's
   // AREA-EQUIVALENT radius: `discProfile` encloses exactly the same ground
   // as the disc of that radius, in an irregular, elongated, lopsided shape.
@@ -203,6 +233,36 @@ export function generateVillage(
   // The BODY the cutter fills, and the reference every downstream stage
   // that used to take `lotRadiusM` now takes instead.
   let lotProfile: RadiusProfile = discProfile;
+
+  // Task 2: BLOCK_CHASE_ROUND_CAP bounds how many rounds are spent chasing
+  // blocks alone, but even a BOUNDED chase can make a DIFFERENT standing
+  // bar worse on a seed that can never reach the blocks floor: every
+  // round, even one that fails to clear it, still draws from the shared
+  // `rng` stream and so still reshapes the fabric. Measured directly on a
+  // seed that could never pass 5 of a 6 floor: picking whichever tried
+  // round had the most blocks still traded its anisotropy ratio from ~3
+  // down to ~1.4, failing THAT bar instead. So the cap does not return to
+  // the best round the chase saw -- it returns to the FIRST HOUSED round,
+  // captured once, before any block-chasing mutation, and restored only
+  // if every round the chase tried afterward still fell short. A round
+  // that genuinely clears the floor is shipped live, not snapshotted, the
+  // moment it does (see the break just below). `lanes`/`lots`/`spend`/
+  // `activeDeck` etc. are all REASSIGNED each round (never mutated in
+  // place -- every producer above returns a fresh array/object), so
+  // capturing the current reference is a true snapshot of that round's
+  // state, no cloning needed.
+  const snapshotChase = () => ({
+    lanes, lots, spend, f0, lotFloorM, activeDeck, lotRadiusM, lotProfile,
+    deckUsableLotCount, measuredMeanFrontage, notch, terrace, spacingRung, extraRings,
+  });
+  let firstHousedSnapshot: ReturnType<typeof snapshotChase> | null = null;
+  const restoreFirstHoused = (): void => {
+    if (!firstHousedSnapshot) return;
+    ({
+      lanes, lots, spend, f0, lotFloorM, activeDeck, lotRadiusM, lotProfile,
+      deckUsableLotCount, measuredMeanFrontage, notch, terrace, spacingRung, extraRings,
+    } = firstHousedSnapshot);
+  };
 
   for (let round = 0; round <= MAX_FEEDBACK_ROUNDS; round++) {
     // This round's rung of the ladder. `tightenM` comes off BOTH the gap
@@ -313,14 +373,67 @@ export function generateVillage(
     }
 
     spend = spendCensus(lots, activeDeck, site, rng, lanes, trace?.fates, terrace);
-    if (spend.unhoused === 0) break;
+    // Task 2: the standing bar read back as a trigger (see `blockFloorFor`).
+    // A census that fits is not the whole job any more -- the fabric it
+    // fits into must also close the enclosed blocks the standing bars ask
+    // for, where the population's floor says that is achievable at all.
+    //
+    // Measured against a TRIAL of the model's own final geometry --
+    // `trimTails` then `connectDeadEnds`, read-only, never assigned back
+    // into `lanes` -- rather than the raw growth lanes: `trimTails` cuts
+    // every lane back to its last HOUSED building plus a stub (see its own
+    // comment on the real call below), and that alone can open a loop
+    // growth closed but the census never seated along -- measured
+    // directly, one seed's raw fabric read 2+ enclosed blocks mid-loop
+    // while the SAME lanes, trimmed the way the model actually ships,
+    // read 0. `connectDeadEnds` is folded into the trial too (it is
+    // read-only here, unlike its real call, which is forbidden inside
+    // this loop for a different reason -- see that comment) because
+    // leaving it out made the proxy UNDER-count relative to the shipped
+    // model on some seeds, which triggered escalation the model did not
+    // need and left it worse off after wandering through extra rounds it
+    // had no reason to run. Still not a guarantee of the exact shipped
+    // number (the rarer post-reseat second trim is not replayed here), but
+    // close enough that a round which is already fine reads as fine.
+    const blocksNow = blockAreas(
+      connectDeadEnds(trimTails(lanes, spend.buildings), green, spend.buildings), green,
+    ).length;
+    const blockFloor = blockFloorFor(site.population);
+
+    if (spend.unhoused === 0) {
+      // The FIRST housed round is the fallback the chase returns to if it
+      // never actually clears the floor -- captured once, never replaced.
+      // A LATER round that is merely closer (still short) is not adopted
+      // in its place: it was reached by spending more of the shared `rng`
+      // stream, which reshapes the fabric as a side effect (measured
+      // directly against a SEPARATE standing bar, anisotropy -- one seed's
+      // ratio fell from ~3 to ~1.4 chasing a floor it could not reach,
+      // even picking the round with the most blocks of the ones tried).
+      // Only a round that genuinely clears the floor is worth that risk,
+      // and it is shipped directly, live, the moment it does.
+      if (firstHousedSnapshot === null) firstHousedSnapshot = snapshotChase();
+      if (blocksNow >= blockFloor) break;
+      // Task 2, BLOCK_CHASE_ROUND_CAP: unlike the unhoused case, more
+      // rounds are not guaranteed to buy more blocks -- see the constant's
+      // comment. Give up by returning to the first housed round rather
+      // than shipping an intermediate one that traded a different bar
+      // away for a partial, still-short gain.
+      blockChaseRounds++;
+      if (blockChaseRounds > BLOCK_CHASE_ROUND_CAP) { restoreFirstHoused(); break; }
+    }
 
     if (round === MAX_FEEDBACK_ROUNDS) {
-      diagnostics.push(
-        `overflow: ${spend.unhoused} of ${site.population} unhoused after `
-        + `${MAX_FEEDBACK_ROUNDS} rounds (available frontage `
-        + `${Math.round(availableFrontage(lanes))} m)`,
-      );
+      if (spend.unhoused > 0) {
+        diagnostics.push(
+          `overflow: ${spend.unhoused} of ${site.population} unhoused after `
+          + `${MAX_FEEDBACK_ROUNDS} rounds (available frontage `
+          + `${Math.round(availableFrontage(lanes))} m)`,
+        );
+      } else {
+        // Housed, chasing blocks right up to the round cap, and still
+        // short: same graceful return as the chase-cap break above.
+        restoreFirstHoused();
+      }
       break;
     }
     // GATE 6.9: THE LADDER. The disc was saturated, re-cut and spent, and
@@ -507,6 +620,22 @@ export function generateVillage(
     diagnostics.push(
       `seating: ${Math.round((spend.buildings.length / deckUsableLotCount) * 100)}% `
       + `(${spend.buildings.length} of ${deckUsableLotCount} deck-usable lots)`,
+    );
+  }
+
+  // Task 2: the honest version of the mid-loop block check above, read off
+  // the geometry the model actually ships (`relaxed`, post-trim AND
+  // post-`connectDeadEnds`) rather than the loop's own trial-trim proxy.
+  // The proxy is a lower bound (see its comment), so this can legitimately
+  // read as met even on a round the loop itself exhausted without knowing
+  // it would be.
+  const shippedBlocks = blockAreas(relaxed, green).length;
+  const shippedBlockFloor = blockFloorFor(site.population);
+  if (spend.unhoused === 0 && shippedBlocks < shippedBlockFloor) {
+    diagnostics.push(
+      `blocks short: ${shippedBlocks} of ${shippedBlockFloor} enclosed `
+      + `(census housed; ${BLOCK_CHASE_ROUND_CAP} extra round`
+      + `${BLOCK_CHASE_ROUND_CAP === 1 ? '' : 's'} spent chasing it did not close enough)`,
     );
   }
 
