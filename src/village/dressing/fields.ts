@@ -5,7 +5,7 @@ import {
   bearingOf, bearingVector, closestPointOnSegment, dist, greenDrawnRadius, inAnyWater,
   wrapDeg,
 } from '../geometry.js';
-import { lotObb, pointInObb, type Obb } from '../parcels/overlap.js';
+import { lotObb, type Obb } from '../parcels/overlap.js';
 import {
   clipHalfPlane, convexHull, cutConvex, cutCorridor, extentAlong, insetConvex,
   longAxisDeg, longestEdgeDeg, polygonArea, polygonCentroid,
