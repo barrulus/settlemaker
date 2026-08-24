@@ -263,19 +263,32 @@ describe('village invariants (design §5.7)', () => {
         const m = generateVillage(input, seed);
         if (m.fields.length === 0) continue;
         const lotObbs = m.lots.map((l) => lotObb(l));
+        // GATE 8.1: the assertion is made ONCE per village, on a collected
+        // list of offenders, rather than once per (vertex x claim) pair.
+        // Cutting the ring into radial courses tripled the block count and
+        // with it the number of pairs, and vitest's `expect` is expensive
+        // enough per call that this test timed out at 20 s while checking
+        // exactly the same geometry. The invariant is unchanged and the
+        // failure message is strictly better (it names the offender).
+        const offenders: string[] = [];
         for (const strip of m.fields) {
           for (const p of strip.polygon) {
             const pointObb = {
               center: p, tangent: new Point(1, 0), normal: new Point(0, 1), halfW: 0, halfD: 0,
             };
             for (const obb of lotObbs) {
-              expect(obbOverlap(pointObb, obb, OVERLAP_EPS_M)).toBe(false);
+              if (obbOverlap(pointObb, obb, OVERLAP_EPS_M)) {
+                offenders.push(`${strip.id} vertex in lot claim (seed ${seed})`);
+              }
             }
             for (const croft of m.crofts) {
-              expect(pointInPolygon(p, croft.polygon)).toBe(false);
+              if (pointInPolygon(p, croft.polygon)) {
+                offenders.push(`${strip.id} vertex in croft ${croft.lotId} (seed ${seed})`);
+              }
             }
           }
         }
+        expect(offenders).toEqual([]);
       }
     }
   }, GRID_TIMEOUT_MS);

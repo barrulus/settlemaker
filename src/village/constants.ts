@@ -899,8 +899,46 @@ export const FIELD_INNER_FLOOR_PAD_M = 2;
  * continuous annulus -- the reference map's ring is visibly a ring of
  * separate fields.
  */
-export const FIELD_BLOCK_MAX_PER_WEDGE = 4;
-export const FIELD_BLOCK_SPAN_TARGET_DEG = 45;
+/**
+ * GATE 8.1 (2026-08-24): 4 / 45 -> 8 / 25. A wedge is 60-120 degrees wide,
+ * so a 45-degree target cut it into two or three FANS -- each one 40-60
+ * degrees of arc and 80-110 m deep, which at pop 300 is most of a village's
+ * own area in a single field. Rasterised, the ring read as a pinwheel of
+ * petals radiating from the green rather than as a band of fields, and
+ * gate 8's irregular inner edge made it worse by giving each petal a
+ * different length. A field is a field-sized thing; this is the angular
+ * half of making it one (the radial half is FIELD_BLOCK_ROW_*).
+ */
+export const FIELD_BLOCK_MAX_PER_WEDGE = 8;
+export const FIELD_BLOCK_SPAN_TARGET_DEG = 25;
+/**
+ * GATE 8.1, THE RADIAL HALF: the ring's census-driven depth is cut into
+ * ROWS of about this depth, with FIELD_BLOCK_ROW_GAP_M of open headland
+ * between them, instead of being spent on ONE block per slot.
+ *
+ * The census arithmetic is untouched -- `blockOuterRadius` still solves for
+ * the depth the population needs and still clamps it to
+ * [FIELD_BLOCK_DEPTH_MIN_M, FIELD_BLOCK_DEPTH_MAX_M]. What changes is that
+ * 82 m of ring at pop 300 becomes two 38 m rows rather than one 82 m slab,
+ * so a block's depth is comparable to its arc width and it reads as a
+ * FIELD. This is also what stops the outer edge being a single long petal:
+ * the ring is now several concentric courses of blocks whose seams the eye
+ * reads as field boundaries.
+ */
+export const FIELD_BLOCK_ROW_DEPTH_TARGET_M = 40;
+export const FIELD_BLOCK_ROWS_MAX = 3;
+/** Open headland between two radial courses of blocks -- the track a cart
+ * turns on. Narrow: the courses are one estate, not scattered patches. */
+export const FIELD_BLOCK_ROW_GAP_M = 6;
+/**
+ * A block whose arc width at its mid radius is less than this share of its
+ * depth is a RADIAL SLIVER, not a field, and is dropped. `clipSlotToRuns`
+ * splits a slot wherever a road or a ribbon of lots crosses the ring, and
+ * the offcut either side can be two degrees wide and a full course deep;
+ * at pop 900 those read as spokes. FIELD_MIN_BLOCK_AREA_M2 cannot catch
+ * them because a 2-degree run 40 m deep at radius 150 is still 200+ m2.
+ */
+export const FIELD_BLOCK_MIN_ASPECT = 0.4;
 /** Share of a wedge's span left as open green between its blocks (and as
  * half-gaps at each end, so a block never butts against the bounding lane
  * -- that lane is a road passing out through the ring).
@@ -937,8 +975,15 @@ export const FIELD_MIN_BLOCK_AREA_M2 = 400;
 /** Each block starts this far beyond the wedge's inner radius, varying per
  * block: the belt between fabric and plough is uneven, as it is anywhere
  * fields grew rather than were laid out. */
-export const FIELD_BELT_JITTER_MIN_M = 5;
-export const FIELD_BELT_JITTER_MAX_M = 30;
+/** GATE 8.1: 5-30 -> 4-16. Measured at pop 300 the belt ran 8-59 m with a
+ * median of 20 against a built edge of 43 -- half the village's own radius
+ * of empty lawn between the last house and the first furrow, which is
+ * gate 5.3's "marooned in its own lawn" verdict coming back by way of the
+ * jitter rather than the constant it fixed. The belt must still WANDER
+ * (that is what stops the ring's inner edge being an offset copy of the
+ * built edge), just not by more than a house plot. */
+export const FIELD_BELT_JITTER_MIN_M = 4;
+export const FIELD_BELT_JITTER_MAX_M = 16;
 /** Per-block multipliers: depth +/-15%, angular span +/-25%. */
 export const FIELD_DEPTH_JITTER = 0.15;
 export const FIELD_SPAN_JITTER = 0.25;

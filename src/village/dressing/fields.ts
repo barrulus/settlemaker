@@ -10,7 +10,9 @@ import {
   FIELD_BELT_GAP_M, FIELD_BELT_JITTER_MAX_M, FIELD_BELT_JITTER_MIN_M,
   FIELD_BLOCK_DEPTH_MAX_M, FIELD_BLOCK_DEPTH_MIN_M, FIELD_DEPTH_JITTER,
   FIELD_SKEW_JITTER, FIELD_SPAN_JITTER,
-  FIELD_BLOCK_GAP_SHARE, FIELD_BLOCK_MAX_PER_WEDGE, FIELD_BLOCK_SLICE_DEG,
+  FIELD_BLOCK_GAP_SHARE, FIELD_BLOCK_MAX_PER_WEDGE, FIELD_BLOCK_MIN_ASPECT,
+  FIELD_BLOCK_ROW_DEPTH_TARGET_M, FIELD_BLOCK_ROW_GAP_M, FIELD_BLOCK_ROWS_MAX,
+  FIELD_BLOCK_SLICE_DEG,
   FIELD_BLOCK_SPAN_TARGET_DEG, FIELD_CROPS, FIELD_FURROW_MIN_SEPARATION_DEG,
   FIELD_INNER_FLOOR_PAD_M, FIELD_INNER_PERCENTILE, FIELD_JITTER_RANGE_DEG,
   FIELD_M2_PER_CAPITA, FIELD_MIN_BLOCK_AREA_M2, FIELD_ORCHARD_VINE_CHANCE,
@@ -437,6 +439,31 @@ function clipSlotToRuns(
 /** One wedge's ring segment: its kept blocks and the radius they reach. */
 interface WedgeRing { blocks: FieldBlock[]; outerRadius: number }
 
+/**
+ * GATE 8.1: how the ring's census-driven depth is spent RADIALLY -- how
+ * many concentric courses of blocks, how deep each is, and the headland
+ * between them.
+ *
+ * Before this, all of it went into one block per slot: at pop 300 an 82 m
+ * slab wrapped around a village of radius 49, at pop 900 a 110 m one. Cut
+ * to 40-degree fans by `blockSlots`, those were PETALS -- a single field
+ * the size of a good part of the village, and (once gate 8 made the inner
+ * edge wander) each petal a different length. The owner's bar is "a band
+ * of chunky fields hugging an irregular village", and a chunky field is one
+ * whose depth is on the order of its width.
+ *
+ * The census is NOT touched: `ringDepth` is exactly what `blockOuterRadius`
+ * solved for, and the rows partition it. The only land given up is the
+ * headlands, which is why `buildWedgeBlocks` asks the solve for them back.
+ */
+export function ringRows(ringDepth: number): { rows: number; rowDepth: number; gap: number } {
+  const rows = Math.max(1, Math.min(
+    FIELD_BLOCK_ROWS_MAX, Math.round(ringDepth / FIELD_BLOCK_ROW_DEPTH_TARGET_M),
+  ));
+  const gap = rows > 1 ? FIELD_BLOCK_ROW_GAP_M : 0;
+  return { rows, gap, rowDepth: (ringDepth - gap * (rows - 1)) / rows };
+}
+
 function buildWedgeBlocks(
   wedge: Wedge, green: Green, edge: RadialExtent, population: number,
   furrowBearingDeg: number, lots: Lot[], crofts: Croft[], lanes: Lane[], water: Point[][],
@@ -450,81 +477,104 @@ function buildWedgeBlocks(
   const demand = Math.max(0, population) * FIELD_M2_PER_CAPITA * (wedge.spanDeg / 360);
   const outerRadius = blockOuterRadius(innerRadius, demand, coverageRad);
   if (!(outerRadius > innerRadius)) return { blocks: [], outerRadius: innerRadius };
+  // GATE 8.1: the depth the census bought, spent as COURSES rather than as
+  // one slab. `rowDepth` is what a block is actually deep now, and it is
+  // the number the depth-clamp bound below is stated against.
+  const { rows, rowDepth, gap: rowGap } = ringRows(outerRadius - innerRadius);
 
   const blocks: FieldBlock[] = [];
   let ordinal = 0;
   let reach = innerRadius;
   for (const slot of slots) {
-    // Gate 5.4: four jitter draws per slot, in slot order, BEFORE the clip
-    // -- so the geometry that gets tested against claims is the geometry
-    // that gets drawn. Jittering a cleared block afterwards would push it
-    // onto ground nothing ever checked.
+    // Gate 5.4: the jitter draws happen in slot order, BEFORE the clip --
+    // so the geometry that gets tested against claims is the geometry that
+    // gets drawn. Jittering a cleared block afterwards would push it onto
+    // ground nothing ever checked.
+    //
+    // GATE 8.1 draw order, fixed: one belt float for the SLOT (the belt is
+    // where the whole course starts, and it must not step between rows of
+    // the same slot), then depth/span/skew for EACH ROW from the inside
+    // out. A row draws its own span and skew so the courses are not three
+    // identical blocks stacked radially, which reads as a spoke.
     const beltOffset = FIELD_BELT_JITTER_MIN_M
       + rng.float() * (FIELD_BELT_JITTER_MAX_M - FIELD_BELT_JITTER_MIN_M);
-    const depthMul = 1 + (rng.float() * 2 - 1) * FIELD_DEPTH_JITTER;
-    const spanMul = 1 + (rng.float() * 2 - 1) * FIELD_SPAN_JITTER;
-    const skew = (rng.float() * 2 - 1) * FIELD_SKEW_JITTER;
+    for (let row = 0; row < rows; row++) {
+      const depthMul = 1 + (rng.float() * 2 - 1) * FIELD_DEPTH_JITTER;
+      const spanMul = 1 + (rng.float() * 2 - 1) * FIELD_SPAN_JITTER;
+      const skew = (rng.float() * 2 - 1) * FIELD_SKEW_JITTER;
 
-    // GATE 8: the block's inner arc IS the measured edge, bearing by
-    // bearing, offset by this slot's belt jitter -- so the ring wanders
-    // with the body instead of being an arc struck about the green.
-    const innerAt = (deg: number): number => edge.atBearing(deg) + beltOffset;
-    // The depth clamp still governs: jitter varies the depth WITHIN
-    // [FIELD_BLOCK_DEPTH_MIN_M, FIELD_BLOCK_DEPTH_MAX_M], never through it.
-    // A block below the floor is the thin strip gate 5 rejected.
-    // GATE 8: the jitter is applied AFTER the clamp, not inside it. A big
-    // census asks for more depth than FIELD_BLOCK_DEPTH_MAX_M allows, so
-    // every slot in every wedge came out at exactly the cap and the ring's
-    // OUTER edge was a perfect circle -- the one that survived making the
-    // inner edge follow the body, and the most conspicuous circle left in
-    // the picture at pop 300. The clamp still governs the SIZE of a block
-    // (a thin one is the strip gate 5 rejected, a huge one runs to the
-    // horizon); what it may not do any more is make every block identical.
-    const jDepth = Math.min(
-      FIELD_BLOCK_DEPTH_MAX_M,
-      Math.max(FIELD_BLOCK_DEPTH_MIN_M, outerRadius - innerRadius),
-    ) * depthMul;
-    const outerAt = (deg: number): number => innerAt(deg) + jDepth;
-    if (!(jDepth > 0)) continue;
-    // The span is scaled about the slot's own mid-bearing. The skew needs
-    // no allowance here because it only ever shrinks an arc (see
-    // `sectorPolygon`), so both arcs stay inside what the clip tested.
-    const slotMid = (slot.fromDeg + slot.toDeg) / 2;
-    const jSpan = (slot.toDeg - slot.fromDeg) * spanMul;
-    const jSlot: Slot = { fromDeg: slotMid - jSpan / 2, toDeg: slotMid + jSpan / 2 };
+      // GATE 8: the block's inner arc IS the measured edge, bearing by
+      // bearing, offset by this slot's belt jitter -- so the ring wanders
+      // with the body instead of being an arc struck about the green.
+      // GATE 8.1: plus the courses already laid inside this one.
+      const base = beltOffset + row * (rowDepth + rowGap);
+      const innerAt = (deg: number): number => edge.atBearing(deg) + base;
+      // The depth clamp still governs the RING (`blockOuterRadius`); what a
+      // BLOCK is deep is that depth divided among the courses, jittered.
+      // GATE 8: the jitter is applied AFTER the clamp, not inside it. A big
+      // census asks for more depth than FIELD_BLOCK_DEPTH_MAX_M allows, so
+      // every slot in every wedge came out at exactly the cap and the
+      // ring's OUTER edge was a perfect circle.
+      const jDepth = rowDepth * depthMul;
+      const outerAt = (deg: number): number => innerAt(deg) + jDepth;
+      if (!(jDepth > 0)) continue;
+      // The span is scaled about the slot's own mid-bearing. The skew needs
+      // no allowance here because it only ever shrinks an arc (see
+      // `sectorPolygon`), so both arcs stay inside what the clip tested.
+      // GATE 8.1 STAGGER: an odd course is turned half a slot, so the gaps
+      // between blocks do NOT line up from one course to the next. Left
+      // aligned, the courses' seams read as green SPOKES running the whole
+      // depth of the ring -- the pinwheel returning by another route. Real
+      // open fields are laid in furlongs that break joint. The shifted
+      // bearings go through `clipSlotToRuns` like any other, so nothing is
+      // drawn on ground that was not tested.
+      const slotMid = (slot.fromDeg + slot.toDeg) / 2
+        + (row % 2 === 1 ? (slot.toDeg - slot.fromDeg) / 2 : 0);
+      const jSpan = (slot.toDeg - slot.fromDeg) * spanMul;
+      const jSlot: Slot = { fromDeg: slotMid - jSpan / 2, toDeg: slotMid + jSpan / 2 };
 
-    for (const run of clipSlotToRuns(green, jSlot, innerAt, outerAt, lots, crofts, lanes, water)) {
-      const spanDeg = run.toDeg - run.fromDeg;
-      // Area at the run's mid-bearing: the block is an irregular ribbon
-      // now, and this is the cull for a block too small to be a field, not
-      // the census arithmetic (which is `blockOuterRadius`, above).
-      const midDeg = (run.fromDeg + run.toDeg) / 2;
-      const area = sectorArea(spanDeg, innerAt(midDeg), outerAt(midDeg));
-      // A block this small is the dropped rug, not a field.
-      if (area < FIELD_MIN_BLOCK_AREA_M2) continue;
-      // Gate 5.4: verify the POLYGON, not just the sample grid.
-      //
-      // `clipSlotToRuns` proves a set of bearings clear at a fixed slice
-      // pitch; `sectorPolygon` emits vertices at its own pitch across the
-      // surviving run. Those two pitches only coincide when the run's span
-      // is an exact multiple of the slice -- which the span jitter made
-      // untrue, so a vertex could land between tested bearings and, in one
-      // measured village out of forty, inside a lot claim. Rather than try
-      // to keep two samplings in phase, the emitted geometry is checked
-      // directly: if any vertex is on claimed ground the block is dropped.
-      const polygon = sectorPolygon(green, run.fromDeg, run.toDeg, innerAt, outerAt, skew);
-      if (!polygon.every((p) => isClearGround(p, lots, crofts, lanes, water))) continue;
-      const glyph = pickCropGlyph(crops, blocks.length, blocks.length === 0, allowOrchardVine, rng, toggle);
-      blocks.push({
-        id: `field:${wedge.id}:S${ordinal}`,
-        wedgeId: wedge.id,
-        glyph,
-        polygon,
-        furrowBearingDeg,
-        areaM2: area,
-      });
-      ordinal += 1;
-      for (const p of polygon) reach = Math.max(reach, dist(green.centre, p));
+      for (const run of clipSlotToRuns(green, jSlot, innerAt, outerAt, lots, crofts, lanes, water)) {
+        const spanDeg = run.toDeg - run.fromDeg;
+        // Area at the run's mid-bearing: the block is an irregular ribbon
+        // now, and this is the cull for a block too small to be a field,
+        // not the census arithmetic (which is `blockOuterRadius`, above).
+        const midDeg = (run.fromDeg + run.toDeg) / 2;
+        const rIn = innerAt(midDeg);
+        const rOut = outerAt(midDeg);
+        const area = sectorArea(spanDeg, rIn, rOut);
+        // A block this small is the dropped rug, not a field.
+        if (area < FIELD_MIN_BLOCK_AREA_M2) continue;
+        // GATE 8.1: and a block this NARROW is a radial sliver -- the
+        // offcut left either side of a road pass. Far out in the ring one
+        // of those clears the area cull comfortably while reading as a
+        // spoke, which is exactly what pop 900 was drawing.
+        const arcW = ((spanDeg * Math.PI) / 180) * ((rIn + rOut) / 2);
+        if (arcW < FIELD_BLOCK_MIN_ASPECT * (rOut - rIn)) continue;
+        // Gate 5.4: verify the POLYGON, not just the sample grid.
+        //
+        // `clipSlotToRuns` proves a set of bearings clear at a fixed slice
+        // pitch; `sectorPolygon` emits vertices at its own pitch across the
+        // surviving run. Those two pitches only coincide when the run's
+        // span is an exact multiple of the slice -- which the span jitter
+        // made untrue, so a vertex could land between tested bearings and,
+        // in one measured village out of forty, inside a lot claim. Rather
+        // than try to keep two samplings in phase, the emitted geometry is
+        // checked directly: if any vertex is on claimed ground the block is
+        // dropped.
+        const polygon = sectorPolygon(green, run.fromDeg, run.toDeg, innerAt, outerAt, skew);
+        if (!polygon.every((p) => isClearGround(p, lots, crofts, lanes, water))) continue;
+        const glyph = pickCropGlyph(crops, blocks.length, blocks.length === 0, allowOrchardVine, rng, toggle);
+        blocks.push({
+          id: `field:${wedge.id}:S${ordinal}`,
+          wedgeId: wedge.id,
+          glyph,
+          polygon,
+          furrowBearingDeg,
+          areaM2: area,
+        });
+        ordinal += 1;
+        for (const p of polygon) reach = Math.max(reach, dist(green.centre, p));
+      }
     }
   }
   return { blocks, outerRadius: Math.max(outerRadius, reach) };

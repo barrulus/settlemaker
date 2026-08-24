@@ -2,12 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { Point } from '../../src/types/point.js';
 import { pointInPolygon } from '../../src/geom/point-in-polygon.js';
 import { SeededRandom } from '../../src/utils/random.js';
-import { blockOuterRadius, buildFields, buildWedges } from '../../src/village/dressing/fields.js';
+import {
+  blockOuterRadius, buildFields, buildWedges, ringRows,
+} from '../../src/village/dressing/fields.js';
 import { generateVillage } from '../../src/village/village-model.js';
 import { lotObb, obbOverlap } from '../../src/village/parcels/overlap.js';
 import { closestPointOnSegment, dist, angularGap } from '../../src/village/geometry.js';
 import {
   FIELD_BLOCK_DEPTH_MAX_M, FIELD_DEPTH_JITTER, FIELD_BLOCK_DEPTH_MIN_M, FIELD_CROPS, FIELD_MIN_BLOCK_AREA_M2,
+  FIELD_BLOCK_MIN_ASPECT, FIELD_BLOCK_ROW_DEPTH_TARGET_M, FIELD_BLOCK_ROW_GAP_M, FIELD_BLOCK_ROWS_MAX,
   GREEN_JOIN_RATIO, LANE_SETBACK_M, RING_SETBACK_M,
 } from '../../src/village/constants.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
@@ -184,32 +187,79 @@ describe('buildFields', () => {
   // Gate 5 replaces the old "no strip is a sliver" length rule: a block is
   // culled below FIELD_MIN_BLOCK_AREA_M2, and is always at least the depth
   // floor deep, so it reads as a chunky field rather than a ribbon.
-  it('keeps no block below FIELD_MIN_BLOCK_AREA_M2, and none thinner than the depth floor', () => {
+  it('keeps no block below FIELD_MIN_BLOCK_AREA_M2, and none outside the COURSE depth range', () => {
     const lanes = [lane('arm-090', 90), lane('arm-270', 270)];
     const rng = new SeededRandom(11);
     const { blocks } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, rng);
     expect(blocks.length).toBeGreaterThan(0);
+    // GATE 8.1 RESTATES THIS PREMISE, which is genuinely false now.
+    //
+    // It used to read "none thinner than FIELD_BLOCK_DEPTH_MIN_M less the
+    // jitter". That constant no longer describes a BLOCK: it clamps the
+    // depth of the whole RING, which is then cut into courses (`ringRows`)
+    // so that a block's depth is comparable to its arc width. A block at
+    // pop 400 is now ~33 m deep, not ~110, and asserting the old bound
+    // would be asserting the petal the owner rejected.
+    //
+    // What is still true, and is what this pins: a block's depth is one
+    // COURSE of a ring whose total depth is inside the old clamp, plus the
+    // jitter. The bound is derived from `ringRows` over the clamp range
+    // rather than written down, because the row count steps (a deeper ring
+    // gets MORE courses and therefore SHALLOWER blocks, so the extremes are
+    // not at the ends of the range).
+    let minRow = Infinity;
+    let maxRow = 0;
+    for (let d = FIELD_BLOCK_DEPTH_MIN_M; d <= FIELD_BLOCK_DEPTH_MAX_M; d += 0.5) {
+      const { rowDepth } = ringRows(d);
+      minRow = Math.min(minRow, rowDepth);
+      maxRow = Math.max(maxRow, rowDepth);
+    }
     for (const s of blocks) {
       expect(s.areaM2).toBeGreaterThanOrEqual(FIELD_MIN_BLOCK_AREA_M2);
       // Radial depth: the polygon is the outer arc forward then the inner
       // arc back, so first and last points share a bearing.
       const outerR = dist(s.polygon[0], green.centre);
       const innerR = dist(s.polygon[s.polygon.length - 1], green.centre);
-      // GATE 8 restates the bound the jitter is measured against, and the
-      // reason is the picture: a census that asks for more depth than
-      // FIELD_BLOCK_DEPTH_MAX_M pinned EVERY block in EVERY wedge to
-      // exactly the cap, so the ring's outer edge came out a perfect
-      // circle -- the last one left once the inner edge followed the body.
-      // The depth jitter is now applied AFTER the clamp rather than inside
-      // it, so a block may sit one jitter step either side of the clamped
-      // range. The clamp still governs the SIZE of a block; what it may no
-      // longer do is make every block identical.
-      expect(outerR - innerR).toBeGreaterThanOrEqual(
-        FIELD_BLOCK_DEPTH_MIN_M * (1 - FIELD_DEPTH_JITTER) - 1e-6,
-      );
-      expect(outerR - innerR).toBeLessThanOrEqual(
-        FIELD_BLOCK_DEPTH_MAX_M * (1 + FIELD_DEPTH_JITTER) + 1e-6,
-      );
+      expect(outerR - innerR).toBeGreaterThanOrEqual(minRow * (1 - FIELD_DEPTH_JITTER) - 1e-6);
+      expect(outerR - innerR).toBeLessThanOrEqual(maxRow * (1 + FIELD_DEPTH_JITTER) + 1e-6);
+    }
+  });
+
+  // GATE 8.1: the two rules that stop the ring reading as a pinwheel of
+  // petals, asserted on real geometry rather than on the constants.
+  it('keeps no block that is a radial sliver (FIELD_BLOCK_MIN_ASPECT)', () => {
+    const lanes = [lane('arm-090', 90), lane('arm-270', 270), lane('arm-000', 0)];
+    const rng = new SeededRandom(7);
+    const { blocks } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, rng);
+    expect(blocks.length).toBeGreaterThan(0);
+    for (const s of blocks) {
+      const n = s.polygon.length;
+      const outerR = dist(s.polygon[0], green.centre);
+      const innerR = dist(s.polygon[n - 1], green.centre);
+      // Arc width at the mid radius, from the polygon's own end bearings.
+      const a = s.polygon[0];
+      const b = s.polygon[n / 2 - 1];
+      const spanRad = Math.abs(angularGap(
+        (Math.atan2(a.x, -a.y) * 180) / Math.PI, (Math.atan2(b.x, -b.y) * 180) / Math.PI,
+      ) * Math.PI) / 180;
+      const arcW = spanRad * ((innerR + outerR) / 2);
+      expect(arcW).toBeGreaterThanOrEqual(FIELD_BLOCK_MIN_ASPECT * (outerR - innerR) - 1e-6);
+    }
+  });
+
+  it('ringRows partitions the ring depth exactly, into courses near the target depth', () => {
+    for (let d = FIELD_BLOCK_DEPTH_MIN_M; d <= FIELD_BLOCK_DEPTH_MAX_M; d += 0.5) {
+      const { rows, rowDepth, gap } = ringRows(d);
+      expect(rows).toBeGreaterThanOrEqual(1);
+      expect(rows).toBeLessThanOrEqual(FIELD_BLOCK_ROWS_MAX);
+      expect(gap).toBe(rows > 1 ? FIELD_BLOCK_ROW_GAP_M : 0);
+      // Exact partition: the census bought this depth and the courses spend
+      // all of it, headlands included. Nothing is invented and nothing lost.
+      expect(rows * rowDepth + gap * (rows - 1)).toBeCloseTo(d, 6);
+      // And a course is a field-sized thing, not a slab: within a factor of
+      // two of the target either way across the whole clamp range.
+      expect(rowDepth).toBeGreaterThan(FIELD_BLOCK_ROW_DEPTH_TARGET_M / 2);
+      expect(rowDepth).toBeLessThan(FIELD_BLOCK_ROW_DEPTH_TARGET_M * 2);
     }
   });
 
