@@ -222,7 +222,7 @@ describe('placeBoathouse', () => {
     // Block a wide band of the shore right at the nearest point (x=15,
     // y=0) with a field strip, forcing the search to slide.
     const blockingField: FieldBlock = {
-      id: 'field:test:S0', wedgeId: 'test', glyph: 'sm-field-plough',
+      id: 'field:test:S0', furlongId: 'test', glyph: 'sm-field-plough',
       polygon: [
         new Point(0, -10), new Point(20, -10), new Point(20, 10), new Point(0, 10),
       ],

@@ -3,19 +3,40 @@ import { Point } from '../../src/types/point.js';
 import { pointInPolygon } from '../../src/geom/point-in-polygon.js';
 import { SeededRandom } from '../../src/utils/random.js';
 import {
-  blockOuterRadius, blockSlots, buildFields, buildWedges, slotCourses,
+  beltPolygon, buildFields, clipOutsideBelt, exitRoads, regionHull,
 } from '../../src/village/dressing/fields.js';
+import { circularExtent, radialExtent } from '../../src/village/dressing/extent.js';
+import { convexHull, longAxisDeg, polygonArea } from '../../src/village/dressing/parcel-cut.js';
 import { generateVillage } from '../../src/village/village-model.js';
 import { lotObb, obbOverlap } from '../../src/village/parcels/overlap.js';
 import { closestPointOnSegment, dist, angularGap } from '../../src/village/geometry.js';
 import {
-  FIELD_BLOCK_DEPTH_MAX_M, FIELD_BLOCK_DEPTH_MIN_M, FIELD_CROPS, FIELD_MIN_BLOCK_AREA_M2,
-  FIELD_BLOCK_GAP_SHARE, FIELD_BLOCK_MIN_ASPECT, FIELD_BLOCK_ROW_DEPTH_MAX_M,
-  FIELD_BLOCK_ROW_DEPTH_MIN_M, FIELD_BLOCK_ROW_GAP_M, FIELD_BLOCK_ROWS_MAX, FIELD_SKEW_JITTER,
+  FIELD_BELT_JITTER_MAX_M, FIELD_BELT_JITTER_MIN_M, FIELD_CROPS, FIELD_JITTER_RANGE_DEG,
+  FIELD_M2_PER_CAPITA, FIELD_MIN_BLOCK_AREA_M2, FIELD_PARCEL_MIN_ASPECT,
+  FIELD_REGION_DEPTH_MAX_M, FIELD_REGION_EFFICIENCY, FIELD_REGION_INNER_VERTICES,
   GREEN_JOIN_RATIO, LANE_SETBACK_M, RING_SETBACK_M,
 } from '../../src/village/constants.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 import type { Croft, Green, Lane, Lot, Site } from '../../src/village/types.js';
+
+/**
+ * GATE 8.3 REWROTE THIS FILE, because the gate deleted the objects most of
+ * it was about.
+ *
+ * The suite up to gate 8.2 tested `buildWedges` (angular sectors between
+ * green-attached lanes), `blockOuterRadius` (the census solved as an
+ * annulus), `blockSlots` (a wedge cut into angular slots) and `slotCourses`
+ * (a slot cut into radial courses). All four are gone, along with every
+ * premise built on them -- "blocks in one wedge share a furrow bearing",
+ * "adjacent wedges run their furrows 90 degrees apart", "no block is
+ * outside the course depth band", "ids read field:<wedgeId>:S<i>".
+ *
+ * They are not loosened here, they are REPLACED, because the thing they
+ * asserted is exactly the thing the owner rejected: a polar field frame.
+ * What stands in their place is the property gate 8.3 exists to deliver,
+ * asserted on real geometry -- that a parcel's edges are STRAIGHT and run
+ * at bearings unrelated to the green.
+ */
 
 const site = (over: Partial<Site> = {}): Site => ({
   population: 400,
@@ -35,88 +56,183 @@ const lane = (id: string, bearingDeg: number, len = 150, over: Partial<Lane> = {
   const r = (bearingDeg * Math.PI) / 180;
   const dir = new Point(Math.sin(r), -Math.cos(r));
   return {
-    // points[0] must NOT be the green centre itself -- bearingOf(centre,
-    // centre) is degenerate (always 0) and would collapse every lane's
-    // bearing. Real lanes start at the green's edge, so this fixture does
-    // too (matches `Lane`'s own contract: "ordered from the green outward").
     id, type: 'local', widthM: 3.5,
     points: [new Point(dir.x * 11, dir.y * 11), new Point(dir.x * len, dir.y * len)],
     ...over,
   };
 };
 
-describe('buildWedges', () => {
-  it('fails soft to one full-circle wedge with zero green-attached lanes', () => {
-    const wedges = buildWedges(green, []);
-    expect(wedges).toHaveLength(1);
-    expect(wedges[0].id).toBe('wedge:none');
-    expect(wedges[0].spanDeg).toBe(360);
+const bearingFrom = (c: Point, p: Point): number => (
+  ((Math.atan2(p.x - c.x, -(p.y - c.y)) * 180) / Math.PI + 360) % 360
+);
+
+/**
+ * THE GATE 8.3 BAR, as a function: what share of a parcel's perimeter runs
+ * either RADIALLY or TANGENTIALLY about the green. An annular sector reads
+ * ~1.0 by construction (its arcs are tangential and its sides radial);
+ * straight edges laid at bearings unrelated to the green read ~0.22, which
+ * is what 4 * 10 / 180 degrees of tolerance gives a uniform distribution.
+ * Measured on gate 8.2's own output it ran 0.73-0.91.
+ */
+function polarShare(polys: Point[][], centre: Point): number {
+  let total = 0;
+  let polar = 0;
+  for (const poly of polys) {
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i];
+      const b = poly[(i + 1) % poly.length];
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      if (len < 1e-9) continue;
+      const mx = (a.x + b.x) / 2 - centre.x;
+      const my = (a.y + b.y) / 2 - centre.y;
+      const rl = Math.hypot(mx, my);
+      if (rl < 1e-9) continue;
+      total += len;
+      const dot = Math.abs(((b.x - a.x) * mx + (b.y - a.y) * my) / (len * rl));
+      const ang = (Math.acos(Math.min(1, dot)) * 180) / Math.PI;
+      if (ang <= 10 || ang >= 80) polar += len;
+    }
+  }
+  return total > 0 ? polar / total : NaN;
+}
+
+describe('beltPolygon (gate 8.3: the farmland\'s inner boundary is a POLYGON)', () => {
+  it('has FIELD_REGION_INNER_VERTICES vertices and spends exactly that many floats', () => {
+    const rngA = new SeededRandom(4);
+    const poly = beltPolygon(green, circularExtent(new Point(0, 0), 60), rngA);
+    expect(poly).toHaveLength(FIELD_REGION_INNER_VERTICES);
+    // The draw count must not depend on the extent it is measuring.
+    const rngB = new SeededRandom(4);
+    beltPolygon(green, circularExtent(new Point(0, 0), 300), rngB);
+    expect(rngA.float()).toBe(rngB.float());
   });
 
-  it('fails soft to one full-circle wedge with exactly one green-attached lane', () => {
-    const wedges = buildWedges(green, [lane('arm-090', 90)]);
-    expect(wedges).toHaveLength(1);
-    expect(wedges[0].id).toBe('wedge:arm-090|arm-090');
-    expect(wedges[0].spanDeg).toBe(360);
+  it('lies outside the built edge by between the belt jitter bounds', () => {
+    const edge = circularExtent(new Point(0, 0), 60);
+    const poly = beltPolygon(green, edge, new SeededRandom(9));
+    for (const p of poly) {
+      const r = dist(green.centre, p);
+      expect(r).toBeGreaterThanOrEqual(60 + FIELD_BELT_JITTER_MIN_M - 1e-6);
+      expect(r).toBeLessThanOrEqual(60 + FIELD_BELT_JITTER_MAX_M + 1e-6);
+    }
   });
 
-  it('ignores branch lanes (parentId set) as wedge bounds', () => {
-    const branch = lane('arm-090/b50', 90, 40, { parentId: 'arm-090' });
-    const wedges = buildWedges(green, [lane('arm-000', 0), branch]);
-    // Only one real green-attached lane -> the fail-soft single-lane case.
-    expect(wedges).toHaveLength(1);
-    expect(wedges[0].id).toBe('wedge:arm-000|arm-000');
+  // The reason the boundary is a polygon at all: a parcel fronting the
+  // village must front a STRAIGHT edge tens of metres long, not a curve
+  // sampled every couple of degrees. Gate 8.2 measured its ring's inner
+  // edge as "a clean round clearing" and refused its bar over it.
+  it('gives the village a straight-sided clearing, not a curve', () => {
+    const poly = beltPolygon(green, circularExtent(new Point(0, 0), 60), new SeededRandom(3));
+    for (let i = 0; i < poly.length; i++) {
+      expect(dist(poly[i], poly[(i + 1) % poly.length])).toBeGreaterThan(8);
+    }
   });
 
-  it('bounds one wedge per adjacent pair of green-attached lanes, sorted by bearing', () => {
-    const wedges = buildWedges(green, [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)]);
-    expect(wedges).toHaveLength(3);
-    expect(wedges.map((w) => w.id)).toEqual([
-      'wedge:arm-000|arm-090', 'wedge:arm-090|arm-200', 'wedge:arm-200|arm-000',
-    ]);
-    const totalSpan = wedges.reduce((s, w) => s + w.spanDeg, 0);
-    expect(totalSpan).toBeCloseTo(360, 5);
+  it('follows an IRREGULAR body in and out', () => {
+    // An extent measured from points reaching much further north than south.
+    const pts: Point[] = [];
+    for (let deg = 0; deg < 360; deg += 5) {
+      const r = deg < 180 ? 90 : 40;
+      const rad = (deg * Math.PI) / 180;
+      pts.push(new Point(Math.sin(rad) * r, -Math.cos(rad) * r));
+    }
+    const edge = radialExtent(new Point(0, 0), pts, 10);
+    const poly = beltPolygon(green, edge, new SeededRandom(2));
+    const radii = poly.map((p) => dist(green.centre, p));
+    expect(Math.max(...radii) / Math.min(...radii)).toBeGreaterThan(1.5);
   });
 });
 
-describe('blockOuterRadius (gate 5: census-driven ring depth)', () => {
-  const FULL = 2 * Math.PI;
+describe('regionHull (gate 8.3: the outer boundary, and the census)', () => {
+  const belt = beltPolygon(green, circularExtent(new Point(0, 0), 60), new SeededRandom(1));
 
-  it('gives a depth of exactly FIELD_BLOCK_DEPTH_MIN_M for zero demand (the floor)', () => {
-    expect(blockOuterRadius(50, 0, FULL)).toBeCloseTo(50 + FIELD_BLOCK_DEPTH_MIN_M, 6);
+  it('is convex, encloses the belt, and holds the area asked for', () => {
+    const target = 60_000;
+    const hull = regionHull(green, belt, target, new SeededRandom(5));
+    expect(polygonArea(hull)).toBeGreaterThan(0);
+    // Convex: its own hull is itself.
+    expect(convexHull(hull)).toHaveLength(hull.length);
+    for (const p of belt) expect(pointInPolygon(p, hull)).toBe(true);
+    expect(polygonArea(hull) - polygonArea(belt)).toBeCloseTo(target, -1);
   });
 
-  it('the swept sector area matches the demand asked for', () => {
-    const inner = 120;
-    const coverage = FULL * 0.8; // a ring with 20% of its span left as green
-    // Demand chosen so the depth lands inside the clamp, otherwise the
-    // clamp -- not the area formula -- is what the assertion measures.
-    const demand = 60_000;
-    const outer = blockOuterRadius(inner, demand, coverage);
-    expect(outer - inner).toBeGreaterThan(FIELD_BLOCK_DEPTH_MIN_M);
-    expect(outer - inner).toBeLessThan(FIELD_BLOCK_DEPTH_MAX_M);
-    const swept = (coverage / 2) * (outer * outer - inner * inner);
-    expect(swept).toBeCloseTo(demand, 0);
+  it('spends exactly 2 * FIELD_REGION_OUTER_VERTICES floats, whatever the demand', () => {
+    const a = new SeededRandom(7);
+    regionHull(green, belt, 10_000, a);
+    const b = new SeededRandom(7);
+    regionHull(green, belt, 500_000, b);
+    expect(a.float()).toBe(b.float());
   });
 
-  it('sizes against COVERAGE, not the full span: a gappier ring runs deeper', () => {
-    const inner = 120;
-    const demand = 60_000;
-    const full = blockOuterRadius(inner, demand, FULL);
-    const gappy = blockOuterRadius(inner, demand, FULL * 0.8);
-    expect(gappy).toBeGreaterThan(full);
-  });
-
-  it('clamps depth at FIELD_BLOCK_DEPTH_MAX_M for a huge census', () => {
-    expect(blockOuterRadius(50, 10_000_000, FULL) - 50).toBeCloseTo(FIELD_BLOCK_DEPTH_MAX_M, 6);
-  });
-
-  it('never returns a band shallower than the floor, at any demand', () => {
-    for (const demand of [0, 1, 5_000, 50_000, 500_000]) {
-      expect(blockOuterRadius(80, demand, FULL)).toBeGreaterThanOrEqual(
-        80 + FIELD_BLOCK_DEPTH_MIN_M - 1e-9,
+  // The whole point of a polygon region: gate 8.2 measured the annular ring
+  // delivering 52-54% of the census demand at pop 900 because
+  // FIELD_BLOCK_DEPTH_MAX_M bound long before the demand was met. Here the
+  // depth is SOLVED, and only a horizon caps it.
+  it('grows with the demand until the depth horizon, then stops', () => {
+    const small = polygonArea(regionHull(green, belt, 30_000, new SeededRandom(5)));
+    const big = polygonArea(regionHull(green, belt, 200_000, new SeededRandom(5)));
+    expect(big).toBeGreaterThan(small * 2);
+    const huge = regionHull(green, belt, 100_000_000, new SeededRandom(5));
+    for (const p of huge) {
+      expect(dist(green.centre, p)).toBeLessThanOrEqual(
+        60 + FIELD_BELT_JITTER_MAX_M + FIELD_REGION_DEPTH_MAX_M * 1.4 + 1e-6,
       );
     }
+  });
+
+  it('is IRREGULAR: its vertices do not sit at one radius', () => {
+    const hull = regionHull(green, belt, 80_000, new SeededRandom(11));
+    const radii = hull.map((p) => dist(green.centre, p));
+    expect(Math.max(...radii) / Math.min(...radii)).toBeGreaterThan(1.25);
+  });
+});
+
+describe('clipOutsideBelt (gate 8.3: taking the village out of a cell)', () => {
+  const belt = beltPolygon(green, circularExtent(new Point(0, 0), 60), new SeededRandom(1));
+
+  it('drops a cell wholly inside the village and keeps one wholly outside', () => {
+    const inner = [new Point(-5, -5), new Point(5, -5), new Point(5, 5), new Point(-5, 5)];
+    expect(clipOutsideBelt(inner, belt)).toEqual([]);
+    const outer = [new Point(200, 200), new Point(230, 200), new Point(230, 230), new Point(200, 230)];
+    expect(clipOutsideBelt(outer, belt)).toHaveLength(4);
+  });
+
+  // The first draft INTERSECTED every touching edge's outward half-plane,
+  // which takes the whole corner away at a belt vertex -- eighteen scallops
+  // of empty lawn round the village. The greedy one-line-at-a-time cut is
+  // what keeps the fields against the houses.
+  it('keeps most of a cell straddling the boundary near a belt corner', () => {
+    const v = belt[0];
+    const r = dist(green.centre, v);
+    const ux = v.x / r;
+    const uy = v.y / r;
+    // A 40 m square centred on the belt vertex: half of it is village.
+    const cx = v.x;
+    const cy = v.y;
+    const cell = [
+      new Point(cx - 20 * uy - 20 * ux, cy + 20 * ux - 20 * uy),
+      new Point(cx + 20 * uy - 20 * ux, cy - 20 * ux - 20 * uy),
+      new Point(cx + 20 * uy + 20 * ux, cy - 20 * ux + 20 * uy),
+      new Point(cx - 20 * uy + 20 * ux, cy + 20 * ux + 20 * uy),
+    ];
+    const kept = clipOutsideBelt(cell, belt);
+    expect(polygonArea(kept)).toBeGreaterThan(0.3 * 1600);
+    for (const p of kept) expect(pointInPolygon(p, belt)).toBe(false);
+  });
+});
+
+describe('exitRoads', () => {
+  it('takes one line per green-attached lane that reaches the farmland', () => {
+    const belt = beltPolygon(green, circularExtent(new Point(0, 0), 60), new SeededRandom(1));
+    const lanes = [
+      lane('arm-090', 90, 150),
+      lane('arm-000', 0, 30), // stops inside the village
+      lane('arm-180/b10', 180, 150, { parentId: 'arm-180' }), // a branch
+    ];
+    const roads = exitRoads(green, lanes, belt);
+    expect(roads).toHaveLength(1);
+    expect(roads[0].dirDeg).toBeCloseTo(90, 6);
+    expect(roads[0].halfWidthM).toBeGreaterThan(3.5 / 2);
   });
 });
 
@@ -124,229 +240,116 @@ describe('buildFields', () => {
   const emptyLots: Lot[] = [];
   const emptyCrofts: Croft[] = [];
 
-  it('blocks within one wedge all share the same furrow direction', () => {
+  it('every parcel is a straight-edged polygon, not an annular sector', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
-    const rng = new SeededRandom(1);
-    const { blocks } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, rng);
-    const byWedge = new Map<string, number[]>();
-    for (const s of blocks) {
-      const arr = byWedge.get(s.wedgeId) ?? [];
-      arr.push(s.furrowBearingDeg);
-      byWedge.set(s.wedgeId, arr);
+    const { blocks } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, new SeededRandom(1));
+    expect(blocks.length).toBeGreaterThan(10);
+    // A sector emitted by the old frame had dozens of vertices, two per
+    // slice of arc. A cut parcel has a handful.
+    for (const b of blocks) {
+      expect(b.polygon.length).toBeGreaterThanOrEqual(3);
+      expect(b.polygon.length).toBeLessThanOrEqual(12);
     }
-    expect(byWedge.size).toBeGreaterThan(0);
-    for (const bearings of byWedge.values()) {
-      for (const b of bearings) expect(b).toBeCloseTo(bearings[0], 6);
-    }
+    // And the bar itself. Gate 8.2's ring measured 0.73-0.91 here.
+    expect(polarShare(blocks.map((b) => b.polygon), green.centre)).toBeLessThan(0.5);
   });
 
-  it('adjacent wedges (two opposite lanes) use directions ~90deg apart, modulo jitter', () => {
-    // Two lanes at 0/180 -> two wedges, bisectors 90 and 270. idx0 (even)
-    // uses its own bisector (90); idx1 (odd) uses bisector+90 (270+90=0/
-    // 360). The two base directions are exactly 90deg apart before jitter.
-    const lanes = [lane('arm-000', 0), lane('arm-180', 180)];
-    const rng = new SeededRandom(3);
-    const { blocks } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, rng);
-    const byWedge = new Map<string, number>();
-    for (const s of blocks) byWedge.set(s.wedgeId, s.furrowBearingDeg);
-    expect(byWedge.size).toBe(2);
-    const [a, b] = [...byWedge.values()];
-    const gap = angularGap(a, b);
-    // 90deg apart, +/- the two wedges' independent jitter draws (max 15 each).
-    expect(gap).toBeGreaterThan(90 - 15 - 15 - 1);
-    expect(gap).toBeLessThan(90 + 15 + 15 + 1);
-  });
-
-  it('every block furrow direction sits within the jitter range of its alternated bisector', () => {
+  it('ploughs each parcel along ITS OWN long axis, within the jitter', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
-    const wedges = buildWedges(green, lanes).slice().sort((x, y) => x.id.localeCompare(y.id));
-    const rng = new SeededRandom(9);
-    const { blocks } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, rng);
-    const byWedge = new Map<string, number>();
-    for (const s of blocks) byWedge.set(s.wedgeId, s.furrowBearingDeg);
-    wedges.forEach((w, idx) => {
-      const bearing = byWedge.get(w.id);
-      if (bearing === undefined) return; // wedge produced no kept blocks
-      const base = idx % 2 === 0 ? w.bisectorDeg : w.bisectorDeg + 90;
-      expect(angularGap(bearing, base)).toBeLessThanOrEqual(15 + 1e-6);
-    });
-  });
-
-  // Gate 5: one block per kept angular run, ordinal within its wedge.
-  it('emits ids as field:<wedgeId>:S<i>, unique within a wedge', () => {
-    const lanes = [lane('arm-090', 90), lane('arm-270', 270)];
-    const rng = new SeededRandom(5);
-    const { blocks } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, rng);
+    const { blocks } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, new SeededRandom(6));
     expect(blocks.length).toBeGreaterThan(0);
-    for (const s of blocks) {
-      expect(s.id.startsWith(`field:${s.wedgeId}:S`)).toBe(true);
-      expect(/^field:.+:S\d+$/.test(s.id)).toBe(true);
-    }
-    expect(new Set(blocks.map((s) => s.id)).size).toBe(blocks.length);
-  });
-
-  // Gate 5 replaces the old "no strip is a sliver" length rule: a block is
-  // culled below FIELD_MIN_BLOCK_AREA_M2, and is always at least the depth
-  // floor deep, so it reads as a chunky field rather than a ribbon.
-  it('keeps no block below FIELD_MIN_BLOCK_AREA_M2, and none outside the COURSE depth range', () => {
-    const lanes = [lane('arm-090', 90), lane('arm-270', 270)];
-    const rng = new SeededRandom(11);
-    const { blocks } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, rng);
-    expect(blocks.length).toBeGreaterThan(0);
-    // GATE 8.1 RESTATED THIS PREMISE, which was genuinely false then, and
-    // GATE 8.2 restates it again for the same kind of reason.
-    //
-    // It used to read "none thinner than FIELD_BLOCK_DEPTH_MIN_M less the
-    // jitter". That constant does not describe a BLOCK: it clamps the depth
-    // of the whole RING, which is then cut into courses so that a block's
-    // depth is comparable to its arc width. A block at pop 400 is ~33 m
-    // deep, not ~110, and asserting the old bound would be asserting the
-    // petal the owner rejected.
-    //
-    // Gate 8.1 then derived the bound from `ringRows` over the clamp range.
-    // That derivation is dead too: the subdivision is per SLOT now, its row
-    // count is DRAWN from every count the band admits, and its shares are
-    // drawn as well -- so there is no function of the ring depth left to
-    // read a bound off. What replaced it is a stronger statement, and the
-    // one gate 8.2 is judged on: `slotCourses` clamps every course into
-    // [FIELD_BLOCK_ROW_DEPTH_MIN_M, FIELD_BLOCK_ROW_DEPTH_MAX_M], whatever
-    // the census asks for and however the dice fall. The only slack is the
-    // SKEW, which shrinks one end of a block by up to half of
-    // FIELD_SKEW_JITTER and so pulls the measured depth at a polygon's END
-    // bearings below the floor (never above the ceiling).
-    const skewSlack = 1 - FIELD_SKEW_JITTER / 2;
-    for (const s of blocks) {
-      expect(s.areaM2).toBeGreaterThanOrEqual(FIELD_MIN_BLOCK_AREA_M2);
-      // Radial depth: the polygon is the outer arc forward then the inner
-      // arc back, so first and last points share a bearing.
-      const outerR = dist(s.polygon[0], green.centre);
-      const innerR = dist(s.polygon[s.polygon.length - 1], green.centre);
-      expect(outerR - innerR).toBeGreaterThanOrEqual(
-        FIELD_BLOCK_ROW_DEPTH_MIN_M * skewSlack - 1e-6,
-      );
-      expect(outerR - innerR).toBeLessThanOrEqual(FIELD_BLOCK_ROW_DEPTH_MAX_M + 1e-6);
+    for (const b of blocks) {
+      const axis = longAxisDeg(b.polygon);
+      const gap = angularGap(b.furrowBearingDeg, axis) % 180;
+      expect(Math.min(gap, 180 - gap)).toBeLessThanOrEqual(FIELD_JITTER_RANGE_DEG / 2 + 1e-6);
     }
   });
 
-  // GATE 8.1: the two rules that stop the ring reading as a pinwheel of
-  // petals, asserted on real geometry rather than on the constants.
-  it('keeps no block that is a radial sliver (FIELD_BLOCK_MIN_ASPECT)', () => {
+  // The premise this replaces -- "adjacent wedges run their furrows ~90
+  // degrees apart" -- existed to break the seam between two neighbouring
+  // ESTATES, an object that no longer exists. A parcel is ploughed along
+  // its own length, and neighbouring parcels rarely share a long axis, so
+  // the seam does not form in the first place. That is what is asserted.
+  it('does not run the whole village\'s furrows one way', () => {
+    const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
+    const { blocks } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, new SeededRandom(6));
+    const bearings = blocks.map((b) => b.furrowBearingDeg % 180);
+    const buckets = new Set(bearings.map((b) => Math.floor(b / 30)));
+    expect(buckets.size).toBeGreaterThanOrEqual(4);
+  });
+
+  it('emits ids as field:P<i>, unique across the village', () => {
+    const lanes = [lane('arm-090', 90), lane('arm-270', 270)];
+    const { blocks } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, new SeededRandom(5));
+    expect(blocks.length).toBeGreaterThan(0);
+    for (const b of blocks) expect(/^field:P\d+$/.test(b.id)).toBe(true);
+    expect(new Set(blocks.map((b) => b.id)).size).toBe(blocks.length);
+  });
+
+  it('keeps no parcel below the area floor, and no splinter', () => {
     const lanes = [lane('arm-090', 90), lane('arm-270', 270), lane('arm-000', 0)];
-    const rng = new SeededRandom(7);
-    const { blocks } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, rng);
+    const { blocks } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, new SeededRandom(7));
     expect(blocks.length).toBeGreaterThan(0);
-    for (const s of blocks) {
-      const n = s.polygon.length;
-      const outerR = dist(s.polygon[0], green.centre);
-      const innerR = dist(s.polygon[n - 1], green.centre);
-      // Arc width at the mid radius, from the polygon's own end bearings.
-      const a = s.polygon[0];
-      const b = s.polygon[n / 2 - 1];
-      const spanRad = Math.abs(angularGap(
-        (Math.atan2(a.x, -a.y) * 180) / Math.PI, (Math.atan2(b.x, -b.y) * 180) / Math.PI,
-      ) * Math.PI) / 180;
-      const arcW = spanRad * ((innerR + outerR) / 2);
-      expect(arcW).toBeGreaterThanOrEqual(FIELD_BLOCK_MIN_ASPECT * (outerR - innerR) - 1e-6);
+    for (const b of blocks) {
+      expect(b.areaM2).toBeGreaterThanOrEqual(FIELD_MIN_BLOCK_AREA_M2);
+      expect(polygonArea(b.polygon)).toBeCloseTo(b.areaM2, 3);
+      const axis = longAxisDeg(b.polygon);
+      const proj = (deg: number): number => {
+        const r = (deg * Math.PI) / 180;
+        const nx = Math.sin(r);
+        const ny = -Math.cos(r);
+        const ts = b.polygon.map((p) => p.x * nx + p.y * ny);
+        return Math.max(...ts) - Math.min(...ts);
+      };
+      expect(proj(axis + 90)).toBeGreaterThanOrEqual(
+        FIELD_PARCEL_MIN_ASPECT * proj(axis) - 1e-6,
+      );
     }
   });
 
-  // GATE 8.2: gate 8.1's `ringRows` test, rewritten for `slotCourses`. The
-  // exactness premise survives word for word -- it is the one that keeps
-  // the census arithmetic honest. What is added is the BAND, which is how
-  // "block depth max/min <= 2.5" is met by construction rather than by
-  // luck, and the fixed draw count, which is what §8.1 requires of any
-  // stage whose rng sequence must not depend on geometry.
-  it('slotCourses partitions a slot depth exactly, into band-clamped courses', () => {
-    // Over every depth a slot can present: the ring clamp either way, plus
-    // FIELD_SLOT_DEPTH_JITTER. The band's own tiling rule (MAX >= 2*MIN +
-    // the headland) is what guarantees a legal row count at every one of
-    // them, so this range walking without a gap IS that rule under test.
-    for (let d = FIELD_BLOCK_DEPTH_MIN_M * 0.75; d <= FIELD_BLOCK_DEPTH_MAX_M * 1.25; d += 0.5) {
-      for (let seed = 1; seed <= 6; seed++) {
-        const { depths, gap } = slotCourses(d, new SeededRandom(seed));
-        expect(depths.length).toBeGreaterThanOrEqual(1);
-        expect(depths.length).toBeLessThanOrEqual(FIELD_BLOCK_ROWS_MAX);
-        expect(gap).toBe(depths.length > 1 ? FIELD_BLOCK_ROW_GAP_M : 0);
-        // Exact partition: the census bought this depth and the courses
-        // spend all of it, headlands included. Nothing invented, none lost.
-        const spent = depths.reduce((a, b) => a + b, 0) + gap * (depths.length - 1);
-        expect(spent).toBeCloseTo(d, 6);
-        // Band: no course is a strip and none is a petal.
-        for (const depth of depths) {
-          expect(depth).toBeGreaterThanOrEqual(FIELD_BLOCK_ROW_DEPTH_MIN_M - 1e-6);
-          expect(depth).toBeLessThanOrEqual(FIELD_BLOCK_ROW_DEPTH_MAX_M + 1e-6);
-        }
-      }
-    }
+  it('delivers the census demand it was sized for', () => {
+    const lanes = [lane('arm-090', 90), lane('arm-270', 270)];
+    const s = site({ population: 400 });
+    const { blocks } = buildFields(s, green, lanes, emptyLots, emptyCrofts, new SeededRandom(3));
+    const drawn = blocks.reduce((sum, b) => sum + b.areaM2, 0);
+    const demand = s.population * FIELD_M2_PER_CAPITA;
+    // The region is sized at demand / FIELD_REGION_EFFICIENCY; what comes
+    // out is what the cuts, baulks and culls leave. The bar is that the
+    // census is broadly honoured, which the annular ring stopped doing at
+    // pop 900 (52-54%).
+    expect(drawn).toBeGreaterThan(demand * 0.7);
+    expect(drawn).toBeLessThan(demand / FIELD_REGION_EFFICIENCY);
   });
 
-  // GATE 8.2: neighbouring slots must not agree on their subdivision --
-  // that agreement IS the concentric ring the owner objected to. Over a
-  // depth every wedge in a pop-900 village sees, the draws must produce
-  // more than one row count and a spread of course depths.
-  it('slotCourses gives different slots different subdivisions', () => {
-    const counts = new Set<number>();
-    const firstDepths: number[] = [];
-    const rng = new SeededRandom(3);
-    for (let i = 0; i < 40; i++) {
-      const { depths } = slotCourses(100, rng);
-      counts.add(depths.length);
-      firstDepths.push(depths[0]);
-    }
-    expect(counts.size).toBeGreaterThanOrEqual(2);
-    expect(Math.max(...firstDepths) - Math.min(...firstDepths)).toBeGreaterThan(8);
-  });
-
-  // GATE 8.2: and the angular axis is not a regular grid either.
-  it('blockSlots cuts a wedge into slots of DIFFERENT widths, spending the same span', () => {
-    const rng = new SeededRandom(5);
-    const wedge = { id: 'w0', bearingA: 0, bearingB: 120, spanDeg: 120, bisectorDeg: 60 };
-    const slots = blockSlots(wedge as never, rng);
-    expect(slots.length).toBeGreaterThan(2);
-    const widths = slots.map((s) => s.toDeg - s.fromDeg);
-    expect(Math.max(...widths) / Math.min(...widths)).toBeGreaterThan(1.2);
-    // The wedge's span, and its FIELD_BLOCK_GAP_SHARE of open green, are
-    // spent exactly as before: only the division changed.
-    const spanned = widths.reduce((a, b) => a + b, 0);
-    expect(spanned).toBeCloseTo(wedge.spanDeg * (1 - FIELD_BLOCK_GAP_SHARE), 6);
-    expect(slots[0].fromDeg).toBeGreaterThanOrEqual(wedge.bearingA);
-    expect(slots[slots.length - 1].toDeg).toBeLessThanOrEqual(wedge.bearingB + 1e-6);
-  });
-
-  // The depth clamp guarantees a positive band at any census, so the only
-  // genuine "no fields" case left is the ring being walled off entirely --
-  // exercised here with water covering every sampled point.
-  it('is empty (fails soft) when the ring is entirely walled off', () => {
+  it('is empty (fails soft) when the region is entirely walled off', () => {
     const bigWater = [[
       new Point(-1000, -1000), new Point(1000, -1000), new Point(1000, 1000), new Point(-1000, 1000),
     ]];
     const lanes = [lane('arm-090', 90), lane('arm-270', 270)];
-    const rng = new SeededRandom(1);
-    const { blocks } = buildFields(site({ water: bigWater }), green, lanes, emptyLots, emptyCrofts, rng);
+    const { blocks } = buildFields(
+      site({ water: bigWater }), green, lanes, emptyLots, emptyCrofts, new SeededRandom(1),
+    );
     expect(blocks).toEqual([]);
   });
 
   it('never throws with zero lanes, zero lots, zero crofts', () => {
-    const rng = new SeededRandom(1);
-    expect(() => buildFields(site(), green, [], [], [], rng)).not.toThrow();
+    expect(() => buildFields(site(), green, [], [], [], new SeededRandom(1))).not.toThrow();
   });
 
   it('tundra biome only ever uses pasture crops', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
-    const rng = new SeededRandom(2);
     const { blocks } = buildFields(
-      site({ biome: 'tundra' }), green, lanes, emptyLots, emptyCrofts, rng,
+      site({ biome: 'tundra' }), green, lanes, emptyLots, emptyCrofts, new SeededRandom(2),
     );
     expect(blocks.length).toBeGreaterThan(0);
-    for (const s of blocks) expect(s.glyph).toBe('sm-field-pasture');
+    for (const b of blocks) expect(b.glyph).toBe('sm-field-pasture');
   });
 
   it('temperate biome only cycles the temperate crop table (plus orchard/vine)', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
-    const rng = new SeededRandom(2);
-    const { blocks } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, rng);
+    const { blocks } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, new SeededRandom(2));
     const allowed = new Set([...FIELD_CROPS.temperate, 'sm-field-orchard', 'sm-field-vine']);
-    for (const s of blocks) expect(allowed.has(s.glyph)).toBe(true);
+    for (const b of blocks) expect(allowed.has(b.glyph)).toBe(true);
   });
 
   it('is deterministic: same inputs and seed produce identical output', () => {
@@ -393,7 +396,7 @@ describe('buildFields geometric invariants (real village fixtures)', () => {
 
   const pointInAnyWater = (p: Point, w: Point[][]): boolean => w.some((ring) => pointInPolygon(p, ring));
 
-  it('no field block polygon point falls inside a croft, lot claim, lane corridor, green, or water', () => {
+  it('no field parcel point falls inside a croft, lot claim, lane corridor, green, or water', () => {
     for (const input of inputs) {
       for (const seed of [1, 2, 3]) {
         const m = generateVillage(input, seed);
@@ -411,13 +414,44 @@ describe('buildFields geometric invariants (real village fixtures)', () => {
     }
   }, 20000);
 
+  // GATE 8.3's bar, through the real pipeline and at both acceptance sizes.
+  // Gate 8.2's ring scored 0.73-0.91 on this and its author refused the
+  // visual bar because of it.
+  it('draws no polar parcels at pop 300 or pop 900', () => {
+    const popInput = (population: number): AzgaarBurgInput => ({
+      name: 'Polar', population, port: false, citadel: false, walls: false,
+      plaza: false, temple: false, shanty: false, capital: false,
+      roadBearings: [{ bearing_deg: 225, kind: 'road' }],
+    });
+    for (const pop of [300, 900]) {
+      const m = generateVillage(popInput(pop), 1);
+      expect(m.fields.length).toBeGreaterThan(10);
+      expect(polarShare(m.fields.map((f) => f.polygon), m.green.centre)).toBeLessThan(0.5);
+    }
+  }, 20000);
+
+  it('honours the census far better than the annular ring did', () => {
+    const popInput = (population: number): AzgaarBurgInput => ({
+      name: 'Census', population, port: false, citadel: false, walls: false,
+      plaza: false, temple: false, shanty: false, capital: false,
+      roadBearings: [{ bearing_deg: 225, kind: 'road' }],
+    });
+    // Gate 8.2 measured 92-95% at pop 300 and 52-54% at pop 900, the latter
+    // because FIELD_BLOCK_DEPTH_MAX_M bound long before the demand was met.
+    for (const pop of [300, 900]) {
+      const m = generateVillage(popInput(pop), 1);
+      const drawn = m.fields.reduce((s, f) => s + f.areaM2, 0);
+      expect(drawn).toBeGreaterThan(pop * FIELD_M2_PER_CAPITA * 0.8);
+    }
+  }, 20000);
+
   it('is deterministic through the full generateVillage pipeline', () => {
     for (const input of inputs) {
       const a = generateVillage(input, 42).fields;
       const b = generateVillage(input, 42).fields;
       expect(JSON.stringify(a)).toBe(JSON.stringify(b));
     }
-  });
+  }, 20000);
 
   it('never throws end to end, including a bare/degenerate input', () => {
     const bare: AzgaarBurgInput = {
@@ -429,60 +463,17 @@ describe('buildFields geometric invariants (real village fixtures)', () => {
     expect(Array.isArray(m.fields)).toBe(true);
   });
 
-  // Fix round 1 regression net (2026-08-21): a post-completion probe over
-  // the real pipeline found `fields` empty in every one of 14 fixtures --
-  // the gate closed because the escalation loop routinely grows the real
-  // fabric past the PREDICTED builtRadius. This is the guard that would
-  // have caught it: a plausible village of real size must produce at
-  // least one field block through the actual generateVillage pipeline,
-  // not just the hand-built unit fixtures above.
-  it('produces at least one field block through the real pipeline (pop 300 and pop 900)', () => {
+  // Fix round 1 regression net (2026-08-21): a post-completion probe found
+  // `fields` empty in every one of 14 fixtures. This is the guard that
+  // would have caught it, and it caught gate 8.3's own first draft of the
+  // belt clip, which emptied the region and drew nothing at all.
+  it('produces field parcels through the real pipeline (pop 300 and pop 900)', () => {
     const popInput = (population: number): AzgaarBurgInput => ({
       name: 'Regression', population, port: false, citadel: false, walls: false,
       plaza: false, temple: false, shanty: false, capital: false,
       roadBearings: [{ bearing_deg: 225, kind: 'road' }],
     });
-    expect(generateVillage(popInput(300), 1).fields.length).toBeGreaterThan(0);
-    expect(generateVillage(popInput(900), 1).fields.length).toBeGreaterThan(0);
-  });
-
-  // Fix wave regression net (2026-08-21, I2): furrow alternation used to be
-  // keyed to the wedge's LEXICAL id rank, which has nothing to do with where
-  // the wedge sits, so "alternating" bundles were only alternating on paper
-  // -- 28% of spatially adjacent pairs came out within 15 degrees of
-  // parallel. Spatial adjacency is what matters: two neighbouring bundles
-  // whose furrows run the same way read as one smeared field, which is the
-  // seam the alternation exists to break. Parity now comes from the
-  // BEARING-sorted rank, so this holds; on the pre-fix code it does not.
-  it('no two spatially adjacent wedges run their furrows within 15deg of parallel', () => {
-    const popInput = (population: number, bearings: number[]): AzgaarBurgInput => ({
-      name: 'Adjacency', population, port: false, citadel: false, walls: false,
-      plaza: false, temple: false, shanty: false, capital: false,
-      roadBearings: bearings.map((b) => ({ bearing_deg: b, kind: 'road' as const })),
-    });
-    let checked = 0;
-    for (const input of [popInput(300, [225]), popInput(600, [0, 120, 240]), popInput(900, [45, 200])]) {
-      for (const seed of [1, 2, 3]) {
-        const m = generateVillage(input, seed);
-        // Furrow bearing per wedge, taken from its blocks (all blocks in a
-        // wedge share one bearing -- asserted separately above).
-        const bearingByWedge = new Map<string, number>();
-        for (const s of m.fields) bearingByWedge.set(s.wedgeId, s.furrowBearingDeg);
-        // Spatial adjacency: consecutive wedges in `buildWedges`'s own
-        // bearing-sorted output, wrap included.
-        const wedges = buildWedges(m.green, m.lanes);
-        for (let i = 0; i < wedges.length; i++) {
-          const a = bearingByWedge.get(wedges[i].id);
-          const b = bearingByWedge.get(wedges[(i + 1) % wedges.length].id);
-          if (a === undefined || b === undefined || wedges.length < 2) continue;
-          // Furrows are undirected: 179deg and 359deg are the same run.
-          const gap = angularGap(a, b) % 180;
-          const fromParallel = Math.min(gap, 180 - gap);
-          checked += 1;
-          expect(fromParallel).toBeGreaterThan(15);
-        }
-      }
-    }
-    expect(checked).toBeGreaterThan(0);
+    expect(generateVillage(popInput(300), 1).fields.length).toBeGreaterThan(10);
+    expect(generateVillage(popInput(900), 1).fields.length).toBeGreaterThan(10);
   }, 20000);
 });

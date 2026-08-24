@@ -107,27 +107,33 @@ export interface Croft {
 }
 
 /**
- * §7.2: one block of the field RING -- an annular sector of ploughed land
- * lying outside the settlement, beyond the open green belt. `wedgeId` groups
- * the blocks of one wedge (the angular sector between two adjacent
- * green-attached lanes), which share a furrow bearing; `id` is
- * `field:<wedgeId>:S<i>`, `i` the block's ordinal within its wedge.
+ * §7.2: one PARCEL of the farmed land lying outside the settlement, beyond
+ * the open green belt.
  *
- * Gate 5 (2026-08-22) replaced the previous 12 m furlong STRIPS, woven
- * through the fabric and outlined in hedge stamps, with these. Owner's
- * verdict on that design: "you'd have fields AROUND the village, not INSIDE
- * the village." A block is a single pattern-filled polygon and carries no
- * outline of any kind -- the ploughed look is the crop tile's own furrow
- * texture.
+ * GATE 8.3 replaced the annular sectors this used to describe with a planar
+ * subdivision: a straight-edged polygon cut out of the farmland region by
+ * recursive bisection, its orientation taken from the roads and its own
+ * long axis rather than from a bearing about the green. The owner's
+ * standing complaint was "near perfect circles everywhere"; gate 8.2
+ * measured its own ring, found the courses broken and the FRAME still
+ * polar, and refused its bar. `furlongId` (was `wedgeId`) groups parcels
+ * loosely by sector for reporting only -- nothing about a parcel's shape
+ * comes from it, and parcels in one group do NOT share a furrow bearing any
+ * more, because a parcel is ploughed along its own length.
+ *
+ * A parcel is a single pattern-filled polygon and carries no outline of any
+ * kind -- the ploughed look is the crop tile's own furrow texture, and the
+ * boundaries show as the BAULK inset between neighbours.
  */
 export interface FieldBlock {
   id: string;
-  wedgeId: string;
+  furlongId: string;
   glyph: string;
-  /** Annular-sector corners: outer arc forward, inner arc back. */
+  /** Straight-edged convex polygon, in order round the parcel. */
   polygon: Point[];
+  /** The direction the furrows run: the parcel's own long axis, jittered. */
   furrowBearingDeg: number;
-  /** The sector's area in m^2, as sized against the census. */
+  /** The parcel's area in m^2. */
   areaM2: number;
 }
 

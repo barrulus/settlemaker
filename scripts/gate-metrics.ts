@@ -100,22 +100,42 @@ for (const [pop, seed] of FIXTURES) {
   }
   const fStats = binStats(fBin);
 
-  // --- BLOCK DEPTH (gate 8.1). `sectorPolygon` emits the outer arc forward
-  // then the inner arc back, so vertex i and vertex N-1-i sit on the SAME
-  // bearing: their radial difference is the block's depth there. The
-  // block's depth is the median of those, which is robust to the skew
-  // (which only ever shrinks one end).
+  // --- PARCEL SIZE (gate 8.3, replacing gate 8.1's BLOCK DEPTH).
+  //
+  // The depth reading was `sectorPolygon`'s index arithmetic: vertex i and
+  // vertex N-1-i sit on the same bearing, so their radial difference is the
+  // block's depth there. A straight-cut parcel has no such pairing and the
+  // reading comes back negative, which is the metric announcing that the
+  // object it described no longer exists. What a parcel HAS is a size and a
+  // shape, measured with rotating calipers: its area, and the ratio of its
+  // short dimension to its long one. `depths` here is the SHORT dimension,
+  // so the min/med/max column still reads in metres and still answers "is
+  // this a field or a splinter".
   const depths: number[] = [];
+  const parcelAreas: number[] = [];
   for (const f of m.fields) {
-    const n = f.polygon.length;
-    if (n < 4 || n % 2 !== 0) continue;
-    const per: number[] = [];
-    for (let i = 0; i < n / 2; i++) {
-      per.push(dist2(c, f.polygon[i]) - dist2(c, f.polygon[n - 1 - i]));
+    const poly = f.polygon;
+    if (poly.length < 3) continue;
+    let narrow = Infinity;
+    let narrowDeg = 0;
+    for (let deg = 0; deg < 180; deg += 2) {
+      const r = (deg * Math.PI) / 180;
+      const nx = Math.sin(r);
+      const ny = -Math.cos(r);
+      const ts = poly.map((p) => p.x * nx + p.y * ny);
+      const span = Math.max(...ts) - Math.min(...ts);
+      if (span < narrow) { narrow = span; narrowDeg = deg; }
     }
-    depths.push(median(per));
+    const r2 = ((narrowDeg + 90) * Math.PI) / 180;
+    const lx = Math.sin(r2);
+    const ly = -Math.cos(r2);
+    const ls = poly.map((p) => p.x * lx + p.y * ly);
+    const long = Math.max(...ls) - Math.min(...ls);
+    depths.push(narrow);
+    parcelAreas.push(long > 0 ? narrow / long : 0);
   }
   depths.sort((a, b) => a - b);
+  parcelAreas.sort((a, b) => a - b);
   const depthRatio = depths.length ? depths[depths.length - 1] / depths[0] : NaN;
 
   // --- VEGETATION BAND DEPTH (gate 8.1): per bearing bin, how far the tree
@@ -511,8 +531,8 @@ for (const [pop, seed] of FIXTURES) {
     `bldg ratio ${bStats.ratio.toFixed(2)} cv ${bStats.cv.toFixed(3)} (${bStats.bins}/24)`,
     `bldg smooth ratio ${bSmooth.ratio.toFixed(2)} cv ${bSmooth.cv.toFixed(3)}`,
     `field inner ratio ${fStats.ratio.toFixed(2)} cv ${fStats.cv.toFixed(3)} (${fStats.bins}/24)`,
-    `blockdepth ${depths.length ? depths[0].toFixed(0) : 'n/a'}/${median(depths).toFixed(0)}/${depths.length ? depths[depths.length - 1].toFixed(0) : 'n/a'} ratio ${depthRatio.toFixed(2)} (n=${depths.length})`,
-    `conc ${conc.index.toFixed(2)} (frac ${conc.frac.toFixed(3)}, span ${conc.span.toFixed(0)}m, n=${inners.length}) interior ${concIn.index.toFixed(2)} (n=${inners.filter((x) => x.u > CONC_BELT_M).length})`,
+    `parcel short ${depths.length ? depths[0].toFixed(0) : 'n/a'}/${median(depths).toFixed(0)}/${depths.length ? depths[depths.length - 1].toFixed(0) : 'n/a'} m ratio ${depthRatio.toFixed(2)} aspect med ${median(parcelAreas).toFixed(2)} (n=${depths.length})`,
+    `concSector ${conc.index.toFixed(2)} (frac ${conc.frac.toFixed(3)}, span ${conc.span.toFixed(0)}m, n=${inners.length}) interior ${concIn.index.toFixed(2)} (n=${inners.filter((x) => x.u > CONC_BELT_M).length})`,
     `concG ${concG.index.toFixed(2)} interior ${concGIn.index.toFixed(2)} (n=${innersG.length})`,
     `polar ${(100 * polarShare).toFixed(0)}% sag ${sagMean.toFixed(4)} bowed ${(100 * bowedShare).toFixed(0)}%`,
     `fieldarea ${(fieldArea / 1000).toFixed(1)}k/${(demandM2 / 1000).toFixed(0)}k = ${(100 * fieldArea / demandM2).toFixed(0)}%`,

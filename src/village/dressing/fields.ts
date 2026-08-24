@@ -2,24 +2,26 @@ import { Point } from '../../types/point.js';
 import { pointInPolygon } from '../../geom/point-in-polygon.js';
 import { SeededRandom } from '../../utils/random.js';
 import {
-  angularGap, bearingOf, bearingVector, dist, greenDrawnRadius, inAnyWater,
-  withinLaneCorridor, wrapDeg,
+  bearingOf, bearingVector, closestPointOnSegment, dist, greenDrawnRadius, inAnyWater,
+  wrapDeg,
 } from '../geometry.js';
 import { lotObb, pointInObb, type Obb } from '../parcels/overlap.js';
 import {
-  FIELD_BELT_GAP_M, FIELD_BELT_JITTER_MAX_M, FIELD_BELT_JITTER_MIN_M,
-  FIELD_BLOCK_DEPTH_MAX_M, FIELD_BLOCK_DEPTH_MIN_M,
-  FIELD_SKEW_JITTER, FIELD_SPAN_JITTER,
-  FIELD_BLOCK_GAP_SHARE, FIELD_BLOCK_MAX_PER_WEDGE, FIELD_BLOCK_MIN_ASPECT,
-  FIELD_BLOCK_ROW_DEPTH_MAX_M, FIELD_BLOCK_ROW_DEPTH_MIN_M,
-  FIELD_BLOCK_ROW_DEPTH_TARGET_M, FIELD_BLOCK_ROW_GAP_M, FIELD_BLOCK_ROWS_MAX,
-  FIELD_BLOCK_SLICE_DEG, FIELD_BLOCK_SPAN_SPREAD,
-  FIELD_ROW_DEPTH_SPREAD, FIELD_ROW_SPLIT_CHANCE, FIELD_ROW_SPLIT_GAP_SHARE,
-  FIELD_ROW_STAGGER_JITTER, FIELD_SLOT_DEPTH_JITTER,
-  FIELD_BLOCK_SPAN_TARGET_DEG, FIELD_CROPS, FIELD_FURROW_MIN_SEPARATION_DEG,
-  FIELD_INNER_FLOOR_PAD_M, FIELD_INNER_PERCENTILE, FIELD_JITTER_RANGE_DEG,
-  FIELD_M2_PER_CAPITA, FIELD_MIN_BLOCK_AREA_M2, FIELD_ORCHARD_VINE_CHANCE,
-  FIELD_WEDGE_CLAIM_MARGIN_DEG, EXTENT_BIN_DEG, LANE_SETBACK_M, RING_SETBACK_M,
+  clipHalfPlane, convexHull, cutConvex, cutCorridor, extentAlong, insetConvex,
+  longAxisDeg, longestEdgeDeg, polygonArea, polygonCentroid,
+} from './parcel-cut.js';
+import {
+  FIELD_BAULK_M, FIELD_BELT_CLIP_FACTOR, FIELD_BELT_JITTER_MAX_M, FIELD_BELT_JITTER_MIN_M,
+  FIELD_CLAIM_MARGIN_M, FIELD_CLEAR_SAMPLE_M, FIELD_CROPS, FIELD_TRIM_MAX_PASSES, FIELD_CUT_GAP_M, FIELD_CUT_JITTER_DEG,
+  FIELD_CUT_MAX_DEPTH, FIELD_CUT_OFFSET_SPREAD, FIELD_FRINGE_CULL_CHANCE,
+  FIELD_FRINGE_TOL_M, FIELD_INNER_FLOOR_PAD_M, FIELD_INNER_PERCENTILE,
+  FIELD_JITTER_RANGE_DEG, FIELD_M2_PER_CAPITA, FIELD_MIN_BLOCK_AREA_M2,
+  FIELD_ORCHARD_VINE_CHANCE, FIELD_PARCEL_AREA_SPREAD, FIELD_PARCEL_LEAF_FACTOR,
+  FIELD_PARCEL_MIN_ASPECT, FIELD_PARCEL_TARGET_M2, FIELD_REGION_DEPTH_MAX_M,
+  FIELD_REGION_DEPTH_MIN_M, FIELD_REGION_DEPTH_SPREAD, FIELD_REGION_EFFICIENCY,
+  FIELD_REGION_INNER_VERTICES, FIELD_REGION_OUTER_BEARING_JITTER_DEG,
+  FIELD_REGION_OUTER_VERTICES, FIELD_ROAD_FRONT_M, FIELD_ROAD_MARGIN_M,
+  LANE_SETBACK_M, RING_SETBACK_M,
 } from '../constants.js';
 import { radialExtent, type RadialExtent } from './extent.js';
 import type {
@@ -27,151 +29,91 @@ import type {
 } from '../types.js';
 
 /**
- * §7.2: the census-eating field system -- since gate 5 (2026-08-22), a RING
- * of large chunky blocks laid AROUND the whole settlement, separated from
- * the fabric by an open green belt, with the roads passing out between the
- * blocks. Owner's verdict on the previous design (12 m furlong strips woven
- * through the fabric, hedge-stamped): "you'd have fields AROUND the
- * village, not INSIDE the village."
+ * §7.2, THE FARMED LAND -- rebuilt at GATE 8.3 as a PLANAR SUBDIVISION.
  *
- * The structure that survives from before: wedges (angular sectors between
- * adjacent green-attached lanes), a per-wedge inner radius measured off the
- * sector's own claims, census-driven area, and the furrow-bearing
- * constraint walk. What changed: a wedge's ring segment is cut into 1-3
- * chunky annular-sector BLOCKS with open green gaps between them, each a
- * single pattern-filled polygon carrying one crop and one furrow bearing.
- * The ploughed texture is the crop tile's own; nothing is outlined.
+ * What the owner said after gate 7: "we need to address the near perfect
+ * circles everywhere as that is not a natural evolution." Gate 8 answered
+ * it for the village BODY (a radius profile the growth itself obeys), and
+ * gates 8.1 and 8.2 answered it for the ring's petals and its concentric
+ * courses. Gate 8.2 then measured its own work honestly and refused half
+ * its bar: the courses were gone, and the picture still had circles in it,
+ * because THE FIELD FRAME WAS POLAR. The belt's inner edge was a circle,
+ * its outer edge was a circle, and every parcel was an annular sector with
+ * both long edges curving about the green. No jitter escapes that.
+ *
+ * So there is no ring here any more, and no bearing arithmetic decides the
+ * shape of anything:
+ *
+ *  1. The farmland REGION is a polygon between two boundaries. The INNER
+ *     one is the village's measured built-up edge plus a drawn belt, taken
+ *     as a POLYGON (`beltPolygon`) rather than as a radius function -- so
+ *     the clearing round the village is straight-sided and follows the
+ *     body's own lopsidedness. The OUTER one is a coarse irregular convex
+ *     hull (`regionHull`) whose depth is solved so the region holds what
+ *     the census demands.
+ *  2. The region is cut by ROADS first: where a lane leaves the village its
+ *     corridor is taken straight out of the cell it crosses, so a road runs
+ *     BETWEEN parcels rather than into the side of one.
+ *  3. What is left is cut by RECURSIVE BISECTION with straight lines
+ *     (`subdivide`), each cut's orientation taken from the road the cell
+ *     fronts or from the cell's own long axis, jittered a few degrees and
+ *     placed off centre. That is the same shape of algorithm the old city
+ *     engine's `createAlleys` uses on a ward; none of its code is imported,
+ *     because the village engine depends on nothing in `src/generator` or
+ *     `src/wards`.
+ *  4. Each leaf is clipped back out of the village (`clipOutsideBelt`),
+ *     inset by a baulk, culled if it is a splinter, and ploughed along ITS
+ *     OWN long axis.
  *
  * Everything here is geometric approximation by design (the brief: "modest
- * geometric approximation is fine") -- blocks are RENDERED as pattern-filled
- * polygons, not simulated farmland, so clipping by angular slice reads
- * correctly at village scale.
+ * geometric approximation is fine") -- parcels are RENDERED as
+ * pattern-filled polygons, not simulated farmland.
  */
-
-export interface Wedge {
-  id: string;
-  /** Clockwise sweep start, degrees. */
-  bearingA: number;
-  /** Clockwise sweep width, degrees; 360 for the fail-soft single-wedge
-   * cases (0 or 1 green-attached lanes), which then skip the angle test
-   * entirely. */
-  spanDeg: number;
-  bisectorDeg: number;
-}
-
-/** Same notion `skeleton/lanes.ts` uses: a lane leaving the green directly,
- * as opposed to one branching off another lane. */
-function isGreenAttachedLane(lane: Lane): boolean {
-  return lane.parentId === undefined && lane.points.length > 0;
-}
 
 /**
- * The angular sectors between adjacent green-attached lanes, sorted by
- * bearing from the green centre. Fewer than 2 such lanes cannot bound a
- * sector at all -- §8.5 fail-soft: one full-circle "wedge" covers the
- * whole village instead of throwing.
+ * The claim's four corners IN RING ORDER.
+ *
+ * They used to come out in nested-loop order -- (-,-), (-,+), (+,-), (+,+)
+ * -- which traces a bowtie, not a rectangle. That was harmless while the
+ * only use was "how far does this claim reach", and it is NOT harmless now
+ * that gate 8.3 treats a claim as a POLYGON to trim parcels against:
+ * `pointInPolygon` on a self-crossing ring answers wrongly for half of it,
+ * so parcels were being laid across house plots and §5.7's invariant caught
+ * them.
  */
-export function buildWedges(green: Green, lanes: Lane[]): Wedge[] {
-  const attached = lanes.filter(isGreenAttachedLane);
-  if (attached.length === 0) {
-    return [{
-      id: 'wedge:none', bearingA: 0, spanDeg: 360, bisectorDeg: 0,
-    }];
-  }
-  if (attached.length === 1) {
-    const b = bearingOf(green.centre, attached[0].points[0]);
-    return [{
-      id: `wedge:${attached[0].id}|${attached[0].id}`,
-      bearingA: b,
-      spanDeg: 360,
-      bisectorDeg: wrapDeg(b + 180),
-    }];
-  }
-
-  const withBearing = attached
-    .map((l) => ({ lane: l, bearing: bearingOf(green.centre, l.points[0]) }))
-    .sort((a, b) => a.bearing - b.bearing);
-  const n = withBearing.length;
-  const wedges: Wedge[] = [];
-  for (let i = 0; i < n; i++) {
-    const a = withBearing[i];
-    const b = withBearing[(i + 1) % n];
-    const span = wrapDeg(b.bearing - a.bearing);
-    if (span <= 1e-6) continue; // duplicate bearings: degenerate, no wedge
-    wedges.push({
-      id: `wedge:${a.lane.id}|${b.lane.id}`,
-      bearingA: a.bearing,
-      spanDeg: span,
-      bisectorDeg: wrapDeg(a.bearing + span / 2),
-    });
-  }
-  if (wedges.length === 0) {
-    return [{
-      id: 'wedge:none', bearingA: 0, spanDeg: 360, bisectorDeg: 0,
-    }];
-  }
-  return wedges;
-}
-
 function obbCorners(obb: Obb): Point[] {
   const {
     center: c, tangent: t, normal: n, halfW, halfD,
   } = obb;
-  const pts: Point[] = [];
-  for (const sw of [-1, 1]) {
-    for (const sd of [-1, 1]) {
-      pts.push(new Point(c.x + t.x * halfW * sw + n.x * halfD * sd, c.y + t.y * halfW * sw + n.y * halfD * sd));
-    }
-  }
-  return pts;
+  const at = (sw: number, sd: number): Point => new Point(
+    c.x + t.x * halfW * sw + n.x * halfD * sd,
+    c.y + t.y * halfW * sw + n.y * halfD * sd,
+  );
+  return [at(-1, -1), at(1, -1), at(1, 1), at(-1, 1)];
 }
 
-function centroid(points: Point[]): Point {
-  let sx = 0;
-  let sy = 0;
-  for (const p of points) { sx += p.x; sy += p.y; }
-  return new Point(sx / points.length, sy / points.length);
-}
-
-/** Whether `p`'s bearing from the green centre falls inside `wedge`'s
- * angular span, widened by FIELD_WEDGE_CLAIM_MARGIN_DEG at both ends. A
- * full-circle fail-soft wedge (spanDeg 360) contains everything. */
-function bearingInWedge(p: Point, green: Green, wedge: Wedge): boolean {
-  if (wedge.spanDeg >= 359.999) return true;
-  const rel = wrapDeg(bearingOf(green.centre, p) - wedge.bearingA + FIELD_WEDGE_CLAIM_MARGIN_DEG);
-  return rel <= wedge.spanDeg + 2 * FIELD_WEDGE_CLAIM_MARGIN_DEG;
-}
-
-/**
- * How far a claim's BACK EDGE reaches from the green: the farthest of its
- * own corners (a lot claim) or vertices (a croft). One number per claim,
- * which is what the percentile below ranks.
- */
 /**
  * Gate 6.11 (owner: the ring must hug the village, not the plot survey):
  * only lots that CARRY A BUILDING count toward the built-up edge. Since
  * gate 6.9 the cutter tiles the whole saturated disc with plots and the
- * census fills the inner part of it, so measuring claims meant the ring
- * sat at the edge of the SURVEY — leaving a band of open green as wide as
+ * census fills the inner part of it, so measuring claims meant the fields
+ * sat at the edge of the SURVEY -- leaving a band of open green as wide as
  * the village itself between the last house and the first furrow. Crofts
  * already exist only behind built lots, so they need no such filter.
  */
 function claimBackEdgeDistances(
-  green: Green, lots: Lot[], crofts: Croft[], wedge?: Wedge,
-  housedLotIds?: ReadonlySet<string>,
+  green: Green, lots: Lot[], crofts: Croft[], housedLotIds?: ReadonlySet<string>,
 ): number[] {
   const out: number[] = [];
   for (const lot of lots) {
     if (housedLotIds && !housedLotIds.has(lot.id)) continue;
     const obb = lotObb(lot);
-    if (wedge && !bearingInWedge(obb.center, green, wedge)) continue;
     let far = 0;
     for (const c of obbCorners(obb)) far = Math.max(far, dist(green.centre, c));
     out.push(far);
   }
   for (const croft of crofts) {
     if (croft.polygon.length === 0) continue;
-    if (wedge && !bearingInWedge(centroid(croft.polygon), green, wedge)) continue;
     let far = 0;
     for (const p of croft.polygon) far = Math.max(far, dist(green.centre, p));
     out.push(far);
@@ -181,547 +123,28 @@ function claimBackEdgeDistances(
 
 /**
  * The MEASURED fabric radius: how far the built-up edge reaches anywhere in
- * the village -- the max over every lot claim's and croft's back edge,
- * floored at the green's drawn radius.
+ * the village -- the max over every housed lot claim's and croft's back
+ * edge, floored at the green's drawn radius.
  *
- * This is the "everything is inside here" number, and only stages that need
- * that use it: the vegetation ramp's fallback when there are no fields at
- * all, §8.4's shorefront reach, and the stone circle's ring (C1). It is
- * explicitly NOT what a wedge's field band starts at -- see
- * `wedgeInnerRadius`.
+ * This is the "everything is inside here" number, and only stages that
+ * genuinely want a single radius use it: §8.4's shorefront reach and the
+ * stone circle's ring (C1).
  */
 export function computeFabricRadius(
   green: Green, lots: Lot[], crofts: Croft[], housedLotIds?: ReadonlySet<string>,
 ): number {
   let maxR = greenDrawnRadius(green);
-  for (const d of claimBackEdgeDistances(green, lots, crofts, undefined, housedLotIds)) {
+  for (const d of claimBackEdgeDistances(green, lots, crofts, housedLotIds)) {
     maxR = Math.max(maxR, d);
   }
   return maxR;
 }
 
 /**
- * Where the ring's inner edge runs, BEARING BY BEARING.
- *
- * The percentile rule is gate 5's and unchanged: a HIGH percentile
- * (FIELD_INNER_PERCENTILE) of the back-edge distances of the claims at that
- * bearing, floored just outside the green ring, with the handful of ribbon
- * claims beyond it clipped around -- which is precisely what opens the road
- * passes through the ring.
- *
- * What GATE 8 changes is the RESOLUTION it is measured at. It used to be
- * one number per WEDGE (the sector between two green-attached lanes): four
- * to six steps around the whole village. That was invisible while the
- * fabric was a disc and is glaring beside an irregular body -- the houses
- * wander in and out and the furrows do not follow them, so the eye gets a
- * near-circular ring drawn right beside a blob to compare it against. It is
- * now a `RadialExtent`: the same percentile per EXTENT_BIN_DEG bin,
- * smoothed and interpolated, and the block polygons walk it directly, so
- * the ring's inner edge is a wandering curve rather than an arc.
- *
- * Three rounds of history on the percentile itself, because it has been
- * both extremes: V1 (2026-08-21) replaced a GLOBAL max with a per-wedge
- * one; W3 (2026-08-21) dropped it to 0.35 so strips would nestle in among
- * the fabric; gate 5 (2026-08-22) reversed W3 on the owner's verdict --
- * the ploughed land belongs AROUND the village, not inside it.
- */
-function ringInnerEdge(
-  green: Green, lots: Lot[], crofts: Croft[], housedLotIds?: ReadonlySet<string>,
-): RadialExtent {
-  const floor = greenDrawnRadius(green) + RING_SETBACK_M + FIELD_INNER_FLOOR_PAD_M;
-  return radialExtent(
-    green.centre, builtEdgePoints(lots, crofts, housedLotIds), floor, FIELD_INNER_PERCENTILE,
-  );
-}
-
-/** The wedge's NOMINAL inner radius -- the mean of the edge across its own
- * span. Only the census arithmetic (how deep the ring must be to feed the
- * village) uses it; every polygon walks the edge itself. */
-function wedgeInnerRadius(edge: RadialExtent, wedge: Wedge): number {
-  const steps = Math.max(2, Math.ceil(wedge.spanDeg / EXTENT_BIN_DEG));
-  let sum = 0;
-  for (let i = 0; i < steps; i++) {
-    sum += edge.atBearing(wedge.bearingA + (wedge.spanDeg * (i + 0.5)) / steps);
-  }
-  return sum / steps;
-}
-
-/**
- * §7.2 rule 1 ("a maximum radius set by how much land the census needs to
- * eat"): a wedge's ring segment runs from `innerRadius` out to the radius
- * at which the ANGULAR COVERAGE actually painted -- the wedge's span less
- * its green gaps, in radians -- holds `areaM2` of land. Solving
- * `(coverage / 2) * (outer^2 - inner^2) = areaM2` gives the sqrt below.
- *
- * Coverage, not the full span, because the gaps between blocks are open
- * green and grow no crops; sizing against the full span would under-deliver
- * the census by exactly the gap share.
- *
- * The resulting depth is clamped to [FIELD_BLOCK_DEPTH_MIN_M,
- * FIELD_BLOCK_DEPTH_MAX_M]: the floor keeps a block chunky (a thin block is
- * the strip gate 5 rejected), the cap stops a huge census running the ring
- * out to the horizon.
- */
-export function blockOuterRadius(
-  innerRadius: number, areaM2: number, coverageRad: number,
-): number {
-  if (!(coverageRad > 0)) return innerRadius + FIELD_BLOCK_DEPTH_MIN_M;
-  const rawOuter = Math.sqrt(innerRadius * innerRadius + (2 * Math.max(0, areaM2)) / coverageRad);
-  const depth = Math.min(
-    FIELD_BLOCK_DEPTH_MAX_M,
-    Math.max(FIELD_BLOCK_DEPTH_MIN_M, rawOuter - innerRadius),
-  );
-  return innerRadius + depth;
-}
-
-/**
- * Ground a field block may cover: not water, not inside a lot claim, not
- * inside a croft claim, not within a lane's corridor. The radius and wedge
- * bounds that used to live here are gone -- every point tested is
- * constructed inside the wedge's own ring segment by the caller.
- */
-function isClearGround(
-  p: Point, lots: Lot[], crofts: Croft[], lanes: Lane[], water: Point[][],
-): boolean {
-  if (inAnyWater(p, water)) return false;
-  for (const lot of lots) {
-    if (pointInObb(p, lotObb(lot))) return false;
-  }
-  for (const croft of crofts) {
-    if (pointInPolygon(p, croft.polygon)) return false;
-  }
-  for (const lane of lanes) {
-    if (withinLaneCorridor(p, lane, LANE_SETBACK_M[lane.type] ?? 2)) return false;
-  }
-  return true;
-}
-
-/**
- * `crops[ordinal % crops.length]`, unless this is the wedge's first KEPT
- * block and the roll (only made for the temperate crop table --
- * desert/tropical/pasture tables never swap) hits: then an orchard/vine
- * tile instead, alternating by a per-wedge-run counter shared across the
- * whole village so consecutive swaps read as orchard, vine, orchard, vine
- * rather than always the same tile.
- */
-function pickCropGlyph(
-  crops: string[], ordinal: number, isFirstBlock: boolean, allowOrchardVine: boolean,
-  rng: SeededRandom, toggle: { n: number },
-): string {
-  if (isFirstBlock && allowOrchardVine && rng.bool(FIELD_ORCHARD_VINE_CHANCE)) {
-    const glyph = toggle.n % 2 === 0 ? 'sm-field-orchard' : 'sm-field-vine';
-    toggle.n += 1;
-    return glyph;
-  }
-  return crops[ordinal % crops.length];
-}
-
-/** An angular window of the ring, degrees, before clipping. */
-export interface Slot { fromDeg: number; toDeg: number }
-
-/**
- * Gate 5: a wedge's span cut into 1-FIELD_BLOCK_MAX_PER_WEDGE nominal
- * blocks (one per FIELD_BLOCK_SPAN_TARGET_DEG of span) with
- * FIELD_BLOCK_GAP_SHARE of the span left as open green -- distributed as a
- * gap between each pair AND a half-gap at each end, so a block never butts
- * against the wedge's bounding lane. Those bounding lanes are roads passing
- * out through the ring, and the reference map shows them running between
- * blocks, not into the side of one.
- */
-export function blockSlots(wedge: Wedge, rng: SeededRandom): Slot[] {
-  const n = Math.max(
-    1,
-    Math.min(FIELD_BLOCK_MAX_PER_WEDGE, Math.round(wedge.spanDeg / FIELD_BLOCK_SPAN_TARGET_DEG)),
-  );
-  // GATE 8.2: the slots are no longer all one width. Gate 8.1 cut a wedge
-  // into n equal slots, so once the radial axis varied the ring was still a
-  // regular grid in the angular axis -- every furlong the same breadth, all
-  // the way round. One rng float per slot, drawn here (i.e. before any of
-  // that slot's own draws), gives each a weight; the weights are normalised
-  // so the wedge's span and its FIELD_BLOCK_GAP_SHARE of open green are
-  // spent EXACTLY as before. Only the division changes.
-  const weights: number[] = [];
-  for (let i = 0; i < n; i++) {
-    weights.push(1 + (rng.float() * 2 - 1) * FIELD_BLOCK_SPAN_SPREAD);
-  }
-  const total = weights.reduce((a, b) => a + b, 0);
-  const gapEach = (wedge.spanDeg * FIELD_BLOCK_GAP_SHARE) / n;
-  const spanBudget = wedge.spanDeg * (1 - FIELD_BLOCK_GAP_SHARE);
-  const slots: Slot[] = [];
-  let cursor = wedge.bearingA + gapEach / 2;
-  for (let i = 0; i < n; i++) {
-    const blockSpan = (spanBudget * weights[i]) / total;
-    slots.push({ fromDeg: cursor, toDeg: cursor + blockSpan });
-    cursor += blockSpan + gapEach;
-  }
-  return slots;
-}
-
-/**
- * The annular-sector polygon between two bearings and two radii: the outer
- * arc walked forward, the inner arc walked back, closed. Arcs are sampled
- * at FIELD_BLOCK_SLICE_DEG -- the SAME pitch `clipSlotToRuns` tests at, and
- * deliberately so: every vertex this emits is then a bearing that was
- * actually proven clear, at radii including the exact inner and outer arc.
- * A coarser polygon pitch would put corners on untested bearings and let a
- * block's edge graze a lot claim.
- */
-function sectorPolygon(
-  green: Green, fromDeg: number, toDeg: number,
-  innerAt: (deg: number) => number, outerAt: (deg: number) => number,
-  skew: number = 0,
-): Point[] {
-  const span = toDeg - fromDeg;
-  const steps = Math.max(2, Math.ceil(span / FIELD_BLOCK_SLICE_DEG));
-  const at = (deg: number, r: number): Point => {
-    const d = bearingVector(deg);
-    return new Point(green.centre.x + d.x * r, green.centre.y + d.y * r);
-  };
-  // Gate 5.4 SKEW, expressed RADIALLY rather than angularly: the block is
-  // deeper at one end than the other, so it is an irregular quad instead of
-  // a perfect annular sector -- which is the visual point -- while every
-  // vertex stays on a bearing the clip actually tested, at a radius inside
-  // [inner, outer], which the clip also tested.
-  //
-  // The first attempt skewed the SPAN (inner arc subtending a different
-  // angle from the outer). That put the shrunk arc's vertices on bearings
-  // BETWEEN the tested slices, and the §5.7 net duly caught a vertex inside
-  // a lot claim. Bearings are not ours to invent here; radii are.
-  const mag = Math.abs(skew) * 0.5;
-  const lean = (t: number): number => (skew >= 0 ? t : 1 - t);
-  const pts: Point[] = [];
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const deg = fromDeg + span * t;
-    const depth = outerAt(deg) - innerAt(deg);
-    pts.push(at(deg, outerAt(deg) - depth * mag * lean(t)));
-  }
-  for (let i = steps; i >= 0; i--) {
-    const t = i / steps;
-    const deg = fromDeg + span * t;
-    const depth = outerAt(deg) - innerAt(deg);
-    pts.push(at(deg, innerAt(deg) + depth * mag * lean(1 - t)));
-  }
-  return pts;
-}
-
-/** Annular sector area for an angular width in DEGREES. */
-function sectorArea(spanDeg: number, inner: number, outer: number): number {
-  return ((spanDeg * Math.PI) / 360) * (outer * outer - inner * inner);
-}
-
-/**
- * One nominal slot, clipped: the slot is tested in FIELD_BLOCK_SLICE_DEG
- * slices (three bearings x five radii each), and every maximal run of clear
- * slices becomes its own block. That is what opens a road pass -- where an
- * arm's ribbon of lots reaches out through the ring, its slices fail and the
- * block is split either side of the road.
- */
-function clipSlotToRuns(
-  green: Green, slot: Slot,
-  innerAt: (deg: number) => number, outerAt: (deg: number) => number,
-  lots: Lot[], crofts: Croft[], lanes: Lane[], water: Point[][],
-): Slot[] {
-  const span = slot.toDeg - slot.fromDeg;
-  const slices = Math.max(1, Math.ceil(span / FIELD_BLOCK_SLICE_DEG));
-  const clearAt = (deg: number): boolean => {
-    const d = bearingVector(deg);
-    const inner = innerAt(deg);
-    const depth = outerAt(deg) - inner;
-    // GATE 8: the tested radii follow the edge at THIS bearing, because the
-    // block's own inner and outer arcs do.
-    return [0, 0.25, 0.5, 0.75, 1].map((t) => inner + depth * t).every((r) => isClearGround(
-      new Point(green.centre.x + d.x * r, green.centre.y + d.y * r), lots, crofts, lanes, water,
-    ));
-  };
-
-  const runs: Slot[] = [];
-  let runStart = -1;
-  for (let i = 0; i < slices; i++) {
-    const a = slot.fromDeg + (span * i) / slices;
-    const b = slot.fromDeg + (span * (i + 1)) / slices;
-    const ok = clearAt(a) && clearAt((a + b) / 2) && clearAt(b);
-    if (ok && runStart < 0) runStart = i;
-    if (!ok && runStart >= 0) {
-      runs.push({ fromDeg: slot.fromDeg + (span * runStart) / slices, toDeg: a });
-      runStart = -1;
-    }
-  }
-  if (runStart >= 0) {
-    runs.push({ fromDeg: slot.fromDeg + (span * runStart) / slices, toDeg: slot.toDeg });
-  }
-  return runs;
-}
-
-/** One wedge's ring segment: its kept blocks and the radius they reach. */
-interface WedgeRing { blocks: FieldBlock[]; outerRadius: number }
-
-/**
- * GATE 8.1: how the ring's census-driven depth is spent RADIALLY -- how
- * many concentric courses of blocks, how deep each is, and the headland
- * between them.
- *
- * Before this, all of it went into one block per slot: at pop 300 an 82 m
- * slab wrapped around a village of radius 49, at pop 900 a 110 m one. Cut
- * to 40-degree fans by `blockSlots`, those were PETALS -- a single field
- * the size of a good part of the village, and (once gate 8 made the inner
- * edge wander) each petal a different length. The owner's bar is "a band
- * of chunky fields hugging an irregular village", and a chunky field is one
- * whose depth is on the order of its width.
- *
- * The census is NOT touched: `ringDepth` is exactly what `blockOuterRadius`
- * solved for, and the rows partition it. The only land given up is the
- * headlands, which is why `buildWedgeBlocks` asks the solve for them back.
- *
- * GATE 8.2 keeps every word of that and takes away the one thing that made
- * the result read as CONCENTRIC COURSES: that it was computed once per
- * WEDGE. It is now `slotCourses`, drawn per SLOT.
- *
- * Which row counts are legal for a given depth: every count whose EVEN
- * share would land inside [FIELD_BLOCK_ROW_DEPTH_MIN_M,
- * FIELD_BLOCK_ROW_DEPTH_MAX_M]. A 120 m slot may be three courses or four;
- * an 80 m slot two or three. The fallback (nothing legal, which only
- * happens for a ring shallower than the minimum or deeper than
- * FIELD_BLOCK_ROWS_MAX * the maximum) is gate 8.1's target-depth rounding.
- */
-export function courseCandidates(ringDepth: number): number[] {
-  const out: number[] = [];
-  for (let rows = 1; rows <= FIELD_BLOCK_ROWS_MAX; rows++) {
-    const gap = rows > 1 ? FIELD_BLOCK_ROW_GAP_M : 0;
-    const even = (ringDepth - gap * (rows - 1)) / rows;
-    if (even >= FIELD_BLOCK_ROW_DEPTH_MIN_M && even <= FIELD_BLOCK_ROW_DEPTH_MAX_M) out.push(rows);
-  }
-  if (out.length === 0) {
-    out.push(Math.max(1, Math.min(
-      FIELD_BLOCK_ROWS_MAX, Math.round(ringDepth / FIELD_BLOCK_ROW_DEPTH_TARGET_M),
-    )));
-  }
-  return out;
-}
-
-/**
- * GATE 8.2: one slot's own radial subdivision -- how many courses, and how
- * deep each of them is, from the inside out.
- *
- * Three properties, all of them load-bearing and all of them pinned by
- * test:
- *  - EXACT. `sum(depths) + gap * (depths.length - 1) === ringDepth`. The
- *    census arithmetic is still `blockOuterRadius`'s alone; this only
- *    decides how its ground is divided.
- *  - UNEVEN. The shares are drawn (FIELD_ROW_DEPTH_SPREAD), so a slot's
- *    courses run 45/30/25 rather than 33/33/33. That is the merge and the
- *    split the owner asked for, arrived at as ONE mechanism: a dominant
- *    share IS two courses merged into a deep parcel, a pair of small ones
- *    IS a course split into strips, and neither needs a special case that
- *    would break the exact partition.
- *  - BOUNDED. Every depth is clamped into the band, with the residual
- *    handed back to the courses that still have headroom, so the ratio
- *    between the deepest and shallowest block the ring can ever draw is
- *    FIELD_BLOCK_ROW_DEPTH_MAX_M / FIELD_BLOCK_ROW_DEPTH_MIN_M = 2.26 --
- *    the acceptance bar, satisfied by construction rather than by luck.
- *
- * Because both the count and the shares are per slot, the boundary between
- * course 1 and course 2 lands at a different radius in every slot, and
- * neighbouring slots do not even agree on how many boundaries there are.
- * That is what stops the eye joining them into a ring.
- *
- * RNG: exactly 1 + FIELD_BLOCK_ROWS_MAX floats, always, whatever the depth
- * -- the row pick, then one share per possible course with the unused tail
- * spent anyway. A draw count that varied with geometry would make the
- * sequence depend on the census (§8.1 forbids that).
- */
-export function slotCourses(
-  ringDepth: number, rng: SeededRandom,
-): { depths: number[]; gap: number } {
-  const candidates = courseCandidates(ringDepth);
-  const pick = Math.min(candidates.length - 1, Math.floor(rng.float() * candidates.length));
-  const rows = candidates[pick];
-  const shares: number[] = [];
-  for (let i = 0; i < FIELD_BLOCK_ROWS_MAX; i++) {
-    const w = 1 + (rng.float() * 2 - 1) * FIELD_ROW_DEPTH_SPREAD;
-    if (i < rows) shares.push(w);
-  }
-  const gap = rows > 1 ? FIELD_BLOCK_ROW_GAP_M : 0;
-  const budget = ringDepth - gap * (rows - 1);
-  const total = shares.reduce((a, b) => a + b, 0);
-  const depths = shares.map((w) => (budget * w) / total);
-  // Clamp into the band and hand the residual back to whichever courses
-  // still have room, repeatedly, so the sum stays EXACTLY `budget`. Two
-  // passes settle every case the band admits; the third is belt and braces
-  // for a budget that sits against a bound.
-  const lo = Math.min(FIELD_BLOCK_ROW_DEPTH_MIN_M, budget / rows);
-  const hi = Math.max(FIELD_BLOCK_ROW_DEPTH_MAX_M, budget / rows);
-  for (let pass = 0; pass < 3; pass++) {
-    for (let i = 0; i < rows; i++) depths[i] = Math.min(hi, Math.max(lo, depths[i]));
-    const residual = budget - depths.reduce((a, b) => a + b, 0);
-    if (Math.abs(residual) < 1e-9) break;
-    const room = depths.map((d) => (residual > 0 ? hi - d : d - lo));
-    const roomTotal = room.reduce((a, b) => a + b, 0);
-    if (roomTotal < 1e-9) {
-      for (let i = 0; i < rows; i++) depths[i] += residual / rows;
-      break;
-    }
-    for (let i = 0; i < rows; i++) depths[i] += (residual * room[i]) / roomTotal;
-  }
-  return { depths, gap };
-}
-
-function buildWedgeBlocks(
-  wedge: Wedge, green: Green, edge: RadialExtent, population: number,
-  furrowBearingDeg: number, lots: Lot[], crofts: Croft[], lanes: Lane[], water: Point[][],
-  crops: string[], allowOrchardVine: boolean, rng: SeededRandom, toggle: { n: number },
-): WedgeRing {
-  const innerRadius = wedgeInnerRadius(edge, wedge);
-  const slots = blockSlots(wedge, rng);
-  const coverageRad = slots.reduce((sum, s) => sum + ((s.toDeg - s.fromDeg) * Math.PI) / 180, 0);
-  // This wedge's share of the census demand, by span -- the same
-  // distribution across wedges the band used before gate 5.
-  const demand = Math.max(0, population) * FIELD_M2_PER_CAPITA * (wedge.spanDeg / 360);
-  const outerRadius = blockOuterRadius(innerRadius, demand, coverageRad);
-  if (!(outerRadius > innerRadius)) return { blocks: [], outerRadius: innerRadius };
-  const ringDepth = outerRadius - innerRadius;
-
-  const blocks: FieldBlock[] = [];
-  let ordinal = 0;
-  let reach = innerRadius;
-  for (const slot of slots) {
-    // Gate 5.4: the jitter draws happen in slot order, BEFORE the clip --
-    // so the geometry that gets tested against claims is the geometry that
-    // gets drawn. Jittering a cleared block afterwards would push it onto
-    // ground nothing ever checked.
-    //
-    // GATE 8.2 draw order per slot, fixed, and every count independent of
-    // geometry: one belt float (the belt is where the whole slot starts,
-    // and it must not step between courses of the same slot), one slot
-    // depth float, then `slotCourses` (1 + FIELD_BLOCK_ROWS_MAX floats),
-    // then FOUR floats per course drawn -- span, skew, stagger, split.
-    //
-    // Gate 8.1 drew the belt, then depth/span/skew per row, and read its
-    // course count off the WEDGE. Reading it off the wedge is exactly what
-    // made three courses appear at the same three radii all the way round
-    // the village; the depth float has moved out to the slot because it is
-    // now the thing that makes neighbouring slots qualify for different
-    // course counts, and the partition itself carries the depth variation.
-    const beltOffset = FIELD_BELT_JITTER_MIN_M
-      + rng.float() * (FIELD_BELT_JITTER_MAX_M - FIELD_BELT_JITTER_MIN_M);
-    // GATE 8.2: this slot's own total depth. The census solved for the
-    // wedge; a slot may be up to FIELD_SLOT_DEPTH_JITTER short of or beyond
-    // it, symmetrically, so the ring's OUTER edge steps from slot to slot
-    // instead of running level -- an outer boundary is a ring boundary too.
-    const slotDepth = ringDepth * (1 + (rng.float() * 2 - 1) * FIELD_SLOT_DEPTH_JITTER);
-    const { depths: courseDepths, gap: rowGap } = slotCourses(slotDepth, rng);
-    const slotSpan = slot.toDeg - slot.fromDeg;
-
-    let base = beltOffset;
-    for (let row = 0; row < courseDepths.length; row++) {
-      const jDepth = courseDepths[row];
-      const spanMul = 1 + (rng.float() * 2 - 1) * FIELD_SPAN_JITTER;
-      const skew = (rng.float() * 2 - 1) * FIELD_SKEW_JITTER;
-      const staggerRoll = rng.float();
-      const splitRoll = rng.float();
-      const rowBase = base;
-      base += jDepth + rowGap;
-      if (!(jDepth > 0)) continue;
-
-      // GATE 8: the block's inner arc IS the measured edge, bearing by
-      // bearing, offset by this slot's belt jitter -- so the ring wanders
-      // with the body instead of being an arc struck about the green.
-      // GATE 8.1: plus the courses already laid inside this one, which
-      // GATE 8.2 makes this SLOT's courses rather than the wedge's.
-      const innerAt = (deg: number): number => edge.atBearing(deg) + rowBase;
-      // The depth clamp still governs the RING (`blockOuterRadius`); what a
-      // BLOCK is deep is this slot's share of that depth (`slotCourses`),
-      // band-clamped.
-      // GATE 8: the jitter is applied AFTER the clamp, not inside it. A big
-      // census asks for more depth than FIELD_BLOCK_DEPTH_MAX_M allows, so
-      // every slot in every wedge came out at exactly the cap and the
-      // ring's OUTER edge was a perfect circle.
-      const outerAt = (deg: number): number => innerAt(deg) + jDepth;
-      // The span is scaled about the slot's own mid-bearing. The skew needs
-      // no allowance here because it only ever shrinks an arc (see
-      // `sectorPolygon`), so both arcs stay inside what the clip tested.
-      // GATE 8.1 STAGGER, GATE 8.2 randomised: an odd course is turned half
-      // a slot, plus up to FIELD_ROW_STAGGER_JITTER of a slot either way.
-      // Left aligned, the courses' seams read as green SPOKES running the
-      // whole depth of the ring -- the pinwheel returning by another route.
-      // Alternating by exactly half a slot cured that but put every odd
-      // course's seams on one set of bearings and every even course's on
-      // another, so the seams still lined up radially two courses at a
-      // time. Real open fields break joint everywhere; so do these now.
-      // The shifted bearings go through `clipSlotToRuns` like any other, so
-      // nothing is drawn on ground that was not tested.
-      const stagger = (row % 2 === 1 ? 0.5 : 0)
-        + (staggerRoll - 0.5) * FIELD_ROW_STAGGER_JITTER;
-      const rowMid = (slot.fromDeg + slot.toDeg) / 2 + stagger * slotSpan;
-      const jSpan = slotSpan * spanMul;
-      // GATE 8.2: occasionally this one course is cut ANGULARLY into two
-      // narrower strips with a baulk between -- the odd pair of narrow
-      // parcels beside the broad ones that a real field system shows, and
-      // another set of block edges that no neighbouring slot shares.
-      const nominal: Slot[] = [];
-      if (splitRoll < FIELD_ROW_SPLIT_CHANCE) {
-        const baulk = jSpan * FIELD_ROW_SPLIT_GAP_SHARE;
-        const half = (jSpan - baulk) / 2;
-        nominal.push({ fromDeg: rowMid - jSpan / 2, toDeg: rowMid - jSpan / 2 + half });
-        nominal.push({ fromDeg: rowMid + jSpan / 2 - half, toDeg: rowMid + jSpan / 2 });
-      } else {
-        nominal.push({ fromDeg: rowMid - jSpan / 2, toDeg: rowMid + jSpan / 2 });
-      }
-
-      for (const jSlot of nominal) {
-        for (const run of clipSlotToRuns(green, jSlot, innerAt, outerAt, lots, crofts, lanes, water)) {
-          const spanDeg = run.toDeg - run.fromDeg;
-          // Area at the run's mid-bearing: the block is an irregular ribbon
-          // now, and this is the cull for a block too small to be a field,
-          // not the census arithmetic (which is `blockOuterRadius`, above).
-          const midDeg = (run.fromDeg + run.toDeg) / 2;
-          const rIn = innerAt(midDeg);
-          const rOut = outerAt(midDeg);
-          const area = sectorArea(spanDeg, rIn, rOut);
-          // A block this small is the dropped rug, not a field.
-          if (area < FIELD_MIN_BLOCK_AREA_M2) continue;
-          // GATE 8.1: and a block this NARROW is a radial sliver -- the
-          // offcut left either side of a road pass. Far out in the ring one
-          // of those clears the area cull comfortably while reading as a
-          // spoke, which is exactly what pop 900 was drawing.
-          const arcW = ((spanDeg * Math.PI) / 180) * ((rIn + rOut) / 2);
-          if (arcW < FIELD_BLOCK_MIN_ASPECT * (rOut - rIn)) continue;
-          // Gate 5.4: verify the POLYGON, not just the sample grid.
-          //
-          // `clipSlotToRuns` proves a set of bearings clear at a fixed slice
-          // pitch; `sectorPolygon` emits vertices at its own pitch across the
-          // surviving run. Those two pitches only coincide when the run's
-          // span is an exact multiple of the slice -- which the span jitter
-          // made untrue, so a vertex could land between tested bearings and,
-          // in one measured village out of forty, inside a lot claim. Rather
-          // than try to keep two samplings in phase, the emitted geometry is
-          // checked directly: if any vertex is on claimed ground the block is
-          // dropped.
-          const polygon = sectorPolygon(green, run.fromDeg, run.toDeg, innerAt, outerAt, skew);
-          if (!polygon.every((p) => isClearGround(p, lots, crofts, lanes, water))) continue;
-          const glyph = pickCropGlyph(crops, blocks.length, blocks.length === 0, allowOrchardVine, rng, toggle);
-          blocks.push({
-            id: `field:${wedge.id}:S${ordinal}`,
-            wedgeId: wedge.id,
-            glyph,
-            polygon,
-            furrowBearingDeg,
-            areaM2: area,
-          });
-          ordinal += 1;
-          for (const p of polygon) reach = Math.max(reach, dist(green.centre, p));
-        }
-      }
-    }
-  }
-  return { blocks, outerRadius: Math.max(outerRadius, reach) };
-}
-
-/**
  * GATE 8: every point that marks the built-up edge -- the corners of each
- * HOUSED lot claim and the vertices of each croft. `computeFabricRadius`
- * is the max of their distances; `radialExtent` bins them by bearing, and
- * that is what the vegetation band follows now that the body is irregular.
+ * HOUSED lot claim and the vertices of each croft. `radialExtent` bins them
+ * by bearing, and that is what the farmland's inner boundary and the
+ * vegetation band both follow now that the body is irregular.
  */
 export function builtEdgePoints(
   lots: Lot[], crofts: Croft[], housedLotIds?: ReadonlySet<string>,
@@ -735,114 +158,702 @@ export function builtEdgePoints(
   return out;
 }
 
-export interface FieldsResult {
-  blocks: FieldBlock[];
-  /** Gate 5: EMPTY. The ring's blocks carry no outline -- no hedge, wall,
-   * fence or ditch anywhere on a field. Kept on the result (and threaded to
-   * `VillageModel.fieldEdges`, and painted by the renderer) so the edge
-   * machinery stays wired up for a future design that wants it back; the
-   * `edges` module and `stampEdge` are likewise kept, unused. */
-  edges: EdgeStamp[];
-  /** The OUTERMOST radius any kept block reaches -- the measured fabric
-   * radius when no block was kept at all. Vegetation's `innerEdge` and the
-   * stone circle's ring use this, not a prediction. */
-  outerRadius: number;
+/**
+ * Where the built-up edge runs, BEARING BY BEARING: a HIGH percentile
+ * (FIELD_INNER_PERCENTILE) of the back-edge distances of the housed claims
+ * in each bin, floored just outside the green ring, with the handful of
+ * ribbon claims beyond it left outside -- which is part of what opens the
+ * road passes out of the village. Gate 5's rule, gate 8's resolution.
+ */
+function builtEdgeExtent(
+  green: Green, lots: Lot[], crofts: Croft[], housedLotIds?: ReadonlySet<string>,
+): RadialExtent {
+  const floor = greenDrawnRadius(green) + RING_SETBACK_M + FIELD_INNER_FLOOR_PAD_M;
+  return radialExtent(
+    green.centre, builtEdgePoints(lots, crofts, housedLotIds), floor, FIELD_INNER_PERCENTILE,
+  );
 }
 
 /**
- * §7.2: the whole field system for one village -- since gate 5, a ring of
- * chunky blocks around the settlement. Draws (in order, after any
- * caller-side draws): one jitter float per wedge (wedge-id-sorted order),
- * plus -- only when that wedge keeps a first block AND its biome resolves
- * to the temperate crop table -- one orchard/vine bool.
+ * GATE 8.3: the farmland's INNER boundary, as a POLYGON.
  *
- * Never throws: a village with fewer than 2 green-attached lanes gets one
- * full-circle wedge (§8.5); the depth clamp guarantees a positive band. An
- * empty result only happens when every slice of every slot is claimed
- * (water/lanes/claims wall the ring off) or every block was culled below
- * FIELD_MIN_BLOCK_AREA_M2.
+ * This is the single change that stops the village standing in a round
+ * clearing. Gate 8 already measured the built-up edge per bearing and gate
+ * 8.1 had the blocks walk it -- but a curve sampled every two degrees and
+ * struck about the green is a circle whatever it is measured from, and at
+ * pop 300, where the body is nearly round, that is exactly how it read.
  *
- * Two orderings, deliberately different, and neither may be collapsed into
- * the other:
- *  - RNG order is wedge-id-sorted, so the draw sequence never depends on
- *    geometry (§8.1). Every wedge spends its jitter float up front, before
- *    any geometry gate, so a wedge that produces nothing still spends it.
- *  - Furrow alternation is walked in the BEARING-sorted order `buildWedges`
- *    produces, i.e. in SPATIAL adjacency (fix wave, I2).
+ * A polygon of FIELD_REGION_INNER_VERTICES vertices turns only at its
+ * corners, so a parcel fronting the village fronts a STRAIGHT edge 20-30 m
+ * long. Two details make that edge lean off tangential rather than reading
+ * as a chord of a circle: each vertex takes the MAXIMUM of the built edge
+ * over its own arc (so the polygon cannot cut inside the houses between
+ * corners) and its own drawn belt from
+ * [FIELD_BELT_JITTER_MIN_M, FIELD_BELT_JITTER_MAX_M], smoothed once over
+ * neighbours so the clearing wanders rather than jags.
  *
- * §7.2's alternation is enforced as a constraint, not assumed from a fixed
- * +90 on alternate wedges. Keyed to the lexical id rank, as it once was, it
- * was only alternating on paper: 28% of spatially adjacent bundles came out
- * within 15 degrees of parallel. But a fixed offset cannot deliver it
- * either -- an odd wedge count leaves one same-parity seam at the wrap by
- * construction, and two wedges whose bisectors already differ by ~90 land
- * PARALLEL once one of them is turned 90. So each wedge, in bearing order,
- * takes the first of +0/+45/+90/+135 on its parity base that clears
- * FIELD_FURROW_MIN_SEPARATION_DEG of parallel against both already-fixed
- * neighbours (the previous wedge, and for the last wedge also the first).
- * The jitter is applied inside each candidate, so this spends no rng.
+ * RNG: exactly FIELD_REGION_INNER_VERTICES floats, always.
+ */
+export function beltPolygon(
+  green: Green, edge: RadialExtent, rng: SeededRandom,
+): Point[] {
+  const n = FIELD_REGION_INNER_VERTICES;
+  const step = 360 / n;
+  const belts: number[] = [];
+  for (let i = 0; i < n; i++) {
+    belts.push(FIELD_BELT_JITTER_MIN_M
+      + rng.float() * (FIELD_BELT_JITTER_MAX_M - FIELD_BELT_JITTER_MIN_M));
+  }
+  const smoothed = belts.map((_, i) => (
+    (belts[(i - 1 + n) % n] + belts[i] * 2 + belts[(i + 1) % n]) / 4
+  ));
+  const poly: Point[] = [];
+  for (let i = 0; i < n; i++) {
+    const deg = i * step;
+    // The maximum over the vertex's own arc, so the straight edge between
+    // two corners still clears the deepest claim between them.
+    let r = 0;
+    for (let k = -6; k <= 6; k++) r = Math.max(r, edge.atBearing(deg + (k * step) / 12));
+    const d = bearingVector(deg);
+    const rad = r + smoothed[i];
+    poly.push(new Point(green.centre.x + d.x * rad, green.centre.y + d.y * rad));
+  }
+  return poly;
+}
+
+/**
+ * GATE 8.3: the farmland's OUTER boundary, and the census arithmetic.
  *
- * ONE furrow bearing per wedge, shared by that wedge's blocks: blocks in a
- * wedge are one estate separated by green gaps, and the seam the
- * alternation exists to break is the one between NEIGHBOURING estates.
+ * FIELD_REGION_OUTER_VERTICES points at jittered bearings, each pushed out
+ * from the belt by the region depth times its own drawn weight, then their
+ * CONVEX HULL. Coarse and irregular on purpose: 8-11 long straight sides,
+ * nothing a compass would draw, and convex so that every cell of the
+ * recursion below stays convex and a single half-plane clip is exact.
+ *
+ * The DEPTH is solved, not chosen: bisection on the scalar depth until the
+ * region between the hull and the belt holds `targetAreaM2`. That is how
+ * the census gets honoured -- gate 8.2 measured the old ring delivering
+ * 52-54% of demand at pop 900 because FIELD_BLOCK_DEPTH_MAX_M bound long
+ * before the demand was met, and a polygon region has no such structural
+ * cap; FIELD_REGION_DEPTH_MAX_M is a horizon, not the operative number.
+ *
+ * RNG: exactly 2 * FIELD_REGION_OUTER_VERTICES floats, always.
+ */
+export function regionHull(
+  green: Green, belt: Point[], targetAreaM2: number, rng: SeededRandom,
+): Point[] {
+  const n = FIELD_REGION_OUTER_VERTICES;
+  const bearings: number[] = [];
+  const weights: number[] = [];
+  for (let i = 0; i < n; i++) {
+    bearings.push(wrapDeg((i * 360) / n
+      + (rng.float() * 2 - 1) * FIELD_REGION_OUTER_BEARING_JITTER_DEG));
+    weights.push(1 + (rng.float() * 2 - 1) * FIELD_REGION_DEPTH_SPREAD);
+  }
+  // How far the belt reaches at each of those bearings: the maximum over
+  // the belt's own vertices near that bearing, so the hull cannot be laid
+  // inside the clearing.
+  const baseR = bearings.map((deg) => {
+    let r = 0;
+    for (const p of belt) {
+      const d = Math.abs(((bearingOf(green.centre, p) - deg + 540) % 360) - 180);
+      if (d < 360 / n) r = Math.max(r, dist(green.centre, p));
+    }
+    if (r === 0) for (const p of belt) r = Math.max(r, dist(green.centre, p));
+    return r;
+  });
+  const beltArea = polygonArea(belt);
+  const hullAt = (depth: number): Point[] => convexHull(bearings.map((deg, i) => {
+    const d = bearingVector(deg);
+    const rad = baseR[i] + depth * weights[i];
+    return new Point(green.centre.x + d.x * rad, green.centre.y + d.y * rad);
+  }));
+  let lo = FIELD_REGION_DEPTH_MIN_M;
+  let hi = FIELD_REGION_DEPTH_MAX_M;
+  if (polygonArea(hullAt(hi)) - beltArea <= targetAreaM2) return hullAt(hi);
+  if (polygonArea(hullAt(lo)) - beltArea >= targetAreaM2) return hullAt(lo);
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (polygonArea(hullAt(mid)) - beltArea < targetAreaM2) lo = mid; else hi = mid;
+  }
+  return hullAt((lo + hi) / 2);
+}
+
+/** A road as the subdivision sees it: an infinite straight line with a
+ * corridor either side of it, and the side of the village it serves. */
+interface RoadLine {
+  p: Point;
+  dirDeg: number;
+  halfWidthM: number;
+  /** Unit vector pointing OUTWARD along the road from the green. A cell is
+   * only cut by this road if it lies on that side -- otherwise the line,
+   * which is infinite, would carve a phantom track through the fields on
+   * the far side of the village where no road runs. */
+  outX: number;
+  outY: number;
+}
+
+/**
+ * The roads that leave the village, as straight lines with corridors. Taken
+ * from each green-attached lane's OUTERMOST segment, which is the part that
+ * actually crosses the farmland (gate 8's concern 6: an arm leaves the body
+ * on a dead straight line, so the line is a faithful description of it).
+ */
+export function exitRoads(green: Green, lanes: Lane[], belt: Point[]): RoadLine[] {
+  const out: RoadLine[] = [];
+  for (const lane of lanes) {
+    if (lane.parentId !== undefined) continue;
+    if (lane.points.length < 2) continue;
+    const tip = lane.points[lane.points.length - 1];
+    const prev = lane.points[lane.points.length - 2];
+    // Only lanes that actually reach the farmland.
+    if (!pointInPolygon(tip, belt)) {
+      const dirDeg = bearingOf(prev, tip);
+      const d = bearingVector(dirDeg);
+      out.push({
+        p: tip,
+        dirDeg,
+        halfWidthM: lane.widthM / 2 + (LANE_SETBACK_M[lane.type] ?? 2) + FIELD_ROAD_MARGIN_M,
+        outX: d.x,
+        outY: d.y,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Everything a parcel must keep off, precomputed once per village.
+ *
+ * The polar frame tested one point at a time against every lot, croft and
+ * lane in the settlement; a planar subdivision asks the same question far
+ * more often (every parcel is walked along its edges, and a parcel that
+ * fouls something is TRIMMED rather than dropped, which means asking
+ * again), so each obstacle carries a bounding circle and the walk skips
+ * anything out of reach.
+ */
+interface Obstacle {
+  /** Convex outline: an OBB's four corners, or a croft's own polygon. */
+  poly: Point[];
+  centre: Point;
+  radiusM: number;
+}
+interface LaneSeg {
+  a: Point;
+  b: Point;
+  clearanceM: number;
+}
+interface Obstacles {
+  claims: Obstacle[];
+  segs: LaneSeg[];
+  water: Point[][];
+}
+
+function buildObstacles(lots: Lot[], crofts: Croft[], lanes: Lane[], water: Point[][]): Obstacles {
+  const claims: Obstacle[] = [];
+  const add = (poly: Point[]): void => {
+    if (poly.length < 3) return;
+    const c = polygonCentroid(poly);
+    let r = 0;
+    for (const p of poly) r = Math.max(r, dist(c, p));
+    claims.push({ poly, centre: c, radiusM: r });
+  };
+  for (const lot of lots) add(obbCorners(lotObb(lot)));
+  for (const croft of crofts) add(croft.polygon);
+  const segs: LaneSeg[] = [];
+  for (const lane of lanes) {
+    const clearanceM = lane.widthM / 2 + (LANE_SETBACK_M[lane.type] ?? 2);
+    for (let i = 1; i < lane.points.length; i++) {
+      segs.push({ a: lane.points[i - 1], b: lane.points[i], clearanceM });
+    }
+  }
+  return { claims, segs, water };
+}
+
+/**
+ * What is standing on this point, if anything: the claim it is inside, the
+ * lane corridor it is inside, or `water` (which cannot be trimmed against,
+ * water rings being neither convex nor few).
+ */
+function blockerAt(
+  p: Point, obs: Obstacles,
+): { kind: 'claim'; obstacle: Obstacle } | { kind: 'lane'; seg: LaneSeg } | { kind: 'water' } | null {
+  if (inAnyWater(p, obs.water)) return { kind: 'water' };
+  for (const claim of obs.claims) {
+    if (dist(p, claim.centre) > claim.radiusM + FIELD_CLAIM_MARGIN_M) continue;
+    // Inside, or close enough to it that §5.7's 0.25 m overlap slack would
+    // call it inside. The test margin is HALF the cut margin, so the edge a
+    // trim leaves behind reads as clear on the next pass instead of being
+    // trimmed again forever.
+    if (pointInPolygon(p, claim.poly)
+      || distToBoundary(p, claim.poly) <= FIELD_CLAIM_MARGIN_M / 2) {
+      return { kind: 'claim', obstacle: claim };
+    }
+  }
+  for (const seg of obs.segs) {
+    if (dist(p, closestPointOnSegment(p, seg.a, seg.b)) <= seg.clearanceM) {
+      return { kind: 'lane', seg };
+    }
+  }
+  return null;
+}
+
+/** Every point a parcel is judged on: its vertices, its edges at
+ * FIELD_CLEAR_SAMPLE_M, and its centroid (which catches a parcel small
+ * enough to sit wholly inside one claim). */
+function parcelSamples(poly: Point[]): Point[] {
+  const out: Point[] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    const steps = Math.max(1, Math.ceil(dist(a, b) / FIELD_CLEAR_SAMPLE_M));
+    for (let k = 0; k < steps; k++) {
+      const t = k / steps;
+      out.push(new Point(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t));
+    }
+  }
+  out.push(polygonCentroid(poly));
+  return out;
+}
+
+/** The first sample that is standing on something, with what it is. */
+function firstBlocker(
+  poly: Point[], obs: Obstacles,
+): { at: Point; blocker: NonNullable<ReturnType<typeof blockerAt>> } | null {
+  for (const p of parcelSamples(poly)) {
+    const blocker = blockerAt(p, obs);
+    if (blocker !== null) return { at: p, blocker };
+  }
+  return null;
+}
+
+/**
+ * GATE 8.3: a parcel that fouls a claim or a lane is TRIMMED, not dropped.
+ *
+ * The polar frame clipped a slot bearing by bearing, so a road or a deep
+ * ribbon lot took a bite out of a block and the rest of it survived. A
+ * straight-cut parcel has no such natural seam, and the first draft simply
+ * rejected any parcel with one bad sample -- which cost a whole ring of
+ * parcels round the village, because FIELD_INNER_PERCENTILE deliberately
+ * leaves the deepest fifteen per cent of claims OUTSIDE the belt. The
+ * render showed it as a wide empty lawn between the last house and the
+ * first furrow, which is the exact verdict gate 5.3 was set to fix.
+ *
+ * So the obstacle is cut away with a straight line instead: the half-plane,
+ * among the obstacle's own sides, that excludes the offending point and
+ * keeps the most parcel. The parcel stays convex, its new edge is straight
+ * and lies along a house plot or a lane -- which is what a field boundary
+ * against a village does -- and the census keeps the ground.
+ *
+ * Water is the exception and is still a rejection: a water ring is neither
+ * convex nor local, and no single half-plane describes a shoreline.
+ */
+function trimToClearGround(poly: Point[], obs: Obstacles): Point[] {
+  let cur = poly;
+  for (let pass = 0; pass < FIELD_TRIM_MAX_PASSES; pass++) {
+    const found = firstBlocker(cur, obs);
+    if (found === null) return cur;
+    if (found.blocker.kind === 'water') return [];
+    const cands: Array<{ nx: number; ny: number; c: number }> = [];
+    if (found.blocker.kind === 'claim') {
+      const cp = found.blocker.obstacle.poly;
+      let sgn = 0;
+      for (let i = 0; i < cp.length; i++) {
+        const a = cp[i];
+        const b = cp[(i + 1) % cp.length];
+        sgn += a.x * b.y - b.x * a.y;
+      }
+      const sign = sgn >= 0 ? 1 : -1;
+      for (let i = 0; i < cp.length; i++) {
+        const a = cp[i];
+        const b = cp[(i + 1) % cp.length];
+        const len = Math.hypot(b.x - a.x, b.y - a.y);
+        if (len < 1e-9) continue;
+        // Inward normal of the claim's edge: keep the ground OUTSIDE it.
+        const nx = (-sign * (b.y - a.y)) / len;
+        const ny = (sign * (b.x - a.x)) / len;
+        cands.push({ nx, ny, c: nx * a.x + ny * a.y - FIELD_CLAIM_MARGIN_M });
+      }
+    } else {
+      const { a, b, clearanceM } = found.blocker.seg;
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      if (len < 1e-9) return [];
+      const dx = (b.x - a.x) / len;
+      const dy = (b.y - a.y) / len;
+      // The corridor is a capsule; the four straight sides of the slab and
+      // its two ends are the lines a field boundary could run along.
+      // Cut a margin CLEAR of the corridor, not exactly on it: a cut placed
+      // on the corridor's own line leaves vertices at exactly the clearance,
+      // which `blockerAt` reads as still inside, and the parcel would be
+      // trimmed again every pass until it was given up on.
+      const w = clearanceM + FIELD_CLAIM_MARGIN_M;
+      cands.push({ nx: dy, ny: -dx, c: dy * a.x - dx * a.y - w });
+      cands.push({ nx: -dy, ny: dx, c: -dy * a.x + dx * a.y - w });
+      cands.push({ nx: dx, ny: dy, c: dx * a.x + dy * a.y - w });
+      cands.push({ nx: -dx, ny: -dy, c: -(dx * b.x + dy * b.y) - w });
+    }
+    let best: Point[] = [];
+    let bestArea = 0;
+    for (const cand of cands) {
+      // The cut must actually exclude the point that was blocked.
+      if (cand.nx * found.at.x + cand.ny * found.at.y <= cand.c + 1e-9) continue;
+      const clipped = clipHalfPlane(cur, cand.nx, cand.ny, cand.c);
+      const area = clipped.length >= 3 ? polygonArea(clipped) : 0;
+      if (area > bestArea) { bestArea = area; best = clipped; }
+    }
+    if (best.length < 3) return [];
+    cur = best;
+  }
+  return firstBlocker(cur, obs) === null ? cur : [];
+}
+
+/**
+ * GATE 8.3: take the village out of a cell.
+ *
+ * The belt polygon is star-shaped about the green but not convex, so this
+ * is not a single clip -- and it must not be an INTERSECTION of clips
+ * either. The first draft cut the cell by the outward half-plane of every
+ * belt edge that touched it, which is right for a cell straddling one edge
+ * and badly wrong for a cell sitting off a belt CORNER: the region outside
+ * a convex polygon is not convex, so intersecting two adjacent outward
+ * half-planes takes the whole corner away. Eighteen corners each scalloped
+ * out is a wide empty lawn round the village -- gate 5.3's verdict again,
+ * and the first render of this gate showed it plainly.
+ *
+ * So the cut is GREEDY and one line at a time: while any part of the cell
+ * is still inside the belt, take the single touching edge whose outward
+ * half-plane excludes an offending point and keeps the most parcel. A cell
+ * wholly inside the village runs out of ground and is dropped; a cell
+ * wholly outside is returned untouched; a cell across the boundary comes
+ * back with one or two straight edges lying along the village's own.
+ */
+export function clipOutsideBelt(cell: Point[], belt: Point[]): Point[] {
+  // Orientation of the belt decides which way "outward" is.
+  let s = 0;
+  for (let i = 0; i < belt.length; i++) {
+    const a = belt[i];
+    const b = belt[(i + 1) % belt.length];
+    s += a.x * b.y - b.x * a.y;
+  }
+  const sign = s >= 0 ? 1 : -1;
+  let cur = cell;
+  for (let pass = 0; pass < FIELD_TRIM_MAX_PASSES; pass++) {
+    // Any sample inside the village at all?
+    let inside: Point | null = null;
+    for (const p of parcelSamples(cur)) {
+      if (pointInPolygon(p, belt)) { inside = p; break; }
+    }
+    if (inside === null) return cur;
+    let best: Point[] = [];
+    let bestArea = 0;
+    for (let i = 0; i < belt.length; i++) {
+      const a = belt[i];
+      const b = belt[(i + 1) % belt.length];
+      const ex = b.x - a.x;
+      const ey = b.y - a.y;
+      const len = Math.hypot(ex, ey);
+      if (len < 1e-9) continue;
+      // Inward normal: clipping to `n.p <= c` keeps the ground on the far
+      // side of this edge from the green.
+      const nx = (-sign * ey) / len;
+      const ny = (sign * ex) / len;
+      const c = nx * a.x + ny * a.y;
+      if (nx * inside.x + ny * inside.y <= c + 1e-9) continue;
+      const clipped = clipHalfPlane(cur, nx, ny, c);
+      const area = clipped.length >= 3 ? polygonArea(clipped) : 0;
+      if (area > bestArea) { bestArea = area; best = clipped; }
+    }
+    if (best.length < 3) return [];
+    cur = best;
+  }
+  return cur;
+}
+
+/** The road whose line runs nearest this cell, and how far off it is. */
+function nearestRoad(cell: Point[], roads: RoadLine[]): { road: RoadLine; distM: number } | null {
+  if (roads.length === 0) return null;
+  const c = polygonCentroid(cell);
+  let best: { road: RoadLine; distM: number } | null = null;
+  for (const road of roads) {
+    if ((c.x - road.p.x) * road.outX + (c.y - road.p.y) * road.outY < -road.halfWidthM) continue;
+    const r = ((road.dirDeg + 90) * Math.PI) / 180;
+    const nx = Math.sin(r);
+    const ny = -Math.cos(r);
+    const d = Math.abs(nx * (c.x - road.p.x) + ny * (c.y - road.p.y));
+    if (best === null || d < best.distM) best = { road, distM: d };
+  }
+  return best;
+}
+
+/** Does this road's corridor actually cut through the cell? */
+function roadCrosses(cell: Point[], road: RoadLine): boolean {
+  const r = ((road.dirDeg + 90) * Math.PI) / 180;
+  const nx = Math.sin(r);
+  const ny = -Math.cos(r);
+  const at = nx * road.p.x + ny * road.p.y;
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const p of cell) {
+    const t = nx * p.x + ny * p.y;
+    if (t < lo) lo = t;
+    if (t > hi) hi = t;
+  }
+  if (lo >= at + road.halfWidthM || hi <= at - road.halfWidthM) return false;
+  // And the cell must lie on the road's OWN side of the village.
+  const c = polygonCentroid(cell);
+  return (c.x - road.p.x) * road.outX + (c.y - road.p.y) * road.outY > -road.halfWidthM * 2;
+}
+
+/** Fold `deg` into [0, 180) -- a cut orientation is undirected. */
+function fold180(deg: number): number {
+  return ((deg % 180) + 180) % 180;
+}
+
+/** The signed difference between two undirected orientations, in
+ * (-90, 90]. */
+function orientDelta(a: number, b: number): number {
+  return ((fold180(a - b) + 90) % 180) - 90;
+}
+
+/**
+ * GATE 8.3: the recursive bisection.
+ *
+ * A cell spends exactly THREE floats before anything else happens to it --
+ * angle jitter, cut position, and the size target that decides whether it
+ * is a leaf -- whatever it turns out to be. Nothing downstream (the clip
+ * against the village, the culls, the clear-ground walk) can move a draw,
+ * which is the same discipline every stage in this engine keeps: the rng
+ * sequence follows the RECURSION, which is a function of the region's own
+ * geometry, never of what survives.
+ *
+ * Where the cut comes from, in order of preference:
+ *  - a ROAD whose corridor crosses the cell: the cell is split by the
+ *    corridor itself, so the road ends up between parcels with its verge
+ *    showing, which is what the old ring achieved with angular gaps;
+ *  - a road within FIELD_ROAD_FRONT_M: the cut takes the road's own
+ *    bearing, or its perpendicular -- whichever is nearer the cell's long
+ *    axis -- so the parcels along a road front onto it;
+ *  - otherwise the cell's LONG AXIS, so a cut always halves the longer
+ *    dimension and the patchwork does not drift into ribbons.
+ */
+function subdivide(
+  cell0: Point[], depth: number, belt: Point[], roads: RoadLine[],
+  rng: SeededRandom, out: Point[][],
+): void {
+  const jitterRoll = rng.float();
+  const offsetRoll = rng.float();
+  const sizeRoll = rng.float();
+  // The village is taken out of the cell AT EVERY LEVEL, not only at the
+  // leaves. Clipping only at the end left every parcel that straddled the
+  // belt losing most of its area and then failing the culls, so the
+  // apparent belt was the drawn belt PLUS a whole parcel width -- a wide
+  // lawn round the village, which is exactly the verdict gate 5.3 was set
+  // to fix. Clipped here, the ground stays in the subdivision and gets cut
+  // into parcels that front the village. `clipOutsideBelt` only ever
+  // intersects half-planes, so the cell stays convex.
+  //
+  // The size threshold below is the one thing that makes this sound.
+  const area0 = polygonArea(cell0);
+  if (area0 < 1e-6) return;
+  // ...but only once the cell is PARCEL-SIZED. `clipOutsideBelt` reads the
+  // belt as a handful of local half-planes, which is true of a cell a
+  // parcel or two across and false of the whole region: the first draft
+  // clipped at every level and the region -- which contains the entire belt
+  // -- was cut by all eighteen of its inward half-planes at once and came
+  // back empty, so the village drew no fields at all. Above the threshold
+  // the cell is left alone and simply subdivided; nothing is lost, because
+  // every descendant passes through here.
+  const cell = area0 <= FIELD_PARCEL_TARGET_M2 * FIELD_BELT_CLIP_FACTOR
+    ? clipOutsideBelt(cell0, belt)
+    : cell0;
+  if (cell.length < 3) return;
+  const area = polygonArea(cell);
+  if (area < 1e-6) return;
+
+  if (depth < FIELD_CUT_MAX_DEPTH) {
+    for (const road of roads) {
+      if (!roadCrosses(cell, road)) continue;
+      const pieces = cutCorridor(cell, road.p, road.dirDeg, road.halfWidthM);
+      // A corridor that swallows the cell whole leaves nothing, and that is
+      // correct: the cell WAS the road.
+      const rest = roads.filter((r) => r !== road);
+      for (const piece of pieces) subdivide(piece, depth + 1, belt, rest, rng, out);
+      return;
+    }
+  }
+
+  const target = FIELD_PARCEL_TARGET_M2 * (1 + (sizeRoll * 2 - 1) * FIELD_PARCEL_AREA_SPREAD);
+  if (area <= target * FIELD_PARCEL_LEAF_FACTOR || depth >= FIELD_CUT_MAX_DEPTH) {
+    out.push(cell);
+    return;
+  }
+
+  // The cut runs ACROSS the longest edge, which is what keeps the pieces
+  // blocky (see `longestEdgeDeg`). The long axis is the tie-breaker the
+  // road rule is judged against, because "which way is this cell long" is
+  // the question "should the parcels here front the road or lie behind it"
+  // reduces to.
+  const axis = longAxisDeg(cell);
+  let normalDeg = longestEdgeDeg(cell);
+  const near = nearestRoad(cell, roads);
+  if (near !== null && near.distM <= FIELD_ROAD_FRONT_M) {
+    const a = near.road.dirDeg;
+    const b = near.road.dirDeg + 90;
+    normalDeg = Math.abs(orientDelta(a, axis)) <= Math.abs(orientDelta(b, axis)) ? a : b;
+  }
+  normalDeg += (jitterRoll * 2 - 1) * FIELD_CUT_JITTER_DEG;
+  const t = 0.5 + (offsetRoll - 0.5) * FIELD_CUT_OFFSET_SPREAD;
+  const pieces = cutConvex(cell, normalDeg, t, FIELD_CUT_GAP_M);
+  if (pieces.length < 2) {
+    out.push(cell);
+    return;
+  }
+  for (const piece of pieces) subdivide(piece, depth + 1, belt, roads, rng, out);
+}
+
+/**
+ * `crops[ordinal % crops.length]`, unless the roll (only made for the
+ * temperate crop table -- desert/tropical/pasture tables never swap) hits:
+ * then an orchard/vine tile instead, alternating by a counter shared across
+ * the village so consecutive swaps read as orchard, vine, orchard, vine.
+ */
+function pickCropGlyph(
+  crops: string[], ordinal: number, allowOrchardVine: boolean,
+  roll: number, toggle: { n: number },
+): string {
+  if (allowOrchardVine && roll < FIELD_ORCHARD_VINE_CHANCE) {
+    const glyph = toggle.n % 2 === 0 ? 'sm-field-orchard' : 'sm-field-vine';
+    toggle.n += 1;
+    return glyph;
+  }
+  return crops[ordinal % crops.length];
+}
+
+/** Shortest distance from `p` to the polygon's boundary. */
+function distToBoundary(p: Point, poly: Point[]): number {
+  let best = Infinity;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    const ex = b.x - a.x;
+    const ey = b.y - a.y;
+    const len2 = ex * ex + ey * ey;
+    const t = len2 < 1e-12 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * ex + (p.y - a.y) * ey) / len2));
+    best = Math.min(best, Math.hypot(p.x - (a.x + ex * t), p.y - (a.y + ey * t)));
+  }
+  return best;
+}
+
+export interface FieldsResult {
+  blocks: FieldBlock[];
+  /** Gate 5: EMPTY. Parcels carry no outline -- no hedge, wall, fence or
+   * ditch anywhere on a field. Kept on the result (and threaded to
+   * `VillageModel.fieldEdges`, and painted by the renderer) so the edge
+   * machinery stays wired up for a future design that wants it back. */
+  edges: EdgeStamp[];
+  /** The OUTERMOST radius any kept parcel reaches -- the measured fabric
+   * radius when no parcel was kept at all. */
+  outerRadius: number;
+  /**
+   * GATE 8.3: the farmland REGION's own outer boundary, as a polygon.
+   *
+   * Vegetation used to measure the tree line off the field polygons
+   * themselves, which was right while the ring's outer edge was continuous
+   * and wrong the moment it stopped being: gate 8.2 stepped that edge per
+   * slot and the band's rim ratio went to 3.8-6.4, and a fringe cull (which
+   * this gate wants, for a ragged outer edge) would have been worse again,
+   * because a bearing whose fringe parcel was culled falls all the way back
+   * to the houses. The REGION is the honest answer to "where does the
+   * farmed land end" -- still measured geometry, not a prediction: it is
+   * the polygon that was actually subdivided.
+   */
+  regionPolygon: Point[];
+}
+
+/**
+ * §7.2: the whole field system for one village.
+ *
+ * RNG, in order, and every count fixed independently of geometry except the
+ * recursion itself (which is a function of the region, not of what
+ * survives):
+ *   1. FIELD_REGION_INNER_VERTICES floats -- the belt polygon.
+ *   2. 2 * FIELD_REGION_OUTER_VERTICES floats -- the region hull.
+ *   3. 3 floats per cell of the bisection, in pre-order.
+ *   4. 3 floats per leaf -- crop roll, furrow jitter, fringe-cull roll --
+ *      spent whether or not the leaf survives the clip and the culls.
+ *
+ * Never throws. An empty result means the region was walled off entirely
+ * (water, claims, corridors) or every parcel was culled.
  */
 export function buildFields(
   site: Site, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[], rng: SeededRandom,
   housedLotIds?: ReadonlySet<string>,
 ): FieldsResult {
   const fabricRadius = computeFabricRadius(green, lots, crofts, housedLotIds);
+  const edge = builtEdgeExtent(green, lots, crofts, housedLotIds);
 
-  const byBearing = buildWedges(green, lanes);
-  const wedges = byBearing.slice().sort((a, b) => a.id.localeCompare(b.id));
+  const belt = beltPolygon(green, edge, rng);
+  const demand = Math.max(0, site.population) * FIELD_M2_PER_CAPITA;
+  const region = regionHull(green, belt, demand / FIELD_REGION_EFFICIENCY, rng);
 
-  // Phase 1 -- every rng draw this stage makes before geometry: one jitter
-  // float per wedge, wedge-id-sorted.
-  const jitterById = new Map<string, number>();
-  for (const wedge of wedges) {
-    jitterById.set(wedge.id, rng.float() * FIELD_JITTER_RANGE_DEG - FIELD_JITTER_RANGE_DEG / 2);
-  }
-
-  // Phase 2 -- furrow bearings, walked in bearing order so "the neighbour"
-  // means the spatial neighbour. No rng.
-  const bearingByWedge = new Map<string, number>();
-  const clearsNeighbour = (candidate: number, neighbour: number | undefined): boolean => {
-    if (neighbour === undefined) return true;
-    const gap = angularGap(candidate, neighbour) % 180;
-    return Math.min(gap, 180 - gap) > FIELD_FURROW_MIN_SEPARATION_DEG;
-  };
-  byBearing.forEach((wedge, rank) => {
-    const jitter = jitterById.get(wedge.id) ?? 0;
-    const base = wedge.bisectorDeg + (rank % 2 === 0 ? 0 : 90);
-    const prev = rank > 0 ? bearingByWedge.get(byBearing[rank - 1].id) : undefined;
-    // The last wedge closes the ring against the first; with 2 wedges the
-    // pair is already covered by `prev`.
-    const wrap = byBearing.length > 2 && rank === byBearing.length - 1
-      ? bearingByWedge.get(byBearing[0].id)
-      : undefined;
-    const candidates = [0, 45, 90, 135].map((extra) => wrapDeg(base + extra + jitter));
-    const chosen = candidates.find(
-      (c) => clearsNeighbour(c, prev) && clearsNeighbour(c, wrap),
-    ) ?? candidates[0];
-    bearingByWedge.set(wedge.id, chosen);
-  });
+  const obstacles = buildObstacles(lots, crofts, lanes, site.water);
+  const roads = exitRoads(green, lanes, belt);
+  const leaves: Point[][] = [];
+  subdivide(region, 0, belt, roads, rng, leaves);
 
   const crops = FIELD_CROPS[site.biome] ?? FIELD_CROPS.temperate;
   const allowOrchardVine = crops === FIELD_CROPS.temperate;
   const toggle = { n: 0 };
 
-  // Phase 3 -- geometry, wedge-id-sorted so the orchard/vine draws stay in
-  // a fixed order too.
   const blocks: FieldBlock[] = [];
   let outerRadius = fabricRadius;
-  const edge = ringInnerEdge(green, lots, crofts, housedLotIds);
-  for (const wedge of wedges) {
-    const ring = buildWedgeBlocks(
-      wedge, green, edge, site.population, bearingByWedge.get(wedge.id) ?? 0,
-      lots, crofts, lanes, site.water, crops, allowOrchardVine, rng, toggle,
-    );
-    if (ring.blocks.length === 0) continue;
-    blocks.push(...ring.blocks);
-    outerRadius = Math.max(outerRadius, ring.outerRadius);
+  let ordinal = 0;
+  for (const leaf of leaves) {
+    const cropRoll = rng.float();
+    const furrowRoll = rng.float();
+    const fringeRoll = rng.float();
+
+    // `subdivide` has already taken the village out of every cell small
+    // enough for the local clip to be sound; this catches the rare leaf
+    // that came out of a corridor cut above that size.
+    const clipped = clipOutsideBelt(leaf, belt);
+    if (clipped.length < 3) continue;
+    const parcel = insetConvex(clipped, FIELD_BAULK_M);
+    if (parcel.length < 3) continue;
+    if (polygonArea(parcel) < FIELD_MIN_BLOCK_AREA_M2) continue;
+    // The fringe cull: a fifth of the parcels standing on the region's own
+    // outer boundary are dropped, so the farmland ends raggedly against the
+    // waste rather than being drawn out flush along a straight hull side.
+    if (fringeRoll < FIELD_FRINGE_CULL_CHANCE
+      && parcel.some((p) => distToBoundary(p, region) <= FIELD_BAULK_M + FIELD_FRINGE_TOL_M)) continue;
+    const cleared = trimToClearGround(parcel, obstacles);
+    if (cleared.length < 3) continue;
+    const clearArea = polygonArea(cleared);
+    if (clearArea < FIELD_MIN_BLOCK_AREA_M2) continue;
+
+    // A splinter -- the offcut left beside a road corridor, a claim or the
+    // belt -- measured on the TRIMMED parcel, which is the shape drawn.
+    const axis = longAxisDeg(cleared);
+    const along = extentAlong(cleared, axis);
+    const across = extentAlong(cleared, axis + 90);
+    const lengthM = along.hi - along.lo;
+    const widthM = across.hi - across.lo;
+    if (!(lengthM > 0) || widthM < FIELD_PARCEL_MIN_ASPECT * lengthM) continue;
+
+    const furrow = wrapDeg(axis + furrowRoll * FIELD_JITTER_RANGE_DEG - FIELD_JITTER_RANGE_DEG / 2);
+    blocks.push({
+      id: `field:P${ordinal}`,
+      furlongId: `furlong:${Math.floor(bearingOf(green.centre, polygonCentroid(cleared)) / 30)}`,
+      glyph: pickCropGlyph(crops, ordinal, allowOrchardVine, cropRoll, toggle),
+      polygon: cleared,
+      furrowBearingDeg: furrow,
+      areaM2: clearArea,
+    });
+    ordinal += 1;
+    for (const p of cleared) outerRadius = Math.max(outerRadius, dist(green.centre, p));
   }
-  return { blocks, edges: [], outerRadius };
+
+  return {
+    blocks, edges: [], outerRadius, regionPolygon: region,
+  };
 }

@@ -1,3 +1,4 @@
+import { Point } from '../../types/point.js';
 import { SeededRandom } from '../../utils/random.js';
 import { buildCrofts } from './crofts.js';
 import { settlementEdgeStyle } from './edges.js';
@@ -57,6 +58,7 @@ export function dressVillage(input: DressingInput): DressingResult {
   const crofts = buildCrofts(lots, buildings, green, lanes, site.water, builtRadiusM, f0);
   const {
     blocks: fields, edges: fieldEdges, outerRadius: fieldsOuterRadius,
+    regionPolygon,
   } = buildFields(site, green, lanes, lots, crofts, rng, housedLotIds);
 
   // THE fix-wave rule (2026-08-21): after pass 3, nothing keys off
@@ -76,9 +78,33 @@ export function dressVillage(input: DressingInput): DressingResult {
   // A bearing whose fields were all clipped away (a road pass, water) must
   // not pull the tree line INSIDE the houses: the band starts at whichever
   // edge is further out.
+  //
+  // GATE 8.3: the farmland's own REGION boundary joins that measurement,
+  // densely sampled so every bearing bin has a point. Measuring the tree
+  // line off the field POLYGONS alone was right while the ring's outer edge
+  // was continuous, and wrong the moment it stopped being: gate 8.2 stepped
+  // that edge per slot and the band's rim ratio went to 3.8-6.4 (its
+  // concern 3), and this gate deliberately culls a fifth of the parcels on
+  // the fringe, so a bearing can now have NO parcel at the edge at all and
+  // would drop the tree line back onto the houses. The region polygon is
+  // still measured geometry -- it is the ground that was actually
+  // subdivided -- not a prediction, so the fix-wave rule holds.
+  const regionEdgePoints: Point[] = [];
+  for (let i = 0; i < regionPolygon.length; i++) {
+    const a = regionPolygon[i];
+    const b = regionPolygon[(i + 1) % regionPolygon.length];
+    const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 5));
+    for (let k = 0; k < steps; k++) {
+      regionEdgePoints.push(new Point(a.x + ((b.x - a.x) * k) / steps, a.y + ((b.y - a.y) * k) / steps));
+    }
+  }
   const vegInnerExtent = radialExtent(
     green.centre,
-    [...builtEdgePoints(lots, crofts, housedLotIds), ...fields.flatMap((f) => f.polygon)],
+    [
+      ...builtEdgePoints(lots, crofts, housedLotIds),
+      ...fields.flatMap((f) => f.polygon),
+      ...regionEdgePoints,
+    ],
     greenDrawnRadius(green),
   );
   const shorefrontReachM = fabricRadiusM * SHOREFRONT_REACH_FACTOR;

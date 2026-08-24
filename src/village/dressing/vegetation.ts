@@ -8,7 +8,8 @@ import { lotObb, pointInObb } from '../parcels/overlap.js';
 import {
   CLUMP_RADIUS_M, SHOREFRONT_BAND_M, VEG_BAND_DEPTH_M, VEG_CELL_M,
   VEG_CLUMP_INTERIOR, VEG_GLYPHS, VEG_INTERIOR_DENSITY, VEG_LANE_CLEAR_M,
-  VEG_PATCH_CELL_M, VEG_PATCH_CHANCE, VEG_PATCH_RADIUS_M, VEG_PATCH_TREES,
+  VEG_PATCH_CELL_M, VEG_PATCH_CHANCE, VEG_PATCH_RADIUS_M, VEG_PATCH_RIM_FLOOR,
+  VEG_PATCH_TREES,
   VEG_SCALE_MAX, VEG_SCALE_MIN,
 } from '../constants.js';
 import type { RadialExtent } from './extent.js';
@@ -91,12 +92,26 @@ function interiorDensityAt(d: number, groveEdge: number): number {
 
 /**
  * Gate 5.3: how likely a patch cell is to seed a wood at distance `d` --
- * VEG_PATCH_CHANCE at the fabric edge, thinning linearly to nothing at the
- * rim, so the country opens out rather than ending in a wall of trees.
+ * VEG_PATCH_CHANCE at the near edge of the band, thinning linearly to
+ * nothing at the rim, so the country opens out rather than ending in a wall
+ * of trees.
+ *
+ * GATE 8.3 changes WHICH edge that is, and it is the fix for the tree line.
+ * It used to be the BUILT-UP edge, so woods seeded anywhere from the last
+ * house outward -- which was harmless while the farmland was a shallow ring
+ * and became the whole problem once it was a region several times the
+ * village's own size: the thinning ramp was spread over 200 m, so a bin
+ * either happened to seed a wood far out or did not, and the measured band
+ * depth ran from 0 to 83 m at pop 300 (rim ratio 14.0). Woods now seed only
+ * BEYOND the farmland, between `innerEdge` (the farmland's own outer
+ * boundary) and the rim a fixed depth past it, which is what "a band of
+ * roughly constant depth following the body" means. It also takes the trees
+ * out from between the furrows, where they read as weeds on ploughed land.
  */
-function patchChanceAt(d: number, groveEdge: number, rim: number): number {
-  if (d < groveEdge || d > rim || !(rim > groveEdge)) return 0;
-  return VEG_PATCH_CHANCE * Math.max(0, 1 - (d - groveEdge) / (rim - groveEdge));
+function patchChanceAt(d: number, bandInner: number, rim: number): number {
+  if (d < bandInner || d > rim || !(rim > bandInner)) return 0;
+  const t = Math.min(1, Math.max(0, (d - bandInner) / (rim - bandInner)));
+  return VEG_PATCH_CHANCE * (VEG_PATCH_RIM_FLOOR + (1 - VEG_PATCH_RIM_FLOOR) * (1 - t));
 }
 
 function pickGlyph(biome: string, rng: SeededRandom): string {
@@ -233,7 +248,7 @@ export function buildVegetation(
         cellOrigin.y + VEG_PATCH_CELL_M / 2,
       );
       const chance = patchChanceAt(
-        dist(cellCentre, green.centre), groveEdge.at(cellCentre), rimExtent.at(cellCentre),
+        dist(cellCentre, green.centre), innerEdge.at(cellCentre), rimExtent.at(cellCentre),
       );
       if (!(rng.float() < chance)) continue;
 

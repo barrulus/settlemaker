@@ -836,262 +836,183 @@ export const CROFT_BEHIND_INK_M = 1;
  * FACTOR` retired; see `blockOuterRadius` in `dressing/fields.ts`.
  */
 export const FIELD_M2_PER_CAPITA = 150;
-/**
- * Gate 5 (2026-08-22): the ploughed land is an OUTER RING of large chunky
- * blocks around the whole settlement, separated from the fabric by an open
- * green belt, with the roads passing out between the blocks. Owner's
- * verdict on the previous 12 m furlong strips woven through the fabric:
- * "you'd have fields AROUND the village, not INSIDE the village."
- *
- * A block is one annular-sector polygon, pattern-filled -- the ploughed
- * look comes from the crop tile's own furrow texture, not from thin strips
- * and not from any outline. FURROW_WIDTH_M, FURROW_MIN_LENGTH_M and
- * FIELD_SAMPLE_STEP_M are RETIRED with the strip walk they served.
- */
-/** A block's radial depth is clamped to [FIELD_BLOCK_DEPTH_MIN_M, this].
- * The cap stops a huge census running the ring out to the horizon. Gate
- * 5.3 widened the range 40-90 -> 50-110: chunkier blocks, and with the
- * belt pulled in they start closer, so the ring as a whole still sits
- * tighter to the village than before. */
-export const FIELD_BLOCK_DEPTH_MAX_M = 110;
-/** Depth floor: below this a block stops reading as a chunky field and
- * starts reading as the thin strip gate 5 rejected. */
-export const FIELD_BLOCK_DEPTH_MIN_M = 50;
-/**
- * V1: each wedge measures its OWN inner radius from the lot claims and
- * crofts it contains. A claim counts as "in" the wedge when the bearing of
- * its centre from the green falls inside the wedge's span widened by this
- * many degrees at each end -- slack so a claim sitting right on a wedge
- * boundary (which is a lane, so there are always claims there) raises the
- * inner radius on BOTH sides of it rather than letting the neighbouring
- * wedge start its band inside that lane's crofts.
- */
-export const FIELD_WEDGE_CLAIM_MARGIN_DEG = 10;
-/**
- * The ring's inner edge in a wedge sits at THIS percentile of the back-edge
- * distances of the claims the wedge contains, plus FIELD_BELT_GAP_M.
- *
- * History, because this constant has been both things: W3 (2026-08-21) set
- * it LOW (0.35) to pull strips in among the fabric. Gate 5 reverses that
- * intent -- the ring belongs outside the settlement -- so it is HIGH again,
- * clearing all but the few deepest ribbon lots. Those few are still clipped
- * around, which is what opens the road passes between blocks.
- */
-export const FIELD_INNER_PERCENTILE = 0.85;
-/**
- * The open green belt between the fabric and the ring, metres.
- *
- * Gate 5 set this at 25 so the ring would separate from the fabric at all.
- * Gate 5.3 pulls it to 10: against watabou's St Aldusa, ours read as a
- * village marooned in its own lawn. A belt is still wanted -- houses, then
- * a little common, then plough -- but a narrow one, so the fields hug the
- * village instead of standing off from it.
- */
-export const FIELD_BELT_GAP_M = 10;
-/** Clearance added on top of the green's drawn radius plus RING_SETBACK_M
- * when a wedge has no claims at all (or a percentile below the turf) --
- * the floor a field block may start at. */
-export const FIELD_INNER_FLOOR_PAD_M = 2;
-/**
- * Gate 5: a wedge's ring segment is cut into this many blocks at most, one
- * per FIELD_BLOCK_SPAN_TARGET_DEG of span (rounded, floored at 1), with
- * angular gaps of open green between them. Chunky blocks with gaps, not one
- * continuous annulus -- the reference map's ring is visibly a ring of
- * separate fields.
- */
-/**
- * GATE 8.1 (2026-08-24): 4 / 45 -> 8 / 25. A wedge is 60-120 degrees wide,
- * so a 45-degree target cut it into two or three FANS -- each one 40-60
- * degrees of arc and 80-110 m deep, which at pop 300 is most of a village's
- * own area in a single field. Rasterised, the ring read as a pinwheel of
- * petals radiating from the green rather than as a band of fields, and
- * gate 8's irregular inner edge made it worse by giving each petal a
- * different length. A field is a field-sized thing; this is the angular
- * half of making it one (the radial half is FIELD_BLOCK_ROW_*).
- */
-export const FIELD_BLOCK_MAX_PER_WEDGE = 8;
-export const FIELD_BLOCK_SPAN_TARGET_DEG = 25;
-/**
- * GATE 8.1, THE RADIAL HALF: the ring's census-driven depth is cut into
- * ROWS of about this depth, with FIELD_BLOCK_ROW_GAP_M of open headland
- * between them, instead of being spent on ONE block per slot.
- *
- * The census arithmetic is untouched -- `blockOuterRadius` still solves for
- * the depth the population needs and still clamps it to
- * [FIELD_BLOCK_DEPTH_MIN_M, FIELD_BLOCK_DEPTH_MAX_M]. What changes is that
- * 82 m of ring at pop 300 becomes two 38 m rows rather than one 82 m slab,
- * so a block's depth is comparable to its arc width and it reads as a
- * FIELD. This is also what stops the outer edge being a single long petal:
- * the ring is now several concentric courses of blocks whose seams the eye
- * reads as field boundaries.
- */
-export const FIELD_BLOCK_ROW_DEPTH_TARGET_M = 40;
-/**
- * GATE 8.2 (2026-08-24): 3 -> 4. The row count is now chosen PER SLOT from
- * every count whose mean course depth falls inside the band below, and
- * raising the cap is what gives the deepest slots a genuine choice (a 120 m
- * slot can be three courses of 36 or four of 26) instead of one legal
- * answer that every neighbouring slot also has to take.
- */
-export const FIELD_BLOCK_ROWS_MAX = 4;
-/**
- * GATE 8.2, THE COURSE-DEPTH BAND. A course is never shallower than the
- * first or deeper than the second, and both the per-slot row count and the
- * uneven partition below are clamped to it.
- *
- * This is the bar "block depth max/min <= 2.5" expressed as a constraint
- * rather than hoped for: 52/23 = 2.26 is the WORST ratio the ring can
- * produce, whatever the census asks for and however the dice fall (the
- * SKEW then shrinks one end of a block by up to half of
- * FIELD_SKEW_JITTER, which takes the measured worst case to 2.44). Gate
- * 8.1 held 1.37-1.44 by making every course in a wedge identical, which is
- * precisely what read as concentric bands; the spread is the point now,
- * and the band is what keeps it from becoming petals again.
- *
- * The two numbers are not independent: MAX must be at least 2*MIN +
- * FIELD_BLOCK_ROW_GAP_M or there are ring depths no row count can divide
- * inside the band (with MIN 23 that is 52 exactly, and the row counts then
- * tile every depth from 23 m up to FIELD_BLOCK_ROWS_MAX courses' worth
- * with no gap). `slotCourses` falls back to gate 8.1's target rounding
- * outside that range and relaxes the band to fit, which is why the ratio
- * above is a promise about villages rather than about the function.
- */
-export const FIELD_BLOCK_ROW_DEPTH_MIN_M = 23;
-export const FIELD_BLOCK_ROW_DEPTH_MAX_M = 52;
-/**
- * GATE 8.2: how unevenly one slot's ring depth is shared out among its
- * courses, as a +/- fraction of an even share (before the band clamp). At
- * 0.45 a three-course slot routinely draws something like 45/30/25 rather
- * than 33/33/33, which is what puts a deep parcel next to a shallow one --
- * the merge and the split the owner asked for, expressed as one mechanism
- * rather than two special cases bolted onto an even partition.
- */
-export const FIELD_ROW_DEPTH_SPREAD = 0.45;
-/**
- * GATE 8.2: how much a SLOT's total ring depth may differ from the depth
- * its wedge's census solve bought, as a +/- fraction. This is gate 5.4's
- * FIELD_DEPTH_JITTER moved from the block to the slot, and it does two
- * things at once: the ring's OUTER edge steps from slot to slot instead of
- * running level (the outer boundary is a ring boundary too, and the gate
- * 8.1 metric never looked at it), and neighbouring slots see different
- * depths, so they qualify for different row counts.
- */
-export const FIELD_SLOT_DEPTH_JITTER = 0.2;
-/**
- * GATE 8.2: how unevenly a wedge's span is shared out among its slots,
- * as a +/- fraction of an even share. Gate 8.1 cut every wedge into slots
- * of one width, so the ring was a regular grid in the angular axis even
- * once the radial axis varied. Real furlongs are not of one width.
- */
-export const FIELD_BLOCK_SPAN_SPREAD = 0.3;
-/**
- * GATE 8.2: chance that a single course inside one slot is cut ANGULARLY
- * into two narrower strips with a baulk between them -- the odd pair of
- * narrow parcels a real field system shows beside its broad ones. Drawn
- * per course; the split fraction is drawn unconditionally beside it so the
- * number of rng draws per course never depends on the roll.
- */
-export const FIELD_ROW_SPLIT_CHANCE = 0.28;
-/** GATE 8.2: the baulk between the two halves of a split course, as a
- * share of the course's span. */
-export const FIELD_ROW_SPLIT_GAP_SHARE = 0.1;
-/**
- * GATE 8.2: how far a course may be turned about its slot's mid bearing,
- * as a +/- share of the slot's span, ON TOP of gate 8.1's alternating
- * half-slot stagger. The half-slot stagger alone put every odd course's
- * seams on the same bearings as every other odd course's, which is a ring
- * seam by another name; a random component means no two courses in the ring
- * break joint at the same place.
- */
-export const FIELD_ROW_STAGGER_JITTER = 0.35;
-/** Open headland between two radial courses of blocks -- the track a cart
- * turns on. Narrow: the courses are one estate, not scattered patches. */
-export const FIELD_BLOCK_ROW_GAP_M = 6;
-/**
- * A block whose arc width at its mid radius is less than this share of its
- * depth is a RADIAL SLIVER, not a field, and is dropped. `clipSlotToRuns`
- * splits a slot wherever a road or a ribbon of lots crosses the ring, and
- * the offcut either side can be two degrees wide and a full course deep;
- * at pop 900 those read as spokes. FIELD_MIN_BLOCK_AREA_M2 cannot catch
- * them because a 2-degree run 40 m deep at radius 150 is still 200+ m2.
- */
-export const FIELD_BLOCK_MIN_ASPECT = 0.4;
-/** Share of a wedge's span left as open green between its blocks (and as
- * half-gaps at each end, so a block never butts against the bounding lane
- * -- that lane is a road passing out through the ring).
- *
- * Gate 5.3: 0.2 -> 0.08. A fifth of the ring given over to grass was most
- * of what made the fields read as scattered patches rather than as a ring
- * of farmland. Enough gap to keep the road passes and the block seams
- * legible, no more. */
-export const FIELD_BLOCK_GAP_SHARE = 0.08;
-/** Angular pitch at which a nominal block is tested against claims/lanes/
- * water. Maximal runs of clear slices become the blocks actually emitted,
- * so a ribbon of lots reaching through the ring splits a block in two and
- * leaves a road pass between them. */
-export const FIELD_BLOCK_SLICE_DEG = 2;
-/**
- * A block covering less than this is culled -- the "dropped rug" V4 named,
- * a sliver of plough floating in open ground rather than a field. At the
- * 40 m depth floor this is a block barely 10 m of arc wide.
- */
-export const FIELD_MIN_BLOCK_AREA_M2 = 400;
 
 /**
- * Gate 5.4, IRREGULAR FIELDS. The ring read as a mechanical pinwheel:
- * every block the same depth, the same span, starting at the same radius.
- * Real field systems are irregular, so each block draws four jitters --
- * one rng float each, in slot order within the wedge, appended after the
- * wedge's existing field draws.
+ * GATE 8.3, THE NON-POLAR FIELD FRAME. Everything between here and
+ * FIELD_ORCHARD_VINE_CHANCE is new, and almost every constant it replaces
+ * is RETIRED rather than re-tuned.
  *
- * They are applied BEFORE the block is clipped against claims, never
- * after, so the geometry that gets tested is the geometry that gets drawn.
- * Jittering a cleared block afterwards would push it onto ground nothing
- * ever checked.
+ * Gates 5 through 8.2 drew the farmland as annular sectors: a wedge between
+ * two green-attached lanes, cut into angular slots, cut again into radial
+ * courses. Gate 8.2 broke the courses and then refused its own visual bar,
+ * because what remained was still the frame -- "every parcel is an annular
+ * sector; both long edges curve about the green; the whole belt is drawn in
+ * polar coordinates and looks it". The owner's demand ("near perfect
+ * circles everywhere ... not a natural evolution") is about the frame, and
+ * no jitter inside a polar frame answers it.
+ *
+ * So the farmland is now a POLYGON REGION cut by STRAIGHT LINES: an outer
+ * boundary that is a coarse irregular convex polygon, an inner boundary
+ * that is the village's own measured edge as a polygon, and a recursive
+ * bisection between them whose cut orientations come from the roads and
+ * from each cell's own long axis. RETIRED with the polar frame:
+ * FIELD_BLOCK_DEPTH_MIN_M / _MAX_M, FIELD_WEDGE_CLAIM_MARGIN_DEG,
+ * FIELD_BELT_GAP_M, FIELD_BLOCK_MAX_PER_WEDGE, FIELD_BLOCK_SPAN_TARGET_DEG,
+ * FIELD_BLOCK_SPAN_SPREAD, FIELD_BLOCK_GAP_SHARE, FIELD_BLOCK_SLICE_DEG,
+ * FIELD_BLOCK_ROW_DEPTH_TARGET_M / _MIN_M / _MAX_M, FIELD_BLOCK_ROW_GAP_M,
+ * FIELD_BLOCK_ROWS_MAX, FIELD_ROW_DEPTH_SPREAD, FIELD_ROW_SPLIT_CHANCE,
+ * FIELD_ROW_SPLIT_GAP_SHARE, FIELD_ROW_STAGGER_JITTER,
+ * FIELD_SLOT_DEPTH_JITTER, FIELD_SPAN_JITTER, FIELD_SKEW_JITTER,
+ * FIELD_BLOCK_MIN_ASPECT, FIELD_FURROW_MIN_SEPARATION_DEG. Nothing of the
+ * polar frame survives as a dead constant.
  */
-/** Each block starts this far beyond the wedge's inner radius, varying per
- * block: the belt between fabric and plough is uneven, as it is anywhere
- * fields grew rather than were laid out. */
-/** GATE 8.1: 5-30 -> 4-16. Measured at pop 300 the belt ran 8-59 m with a
- * median of 20 against a built edge of 43 -- half the village's own radius
- * of empty lawn between the last house and the first furrow, which is
- * gate 5.3's "marooned in its own lawn" verdict coming back by way of the
- * jitter rather than the constant it fixed. The belt must still WANDER
- * (that is what stops the ring's inner edge being an offset copy of the
- * built edge), just not by more than a house plot. */
+
+/**
+ * The ring's inner edge sits at THIS percentile of the back-edge distances
+ * of the HOUSED claims at each bearing. Kept from gate 5 unchanged: high,
+ * so the ploughed land lies outside the settlement, with the few deepest
+ * ribbon lots clipped around -- which is part of what opens the road passes.
+ */
+export const FIELD_INNER_PERCENTILE = 0.85;
+/** Clearance added on top of the green's drawn radius plus RING_SETBACK_M
+ * where a bearing has no claims at all -- the floor farmland may start at. */
+export const FIELD_INNER_FLOOR_PAD_M = 2;
+/** The open green belt between the last house and the first furrow, drawn
+ * per boundary vertex from this range. Gate 8.1 measured a wider belt as
+ * "a village marooned in its own lawn" and pulled it to 4-16; gate 8.2 took
+ * the ceiling to 20 to spread the inner edge. GATE 8.3 keeps the range: it
+ * is now what makes the belt polygon's edges lean off tangential, since a
+ * chord between two vertices at the SAME radius is exactly tangential at
+ * its midpoint and would read as a piece of circle however few vertices the
+ * polygon has. */
 export const FIELD_BELT_JITTER_MIN_M = 4;
 export const FIELD_BELT_JITTER_MAX_M = 20;
-/** Per-block angular span multiplier, +/-25%. (The depth multiplier that
- * stood beside it is gone: GATE 8.2 spends the ring depth as an uneven,
- * band-clamped partition into courses, which is a depth jitter that also
- * keeps the partition EXACT, and moves the remaining per-slot depth
- * variation to FIELD_SLOT_DEPTH_JITTER.) */
-export const FIELD_SPAN_JITTER = 0.25;
+
 /**
- * SKEW: the inner arc's angular span differs from the outer's by up to
- * this fraction, so a block is an irregular quad rather than a perfect
- * annular sector -- the single change that stops the ring reading as a
- * pinwheel of identical wedges.
+ * GATE 8.3: how many vertices the two boundary polygons of the farmland
+ * region have. Both numbers are a compromise the gate is explicit about.
+ *
+ * The INNER boundary must hug an irregular village closely enough that the
+ * fields follow it in and out (every gate since 5 requires that), which
+ * wants many vertices; but each vertex is a place the boundary can only
+ * turn, and a 48-gon at radius 60 is a circle to the eye. 18 puts a corner
+ * every 20 degrees, i.e. a straight run of 20-30 m -- the length of a
+ * field's frontage, which is the scale the boundary should turn at.
+ *
+ * The OUTER boundary has no such duty, so it is coarse: 11 vertices at
+ * jittered bearings and jittered depths, then their CONVEX HULL, which
+ * gives 8-11 long straight sides. That hull is also what keeps every cell
+ * of the recursive bisection convex.
  */
-export const FIELD_SKEW_JITTER = 0.15;
-/** Jitter range (degrees) added to a wedge's furrow bearing: rng.float() *
- * this - this/2, one draw per wedge. */
+export const FIELD_REGION_INNER_VERTICES = 18;
+export const FIELD_REGION_OUTER_VERTICES = 11;
+/** Bearing jitter on an outer vertex, +/- degrees: the hull's sides must
+ * not be a regular polygon's either. */
+export const FIELD_REGION_OUTER_BEARING_JITTER_DEG = 12;
+/** Per-outer-vertex depth multiplier, 1 +/- this. The farmland reaches
+ * much further out on some sides than others, which is what a village
+ * whose land grew rather than being surveyed looks like. */
+export const FIELD_REGION_DEPTH_SPREAD = 0.38;
+/** The region's mean depth beyond the belt is solved so the region delivers
+ * the census demand, then clamped here. The floor keeps a tiny hamlet's
+ * farmland wide enough to hold a parcel; the ceiling is the only thing
+ * standing between a large village and farmland running to the horizon. */
+export const FIELD_REGION_DEPTH_MIN_M = 30;
+export const FIELD_REGION_DEPTH_MAX_M = 200;
+/**
+ * What share of the REGION ends up as painted parcel. The rest goes on the
+ * headland left at every cut, the baulk inset round every parcel, the road
+ * corridors, the culled slivers and the fringe cull. Measured rather than
+ * assumed: the region is sized at demand / this, and gate 8.3's report
+ * records what came out the other end.
+ */
+export const FIELD_REGION_EFFICIENCY = 0.62;
+
+/** Target area of ONE parcel. The recursion stops splitting a cell once it
+ * is near this, so it sets the grain of the whole patchwork. 1600 m2 is
+ * about 40 m square -- a field, at the scale a village map draws one. */
+export const FIELD_PARCEL_TARGET_M2 = 1100;
+/** The target is drawn per cell, 1 +/- this, so neighbouring parcels are
+ * not the same size. This is the whole of the size variation: there is no
+ * separate depth jitter any more because there is no depth axis. */
+export const FIELD_PARCEL_AREA_SPREAD = 0.45;
+/** A cell is a leaf once its area is below its drawn target times this.
+ * Above 2 the recursion would leave cells it could have halved. */
+export const FIELD_PARCEL_LEAF_FACTOR = 1.6;
+/** The village is taken out of a cell only once the cell is this many
+ * parcel-targets in area or less. `clipOutsideBelt` treats the belt as a
+ * few local half-planes, which is sound for a cell a parcel or two across
+ * and nonsense for the whole region -- clipping the region by all eighteen
+ * of the belt's inward half-planes at once empties it. */
+export const FIELD_BELT_CLIP_FACTOR = 4;
+/** Recursion guard. Never reached in practice (a pop-900 region needs 8);
+ * it exists so no geometry can spin the bisection forever. */
+export const FIELD_CUT_MAX_DEPTH = 14;
+/** Degrees of jitter on a cut's orientation, +/-. Small on purpose: the
+ * cut direction is meant to come from the land (the road the cell fronts,
+ * or the cell's own long axis) and be nudged, not randomised. */
+export const FIELD_CUT_JITTER_DEG = 9;
+/** A cut is placed at 0.5 +/- this of the cell's extent, so a split gives
+ * two unequal parcels. */
+export const FIELD_CUT_OFFSET_SPREAD = 0.26;
+/** Ground taken out along every cut: the headland/track between two
+ * parcels that were once one. */
+export const FIELD_CUT_GAP_M = 2.4;
+/** A cell whose centroid is within this of a road takes the ROAD's bearing
+ * for its cut (whichever of parallel/perpendicular is nearer its own long
+ * axis) instead of its long axis alone -- which is what makes the parcels
+ * along a road front onto it. */
+export const FIELD_ROAD_FRONT_M = 55;
+/** Extra clearance either side of a road's corridor cut, on top of the
+ * lane's own half width and setback. A road leaving the village must pass
+ * BETWEEN parcels, with the verge showing. */
+export const FIELD_ROAD_MARGIN_M = 5;
+/** Every parcel is inset by this before it is painted: the baulk. Without
+ * it the patchwork is one continuous sheet of crop tiles, because a field
+ * carries no outline of any kind (gate 5). */
+export const FIELD_BAULK_M = 1.3;
+/** A parcel whose short dimension is under this fraction of its long one is
+ * culled -- the offcut left beside a road corridor or the belt, which reads
+ * as a splinter rather than a field. */
+export const FIELD_PARCEL_MIN_ASPECT = 0.24;
+/** Chance a parcel standing on the region's OUTER boundary is dropped. The
+ * hull is a straight-sided polygon and would otherwise be drawn out in full
+ * along every side; culling a fifth of the fringe leaves the outer edge of
+ * the farmland ragged, which is what a field system's edge against waste
+ * ground looks like. */
+export const FIELD_FRINGE_CULL_CHANCE = 0.22;
+/** How close a parcel vertex must come to the region's outer boundary to
+ * count as standing on it. */
+export const FIELD_FRINGE_TOL_M = 1.5;
+/** Pitch at which a parcel's EDGES (not just its vertices) are tested for
+ * clear ground. The polar frame emitted vertices every 2 degrees, so its
+ * vertex test was nearly an edge test; a straight-cut parcel has edges tens
+ * of metres long between vertices and needs this. */
+export const FIELD_CLEAR_SAMPLE_M = 3;
+/** How many straight cuts a parcel may take to get off a claim or a lane
+ * before it is given up on. Two or three is the normal case (a house plot
+ * and the lane it fronts); the cap stops a parcel wedged between many
+ * claims being whittled to nothing one edge at a time. */
+export const FIELD_TRIM_MAX_PASSES = 6;
+/** A trim cut is placed this far OUTSIDE the claim it is trimming against,
+ * so a parcel's new edge does not lie exactly on a lot's boundary. §5.7's
+ * invariant counts a field vertex within 0.25 m of a claim as an overlap
+ * (float noise is real), and a cut placed on the line puts every vertex it
+ * creates exactly there. */
+export const FIELD_CLAIM_MARGIN_M = 0.4;
+/**
+ * A parcel covering less than this is culled -- V4's "dropped rug", a
+ * sliver of plough floating in open ground rather than a field.
+ */
+export const FIELD_MIN_BLOCK_AREA_M2 = 400;
+/** Jitter range (degrees) on a parcel's furrow bearing: one draw per
+ * parcel, applied to the parcel's OWN long axis. GATE 8.3: the furrow
+ * bearing used to be one per wedge, chosen to alternate against the
+ * neighbouring wedge -- an alternation that only made sense while a wedge
+ * was a real object. A parcel is ploughed along its length, and since
+ * neighbouring parcels rarely share a long axis the seam the alternation
+ * existed to break does not form in the first place. */
 export const FIELD_JITTER_RANGE_DEG = 30;
-/**
- * I2: how far from parallel (degrees, modulo 180 -- furrows are undirected)
- * two SPATIALLY adjacent bundles must run. §7.2's alternation exists to
- * break the seam between neighbouring field blocks, and a fixed +90 on
- * alternate wedges cannot deliver it: an odd wedge count leaves one
- * same-parity pair at the wrap, and two wedges whose bisectors already
- * differ by ~90 land parallel once one is turned. `buildFields` walks the
- * wedges in bearing order and picks the first candidate offset clearing
- * this against both fixed neighbours.
- */
-export const FIELD_FURROW_MIN_SEPARATION_DEG = 20;
-/** §7.2 rule 4: chance a wedge's FIRST (innermost) strip ring swaps its
- * cycled crop for an orchard/vine tile instead -- only rolled for biomes
- * whose crop table is the temperate one (desert/tropical/pasture tables
- * never roll this). */
 export const FIELD_ORCHARD_VINE_CHANCE = 0.15;
 /**
  * Per-biome crop cycle, walked by strip ordinal (`i % length`). Keys not
@@ -1219,6 +1140,20 @@ export const VEG_PATCH_CELL_M = 45;
 export const VEG_PATCH_CHANCE = 0.7;
 /** How far a wood's trees spread from its seed point. */
 export const VEG_PATCH_RADIUS_M = 22;
+/**
+ * GATE 8.3: the woodland band's seeding chance does not thin all the way to
+ * nothing at the rim -- it thins to this FRACTION of its inner value.
+ *
+ * The ramp to zero was written when woods seeded across the whole country
+ * beyond the houses. Now that they seed only in the fixed-depth band beyond
+ * the FARMLAND (see `patchChanceAt`), a ramp to zero leaves the outer half
+ * of a 70 m band nearly empty, and since a wood is a discrete mass on a
+ * 45 m grid, a good half of the 15-degree bins ended up with no wood at all
+ * -- which the rim metric reads, correctly, as a tree line that balloons in
+ * one direction and vanishes in another. The country still opens out; it
+ * just does not stop dead.
+ */
+export const VEG_PATCH_RIM_FLOOR = 0.45;
 /** Trees per wood, as [min, maxExclusive] for `rng.int` -- 8 to 20. Enough
  * overlap at VEG_PATCH_RADIUS_M to read as a canopy mass rather than a
  * ring of separate trees. */
