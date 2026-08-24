@@ -156,6 +156,86 @@ for (const [pop, seed] of FIXTURES) {
     }
     return R;
   };
+  // --- CONCENTRICITY (gate 8.2). "Do block boundaries line up into rings?"
+  //
+  // What the eye reads as a ring is not one block's radius: it is MANY
+  // blocks, at bearings all round the village, whose radial boundaries sit
+  // at the SAME distance out. So that is what is measured.
+  //
+  //  1. Every block contributes its INNER-EDGE radius at its own mid
+  //     bearing. `sectorPolygon` emits the outer arc forward then the inner
+  //     arc back, so index k and index n-1-k share a bearing; the pair at
+  //     k = floor(n/4) is the block's midline and the second of them is its
+  //     inner edge. Inner edges are the right boundary to count: course
+  //     j+1's inner edge sits on course j's outer edge, so every radial
+  //     boundary in the ring is counted once.
+  //  2. That radius is measured RELATIVE TO THE RING'S OWN INNER EDGE at
+  //     the same bearing (`fBin`, the minimum field-vertex radius in that
+  //     bearing bin). Normalising is the whole point: the body is
+  //     deliberately irregular since gate 8, so an ABSOLUTE radius would
+  //     read the village's lopsidedness as ring-breaking and score a
+  //     perfect set of courses as irregular. u = rInner - ringInner(theta)
+  //     is "how deep into the belt this boundary lies" -- 0 for a
+  //     first-course block anywhere round the circle, one course depth for
+  //     a second-course block, and so on. It is exactly the quantity a
+  //     concentric system holds constant and a patchwork does not.
+  //  3. Then, over every PAIR of blocks whose bearings differ by at least
+  //     SEP = 30 degrees -- genuinely different parts of the ring, not two
+  //     neighbours inside one wedge -- the fraction whose u agree within
+  //     TOL = 4 m. Concentric courses make that fraction large (any two
+  //     blocks of the same course agree, wherever they stand); an irregular
+  //     patchwork makes it small.
+  //  4. That fraction is divided by what it would be if the same u values
+  //     were spread UNIFORMLY over the same span D: E = 2*TOL/D -
+  //     (TOL/D)^2. The quotient is the reported CONCENTRICITY INDEX. 1.0
+  //     means "no more aligned than a uniform scatter of boundaries";
+  //     higher means the boundaries pile onto a few shared depths, which is
+  //     a ring. Dividing the span out is what stops the metric being
+  //     satisfied by simply making the belt deeper.
+  const CONC_TOL_M = 4;
+  const CONC_SEP_DEG = 30;
+  const ringInnerAt = (deg: number): number | null => {
+    const k = Math.floor(deg / (360 / BINS)) % BINS;
+    for (let stp = 0; stp < BINS; stp++) {
+      const a = fBin[(k + stp) % BINS];
+      const b = fBin[(k - stp + BINS) % BINS];
+      if (a !== null && b !== null) return Math.min(a, b);
+      if (a !== null) return a;
+      if (b !== null) return b;
+    }
+    return null;
+  };
+  const inners: Array<{ u: number; deg: number }> = [];
+  for (const f of m.fields) {
+    const n = f.polygon.length;
+    if (n < 4 || n % 2 !== 0) continue;
+    const k = Math.floor(n / 4);
+    const innerP = f.polygon[n - 1 - k];
+    const deg = bearing(c, innerP);
+    const ref = ringInnerAt(deg);
+    if (ref === null) continue;
+    inners.push({ u: dist2(c, innerP) - ref, deg });
+  }
+  let concIndex = NaN; let concFrac = NaN; let concSpan = NaN;
+  if (inners.length >= 4) {
+    const us = inners.map((x) => x.u);
+    concSpan = Math.max(...us) - Math.min(...us);
+    let pairs = 0; let aligned = 0;
+    for (let i = 0; i < inners.length; i++) {
+      for (let j = i + 1; j < inners.length; j++) {
+        const dd = Math.abs(inners[i].deg - inners[j].deg);
+        if (Math.min(dd, 360 - dd) < CONC_SEP_DEG) continue;
+        pairs++;
+        if (Math.abs(inners[i].u - inners[j].u) <= CONC_TOL_M) aligned++;
+      }
+    }
+    if (pairs > 0 && concSpan > CONC_TOL_M) {
+      concFrac = aligned / pairs;
+      const r = CONC_TOL_M / concSpan;
+      concIndex = concFrac / (2 * r - r * r);
+    }
+  }
+
   let discTot = 0; let discHit = 0; let bodyTot = 0; let bodyHit = 0;
   const step = 1;
   for (let x = -R; x <= R; x += step) {
@@ -294,6 +374,7 @@ for (const [pop, seed] of FIXTURES) {
     `bldg smooth ratio ${bSmooth.ratio.toFixed(2)} cv ${bSmooth.cv.toFixed(3)}`,
     `field inner ratio ${fStats.ratio.toFixed(2)} cv ${fStats.cv.toFixed(3)} (${fStats.bins}/24)`,
     `blockdepth ${depths.length ? depths[0].toFixed(0) : 'n/a'}/${median(depths).toFixed(0)}/${depths.length ? depths[depths.length - 1].toFixed(0) : 'n/a'} ratio ${depthRatio.toFixed(2)} (n=${depths.length})`,
+    `conc ${concIndex.toFixed(2)} (frac ${concFrac.toFixed(3)}, span ${concSpan.toFixed(0)}m, n=${inners.length})`,
     `vegdepth ${vDepths.length ? vDepths[0].toFixed(0) : 'n/a'}/${median(vDepths).toFixed(0)}/${vDepths.length ? vDepths[vDepths.length - 1].toFixed(0) : 'n/a'} rimratio ${vStats.ratio.toFixed(2)}`,
     `landuse disc ${(100 * discHit / discTot).toFixed(0)}% body ${(100 * bodyHit / bodyTot).toFixed(0)}%`,
     `blocks ${blocks}`,
