@@ -1137,7 +1137,7 @@ export const VEG_PATCH_CELL_M = 45;
  * the seeding was pulled back to where merging is occasional, which is
  * what was actually asked for.
  */
-export const VEG_PATCH_CHANCE = 0.7;
+export const VEG_PATCH_CHANCE = 0.9;
 /** How far a wood's trees spread from its seed point. */
 export const VEG_PATCH_RADIUS_M = 22;
 /**
