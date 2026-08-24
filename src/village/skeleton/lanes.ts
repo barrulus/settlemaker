@@ -15,7 +15,9 @@ import {
   SATURATION_RING_STEP_M, SECTOR_SAMPLE_DEG,
   VOID_SCAN_STEP_M, VOID_SPACING_M, LANE_SEATING_YIELD, LANE_TILE_SPACING_M,
   ARC_MAX_SWEEP_DEG, ARC_NEIGHBOURHOOD_M, ARC_RADIAL_TOL_DEG, LANE_PARALLEL_TOL_DEG,
+  PROFILE_SHAPE_MAX,
 } from '../constants.js';
+import { type RadiusProfile } from './profile.js';
 import {
   armLaneId, branchLaneId, inventedLaneId,
   type Building, type Green, type Lane, type Site, type SiteRoute,
@@ -124,17 +126,37 @@ function runLine(
  * interior fills before growth moves outward, and a street laid in an early
  * ring is lengthened by `extendOne` as the rings widen.
  */
-function streetRunM(from: Point, bearingDeg: number, green: Green, ringRadiusM: number): number {
-  // Ray/circle intersection: how far along `bearingDeg` from `from` the ring
-  // boundary lies. `from` is inside the ring in every caller here.
+function streetRunM(
+  from: Point, bearingDeg: number, green: Green, profile: RadiusProfile,
+  ringRadiusM: number,
+): number {
+  // GATE 8: the ring is a BODY of the profile's shape, not a circle, so the
+  // closed-form ray/circle intersection this used is gone: the boundary is
+  // marched for instead. The march is deterministic (fixed step, fixed
+  // cap) and costs a handful of table lookups.
   const dir = bearingVector(bearingDeg);
-  const cx = from.x - green.centre.x;
-  const cy = from.y - green.centre.y;
-  const b = cx * dir.x + cy * dir.y;
-  const c = cx * cx + cy * cy - ringRadiusM * ringRadiusM;
-  const disc = b * b - c;
-  const reach = disc <= 0 ? 0 : -b + Math.sqrt(disc);
+  let reach = 0;
+  for (let d = 0; d <= BRANCH_MAX_M; d += LANE_SAMPLE_STEP_M) {
+    const p = new Point(from.x + dir.x * d, from.y + dir.y * d);
+    if (!insideRing(green, profile, ringRadiusM, p)) break;
+    reach = d;
+  }
   return Math.min(BRANCH_MAX_M, Math.max(BRANCH_MIN_M, reach));
+}
+
+/**
+ * GATE 8: is `p` inside the ring of nominal radius `nominalRadiusM`? The
+ * ring follows the profile — `nominalRadiusM` is its AREA-EQUIVALENT
+ * radius, and its actual radius at any bearing is the profile's shape
+ * there. Every "inside the disc / inside the ring" test in this file goes
+ * through here; there is no circle left in growth.
+ */
+function insideRing(
+  green: Green, profile: RadiusProfile, nominalRadiusM: number, p: Point,
+): boolean {
+  const d = dist(p, green.centre);
+  if (d < 1e-9) return true;
+  return d <= profile.ringAt(nominalRadiusM, bearingOf(green.centre, p));
 }
 
 interface ArmEmission {
@@ -401,6 +423,21 @@ export function lotReachFor(
   return isTrunk ? saturatedRadiusM * ARM_LOT_RADIUS_SHARE : saturatedRadiusM;
 }
 
+/**
+ * GATE 8: the same rule, read off the BODY rather than a circle. The reach
+ * is a function of the point being judged, because the saturated fabric
+ * reaches further along the village's long axis than across it -- and a
+ * trunk cap measured against a mean radius would cut the ribbon short on
+ * one side and let it run on the other.
+ */
+export function lotReachAt(
+  lane: Lane, green: Green, profile: RadiusProfile, population: number,
+): (p: Point) => number {
+  return (p: Point) => lotReachFor(
+    lane, profile.at(bearingOf(green.centre, p)), population,
+  );
+}
+
 
 /**
  * Both sides of every lane are frontage -- but only the stretch that will
@@ -489,15 +526,17 @@ export function laneBudgetFor(radiusM: number): number {
   return (Math.PI * radiusM * radiusM) / (LANE_TILE_SPACING_M * DISC_MARGIN * DISC_MARGIN);
 }
 
-/** Lane length inside `radiusM` of the green, segment by segment. */
-function laneLengthWithin(lanes: Lane[], green: Green, radiusM: number): number {
+/** Lane length inside the profile BODY, segment by segment (gate 8: the
+ * budget is spent on ground inside the village, and the village is not a
+ * circle). */
+function laneLengthWithin(lanes: Lane[], green: Green, profile: RadiusProfile): number {
   let total = 0;
   for (const lane of lanes) {
     for (let i = 1; i < lane.points.length; i++) {
       const a = lane.points[i - 1];
       const b = lane.points[i];
-      const inA = dist(a, green.centre) <= radiusM;
-      const inB = dist(b, green.centre) <= radiusM;
+      const inA = insideRing(green, profile, profile.radiusM, a);
+      const inB = insideRing(green, profile, profile.radiusM, b);
       if (!inA && !inB) continue;
       total += dist(a, b) * (inA && inB ? 1 : 0.5);
     }
@@ -522,7 +561,7 @@ interface BranchSlot {
  * A slot is occupied if any existing lane already starts nearby.
  */
 function branchSlots(
-  out: Lane[], green: Green, growthRadiusM: number, pitch: number,
+  out: Lane[], green: Green, profile: RadiusProfile, pitch: number,
 ): BranchSlot[] {
   const slots: BranchSlot[] = [];
   for (const parent of out) {
@@ -536,9 +575,11 @@ function branchSlots(
       const { p, dirDeg } = sampleAt(parent.points, acc, s);
       const distToGreen = dist(p, green.centre);
       // Gate 3: "sprawl should be clustered around the green" — a slot
-      // outside the growth circle never spawns a branch, so a long FMG
-      // road cannot sprout satellite webs half a map away.
-      if (distToGreen <= growthRadiusM
+      // outside the growth BODY never spawns a branch, so a long FMG
+      // road cannot sprout satellite webs half a map away. (Gate 8: the
+      // body, not a circle -- a slot on the village's short side is
+      // outside at a distance a slot on its long side is still inside at.)
+      if (distToGreen <= profile.at(bearingOf(green.centre, p))
         && !out.some((l) => dist(l.points[0], p) < pitch * 0.45)) {
         slots.push({ parent, at: s / total, anchor: p, dirDeg, distToGreen });
       }
@@ -769,7 +810,7 @@ function earnsItsSpace(
  * cluster balanced instead of streaming out one long tentacle.
  */
 function extendOne(
-  out: Lane[], green: Green, meanFrontageM: number, growthRadiusM: number,
+  out: Lane[], green: Green, meanFrontageM: number, profile: RadiusProfile,
   rng: SeededRandom, maxLengthM: number, satRadiusM: number,
 ): boolean {
   const extendable = out
@@ -777,12 +818,12 @@ function extendOne(
       && polylineLength(l.points) < maxLengthM
       // Gate 3: extension is confined to the cluster — a street whose end
       // has left the growth circle stops growing outward.
-      && dist(l.points[l.points.length - 1], green.centre) <= growthRadiusM
+      && insideRing(green, profile, profile.radiusM, l.points[l.points.length - 1])
       // Gate 6.2 CONCENTRIC SATURATION: and to the ring currently being
       // filled. An extension's ANCHOR is the end it grows from, so a street
       // already reaching past the saturation radius is not the place to add
       // more length -- the interior has first call on every metre.
-      && dist(l.points[l.points.length - 1], green.centre) <= satRadiusM
+      && insideRing(green, profile, satRadiusM, l.points[l.points.length - 1])
       // Gate 4: a truncated or loop-snapped lane ENDS at a junction on
       // another lane. Extending it from there walks straight across that
       // lane — segmentIntersection's endpoint-touch exclusion cannot even
@@ -796,7 +837,7 @@ function extendOne(
     const endDir = bearingOf(lane.points[n - 2], lane.points[n - 1]);
     const extension = truncateAtFirstCrossing(
       runLine(lane.points[n - 1], endDir,
-        streetRunM(lane.points[n - 1], endDir, green, satRadiusM), rng),
+        streetRunM(lane.points[n - 1], endDir, green, profile, satRadiusM), rng),
       out.filter((l) => l.id !== lane.id), green);
     if (extension.length < 2) continue;
     // Gate 5.4: an extension leaves from the lane's OLD END -- which is
@@ -832,7 +873,7 @@ function extendOne(
 
 /** One growth step. Returns false when there is nowhere left to grow. */
 function growOne(
-  out: Lane[], green: Green, meanFrontageM: number, growthRadiusM: number,
+  out: Lane[], green: Green, meanFrontageM: number, profile: RadiusProfile,
   rng: SeededRandom, satRadiusM: number, spacingScale: number,
 ): boolean {
   // 1. The green may still host a street of its own: an invented rib, up
@@ -846,7 +887,7 @@ function growOne(
   // FMG's own arms let two incoming routes eat a cap of 3, leaving a
   // pop-900 green a single radial and a dead quadrant.
   if (out.filter((l) => isGreenAttached(l) && l.id.startsWith('lane-')).length
-      < ribCountFor(growthRadiusM)) {
+      < ribCountFor(profile.radiusM)) {
     const taken = out.filter(isGreenAttached).map((l) => laneBearing(green, l));
     for (let attempt = 0; attempt < 36; attempt++) {
       const candidate = Math.round(widestGapBearing(taken, rng)) % 360;
@@ -864,7 +905,7 @@ function growOne(
       const lengthJitter = 0.7 + rng.float() * 0.6;
       const points = truncateAtFirstCrossing(
         runLine(start, candidate,
-          streetRunM(start, candidate, green, satRadiusM) * lengthJitter, rng),
+          streetRunM(start, candidate, green, profile, satRadiusM) * lengthJitter, rng),
         out, green);
       // Gate 6.6: a radial that never leaves its neighbours' ground only
       // splits the same frontage in two -- see `earnsItsSpace`.
@@ -884,9 +925,9 @@ function growOne(
   // ring currently being filled are candidates. Growth reticulates there
   // until nothing more can be done, and only then does the caller widen the
   // ring. No ring is left until it is genuinely full.
-  const slots = branchSlots(out, green, growthRadiusM,
-    slotPitchFor(green, growthRadiusM))
-    .filter((sl) => sl.distToGreen <= satRadiusM);
+  const slots = branchSlots(out, green, profile,
+    slotPitchFor(green, profile.radiusM))
+    .filter((sl) => insideRing(green, profile, satRadiusM, sl.anchor));
 
   /** Try each candidate slot in order; returns true once one takes. */
   const tryBranch = (candidates: BranchSlot[]): boolean => {
@@ -897,7 +938,7 @@ function growOne(
       // because a radial-ish branch into a radial fabric is what built the
       // starfish; where the fabric is not radial `seedArcThrough` declines
       // and the ordinary branch below is unchanged.
-      if (seedArcThrough(out, green, slot.anchor, slot.parent, spacingScale)) return true;
+      if (seedArcThrough(out, green, profile, slot.anchor, slot.parent, spacingScale)) return true;
       // branchLaneId formats `at` as a 2-digit percent (~100 buckets per
       // parent); if this slot's bucket is taken, probe deterministically.
       // The id is identity, the anchor is authoritative for position.
@@ -918,7 +959,8 @@ function growOne(
       let cls = inventedChildClass(slot.parent.type);
       // Gate 6.7: to the ring's edge, not one stub length -- see `streetRunM`.
       let points = runLine(
-        slot.anchor, branchBearing, streetRunM(slot.anchor, branchBearing, green, satRadiusM), rng,
+        slot.anchor, branchBearing,
+        streetRunM(slot.anchor, branchBearing, green, profile, satRadiusM), rng,
       );
       // Loop rule first: an end passing near another lane joins it. Then ONE
       // crossing pass over the fully assembled polyline — snap tail included —
@@ -996,7 +1038,7 @@ function growOne(
 
   // 3. Nothing new to open in this ring, so lengthen what is here -- still
   //    only streets whose end lies inside it.
-  if (extendOne(out, green, meanFrontageM, growthRadiusM, rng,
+  if (extendOne(out, green, meanFrontageM, profile, rng,
     satRadiusM * 2, satRadiusM)) {
     return true;
   }
@@ -1005,7 +1047,7 @@ function growOne(
   //    is at full length, so lengthen one past its nominal length anyway.
   //    Still ring-bounded -- when this also fails, the caller widens the
   //    ring, which is the only way growth ever moves outward.
-  return extendOne(out, green, meanFrontageM, growthRadiusM, rng, Infinity, satRadiusM);
+  return extendOne(out, green, meanFrontageM, profile, rng, Infinity, satRadiusM);
 }
 
 /**
@@ -1129,12 +1171,15 @@ export function connectDeadEnds(
  * just their vertices, so a long lane crossing a sector marks it covered
  * even when neither endpoint sits there.
  */
-function angularCoverage(lanes: Lane[], green: Green, radiusM: number): boolean[] {
+function angularCoverage(
+  lanes: Lane[], green: Green, profile: RadiusProfile, radiusM: number,
+): boolean[] {
   const buckets = Math.round(360 / SECTOR_SAMPLE_DEG);
   const covered = new Array<boolean>(buckets).fill(false);
   const mark = (p: Point): void => {
     const d = dist(p, green.centre);
-    if (d > radiusM || d < 1) return;
+    // GATE 8: inside the BODY at this bearing, not inside a circle.
+    if (d < 1 || d > profile.ringAt(radiusM, bearingOf(green.centre, p))) return;
     covered[Math.floor(bearingOf(green.centre, p) / SECTOR_SAMPLE_DEG) % buckets] = true;
   };
   for (const lane of lanes) {
@@ -1182,13 +1227,16 @@ function widestGap(covered: boolean[]): { bisectorDeg: number; widthDeg: number 
  * same order for the same seed.
  */
 function widestVoid(
-  lanes: Lane[], green: Green, satRadiusM: number,
+  lanes: Lane[], green: Green, profile: RadiusProfile, satRadiusM: number,
 ): { point: Point; junction: Point; parent: Lane; distance: number } | null {
   let best: { point: Point; junction: Point; parent: Lane; distance: number } | null = null;
-  for (let x = -satRadiusM; x <= satRadiusM; x += VOID_SCAN_STEP_M) {
-    for (let y = -satRadiusM; y <= satRadiusM; y += VOID_SCAN_STEP_M) {
+  // GATE 8: the scan BOX is the profile's widest reach; the membership test
+  // inside it is the profile itself, so the ground scanned is the body.
+  const boxM = satRadiusM * PROFILE_SHAPE_MAX;
+  for (let x = -boxM; x <= boxM; x += VOID_SCAN_STEP_M) {
+    for (let y = -boxM; y <= boxM; y += VOID_SCAN_STEP_M) {
       const p = new Point(green.centre.x + x, green.centre.y + y);
-      if (dist(p, green.centre) > satRadiusM) continue;
+      if (!insideRing(green, profile, satRadiusM, p)) continue;
       let nearest: { point: Point; parent: Lane; distance: number } | null = null;
       for (const lane of lanes) {
         for (let i = 1; i < lane.points.length; i++) {
@@ -1275,15 +1323,24 @@ function locallyRadial(lanes: Lane[], p: Point, green: Green): boolean {
  * Returns the assembled polyline and how many of its two ends found a lane.
  */
 function buildArc(
-  out: Lane[], green: Green, through: Point, snapExclude: Set<string>,
+  out: Lane[], green: Green, profile: RadiusProfile, through: Point,
+  snapExclude: Set<string>,
 ): { points: Point[]; joinedEnds: number } | null {
   const radiusM = dist(through, green.centre);
   if (radiusM < greenDrawnRadius(green) + LANE_SAMPLE_STEP_M) return null;
   const stepDeg = (LANE_SAMPLE_STEP_M / radiusM) * (180 / Math.PI);
   const theta0 = bearingOf(green.centre, through);
+  // GATE 8: AN ARC IS NO LONGER A CIRCLE. It runs at a constant FRACTION of
+  // the radius profile rather than a constant radius, so a ring street
+  // bulges where the village bulges and pulls in where it pulls in. This is
+  // the single most visible consequence of the profile: constant-radius
+  // arcs were drawing true circles through the fabric, and once the fabric
+  // grew rings (gate 6.11) the picture was concentric by construction.
+  const share = radiusM / Math.max(1e-6, profile.at(theta0));
   const at = (deg: number): Point => {
     const d = bearingVector(deg);
-    return new Point(green.centre.x + d.x * radiusM, green.centre.y + d.y * radiusM);
+    const r = profile.at(deg) * share;
+    return new Point(green.centre.x + d.x * r, green.centre.y + d.y * r);
   };
 
   const sweep = (sign: 1 | -1): { pts: Point[]; joined: boolean } => {
@@ -1341,12 +1398,12 @@ function buildArc(
  * lane's identity and its lots have ordinary lot ids.
  */
 function seedArcThrough(
-  out: Lane[], green: Green, through: Point, parent: Lane | undefined,
-  spacingScale: number,
+  out: Lane[], green: Green, profile: RadiusProfile, through: Point,
+  parent: Lane | undefined, spacingScale: number,
 ): boolean {
   if (!locallyRadial(out, through, green)) return false;
   const snapExclude = new Set<string>(parent ? [parent.id] : []);
-  const arc = buildArc(out, green, through, snapExclude);
+  const arc = buildArc(out, green, profile, through, snapExclude);
   if (!arc || arc.joinedEnds === 0) return false;
   let { points } = arc;
   if (polylineLength(points) < BRANCH_MIN_M) return false;
@@ -1457,17 +1514,17 @@ function seedArcThrough(
  * slots, extensions and sector coverage are exhausted.
  */
 function seedVoidLane(
-  out: Lane[], green: Green, meanFrontageM: number, satRadiusM: number,
-  rng: SeededRandom, spacingScale: number,
+  out: Lane[], green: Green, meanFrontageM: number, profile: RadiusProfile,
+  satRadiusM: number, rng: SeededRandom, spacingScale: number,
 ): boolean {
-  const void_ = widestVoid(out, green, satRadiusM);
+  const void_ = widestVoid(out, green, profile, satRadiusM);
   if (!void_ || void_.distance <= VOID_SPACING_M) return false;
 
   // GATE 6.10: a void between two RIBS is a wedge, and the street that
   // fills a wedge runs across it, not out of it. No parent is handed to the
   // arc here: the void point is in open ground, so every lane around it —
   // the nearest one included — is a candidate to join.
-  if (seedArcThrough(out, green, void_.point, undefined, spacingScale)) return true;
+  if (seedArcThrough(out, green, profile, void_.point, undefined, spacingScale)) return true;
 
   const bearing = Math.round(bearingOf(void_.junction, void_.point)) % 360;
   // Long enough to run THROUGH the void rather than stop at its near edge,
@@ -1585,31 +1642,40 @@ function circumferentialityDeg(lane: Lane, green: Green): number {
  * from the disc, see `ribCountFor`.
  */
 function seedCoverageLane(
-  out: Lane[], green: Green, meanFrontageM: number, satRadiusM: number,
-  rng: SeededRandom, spacingScale: number,
+  out: Lane[], green: Green, meanFrontageM: number, profile: RadiusProfile,
+  satRadiusM: number, rng: SeededRandom, spacingScale: number,
 ): boolean {
-  const gap = widestGap(angularCoverage(out, green, satRadiusM));
+  const gap = widestGap(angularCoverage(out, green, profile, satRadiusM));
   if (gap.widthDeg <= coverageThresholdDeg(satRadiusM)) return false;
 
+  // GATE 8: every radius below is a fraction of the RING AT THIS BEARING, so
+  // a sector on the village's short side is served at the radius its own
+  // ground reaches to rather than at the mean.
+  const ringHere = profile.ringAt(satRadiusM, gap.bisectorDeg);
+
   // 1. Serve it circumferentially if anything is there to tie.
+  // A ring lane's MEAN radius is its share of the profile (the shape has
+  // mean 1 by construction), so continuing that ring round to this sector
+  // means seeding at the same share HERE -- `ringAt`, not the bare radius.
   const ringRadii = out
     .filter((l) => circumferentialityDeg(l, green) >= 60)
     .map((l) => meanRadiusOf(l, green))
     .filter((r) => r > greenDrawnRadius(green) && r <= satRadiusM)
-    .sort((a, b) => b - a);
+    .sort((a, b) => b - a)
+    .map((r) => profile.ringAt(r, gap.bisectorDeg));
   const inner = greenDrawnRadius(green) + BRANCH_MIN_M / 2;
   const scanned = [0.9, 0.75, 0.6, 0.45]
-    .map((f) => satRadiusM * f)
+    .map((f) => ringHere * f)
     .filter((r) => r > inner);
   for (const radiusM of [...ringRadii, ...scanned]) {
     const dir = bearingVector(gap.bisectorDeg);
     const at = new Point(
       green.centre.x + dir.x * radiusM, green.centre.y + dir.y * radiusM,
     );
-    if (seedArcThrough(out, green, at, undefined, spacingScale)) return true;
+    if (seedArcThrough(out, green, profile, at, undefined, spacingScale)) return true;
   }
 
-  const reach = Math.max(0, satRadiusM - greenDrawnRadius(green));
+  const reach = Math.max(0, ringHere - greenDrawnRadius(green));
   if (reach < BRANCH_MIN_M) return false;
   const nominal = Math.min(reach, branchLengthM(meanFrontageM) * INVENTED_ARM_LENGTH_FACTOR);
 
@@ -1653,8 +1719,16 @@ function seedCoverageLane(
  */
 export function saturateDisc(
   lanes: Lane[], green: Green, meanFrontageM: number,
-  targetRadiusM: number, rng: SeededRandom, spacingScale = 1,
-): { lanes: Lane[]; radiusM: number } {
+  target: RadiusProfile, rng: SeededRandom, spacingScale = 1,
+): { lanes: Lane[]; radiusM: number; profile: RadiusProfile } {
+  // GATE 8: the disc is a PROFILE. `targetRadiusM` below is its
+  // area-equivalent radius -- every ring test in growth goes through
+  // `insideRing`, which reads the profile's shape at the bearing of the
+  // point being judged, so saturation grows as an irregular body rather
+  // than as concentric circles. The AREA is unchanged (the profile is
+  // area-normalised), so the lane budget below is the same budget gate 6.6
+  // derived and the census arithmetic is untouched.
+  const targetRadiusM = target.radiusM;
   const out = [...lanes];
   let guard = 0;
   // Gate 6.2 CONCENTRIC SATURATION. The ring being filled starts just
@@ -1675,7 +1749,7 @@ export function saturateDisc(
   // round it collide and §5.4 resolution drops them). Measured at gate 6.5,
   // that is where two thirds of every village's cut frontage went.
   const budgetM = laneBudgetFor(targetRadiusM);
-  while (guard < MAX_INVENTED_LANES && laneLengthWithin(out, green, targetRadiusM) < budgetM) {
+  while (guard < MAX_INVENTED_LANES && laneLengthWithin(out, green, target) < budgetM) {
     guard++;
     // Gate 6.7: coverage comes FIRST, not last. Gate 6.4 added this check
     // as a last resort before widening, which was enough while every street
@@ -1685,13 +1759,15 @@ export function saturateDisc(
     // as a 66 deg laneless sector at pop 300, over the 60 deg bar. Coverage
     // is a hard constraint on the shape; meshing an already-covered ring is
     // discretionary, so the constraint goes first.
-    if (seedCoverageLane(out, green, meanFrontageM, satRadiusM, rng, spacingScale)) continue;
-    if (growOne(out, green, meanFrontageM, targetRadiusM, rng, satRadiusM, spacingScale)) continue;
+    if (seedCoverageLane(out, green, meanFrontageM, target, satRadiusM, rng, spacingScale)) {
+      continue;
+    }
+    if (growOne(out, green, meanFrontageM, target, rng, satRadiusM, spacingScale)) continue;
     // Gate 6.5: and even with every bearing covered, a RADIAL tree leaves
     // widening wedges of untouched ground between its tendrils -- the
     // spider. Measure the GROUND, not the network: if anywhere in the disc
     // is further than VOID_SPACING_M from a lane, put a lane there.
-    if (seedVoidLane(out, green, meanFrontageM, satRadiusM, rng, spacingScale)) continue;
+    if (seedVoidLane(out, green, meanFrontageM, target, satRadiusM, rng, spacingScale)) continue;
     // This ring is genuinely full. Widen it -- or, at the target, stop:
     // the disc is saturated and growing past it is exactly the over-tiling
     // gate 6.6 removed.
@@ -1702,5 +1778,8 @@ export function saturateDisc(
   // same disc, or it cuts plots along stretches growth never reached (and
   // the far reaches of an FMG arm sprout houses while the interior is still
   // empty).
-  return { lanes: out, radiusM: satRadiusM };
+  // The BODY actually saturated: the same shape at the radius growth
+  // reached. The lot cutter, the trunk cap and the dressing passes all read
+  // this profile, so nothing downstream of growth speaks about a circle.
+  return { lanes: out, radiusM: satRadiusM, profile: target.scaled(satRadiusM / targetRadiusM) };
 }

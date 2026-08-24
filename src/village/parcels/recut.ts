@@ -139,8 +139,10 @@ export interface RecutInput {
   /** The deck's narrowest usable dwelling frontage — a hard floor. */
   floorM: number;
   maxFrontageM: number;
-  /** How far out along a given lane lots may be cut at all. */
-  reachOf: (lane: Lane) => number;
+  /** How far out along a given lane lots may be cut at all. GATE 8: a
+   * function of the POSITION as well as the lane -- the saturated fabric is
+   * a profile body, not a disc, so the limit depends on the bearing. */
+  reachOf: (lane: Lane) => (p: Point) => number;
   /** Which re-cut pass this is; part of the lot id. */
   pass: number;
 }
@@ -180,7 +182,7 @@ export function recutFreedGround(input: RecutInput): RecutResult {
 
   for (const lane of lanes) {
     const setback = lane.widthM / 2 + (LANE_SETBACK_M[lane.type] ?? 2);
-    const maxDistanceM = reachOf(lane);
+    const reachAt = reachOf(lane);
     for (const side of [1, -1] as const) {
       const edge = offsetPolyline(lane.points, setback, side);
       if (edge.length < 2) continue;
@@ -219,8 +221,7 @@ export function recutFreedGround(input: RecutInput): RecutResult {
           const probeStep = floorM / 2;
           if (frontage < floorM) break;
           const mid = sampleAt(edge, acc, s + frontage / 2);
-          const midD = dist(mid.p, green.centre);
-          if (midD > maxDistanceM) { s += probeStep; continue; }
+          if (dist(mid.p, green.centre) > reachAt(mid.p)) { s += probeStep; continue; }
           const bearingDeg = (mid.dirDeg + (side === 1 ? -90 : 90) + 360) % 360;
           const candidate: Lot = {
             id: recutLotId(lane.id, side, ordinal, pass),

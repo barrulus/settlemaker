@@ -4,8 +4,9 @@ import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import { buildSite } from './site.js';
 import { predictedBuiltRadius, siteGreen } from './skeleton/green-siting.js';
 import {
-  availableFrontage, buildArms, connectDeadEnds, discRadiusFor, lotReachFor, saturateDisc,
+  availableFrontage, buildArms, connectDeadEnds, discRadiusFor, lotReachAt, saturateDisc,
 } from './skeleton/lanes.js';
+import { buildRadiusProfile, type RadiusProfile } from './skeleton/profile.js';
 import { relaxLanes, trimTails } from './skeleton/relax.js';
 import {
   clipLots, gapForPopulation, orderLots, scoreLots, subdivideGreen, subdivideLane,
@@ -26,6 +27,7 @@ import {
   INITIAL_MEAN_FRONTAGE_FACTOR, LANE_EXTENT_FACTOR, LANE_SETBACK_M, LOT_DEPTH_M,
   MAX_FEEDBACK_ROUNDS, MAX_LOT_FRONTAGE_RATIO, MEAN_LOT_AREA_M2, RECUT_MAX_PASSES,
   DISC_ESCALATION_STEP_RATIO, RING_SETBACK_M, SPACING_RELAX_FLOOR, SPACING_RELAX_STEP,
+  PROFILE_SEED_MULTIPLIER, PROFILE_SEED_OFFSET,
 } from './constants.js';
 import type { Lane, Lot, VillageModel } from './types.js';
 import { classRank, type RouteType } from './route-class.js';
@@ -166,12 +168,41 @@ export function generateVillage(
     SPACING_RELAX_FLOOR, 1 - spacingRung * SPACING_RELAX_STEP,
   );
   let extraRings = 0;
+  // GATE 8: THE DISC IS A PROFILE. `cappedRadiusM` is now the profile's
+  // AREA-EQUIVALENT radius: `discProfile` encloses exactly the same ground
+  // as the disc of that radius, in an irregular, elongated, lopsided shape.
+  // The owner's verdict on gate 7 was that the near-perfect circles are not
+  // a natural evolution, and the diagnosis was that every sizing rule here
+  // is polar -- so the fix is not a wobbly outline drawn round a disc of
+  // houses, it is that GROWTH ITSELF follows this profile: the saturation
+  // ring, the lot reach, the void scan, the coverage sweep, the arc, the
+  // field ring and the vegetation band all read it. Because the area is
+  // preserved exactly, every density figure gates 6.6-6.11 established is
+  // arithmetic over the same ground as before.
+  //
+  // The profile's randomness comes off its OWN stream, derived from the
+  // village seed, so adding it displaced no draw of the deck, the green,
+  // the arms, growth, seating or dressing -- see `profile.ts`.
+  const profileRng = new SeededRandom(seed * PROFILE_SEED_MULTIPLIER + PROFILE_SEED_OFFSET);
+  const discProfile = buildRadiusProfile({
+    centre: green.centre,
+    radiusM: cappedRadiusM,
+    // A village grows ALONG its road, and a through road pulls both ways.
+    trunkBearingsDeg: site.routes.flatMap(
+      (r) => (r.through ? [r.bearingDeg, (r.bearingDeg + 180) % 360] : [r.bearingDeg]),
+    ),
+    water: site.water,
+    rng: profileRng,
+  });
   let targetRadiusM = cappedRadiusM;
   // The disc growth actually saturated, which is also the disc the lot
   // cutter fills and the reference for the frontage gradient. Everything
   // downstream of growth speaks about THIS radius, never the pre-fabric
   // estimate.
   let lotRadiusM = targetRadiusM;
+  // The BODY the cutter fills, and the reference every downstream stage
+  // that used to take `lotRadiusM` now takes instead.
+  let lotProfile: RadiusProfile = discProfile;
 
   for (let round = 0; round <= MAX_FEEDBACK_ROUNDS; round++) {
     // This round's rung of the ladder. `tightenM` comes off BOTH the gap
@@ -183,10 +214,11 @@ export function generateVillage(
     lotFloorM = Math.max(inkFloorM, nominalLotFloorM - tightenM);
     activeDeck = tightenDeck(deck, tightenM);
     targetRadiusM = cappedRadiusM * (1 + extraRings * DISC_ESCALATION_STEP_RATIO);
-    const grown = saturateDisc(lanes, green, measuredMeanFrontage, targetRadiusM,
-      rng, spacingScale());
+    const grown = saturateDisc(lanes, green, measuredMeanFrontage,
+      discProfile.scaled(targetRadiusM / cappedRadiusM), rng, spacingScale());
     lanes = grown.lanes;
     lotRadiusM = grown.radiusM;
+    lotProfile = grown.profile;
 
     const laneTypes = new Map<string, RouteType>(lanes.map((l) => [l.id, l.type]));
     laneTypes.set('green', 'main');
@@ -195,7 +227,7 @@ export function generateVillage(
       ...subdivideGreen(green, f0, LOT_DEPTH_M, rng, lanes),
       ...lanes.flatMap((l) => subdivideLane(
         l, green, lotRadiusM, f0, LOT_DEPTH_M, rng, lotFloorM, lotCapM,
-        lotReachFor(l, lotRadiusM, site.population),
+        lotReachAt(l, green, lotProfile, site.population),
       )),
     ];
     // §5.4 rules 3-4 (the R20 debt): clipLots only ever dropped water/
@@ -243,7 +275,7 @@ export function generateVillage(
         depthM: LOT_DEPTH_M,
         floorM: lotFloorM,
         maxFrontageM: lotCapM,
-        reachOf: (l) => lotReachFor(l, lotRadiusM, site.population),
+        reachOf: (l) => lotReachAt(l, green, lotProfile, site.population),
         pass,
       });
       if (recut.added.length === 0) break;
@@ -408,7 +440,7 @@ export function generateVillage(
       .filter((l) => isConnectorLane(l.id))
       .flatMap((l) => subdivideLane(
         l, green, lotRadiusM, f0, LOT_DEPTH_M, rng, lotFloorM, lotCapM,
-        lotReachFor(l, lotRadiusM, site.population),
+        lotReachAt(l, green, lotProfile, site.population),
       ))
       .sort((a, b) => dist(a.front, green.centre) - dist(b.front, green.centre)
         || a.id.localeCompare(b.id))

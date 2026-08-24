@@ -1188,3 +1188,67 @@ export const VEG_GLYPHS: Record<string, VegGlyphWeight[]> = {
     { glyph: 'sm-tree-deciduous', weight: 0.3 },
   ],
 };
+
+/**
+ * GATE 8 -- THE RADIUS PROFILE. See `skeleton/profile.ts` for the whole
+ * argument; these are its tunables.
+ *
+ * The harmonics are 1, 2 and 3 of the circle and nothing higher: 1 makes
+ * the body lopsided, 2 elongates it, 3 makes it ragged, and 4 upward reads
+ * as lumpy noise scribbled on an outline rather than as a village that grew
+ * one way. Each harmonic's amplitude is drawn from its own range, on the
+ * profile's own rng stream.
+ */
+export const PROFILE_HARMONICS = [1, 2, 3];
+export const PROFILE_HARMONIC_AMPLITUDES: Array<[number, number]> = [
+  [0.05, 0.12], [0.08, 0.16], [0.04, 0.09],
+];
+
+/**
+ * How hard the road axis stretches the body, at full axis strength. 0.22
+ * means a single-road village runs about 1.6x as far along its road as
+ * across it before the harmonics are applied at all, which is the ratio
+ * measured off watabou's own villages of a comparable size.
+ */
+export const PROFILE_ROAD_ELONGATION = 0.18;
+
+/** The floor on irregularity, and how far the shape may be scaled up to
+ * reach it. Three free-phase harmonics can cancel each other and the road
+ * axis, and a village whose shape has a coefficient of variation below
+ * PROFILE_MIN_CV reads as a circle whatever produced it. Villages that draw
+ * a strong shape are untouched. */
+export const PROFILE_MIN_CV = 0.19;
+export const PROFILE_MAX_BOOST = 2.2;
+
+/** The shape is clamped to this band before it is area-normalised, so no
+ * bearing can collapse to nothing (a pinched village is a defect, not a
+ * shape) or run away into a tentacle. */
+export const PROFILE_SHAPE_MIN = 0.70;
+export const PROFILE_SHAPE_MAX = 1.40;
+
+/** Water response: how far out the march looks (as a share of the radius),
+ * the step it marches at, the margin it keeps off the shore, and the floor
+ * below which no amount of water may pull the profile in.
+ *
+ * The floor is deliberately LOW (0.2, not the 0.5 a first draft used): the
+ * shore is a hard cap, not a bias, and a floor high enough to override it
+ * would put the village's own growth body in the water -- measured, a
+ * bearing whose shore was 40 m out came back at exactly 40 m because the
+ * floor, not the shore, decided it. It exists only to stop a village
+ * enclosed by water on every side collapsing to a needle. */
+export const PROFILE_WATER_REACH_RATIO = 1.4;
+export const PROFILE_WATER_STEP_M = 2;
+export const PROFILE_WATER_MARGIN_M = 6;
+export const PROFILE_WATER_FLOOR = 0.2;
+
+/** The profile's rng stream is derived from the village seed by this odd
+ * multiplier and offset, so it is deterministic in the seed while sharing
+ * no draws with the village's own stream. */
+export const PROFILE_SEED_MULTIPLIER = 7919;
+export const PROFILE_SEED_OFFSET = 13;
+
+/** GATE 8: the bin pitch `dressing/extent.ts` measures the built-up edge
+ * and the field ring at. 15 deg is 24 bins -- fine enough that the grove
+ * edge and the tree line follow the body's lobes, coarse enough that a
+ * single deep claim does not carve a notch out of them. */
+export const EXTENT_BIN_DEG = 15;

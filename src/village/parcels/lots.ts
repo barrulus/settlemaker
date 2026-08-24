@@ -48,12 +48,19 @@ export function frontageAt(distanceM: number, builtRadiusM: number, f0: number):
  * `maxFrontageM` caps every lot regardless of distance (gate 5.1's
  * one-house-width gap rule); `maxDistanceM` stops the lane carrying lots
  * beyond the cluster, without shortening the lane itself.
+ *
+ * GATE 8: `maxDistanceM` may be a FUNCTION of the position being cut, not
+ * only a number. The cluster is no longer a disc -- it is the radius
+ * profile's body -- so how far out a lane may carry lots depends on which
+ * way it runs. A plain number still means the old circular limit.
  */
 export function subdivideLane(
   lane: Lane, green: Green, builtRadiusM: number, f0: number, depthM: number,
   rng: SeededRandom, floorM: number = 0,
-  maxFrontageM: number = Infinity, maxDistanceM: number = Infinity,
+  maxFrontageM: number = Infinity,
+  maxDistanceM: number | ((p: Point) => number) = Infinity,
 ): Lot[] {
+  const reachAt = typeof maxDistanceM === 'function' ? maxDistanceM : () => maxDistanceM;
   const lots: Lot[] = [];
   const setback = lane.widthM / 2 + (LANE_SETBACK_M[lane.type] ?? 2);
 
@@ -101,7 +108,7 @@ export function subdivideLane(
       // still advances for a skipped position, so a lot nearer the green
       // never renumbers because something further out was dropped (ids may
       // therefore skip, the same convention `EdgeStamp` uses).
-      if (d > maxDistanceM) {
+      if (d > reachAt(p)) {
         s += frontage;
         ordinal++;
         continue;
