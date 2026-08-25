@@ -725,6 +725,21 @@ function findCrossing(a: Point[], b: Point[]): { aIdx: number; bIdx: number; poi
   return null;
 }
 
+/** One full O(n^2) scan for the FIRST properly-crossing pair in `lanes`, or
+ * null once none remain. Returns the pair's indices alongside the hit so
+ * the caller can split and try again from scratch. */
+function findFirstCrossingPair(
+  lanes: Lane[],
+): { i: number; j: number; hit: { aIdx: number; bIdx: number; point: Point } } | null {
+  for (let i = 0; i < lanes.length; i++) {
+    for (let j = i + 1; j < lanes.length; j++) {
+      const hit = findCrossing(lanes[i].points, lanes[j].points);
+      if (hit) return { i, j, hit };
+    }
+  }
+  return null;
+}
+
 /**
  * The proper-crossing invariant (spec 5.2's last step): any two lanes that
  * cross properly are split at the intersection into a junction, which is
@@ -732,36 +747,63 @@ function findCrossing(a: Point[], b: Point[]): { aIdx: number; bIdx: number; poi
  * 0 side, per the Lane convention this module keeps -- inner-first) keeps
  * the original id; the OUTER half gets a content-derived suffix naming the
  * lane it crossed, so the split is deterministic without a counter.
+ *
+ * FIXED POINT, not a single sweep. A single forward-only pass over a
+ * live-growing array only ever compares a newly split half against lanes
+ * at LATER indices -- an index the outer loop already finished is never
+ * revisited. A pair that crosses only ONCE is always safe (whichever lane
+ * is checked first sees the other's FULL, not-yet-split geometry, and a
+ * split only ever TRUNCATES, never repositions, so no truncated half can
+ * cross something its own full original didn't). But a pair that crosses
+ * MORE THAN ONCE is not: the single sweep resolves the FIRST intersection
+ * it finds and moves on, and the SECOND intersection can end up stranded
+ * on two already-split halves that never get compared again in that same
+ * pass -- a real, constructed case lives in
+ * `tests/village/trunks-patterns.test.ts`'s "single-pass forward sweep can
+ * leave a residual crossing" regression. So: find the first crossing,
+ * split it, and start the WHOLE scan over from scratch, until a complete
+ * scan finds none. Capped defensively -- each split strictly increases the
+ * lane count without ever un-crossing an existing pair, so the count of
+ * real crossings among the (finite, fixed) underlying geometry cannot
+ * increase forever; the cap exists only to turn a latent bug into a loud
+ * error instead of a hang, and should never fire in practice.
  */
-function resolveCrossings(trunks: Lane[], junctions: TrunkJunction[]): { trunks: Lane[]; junctions: TrunkJunction[] } {
-  const out: Lane[] = [...trunks];
-  const outJ: TrunkJunction[] = [...junctions];
+export function resolveCrossings(trunks: Lane[], junctions: TrunkJunction[]): { trunks: Lane[]; junctions: TrunkJunction[] } {
+  let currentTrunks = trunks;
+  let currentJunctions = junctions;
+  const cap = trunks.length * trunks.length + 8;
 
-  for (let i = 0; i < out.length; i++) {
-    for (let j = i + 1; j < out.length; j++) {
-      const a = out[i];
-      const b = out[j];
-      const hit = findCrossing(a.points, b.points);
-      if (!hit) continue;
+  for (let pass = 0; pass < cap; pass++) {
+    const found = findFirstCrossingPair(currentTrunks);
+    if (!found) return { trunks: currentTrunks, junctions: currentJunctions };
 
-      const aInner: Lane = { ...a, points: [...a.points.slice(0, hit.aIdx + 1), hit.point] };
-      const aOuter: Lane = { ...a, id: `${a.id}~x${sanitizeForId(b.id)}`, points: [hit.point, ...a.points.slice(hit.aIdx + 1)] };
-      const bInner: Lane = { ...b, points: [...b.points.slice(0, hit.bIdx + 1), hit.point] };
-      const bOuter: Lane = { ...b, id: `${b.id}~x${sanitizeForId(a.id)}`, points: [hit.point, ...b.points.slice(hit.bIdx + 1)] };
+    const { i, j, hit } = found;
+    const a = currentTrunks[i];
+    const b = currentTrunks[j];
 
-      out[i] = aInner;
-      out[j] = bInner;
-      out.push(aOuter, bOuter);
+    const aInner: Lane = { ...a, points: [...a.points.slice(0, hit.aIdx + 1), hit.point] };
+    const aOuter: Lane = { ...a, id: `${a.id}~x${sanitizeForId(b.id)}`, points: [hit.point, ...a.points.slice(hit.aIdx + 1)] };
+    const bInner: Lane = { ...b, points: [...b.points.slice(0, hit.bIdx + 1), hit.point] };
+    const bOuter: Lane = { ...b, id: `${b.id}~x${sanitizeForId(a.id)}`, points: [hit.point, ...b.points.slice(hit.bIdx + 1)] };
 
-      outJ.push({
-        id: `j:${sortedJunctionIds([aInner.id, aOuter.id, bInner.id, bOuter.id]).join('+')}`,
-        position: hit.point,
-        laneIds: sortedJunctionIds([aInner.id, aOuter.id, bInner.id, bOuter.id]),
-      });
-    }
+    const nextTrunks = [...currentTrunks];
+    nextTrunks[i] = aInner;
+    nextTrunks[j] = bInner;
+    nextTrunks.push(aOuter, bOuter);
+    currentTrunks = nextTrunks;
+
+    currentJunctions = [...currentJunctions, {
+      id: `j:${sortedJunctionIds([aInner.id, aOuter.id, bInner.id, bOuter.id]).join('+')}`,
+      position: hit.point,
+      laneIds: sortedJunctionIds([aInner.id, aOuter.id, bInner.id, bOuter.id]),
+    }];
   }
 
-  return { trunks: out, junctions: outJ };
+  throw new Error(
+    'resolveCrossings exceeded its iteration cap -- the no-proper-crossing invariant loop should always '
+    + 'terminate given a finite, fixed set of underlying segments; this means a real bug (e.g. a split that '
+    + 'does not shrink the crossing count), not a legitimately busy network.',
+  );
 }
 
 /**

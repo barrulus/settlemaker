@@ -1,7 +1,7 @@
 // tests/village/trunks-patterns.test.ts
 import { describe, expect, it } from 'vitest';
 import {
-  choosePattern, synthesizeTrunks, isTrunk, type ConvergencePattern,
+  choosePattern, synthesizeTrunks, isTrunk, resolveCrossings, type ConvergencePattern,
 } from '../../src/village/skeleton/trunks.js';
 import { segmentIntersection } from '../../src/village/geometry.js';
 import type { Site, Lane } from '../../src/village/types.js';
@@ -228,5 +228,45 @@ describe('isTrunk still holds for pattern-added lanes', () => {
   it('loop and y-tree connector lanes count as trunks', () => {
     expect(isTrunk('trunk-loop-0')).toBe(true);
     expect(isTrunk('trunk-ytree-1')).toBe(true);
+  });
+});
+
+describe('resolveCrossings: single-pass forward sweep can leave a residual crossing', () => {
+  // Found by brute-force search: A and B cross TWICE (a real polyline can
+  // wander back across another). The single-pass sweep resolves the FIRST
+  // A-B crossing it finds, then B gets split again by C before A's own
+  // outer index-0 slot ever gets a chance to re-check the pieces that carry
+  // the SECOND A-B crossing -- so it survives unresolved. This is the
+  // "outer loop never revisits an index it already passed" gap: not (as the
+  // module's docstring speculated) that split-only truncation can invent a
+  // NEW crossing, but that a pair crossing MORE THAN ONCE only ever gets
+  // its first intersection handled in a single sweep.
+  const mkLane = (id: string, pts: [number, number][]): Lane => ({
+    id, type: 'local', points: pts.map(([x, y]) => new Point(x, y)), widthM: 3,
+  });
+
+  const A = mkLane('A', [
+    [8.957683164140988, -23.675983750110483],
+    [16.588398416800608, -21.420022617755468],
+    [14.088218325790123, 12.38680421485882],
+  ]);
+  const B = mkLane('B', [
+    [14.059630112750284, 12.405172568934582],
+    [10.085075041318817, -23.34268049958287],
+    [25.469604635364192, -16.714646335092674],
+  ]);
+  const C = mkLane('C', [
+    [19.161577061359573, -11.513671112020347],
+    [3.581751665837018, -25.265338381410267],
+    [-23.149009055061736, 14.183903114955832],
+  ]);
+
+  it('leaves no properly-crossing pair once resolved', () => {
+    const { trunks } = resolveCrossings([A, B, C], []);
+    for (let i = 0; i < trunks.length; i++) {
+      for (let j = i + 1; j < trunks.length; j++) {
+        expect(crossesLane(trunks[i].points, trunks[j].points)).toBe(false);
+      }
+    }
   });
 });
