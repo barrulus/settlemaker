@@ -19,7 +19,9 @@ import {
   widestDwellingWidthM,
 } from './deck.js';
 import { intrudesOnLane, spendCensus, type SpendResult } from './dwellings.js';
-import { resetLotTrace, type LotTrace } from './lot-trace.js';
+import {
+  cloneLotTrace, resetLotTrace, restoreLotTrace, type LotTrace,
+} from './lot-trace.js';
 import { dressVillage } from './dressing/index.js';
 import { closestPointOnSegment, dist, segmentIntersection } from './geometry.js';
 import {
@@ -60,6 +62,29 @@ export function blockFloorFor(population: number): number {
   if (population < HAMLET_RIBBON_POP) return 0;
   if (population < 900) return 2;
   return 6;
+}
+
+/**
+ * F2 (final fix wave): a true snapshot of `lanes` for the block chase's
+ * `restoreFirstHoused`. `extendOne` (`skeleton/lanes.ts`) mutates a `Lane`
+ * object's `points` array IN PLACE
+ * (`lane.points = [...lane.points, ...extension.slice(1)]`) rather than
+ * returning a new one -- a later chase round that calls back into
+ * `saturateDisc`/`extendOne` mutates the SAME `Lane` objects an earlier
+ * round's snapshot is still holding references to, so a plain
+ * `lanes.slice()` (or a bare reference capture) is not a faithful
+ * snapshot: a discarded round's extension survives `restoreFirstHoused`
+ * regardless, because the object was mutated after the snapshot was
+ * taken, not before. This clones one level deep -- fresh `Lane` objects,
+ * fresh `points` arrays -- which is exactly as deep as the one confirmed
+ * in-place mutation site in the growth pipeline goes (see the grep note in
+ * the final-fix-wave report; no other `Lane` field is ever mutated after
+ * construction). Exported, rather than an inline closure inside
+ * `generateVillage`, so it can be unit-tested directly against the exact
+ * mutation pattern that broke it.
+ */
+export function snapshotLanesForChase(lanes: Lane[]): Lane[] {
+  return lanes.map((l) => ({ ...l, points: [...l.points] }));
 }
 
 // Every tunable below comes from constants.ts. VILLAGE_POP_CEILING lives
@@ -246,20 +271,33 @@ export function generateVillage(
   // captured once, before any block-chasing mutation, and restored only
   // if every round the chase tried afterward still fell short. A round
   // that genuinely clears the floor is shipped live, not snapshotted, the
-  // moment it does (see the break just below). `lanes`/`lots`/`spend`/
-  // `activeDeck` etc. are all REASSIGNED each round (never mutated in
-  // place -- every producer above returns a fresh array/object), so
-  // capturing the current reference is a true snapshot of that round's
-  // state, no cloning needed.
+  // moment it does (see the break just below). `lots`/`spend`/`activeDeck`
+  // etc. are all REASSIGNED each round (never mutated in place -- every
+  // producer above returns a fresh array/object), so capturing the current
+  // reference is a true snapshot of that round's state for those fields, no
+  // cloning needed.
+  //
+  // F2 review fix: `lanes` is the one exception -- see `snapshotLanesForChase`'s
+  // own comment for why a plain reference capture is not a true snapshot for
+  // this one field. Every other field here is still a cheap reference
+  // capture, per the paragraph above.
   // `diagnostics` is the model's honesty channel, and a restored round must
   // not keep the lines a discarded round pushed -- those describe geometry
   // that no longer ships. Captured as a length, not a copy: entries before
   // the snapshot belong to the model regardless of what the chase does
   // afterward, so restoring truncates back to exactly that length.
   const snapshotChase = () => ({
-    lanes, lots, spend, f0, lotFloorM, activeDeck, lotRadiusM, lotProfile,
+    lanes: snapshotLanesForChase(lanes),
+    lots, spend, f0, lotFloorM, activeDeck, lotRadiusM, lotProfile,
     deckUsableLotCount, measuredMeanFrontage, notch, terrace, spacingRung, extraRings,
     diagnosticsLength: diagnostics.length,
+    // F3: `trace` (when passed) is mutated IN PLACE every round
+    // (`resetLotTrace` then refilled) -- unlike every field above, it is not
+    // a fresh reference each round, so a restore that only rewinds `lanes`/
+    // `lots`/`diagnostics` still leaves the trace describing the discarded
+    // round's lot histogram. Cloned here (deep enough to detach from the
+    // live Maps/Sets `trace` holds) and restored into `trace` in place below.
+    trace: trace ? cloneLotTrace(trace) : undefined,
   });
   let firstHousedSnapshot: ReturnType<typeof snapshotChase> | null = null;
   const restoreFirstHoused = (): void => {
@@ -269,6 +307,7 @@ export function generateVillage(
       deckUsableLotCount, measuredMeanFrontage, notch, terrace, spacingRung, extraRings,
     } = firstHousedSnapshot);
     diagnostics.length = firstHousedSnapshot.diagnosticsLength;
+    if (trace && firstHousedSnapshot.trace) restoreLotTrace(trace, firstHousedSnapshot.trace);
   };
 
   for (let round = 0; round <= MAX_FEEDBACK_ROUNDS; round++) {
@@ -403,19 +442,32 @@ export function generateVillage(
     // number (the rarer post-reseat second trim is not replayed here), but
     // close enough that a round which is already fine reads as fine.
     //
-    // Task 5: `{ weld: false }` -- this trial's own trimTails call skips
-    // the growth-time join protection the two REAL calls below use (see
-    // `trimTails`'s doc comment): paying that O(lanes^2) cost every round
-    // of the escalation ladder, on top of `blockAreas`'s own weld pass
-    // right after it, measured as the difference between a large-village
-    // stress fixture finishing and it no longer finishing inside a 120s
-    // test timeout. An under-count here costs at most one extra, already-
-    // capped chase round -- not a wrong shipped fabric.
-    const blocksNow = blockAreas(
-      connectDeadEnds(trimTails(lanes, spend.buildings, { weld: false }), green, spend.buildings),
-      green,
-    ).length;
+    // F1 (final fix wave): the trial used to pass `{ weld: false }` to its
+    // own `trimTails` call, which made it under-read blocks 3-5x relative
+    // to the weld-protected shipped truth (measured, tri 900 s1: 14 blocks
+    // weld-protected vs 3 without) -- so `blocksNow >= blockFloor` below was
+    // almost never true, and the block chase fired (and spent an extra
+    // round of `rng`, reshaping the fabric) on nearly every round regardless
+    // of whether blocks were actually short. `weldJoins` no longer costs
+    // O(lanes^2) (see its own comment -- the per-pair `arcLengths` call is
+    // hoisted to once per host), so the trial now welds too: `weld: false`
+    // is gone from this call.
+    //
+    // Also gated: the trial (and its O(lanes^2)-ish `blockAreas`/
+    // `weldJoins` cost) only runs when it could actually change the
+    // decision below -- the census is housed (nothing downstream of an
+    // unhoused round reads `blocksNow`) and the population's own floor is
+    // above zero (a ribbon hamlet has no block floor to chase; see
+    // `blockFloorFor`). This is the same performance-conscious spirit as
+    // the earlier `{ weld: false }`, aimed instead at the actual dead
+    // weight -- not running a trial whose answer nothing will use.
     const blockFloor = blockFloorFor(site.population);
+    const blocksNow = (spend.unhoused === 0 && blockFloor > 0)
+      ? blockAreas(
+        connectDeadEnds(trimTails(lanes, spend.buildings), green, spend.buildings),
+        green,
+      ).length
+      : 0;
 
     if (spend.unhoused === 0) {
       // The FIRST housed round is the fallback the chase returns to if it

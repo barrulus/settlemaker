@@ -630,9 +630,15 @@ export function laneBudgetFor(radiusM: number): number {
  * grown off one. Arm ids live in the `arm-` space (`armLaneId`) and never
  * contain `/b` (`branchLaneId`'s separator); a branch off an arm keeps the
  * `arm-` prefix as its parent id but is invented growth all the same, so it
- * must not be exempted. Same distinction `isFmgArm` makes in `relax.ts`.
+ * must not be exempted.
+ *
+ * Final-fix-wave dedup: this used to have a verbatim copy in `relax.ts`
+ * (both files needed the same distinction, for different reasons -- this
+ * one for the invented-lane growth budget, `relax.ts` for which lanes
+ * `trimTails` may drop). Exported from here and imported there instead, so
+ * there is exactly one definition to keep in sync.
  */
-function isFmgArm(laneId: string): boolean {
+export function isFmgArm(laneId: string): boolean {
   return laneId.startsWith('arm-') && !laneId.includes('/b');
 }
 

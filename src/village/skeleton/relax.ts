@@ -5,6 +5,7 @@ import {
   RELAX_CLEARANCE_M, RELAX_ITERATIONS, RELAX_MAX_DISPLACEMENT_M, TAIL_STUB_M,
 } from '../constants.js';
 import type { Building, Lane } from '../types.js';
+import { isFmgArm } from './lanes.js';
 
 /**
  * Lanes bend around the houses they acquired. The skeleton was solved
@@ -87,10 +88,10 @@ export function relaxLanes(lanes: Lane[], buildings: Building[]): Lane[] {
  *
  * A branch id such as `arm-090/b50` starts with `arm-` but is NOT exempt —
  * the `/b` marks it as an invented branch, checked before the arm test.
+ *
+ * `isFmgArm` itself is defined once, in `lanes.ts` (final fix wave: this
+ * file used to carry a verbatim copy), and imported from there.
  */
-function isFmgArm(laneId: string): boolean {
-  return laneId.startsWith('arm-') && !laneId.includes('/b');
-}
 
 /**
  * A building belongs to a lane only when its lotId's lane-id segment is an
@@ -186,16 +187,37 @@ const WELD_EPS_M = 1.5;
  * fixes is specifically the one `growOne`'s rung/arc primitives build at a
  * lane's FAR end (via `loopSnap` or `truncateAtFirstCrossing`), which is
  * always that lane's last point by construction.
+ *
+ * The exemption this produces is broader than "a rung is protected": ANY
+ * lane whose last point lands within `WELD_EPS_M` of ANOTHER lane's
+ * polyline is protected (added to `joiners`, exempt from the
+ * zero-buildings drop below), and the lane it lands on gets a trim floor
+ * at that point, regardless of which lane grew first or which one the
+ * caller thinks of as "the rung." This includes a MUTUAL pair: two lanes
+ * whose tips both happen to land near each other (a near-dead-end pair)
+ * protect each other symmetrically -- each one's last point is close
+ * enough to the other's polyline to count as a weld on it, so both end up
+ * in `joiners` and both get a floor, not just whichever one `growOne`
+ * happened to build second.
  */
 function weldJoins(lanes: Lane[]): { floorS: Map<string, number>; joiners: Set<string> } {
   const floorS = new Map<string, number>();
   const joiners = new Set<string>();
+  // F1(a) (final fix wave): `arcLengths(host.points)` is O(host.points) and
+  // was recomputed on every (other, host) pair -- O(lanes) times more often
+  // than it needs to be, since it depends only on `host`. Hoisted to once
+  // per host, computed before the `other` loop even starts. This is what
+  // makes running `weldJoins` (and therefore `weld: true`) affordable at the
+  // mid-loop TRIAL call site in `village-model.ts` -- see that call's
+  // comment.
+  const hostArcs = new Map<string, number[]>();
+  for (const host of lanes) hostArcs.set(host.id, arcLengths(host.points));
   for (const other of lanes) {
     if (other.points.length < 2) continue;
     const end = other.points[other.points.length - 1];
     for (const host of lanes) {
       if (host.id === other.id) continue;
-      const acc = arcLengths(host.points);
+      const acc = hostArcs.get(host.id)!;
       let bestD = WELD_EPS_M;
       let bestS = -1;
       for (let i = 1; i < host.points.length; i++) {
@@ -213,22 +235,29 @@ function weldJoins(lanes: Lane[]): { floorS: Map<string, number>; joiners: Set<s
 }
 
 /**
- * `weld` defaults true (the two REAL calls in `village-model.ts` -- the
- * geometry that actually ships). `village-model.ts`'s round loop also runs
+ * `weld` defaults true. `village-model.ts`'s round loop also runs
  * `trimTails` a THIRD time, every round, purely as a read-only TRIAL to
  * estimate whether blocks already clear the population's floor (that
  * call's own comment already documents it as "not a guarantee... but
- * close enough" -- an approximation, not the shipped truth). `weldJoins`
- * is an O(lanes^2) pass, the same order of cost `blockAreas`'s own weld
- * step already pays once per round for that same trial (see
- * `blocks.ts`) -- paying it TWICE every round, across a whole escalation
- * ladder, measured directly as the difference between a large-population
- * stress fixture finishing in ~70s and it no longer finishing inside a
- * 120s test timeout at all. The trial does not need this precision (an
- * under-count there costs at most one extra, already-capped chase round,
- * not a wrong shipped fabric -- see `BLOCK_CHASE_ROUND_CAP`), so
- * `weld: false` skips it there while the two calls that decide what ships
- * keep it on.
+ * close enough" -- an approximation, not the shipped truth).
+ *
+ * F1 (final fix wave): this trial used to pass `{ weld: false }`, on the
+ * measured grounds that `weldJoins`'s O(lanes^2) cost, paid on top of
+ * `blockAreas`'s own weld pass right after it, blew a large-population
+ * stress fixture past a 120s test timeout. That measurement was real, but
+ * the trial it was protecting was itself broken by the same omission:
+ * without weld protection the trial under-reads blocks 3-5x relative to
+ * the weld-protected (shipped) truth (measured, tri 900 s1: 14 blocks
+ * weld-protected vs 3 without, against a floor of 6) -- so the trial's own
+ * `blocksNow >= blockFloor` check was very rarely true, the block chase
+ * fired on nearly every housed round, and the "wasted" chase round's rng
+ * draws perturbed every downstream draw even when nothing was actually
+ * short. `weldJoins` itself is now the O(lanes) cost the hoisted
+ * `hostArcs` precompute makes it (see that function's comment) rather than
+ * the O(lanes^2) cost it used to be recomputing `arcLengths` per pair, so
+ * the trial can afford to weld-protect too: `weld: false` is no longer
+ * passed anywhere, and the option exists only in case a future caller
+ * needs the cheaper, less accurate form for some other reason.
  */
 export function trimTails(
   lanes: Lane[], buildings: Building[], opts: { weld?: boolean } = {},

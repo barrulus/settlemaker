@@ -779,6 +779,13 @@ describe('enclosed blocks (gate 6.10: a bar, not a column)', () => {
     // and every seed clears it: an irregular body gives a small village
     // streets that MEET at an angle instead of a fan of near-parallel ribs,
     // and a face closes where two streets meet.
+    //
+    // Final fix wave (2026-08-25), re-measured after F1-F3 (weld-protected
+    // block-chase trial, faithful chase snapshot/restore, trace restore):
+    // counts are 6, 10, 2, 4, 3 -- higher on average than the gate-8
+    // baseline above, but the floor stays at 2 since seed 3 is still
+    // exactly at it; no safety margin is available to add without
+    // relaxing what this bar actually promises.
     const counts = [1, 2, 3, 4, 5].map((seed) => {
       const m = generateVillage(popInput(300), seed);
       return blockAreas(m.lanes, m.green).length;
@@ -795,12 +802,20 @@ describe('enclosed blocks (gate 6.10: a bar, not a column)', () => {
     // hardest to the irregularity floor -- encloses four. That is a real
     // cost of this gate and it is carried in the report, not tuned away.
     // The floor asserted is still well above gate 6.10's five-block seed.
+    //
+    // Final fix wave (2026-08-25), re-measured after F1-F3: counts are
+    // 16, 16, 16, 14, 13 -- every seed now clears 6 comfortably (the
+    // weld-protected trial means the block chase actually fires only when
+    // blocks are genuinely short, instead of on nearly every round), so
+    // the "4 of 5" allowance is tightened to "5 of 5", and the min floor is
+    // ratcheted from 4 to 8 -- a safety margin below the measured min of
+    // 13, not the measured value itself, since only 5 seeds were sampled.
     const counts = [1, 2, 3, 4, 5].map((seed) => {
       const m = generateVillage(popInput(900), seed);
       return blockAreas(m.lanes, m.green).length;
     });
-    expect(counts.filter((n) => n >= 6).length).toBeGreaterThanOrEqual(4);
-    expect(Math.min(...counts)).toBeGreaterThanOrEqual(4);
+    expect(counts.filter((n) => n >= 6).length).toBe(5);
+    expect(Math.min(...counts)).toBeGreaterThanOrEqual(8);
   });
 });
 

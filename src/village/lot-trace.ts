@@ -74,3 +74,32 @@ export function resetLotTrace(trace: LotTrace): void {
   trace.staleAfterTrim.clear();
   trace.convergeDetail.clear();
 }
+
+/**
+ * F3 (block-chase snapshot/restore): `LotTrace` is mutated IN PLACE every
+ * round (`resetLotTrace` then refilled), unlike `lanes`/`lots`/`spend` which
+ * are reassigned fresh references each round. A chase-round snapshot that
+ * merely captures a reference to `trace` therefore captures nothing --
+ * restoring it later is a no-op, and the trace left behind still describes
+ * the discarded round's histogram, not the round the model actually shipped.
+ * `cloneLotTrace`/`restoreLotTrace` give the trace the same snapshot/restore
+ * semantics every other piece of chase state already has: a real, detached
+ * copy of the four collections, and a restore that clears the live trace and
+ * refills it from that copy.
+ */
+export function cloneLotTrace(trace: LotTrace): LotTrace {
+  return {
+    cut: new Map(trace.cut),
+    fates: new Map(trace.fates),
+    staleAfterTrim: new Set(trace.staleAfterTrim),
+    convergeDetail: new Map(trace.convergeDetail),
+  };
+}
+
+/** Restores `trace` (in place) to the contents of a `cloneLotTrace` snapshot. */
+export function restoreLotTrace(trace: LotTrace, snapshot: LotTrace): void {
+  trace.cut = new Map(snapshot.cut);
+  trace.fates = new Map(snapshot.fates);
+  trace.staleAfterTrim = new Set(snapshot.staleAfterTrim);
+  trace.convergeDetail = new Map(snapshot.convergeDetail);
+}
