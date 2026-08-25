@@ -8,9 +8,107 @@
  * untouched, until this network replaces it.
  */
 import { Point } from '../../types/point.js';
-import { CONTRACT_RADIUS_FACTOR } from '../constants.js';
+import type { SeededRandom } from '../../utils/random.js';
+import { CONTRACT_RADIUS_FACTOR, TRUNK_SAGITTA_RATIO } from '../constants.js';
 import { bearingVector } from '../geometry.js';
+import type { RouteType } from '../route-class.js';
 import type { Site, SiteRoute } from '../types.js';
+
+/** Wanderer classes (ratio >= 0.12) get a second control jitter and are
+ * subdivided into two Béziers sharing tangents at the midpoint. */
+const WANDER_THRESHOLD = 0.12;
+
+/** Sample points are spaced roughly this far apart along the curve. */
+const SAMPLE_STEP_M = 6;
+
+function quadraticBezier(p0: Point, p1: Point, p2: Point, t: number): Point {
+  const mt = 1 - t;
+  const a = mt * mt;
+  const b = 2 * mt * t;
+  const c = t * t;
+  return new Point(
+    a * p0.x + b * p1.x + c * p2.x,
+    a * p0.y + b * p1.y + c * p2.y,
+  );
+}
+
+/** Rough arc length of a quadratic Bézier by summing chord segments over a
+ * fine parametric scan -- accurate enough to pick a sample count. */
+function bezierLength(p0: Point, p1: Point, p2: Point): number {
+  const STEPS = 24;
+  let len = 0;
+  let prev = p0;
+  for (let i = 1; i <= STEPS; i++) {
+    const cur = quadraticBezier(p0, p1, p2, i / STEPS);
+    len += Point.distance(prev, cur);
+    prev = cur;
+  }
+  return len;
+}
+
+/** Sample a single quadratic Bézier at roughly `SAMPLE_STEP_M` spacing,
+ * excluding the start point (caller supplies it) but including the end. */
+function sampleBezier(p0: Point, p1: Point, p2: Point): Point[] {
+  const length = bezierLength(p0, p1, p2);
+  const steps = Math.max(1, Math.ceil(length / SAMPLE_STEP_M));
+  const pts: Point[] = [];
+  for (let i = 1; i <= steps; i++) {
+    pts.push(quadraticBezier(p0, p1, p2, i / steps));
+  }
+  return pts;
+}
+
+/**
+ * A polyline from `from` to `to` whose deviation off the chord is bounded
+ * by the route class's sagitta ratio (spec 5.2, class stiffness). Royal
+ * roads barely bend; footpaths wander. Sampled at roughly `SAMPLE_STEP_M`
+ * spacing. Pure function of its arguments -- no module state, so the same
+ * seed always reproduces the same path.
+ */
+export function drawTrunkPath(from: Point, to: Point, type: RouteType, rng: SeededRandom): Point[] {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const chordLength = Math.hypot(dx, dy);
+  const ratio = TRUNK_SAGITTA_RATIO[type];
+
+  if (chordLength === 0) return [from.clone(), to.clone()];
+
+  // Unit perpendicular to the chord.
+  const perp = new Point(-dy / chordLength, dx / chordLength);
+
+  const jitter = (magnitude: number): number => (rng.float() * 2 - 1) * magnitude * chordLength;
+
+  const points: Point[] = [from.clone()];
+
+  if (ratio >= WANDER_THRESHOLD) {
+    // Subdivide into two quadratic Béziers sharing tangents at the
+    // midpoint: a control jitter near the 1/4 point (half magnitude) and
+    // one at the 3/4 point (full magnitude on the second half), meeting
+    // at the chord midpoint so the tangent is continuous there.
+    const mid = new Point((from.x + to.x) / 2, (from.y + to.y) / 2);
+    const offset1 = jitter(ratio * 0.5);
+    const offset2 = jitter(ratio);
+    const control1 = new Point(
+      from.x * 0.75 + to.x * 0.25 + perp.x * offset1,
+      from.y * 0.75 + to.y * 0.25 + perp.y * offset1,
+    );
+    const control2 = new Point(
+      from.x * 0.25 + to.x * 0.75 + perp.x * offset2,
+      from.y * 0.25 + to.y * 0.75 + perp.y * offset2,
+    );
+    points.push(...sampleBezier(from, control1, mid));
+    points.push(...sampleBezier(mid, control2, to));
+  } else {
+    const offset = jitter(ratio);
+    const control = new Point(
+      (from.x + to.x) / 2 + perp.x * offset,
+      (from.y + to.y) / 2 + perp.y * offset,
+    );
+    points.push(...sampleBezier(from, control, to));
+  }
+
+  return points;
+}
 
 export interface TrunkEntry {
   point: Point;
