@@ -1400,3 +1400,26 @@ export const MERGE_BAND_WEIGHTS = { fields: 0.4, edge: 0.35, inner: 0.25 };
 
 /** A trunk loop's radius as a fraction of the contract radius. */
 export const LOOP_RADIUS_FACTOR = 0.45;
+
+/**
+ * Task 4: convergence-pattern weights, keyed by which weight row
+ * `choosePattern` reaches for -- initial, tuned at G1.
+ *
+ * `terminal` never appears here: it is a hard precondition (a non-through
+ * primary road with only trail feeders always terminates, spec ruling 4's
+ * worked example), decided before any weighted draw. The three rows below
+ * cover every other case:
+ *  - `through`: a through royal/main road survives merging. Panels 1/3 of
+ *    the sketches want the road to dominate, so `main-street` gets most of
+ *    the weight (>= 0.6, the brief's statistical floor).
+ *  - `many`: 4+ roots survive with no dominant through route. `loop` (panel
+ *    2) is the natural read of a crossroads this busy; `junction` -- a
+ *    perfect meeting of 4+ roads -- stays rare (< 15%) per ruling 5.
+ *  - `few`: 2-3 roots, no through route. `y-tree` is the default; junction
+ *    and loop stay live but minor.
+ */
+export const PATTERN_WEIGHTS: Record<string, Record<string, number>> = {
+  through: { 'main-street': 0.7, 'y-tree': 0.12, loop: 0.12, junction: 0.06 },
+  many: { loop: 0.5, 'y-tree': 0.35, junction: 0.07, 'main-street': 0.08 },
+  few: { 'y-tree': 0.6, junction: 0.15, loop: 0.15, 'main-street': 0.1 },
+};
