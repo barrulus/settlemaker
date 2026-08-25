@@ -282,6 +282,20 @@ export function buildingId(lotIdValue: string): string {
 }
 
 /**
+ * The stable identity of one FMG route: its `routeId` when it has one,
+ * else its bearing rounded to at most 2 decimals so near-duplicate
+ * bearings still make distinct keys. Shared by `trunkLaneId` (sanitised
+ * further for the lane id namespace) and by trunk merging's
+ * `sourceRouteIds` provenance fold (spec 2026-08-25 §5.5) -- a route
+ * without an id must still leave a trace when it merges away, or Task 4's
+ * "every FMG route appears in exactly one lane's id or sourceRouteIds"
+ * invariant silently loses it.
+ */
+export function routeProvenanceKey(routeId: string | undefined, bearingDeg: number): string {
+  return routeId ?? String(Math.round(bearingDeg * 100) / 100);
+}
+
+/**
  * The trunk lane id namespace (spec 2026-08-25 §5.1): content-derived from
  * the route's class and id so a trunk's identity survives regeneration.
  * `routeId` is sanitised (`/` -> `_`) so it can never be mistaken for the
@@ -295,6 +309,6 @@ export function trunkLaneId(
   bearingDeg: number,
   farSide: boolean,
 ): string {
-  const key = routeId ? routeId.replace(/\//g, '_') : String(Math.round(bearingDeg * 100) / 100);
+  const key = routeId ? routeId.replace(/\//g, '_') : routeProvenanceKey(routeId, bearingDeg);
   return `trunk-${type}-${key}${farSide ? '~far' : ''}`;
 }

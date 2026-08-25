@@ -12,7 +12,7 @@ import type { SeededRandom } from '../../utils/random.js';
 import { CONTRACT_RADIUS_FACTOR, MERGE_BAND_WEIGHTS, MERGE_CAPTURE_M, TRUNK_SAGITTA_RATIO } from '../constants.js';
 import { bearingVector, closestPointOnPolyline } from '../geometry.js';
 import { classRank, laneWidth, type RouteType } from '../route-class.js';
-import { trunkLaneId, type Lane, type Site, type SiteRoute } from '../types.js';
+import { routeProvenanceKey, trunkLaneId, type Lane, type Site, type SiteRoute } from '../types.js';
 
 /** Wanderer classes (ratio >= 0.12) get a second control jitter and are
  * subdivided into two Béziers sharing tangents at the midpoint. */
@@ -223,6 +223,7 @@ interface CommittedTrunk {
   type: RouteType;
   rank: number;
   routeId?: string;
+  bearingDeg: number;
   /** Circle -> inward, truncated at the junction if this draft merged. */
   points: Point[];
   sourceRouteIds?: string[];
@@ -291,9 +292,9 @@ export function mergeTrunks(
       captured = true;
 
       const target = capturedAt.target;
-      const existing = target.sourceRouteIds ?? (target.routeId ? [target.routeId] : []);
+      const existing = target.sourceRouteIds ?? [routeProvenanceKey(target.routeId, target.bearingDeg)];
       const folded = new Set(existing);
-      if (draft.entry.route.routeId) folded.add(draft.entry.route.routeId);
+      folded.add(routeProvenanceKey(draft.entry.route.routeId, draft.entry.bearingDeg));
       target.sourceRouteIds = Array.from(folded).sort((a, b) => a.localeCompare(b));
 
       const laneIds = [laneId, target.laneId].sort((a, b) => a.localeCompare(b));
@@ -305,6 +306,7 @@ export function mergeTrunks(
       type,
       rank,
       routeId: draft.entry.route.routeId,
+      bearingDeg: draft.entry.bearingDeg,
       points,
       sourceRouteIds: undefined,
       captured,

@@ -19,7 +19,7 @@ function straightPath(from: Point, to: Point, steps = 50): Point[] {
   return pts;
 }
 
-function draft(bearingDeg: number, type: RouteType, routeId: string, aim: Point = AIM): DraftTrunk {
+function draft(bearingDeg: number, type: RouteType, routeId: string | undefined, aim: Point = AIM): DraftTrunk {
   const dir = bearingVector(bearingDeg);
   const circlePoint = new Point(dir.x * CIRCLE_R, dir.y * CIRCLE_R);
   const path = straightPath(circlePoint, aim, 50);
@@ -87,6 +87,13 @@ describe('mergeTrunks', () => {
     const a = mergeTrunks(twoRoutes(), BUILT_EDGE, new SeededRandom(7));
     const b = mergeTrunks(twoRoutes(), BUILT_EDGE, new SeededRandom(7));
     expect(a).toEqual(b);
+  });
+
+  it('(g) routeId-less routes still leave a bearing-derived trace in sourceRouteIds', () => {
+    const drafts = [draft(0, 'main', undefined), draft(0.5, 'trail', undefined)];
+    const { trunks } = mergeTrunks(drafts, BUILT_EDGE, new SeededRandom(1));
+    const main = trunks.find((t) => t.type === 'main')!;
+    expect(main.sourceRouteIds).toEqual(['0', '0.5']);
   });
 
   it('(f) every junction lies on the survivor polyline within 1e-6', () => {
