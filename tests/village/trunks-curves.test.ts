@@ -85,4 +85,24 @@ describe('drawTrunkPath', () => {
       }
     }
   });
+
+  it('wanderer classes stay C1-continuous at the two-Bezier join (no kink)', () => {
+    // Regression guard: the join between the two Beziers must not read as a
+    // break in the road. Scan every consecutive pair of direction vectors
+    // along the whole polyline (which includes the join) and assert none
+    // turns sharply -- a kink at the join would spike far above the smooth
+    // per-sample turning angle a single Bezier produces at this spacing.
+    for (const t of ['local', 'trail', 'footpath'] as RouteType[]) {
+      for (let seed = 1; seed <= 10; seed++) {
+        const pts = drawTrunkPath(from, to, t, new SeededRandom(seed));
+        for (let i = 1; i < pts.length - 1; i++) {
+          const d1 = Math.atan2(pts[i].y - pts[i - 1].y, pts[i].x - pts[i - 1].x);
+          const d2 = Math.atan2(pts[i + 1].y - pts[i].y, pts[i + 1].x - pts[i].x);
+          let diffDeg = (Math.abs(d1 - d2) * 180) / Math.PI;
+          if (diffDeg > 180) diffDeg = 360 - diffDeg;
+          expect(diffDeg).toBeLessThan(5);
+        }
+      }
+    }
+  });
 });

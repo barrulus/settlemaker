@@ -81,11 +81,16 @@ export function drawTrunkPath(from: Point, to: Point, type: RouteType, rng: Seed
   const points: Point[] = [from.clone()];
 
   if (ratio >= WANDER_THRESHOLD) {
-    // Subdivide into two quadratic Béziers sharing tangents at the
-    // midpoint: a control jitter near the 1/4 point (half magnitude) and
-    // one at the 3/4 point (full magnitude on the second half), meeting
-    // at the chord midpoint so the tangent is continuous there.
-    const mid = new Point((from.x + to.x) / 2, (from.y + to.y) / 2);
+    // Subdivide into two quadratic Béziers sharing tangents at the join:
+    // a control jitter near the 1/4 point (half magnitude) and one near
+    // the 3/4 point (full magnitude), independently drawn so each half
+    // wanders on its own. C1 continuity is guaranteed -- not by luck --
+    // by placing the join ON the segment between the two control points,
+    // at their midpoint: the outgoing tangent of the first curve is
+    // (join - control1) = (control2 - control1) / 2 and the incoming
+    // tangent of the second is (control2 - join) = (control2 - control1)
+    // / 2 -- identical, so the curves meet with matching direction and
+    // magnitude regardless of how offset1 and offset2 were drawn.
     const offset1 = jitter(ratio * 0.5);
     const offset2 = jitter(ratio);
     const control1 = new Point(
@@ -96,8 +101,12 @@ export function drawTrunkPath(from: Point, to: Point, type: RouteType, rng: Seed
       from.x * 0.25 + to.x * 0.75 + perp.x * offset2,
       from.y * 0.25 + to.y * 0.75 + perp.y * offset2,
     );
-    points.push(...sampleBezier(from, control1, mid));
-    points.push(...sampleBezier(mid, control2, to));
+    const join = new Point(
+      (control1.x + control2.x) / 2,
+      (control1.y + control2.y) / 2,
+    );
+    points.push(...sampleBezier(from, control1, join));
+    points.push(...sampleBezier(join, control2, to));
   } else {
     const offset = jitter(ratio);
     const control = new Point(
