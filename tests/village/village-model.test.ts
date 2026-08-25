@@ -821,18 +821,7 @@ describe('block-aware chase (fix round: three review findings)', () => {
     expect(blockFloorFor(900)).toBe(6);
   });
 
-  // hub (five mixed-class routes, the probe scenario Task 2's report names)
-  // at pop 300, seed 38: census houses at a round whose fabric encloses only
-  // 1 block against the 2-block floor. This is the chase branch itself:
-  // `blockChaseRounds` increments, the loop does not break on housing alone.
-  //
-  // Re-pointed from seed 3 by Task 5 (2026-08-24): the trimTails weld fix
-  // (`relax.ts`, `weldJoins`) closes far more of growth's own loops into
-  // the SHIPPED geometry, so seed 3 now clears the floor at round 0 and no
-  // longer exercises the chase at all -- measured directly, a one-off
-  // seed sweep (run during this task, not kept in scripts/) over seeds
-  // 1-200 of this exact scenario found seed 38 the only one whose round-0
-  // fabric still falls short of its own floor.
+  // hub (five mixed-class routes, the probe scenario Task 2's report names).
   const hubInput = (population: number): AzgaarBurgInput => ({
     name: 'Probe', population, port: false, citadel: false, walls: false,
     plaza: false, temple: false, shanty: false, capital: false,
@@ -845,16 +834,17 @@ describe('block-aware chase (fix round: three review findings)', () => {
     ],
   });
 
-  it('enters the block chase when a housed round falls short of the floor', () => {
-    const m = generateVillage(hubInput(300), 38);
-    const blocks = blockAreas(m.lanes, m.green).length;
-    expect(blocks).toBeLessThan(blockFloorFor(300));
-    // The chase ran (not an immediate break on housing) and gave up
-    // honestly rather than silently shipping a short fabric.
-    expect(m.diagnostics.some((d) => d.startsWith('blocks short:'))).toBe(true);
-    expect(m.diagnostics.some((d) => d.startsWith('overflow:'))).toBe(false);
-  });
-
+  // The "chase branch itself runs" control-flow guarantee this used to
+  // exercise on a real, swept seed (hub pop 300 seed 38 -- the one seed of
+  // 200 that still falls short of its own blocks floor at round 0, post the
+  // `weldJoins` fix) now lives as a MOCK-driven test,
+  // `village-model-block-chase-entry.test.ts` (Task 5 review, finding #3):
+  // seed-hunting a knife-edge seed made the guarantee's continued truth
+  // depend on an unrelated future change to growth/trimming not moving that
+  // one seed's round-0 block count across its floor -- exactly what
+  // happened to this test and the two below it when the loop-closure fix
+  // landed. The mock forces the branch open deterministically instead.
+  //
   // Finding #3, isolated from any restore: hub pop 300, seed 28. Measured
   // directly, the census first houses at a round where the ladder is
   // already maxed (notch/terrace/spacing all exhausted from real widening
@@ -887,27 +877,37 @@ describe('block-aware chase (fix round: three review findings)', () => {
   // during this task, not kept: 150 seeds each of hub and fan at pop 300,
   // plus 120 seeds each of hub and fan at pop 900) found ZERO seeds that
   // still produce a real `restored:` diagnostic post-fix -- the shortfall
-  // this test
-  // originally exercised is, empirically, gone for these scenarios. The
-  // control-flow path itself (restore-on-regression, finding #1) is still
-  // covered deterministically by the MOCKED test in
+  // this test originally exercised is, empirically, gone for these
+  // scenarios. The control-flow path itself (restore-on-regression, finding
+  // #1) is still covered deterministically by the MOCKED test in
   // `village-model-chase-regression.test.ts`, which forces the exact
-  // sequence a real seed no longer reliably produces. This test is
-  // re-pointed to hub pop 300 seed 38 -- the one seed found short of its
-  // OWN floor at all (see the test above) -- to keep a REAL, non-mocked
-  // check that a genuinely short village reports honestly (`blocks
-  // short:`, never `overflow:`) rather than asserting a restore shape
-  // that no longer occurs naturally.
-  it('reports the honest shortfall, not an overflow, for a real seed the chase cannot clear', () => {
+  // sequence a real seed no longer reliably produces.
+  //
+  // Task 5 REVIEW, finding #3+#4: this is now the ONE real-seed smoke test
+  // the brief allows to stand alongside the mock-driven
+  // `village-model-block-chase-entry.test.ts` -- kept because a real,
+  // non-mocked confirmation that SOME seed still walks the "genuinely
+  // short, reports honestly" path is worth having, not because the
+  // control-flow guarantee depends on it. FRAGILE: seed 38 (hub, pop 300)
+  // was the only seed of a 200-seed sweep still short of its own blocks
+  // floor at round 0 as of this task; an unrelated future change to
+  // growth/trimming could move it back over the floor the same way it did
+  // to this test's own former seed (3), at which point this test should be
+  // re-pointed (or dropped, since the mock test already covers the
+  // guarantee) rather than patched to force a shortfall.
+  //
+  // Finding #4: this used to duplicate the "enters the block chase" test
+  // above (same scenario/seed, same `overflow:`/`blocks short:` checks)
+  // plus one more assertion -- that any `disc widened ... N of pop still
+  // unhoused` diagnostic has N > 0 -- inherited from an older, unrelated
+  // review finding about a different seed (hub pop 900 seed 3). Checked
+  // directly: seed 38's real run never emits a `disc widened` diagnostic at
+  // all (it houses immediately and only falls short on blocks), so that
+  // assertion's loop body never executed -- vacuous, not merely redundant.
+  // Dropped rather than folded in for that reason.
+  it('reports the honest shortfall, not an overflow, for a real seed the chase cannot clear (fragility smoke test)', () => {
     const m = generateVillage(hubInput(300), 38);
-    for (const d of m.diagnostics) {
-      const widened = d.match(/^disc widened past its closed form: (\d+) of \d+ still unhoused/);
-      if (widened) expect(Number(widened[1])).toBeGreaterThan(0);
-    }
-    // Housed (a "blocks short" line, not "overflow") and the shipped
-    // geometry is the restored round, not a discarded later one: no line
-    // in the final diagnostics describes a round of 0 unhoused blocks
-    // widening that a subsequent round then quietly overwrote.
+    expect(blockAreas(m.lanes, m.green).length).toBeLessThan(blockFloorFor(300));
     expect(m.diagnostics.some((d) => d.startsWith('overflow:'))).toBe(false);
     expect(m.diagnostics.some((d) => d.startsWith('blocks short:'))).toBe(true);
   });

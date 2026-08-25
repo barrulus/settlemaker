@@ -290,7 +290,17 @@ export function trimTails(
     // host would orphan that join exactly as dropping the joiner itself
     // would; see `weldJoins`'s comment for the full mechanism.
     const weldFloor = weldFloorS.get(lane.id) ?? 0;
-    if (mine.length === 0 && weldFloor === 0) {
+    // Task 5 review fix (#2): a HOST welded at arc-length 0 (another lane's
+    // far end lands on THIS lane's very first vertex -- what `loopSnap`
+    // snapping to a target vertex produces) is a legitimate weld, not "no
+    // weld". Testing `weldFloor === 0` conflated the two and dropped a
+    // zero-building host that a surviving joiner still depends on,
+    // orphaning that joiner into a dangling interior spur -- exactly the
+    // defect class this whole mechanism exists to prevent. `.has()` is the
+    // correct presence check; `weldFloor` (the `?? 0` fallback) stays for
+    // the cutoff arithmetic below, where 0 is the right floor value on a
+    // weld-at-start.
+    if (mine.length === 0 && !weldFloorS.has(lane.id)) {
       // Invented purely to supply frontage; none was used, so it is not drawn.
       continue;
     }

@@ -218,6 +218,24 @@ describe('trimTails', () => {
       expect(out.find((l) => l.id === 'lane-000')).toBeDefined();
     });
 
+    it('a zero-building host welded at arc-length 0 (weld lands on its own first vertex) survives', () => {
+      // Review finding #2: weldFloorS legitimately stores bestS = 0 when a
+      // joiner's far end lands on the HOST's very first vertex -- exactly
+      // what loopSnap snapping to a target vertex produces. Testing
+      // `weldFloor === 0` instead of `weldFloorS.has(lane.id)` conflated
+      // "no weld" with "weld at s=0" and dropped the host, orphaning the
+      // still-protected joiner into a dangling interior spur.
+      const rungAtStart: Lane = {
+        id: 'lane-000/b60',
+        type: 'footpath',
+        widthM: 4,
+        points: [new Point(0, 20), new Point(0, 0)],
+      };
+      const out = trimTails([laneA(), rungAtStart], []);
+      expect(out.find((l) => l.id === 'lane-000')).toBeDefined();
+      expect(out.find((l) => l.id === 'lane-000/b60')).toBeDefined();
+    });
+
     it('a rung earning no building AND welding onto nothing (both ends free) is still dropped', () => {
       // The generalisation must not blanket-protect every empty invented
       // lane -- only ones a surviving junction actually depends on.
