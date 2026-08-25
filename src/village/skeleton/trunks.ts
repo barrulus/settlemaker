@@ -9,10 +9,10 @@
  */
 import { Point } from '../../types/point.js';
 import type { SeededRandom } from '../../utils/random.js';
-import { CONTRACT_RADIUS_FACTOR, TRUNK_SAGITTA_RATIO } from '../constants.js';
-import { bearingVector } from '../geometry.js';
-import type { RouteType } from '../route-class.js';
-import type { Site, SiteRoute } from '../types.js';
+import { CONTRACT_RADIUS_FACTOR, MERGE_BAND_WEIGHTS, MERGE_CAPTURE_M, TRUNK_SAGITTA_RATIO } from '../constants.js';
+import { bearingVector, closestPointOnPolyline } from '../geometry.js';
+import { classRank, laneWidth, type RouteType } from '../route-class.js';
+import { trunkLaneId, type Lane, type Site, type SiteRoute } from '../types.js';
 
 /** Wanderer classes (ratio >= 0.12) get a second control jitter and are
  * subdivided into two Béziers sharing tangents at the midpoint. */
@@ -176,4 +176,154 @@ function makeEntry(route: SiteRoute, bearingDeg: number, radiusM: number, farSid
     route,
     farSide,
   };
+}
+
+/**
+ * One undrawn trunk curve, `from` its contract entry to its inward aim
+ * point -- the raw material `mergeTrunks` walks to find where (if anywhere)
+ * it joins a bigger road.
+ */
+export interface DraftTrunk {
+  entry: TrunkEntry;
+  /** Circle -> inward, matching `drawTrunkPath`'s own point order. */
+  path: Point[];
+}
+
+/** Where two (or more) trunks meet after merging (spec 5.2). Id is
+ * `j:` + every participating lane id, sorted lexically and joined by `+`. */
+export interface TrunkJunction {
+  id: string;
+  position: Point;
+  laneIds: string[];
+}
+
+type MergeBand = 'fields' | 'edge' | 'inner';
+
+/** Which of the three merge bands a radial distance from the origin falls
+ * in, relative to the built edge (spec 5.2). */
+function bandOf(radialM: number, builtEdgeRadiusM: number): MergeBand {
+  if (radialM > builtEdgeRadiusM * 1.15) return 'fields';
+  if (radialM >= builtEdgeRadiusM * 0.85) return 'edge';
+  return 'inner';
+}
+
+/** One weighted draw from `MERGE_BAND_WEIGHTS`, consumed once per draft so
+ * every trunk's merge point is staggered independently (spec 5.2). */
+function drawBand(rng: SeededRandom): MergeBand {
+  const r = rng.float();
+  if (r < MERGE_BAND_WEIGHTS.fields) return 'fields';
+  if (r < MERGE_BAND_WEIGHTS.fields + MERGE_BAND_WEIGHTS.edge) return 'edge';
+  return 'inner';
+}
+
+/** Working record for one draft as it is committed -- possibly truncated
+ * by its own merge, and possibly the target of later, lesser merges. */
+interface CommittedTrunk {
+  laneId: string;
+  type: RouteType;
+  rank: number;
+  routeId?: string;
+  /** Circle -> inward, truncated at the junction if this draft merged. */
+  points: Point[];
+  sourceRouteIds?: string[];
+  /** True iff this draft itself merged into a greater lane -- excluded
+   * from `roots` when true. */
+  captured: boolean;
+}
+
+/**
+ * Merges lesser trunks into greater ones (spec 5.2, "Staggered, class-aware
+ * merges"). Drafts are processed highest class first (stable on input
+ * order for ties); each lesser draft walks its own path inward looking for
+ * the first sample that is both within capture distance of an
+ * already-committed greater lane and inside this draft's own seeded band
+ * (fields / edge / inner, drawn once per draft). A capture truncates the
+ * draft there, snaps its inner end onto the greater's polyline, records a
+ * junction, and folds the lesser's route id onto the survivor's
+ * `sourceRouteIds`. A draft that never captures is returned as a root.
+ * Every returned `Lane.points` is re-oriented inner-first.
+ */
+export function mergeTrunks(
+  drafts: DraftTrunk[],
+  builtEdgeRadiusM: number,
+  rng: SeededRandom,
+): { trunks: Lane[]; junctions: TrunkJunction[]; roots: Lane[] } {
+  const ordered = drafts
+    .map((d, i) => ({ d, i }))
+    .sort((a, b) => {
+      const rankDiff = classRank(a.d.entry.route.type) - classRank(b.d.entry.route.type);
+      return rankDiff !== 0 ? rankDiff : a.i - b.i;
+    })
+    .map((x) => x.d);
+
+  const committed: CommittedTrunk[] = [];
+  const junctions: TrunkJunction[] = [];
+
+  for (const draft of ordered) {
+    const type = draft.entry.route.type;
+    const rank = classRank(type);
+    const laneId = trunkLaneId(type, draft.entry.route.routeId, draft.entry.bearingDeg, draft.entry.farSide);
+    const band = drawBand(rng);
+
+    let capturedAt: { idx: number; target: CommittedTrunk; point: Point } | null = null;
+
+    for (let idx = 0; idx < draft.path.length && !capturedAt; idx++) {
+      const p = draft.path[idx];
+      const radial = Math.hypot(p.x, p.y);
+      if (bandOf(radial, builtEdgeRadiusM) !== band) continue;
+      for (const c of committed) {
+        if (c.rank >= rank) continue; // only a STRICTLY greater class can capture
+        const capture = MERGE_CAPTURE_M[c.type];
+        const { distance, point } = closestPointOnPolyline(p, c.points);
+        if (distance <= capture) {
+          capturedAt = { idx, target: c, point };
+          break;
+        }
+      }
+    }
+
+    let points = draft.path;
+    let captured = false;
+
+    if (capturedAt) {
+      points = draft.path.slice(0, capturedAt.idx);
+      points.push(capturedAt.point);
+      captured = true;
+
+      const target = capturedAt.target;
+      const existing = target.sourceRouteIds ?? (target.routeId ? [target.routeId] : []);
+      const folded = new Set(existing);
+      if (draft.entry.route.routeId) folded.add(draft.entry.route.routeId);
+      target.sourceRouteIds = Array.from(folded).sort((a, b) => a.localeCompare(b));
+
+      const laneIds = [laneId, target.laneId].sort((a, b) => a.localeCompare(b));
+      junctions.push({ id: `j:${laneIds.join('+')}`, position: capturedAt.point, laneIds });
+    }
+
+    committed.push({
+      laneId,
+      type,
+      rank,
+      routeId: draft.entry.route.routeId,
+      points,
+      sourceRouteIds: undefined,
+      captured,
+    });
+  }
+
+  const trunks: Lane[] = [];
+  const roots: Lane[] = [];
+  for (const c of committed) {
+    const lane: Lane = {
+      id: c.laneId,
+      type: c.type,
+      points: [...c.points].reverse(), // circle-first -> inner-first
+      widthM: laneWidth(c.type),
+      sourceRouteIds: c.sourceRouteIds,
+    };
+    trunks.push(lane);
+    if (!c.captured) roots.push(lane);
+  }
+
+  return { trunks, junctions, roots };
 }

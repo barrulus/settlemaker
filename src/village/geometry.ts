@@ -96,6 +96,24 @@ export function closestPointOnSegment(p: Point, a: Point, b: Point): Point {
 }
 
 /**
+ * The closest point to `p` on the whole polyline `points`, scanning every
+ * segment. Used by trunk merging (spec 5.2): a lesser trunk captures onto
+ * a greater one at whichever point of the greater's polyline sits closest,
+ * not just its endpoints.
+ */
+export function closestPointOnPolyline(p: Point, points: Point[]): { distance: number; point: Point } {
+  if (points.length === 0) return { distance: Infinity, point: p };
+  if (points.length === 1) return { distance: dist(p, points[0]), point: points[0] };
+  let best = { distance: Infinity, point: points[0] };
+  for (let i = 1; i < points.length; i++) {
+    const q = closestPointOnSegment(p, points[i - 1], points[i]);
+    const d = dist(p, q);
+    if (d < best.distance) best = { distance: d, point: q };
+  }
+  return best;
+}
+
+/**
  * The green's DRAWN edge (the art fills ~GREEN_JOIN_RATIO of its box), plus
  * the ring setback — the same radius `subdivideGreen` seats the green ring's
  * lot fronts against, and the radius every dressing stage treats as "the

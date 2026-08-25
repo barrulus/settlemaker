@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Point } from '../../src/types/point.js';
 import {
-  angularGap, arcLengths, bearingOf, bearingVector, closestPointOnSegment, dist, inAnyWater,
+  angularGap, arcLengths, bearingOf, bearingVector, closestPointOnPolyline, closestPointOnSegment, dist, inAnyWater,
   polylineLength, sampleAt, unit,
 } from '../../src/village/geometry.js';
 
@@ -80,6 +80,26 @@ describe('polylines', () => {
     const acc = arcLengths(line);
     expect(sampleAt(line, acc, -5).p.x).toBeCloseTo(0, 6);
     expect(sampleAt(line, acc, 999).p.y).toBeCloseTo(10, 6);
+  });
+});
+
+describe('closestPointOnPolyline', () => {
+  const line = [new Point(0, 0), new Point(10, 0), new Point(10, 10)];
+
+  it('finds the closest point on whichever segment is nearest', () => {
+    const r = closestPointOnPolyline(new Point(5, 3), line);
+    expect(r.point.x).toBeCloseTo(5, 6);
+    expect(r.point.y).toBeCloseTo(0, 6);
+    expect(r.distance).toBeCloseTo(3, 6);
+  });
+
+  it('handles a single-point polyline', () => {
+    const r = closestPointOnPolyline(new Point(3, 4), [new Point(0, 0)]);
+    expect(r.distance).toBeCloseTo(5, 6);
+  });
+
+  it('returns Infinity for an empty polyline', () => {
+    expect(closestPointOnPolyline(new Point(1, 1), []).distance).toBe(Infinity);
   });
 });
 
