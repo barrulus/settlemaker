@@ -1354,3 +1354,49 @@ export const PROFILE_SEED_OFFSET = 13;
  * edge and the tree line follow the body's lobes, coarse enough that a
  * single deep claim does not carve a notch out of them. */
 export const EXTENT_BIN_DEG = 15;
+
+// --- TRUNK NETWORK (spec 2026-08-25) ------------------------------------
+// All values below are initial, tuned at G1 (first render gate of the
+// trunk-networks work) -- expect them to move as the boundary-contract
+// mesh is judged against real renders.
+
+import type { RouteType } from './route-class.js';
+
+/** The contract circle's radius is the closed-form green/body radius times
+ * this factor -- it must sit clear of the green and the first ring of
+ * growth so trunk curves have room to bend before they reach the fabric. */
+export const CONTRACT_RADIUS_FACTOR = 2.75;
+
+/** How far a trunk curve bows off the chord between its contract entry
+ * and its landing point, as a fraction of that chord's length. Keyed by
+ * route class -- a royal road barely bends, a footpath wanders. */
+export const TRUNK_SAGITTA_RATIO: Record<RouteType, number> = {
+  royal: 0.04,
+  main: 0.06,
+  market: 0.07,
+  town: 0.10,
+  local: 0.12,
+  trail: 0.18,
+  footpath: 0.25,
+};
+
+/** How close a trunk curve must pass to another lane before the two are
+ * merged into one, in metres. Keyed by the GREATER of the two classes --
+ * a royal road claims a wide capture band, a footpath only a narrow one. */
+export const MERGE_CAPTURE_M: Record<RouteType, number> = {
+  royal: 40,
+  main: 32,
+  market: 28,
+  town: 24,
+  local: 18,
+  trail: 12,
+  footpath: 8,
+};
+
+/** Relative weight given to a candidate merge point depending which band
+ * of the village it falls in -- fields pull hardest, the inner body least,
+ * so trunks merge with the existing fabric before they cut through it. */
+export const MERGE_BAND_WEIGHTS = { fields: 0.4, edge: 0.35, inner: 0.25 };
+
+/** A trunk loop's radius as a fraction of the contract radius. */
+export const LOOP_RADIUS_FACTOR = 0.45;

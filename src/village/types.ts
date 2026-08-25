@@ -280,3 +280,21 @@ export function lotOrdinal(id: string): number {
 export function buildingId(lotIdValue: string): string {
   return `bld:${lotIdValue}`;
 }
+
+/**
+ * The trunk lane id namespace (spec 2026-08-25 §5.1): content-derived from
+ * the route's class and id so a trunk's identity survives regeneration.
+ * `routeId` is sanitised (`/` -> `_`) so it can never be mistaken for the
+ * `/b` branch-suffix `isTrunk` screens for. When a route carries no id
+ * (invented or unattributed), the bearing stands in for it, rounded to at
+ * most 2 decimals so near-duplicate bearings still make distinct ids.
+ */
+export function trunkLaneId(
+  type: RouteType,
+  routeId: string | undefined,
+  bearingDeg: number,
+  farSide: boolean,
+): string {
+  const key = routeId ? routeId.replace(/\//g, '_') : String(Math.round(bearingDeg * 100) / 100);
+  return `trunk-${type}-${key}${farSide ? '~far' : ''}`;
+}
