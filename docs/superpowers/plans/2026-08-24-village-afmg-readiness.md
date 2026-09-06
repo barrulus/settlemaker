@@ -105,9 +105,9 @@ road AROUND water is Phase 3's own job and was deliberately left there.
 **Why:** today the village engine emits its own SVG only. Every existing consumer — settlemaker.com, the `/fmg` endpoint, settlement-tiler — expects the old engine's contract.
 
 - [ ] Themed SVG via `render-theme.ts` (parchment default), honouring the `data-bg="paper"` rect the tiler's `cropSvgToTile` depends on.
-- [ ] GeoJSON v4 feature parity: buildings, lanes (with route class and `route_id` echoed), green, fields, water, POIs — matching the existing schema's property names.
-- [ ] Stable ids across both outputs (the structural-id invariant, R-series rulings).
-- [ ] Acceptance: a village round-trips through the same consumer path as an old-engine settlement; golden-file tests for both outputs.
+- [x] GeoJSON v4 feature parity: buildings, lanes (with route class and `route_id` echoed), green, fields, water, POIs — matching the existing schema's property names. *(Done: `src/village/geojson.ts`, `layer`-discriminated at the same `GEOJSON_SCHEMA_VERSION`, with `streetType`/`building_id`/`street_id` carried over from the city builder. Layers: building, street, green, field, water, crossing, poi. A trunk echoes the FMG routes it carries as `route_ids`, which is how a merged road reports the several routes it stands for.)*
+- [x] Stable ids across both outputs (the structural-id invariant, R-series rulings). *(Done, and deliberately DIFFERENT from the city path: ids come from the MODEL, not an `IdAllocator`. Village ids are content-derived and survive regeneration; allocating fresh ones per run would destroy exactly the invariant the R-series rulings protect. Pinned by a test that regenerates and compares.)*
+- [x] Acceptance: a village round-trips through the same consumer path as an old-engine settlement; golden-file tests for both outputs. *(Both outputs exported from `src/index.ts` — the consumer path; anything not there does not exist to settlemaker.com or `/fmg`. `tests/village/output-parity.test.ts` pins the SVG's tiler contract (`data-bg="paper"`, a readable viewBox via the tiler's own `parseSvgViewBox`, `data-contract-radius`), the GeoJSON's layers and metadata keys, and regeneration stability. Golden files are STRUCTURAL — layers, metadata keys, contract attributes — not a byte hash of 400 features, which would fail on every unrelated tuning change and teach us nothing.)*
 
 ## Phase 5 — Population routing
 

@@ -166,6 +166,10 @@ export function generateFromBurg(
 // Wire the threshold once they exist.
 export { generateVillage, VILLAGE_POP_CEILING } from './village/village-model.js';
 export { renderVillage } from './village/render.js';
+// Phase 4 (output parity): the village's GeoJSON, in the same
+// `layer`-discriminated schema and at the same `schema_version` as the city
+// builder's, so an existing consumer needs no new branch to read a village.
+export { generateVillageGeoJson } from './village/geojson.js';
 export type {
   Site, SiteRoute, Green, GreenShape, Lane, Lot, Building, Croft, EdgeStyle, EdgeStamp,
   FieldBlock, Vegetation,
