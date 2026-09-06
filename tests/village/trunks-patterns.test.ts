@@ -143,6 +143,31 @@ describe('synthesizeTrunks: y-tree', () => {
   });
 });
 
+describe('synthesizeTrunks: the crossroad panel can become a loop', () => {
+  // G1 finding 3 (owner-approved 2026-09-06): sketch panel 2 is four
+  // approaches landing at staggered junctions on an irregular loop, and
+  // explicitly "no X". The scenario merges its feeders onto the through
+  // road, leaving 2 roots, and `loop` was gated on 3+ ROOTS -- so it could
+  // never be drawn and the panel rendered as the crossing pair the spec
+  // forbids. A ring serves however many roads ARRIVE, not how many survive
+  // merging, so the gate counts approaches.
+  const site = makeSite([
+    { bearingDeg: 40, type: 'main', through: true, routeId: 'r-main' },
+    { bearingDeg: 130, type: 'town', through: false, routeId: 'r-town' },
+    { bearingDeg: 225, type: 'local', through: false, routeId: 'r-local' },
+    { bearingDeg: 305, type: 'trail', through: false, routeId: 'r-trail' },
+  ]);
+
+  it('reaches `loop` for the four-approach crossroad within 200 seeds', () => {
+    let loops = 0;
+    for (let seed = 1; seed <= 200; seed++) {
+      const net = synthesizeTrunks(site, CONTRACT_R, BUILT_EDGE, new SeededRandom(seed));
+      if (net.pattern === 'loop') loops++;
+    }
+    expect(loops, 'the crossroad panel can never be drawn as a ring').toBeGreaterThan(0);
+  });
+});
+
 describe('synthesizeTrunks: junction', () => {
   const site = makeSite([
     { bearingDeg: 0, type: 'town', through: false, routeId: 'a' },

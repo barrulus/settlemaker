@@ -25,6 +25,11 @@ import { routeProvenanceKey, trunkLaneId, type Lane, type Site, type SiteRoute }
  * subdivided into two Béziers sharing tangents at the midpoint. */
 const WANDER_THRESHOLD = 0.12;
 
+/** The least a road may bow, as a share of its class bound (G1 finding 2).
+ * Raise it for more emphatic curves, lower it toward 0 to allow straight
+ * roads again. Tuned at G1. */
+const SAGITTA_MIN_SHARE = 0.55;
+
 /** Sample points are spaced roughly this far apart along the curve. */
 const SAMPLE_STEP_M = 6;
 
@@ -105,7 +110,19 @@ export function drawTrunkPath(from: Point, to: Point, type: RouteType, rng: Seed
   // Unit perpendicular to the chord.
   const perp = new Point(-dy / chordLength, dx / chordLength);
 
-  const jitter = (magnitude: number): number => (rng.float() * 2 - 1) * magnitude * chordLength;
+  // G1 finding 2 (owner-approved 2026-09-06): the offset used to be a
+  // symmetric draw in [-1, 1], which lands near zero often enough that a
+  // stiff class rendered as a ruled line -- `panel-through` came out a dead
+  // straight diagonal where sketch panel 1 asks for a meander. Sign and
+  // magnitude are now drawn separately, and the magnitude starts at
+  // `SAGITTA_MIN_SHARE` of the class bound rather than at nothing. The BOUND
+  // is unchanged: `TRUNK_SAGITTA_RATIO` still says how far a class may bow,
+  // so a royal road stays stiffer than a footpath.
+  const jitter = (magnitude: number): number => {
+    const sign = rng.float() < 0.5 ? -1 : 1;
+    const share = SAGITTA_MIN_SHARE + rng.float() * (1 - SAGITTA_MIN_SHARE);
+    return sign * share * magnitude * chordLength;
+  };
 
   const points: Point[] = [from.clone()];
 
@@ -564,6 +581,11 @@ export function choosePattern(
   bestClass: RouteType,
   allFeedersTrails: boolean,
   rng: SeededRandom,
+  /** How many roads ARRIVE at the contract circle, as opposed to how many
+   * survive merging. A ring serves everything that arrives, so it is gated
+   * on this (G1 finding 3); defaults to `roots` for callers that do not
+   * distinguish them. */
+  approaches: number = roots,
 ): ConvergencePattern {
   const primaryIsMajor = classRank(bestClass) <= classRank('main');
   if (!hasThrough && primaryIsMajor && allFeedersTrails) return 'terminal';
@@ -579,11 +601,18 @@ export function choosePattern(
     : roots >= 4
       ? PATTERN_WEIGHTS.many
       : PATTERN_WEIGHTS.few;
-  // A ring road needs something to ring. With one or two approaches the
+  // A ring road needs something to ring. With one or two roads ARRIVING the
   // loop has nothing to enclose and lands as a bare circle around the green
-  // (the vegetation grove-country fixture's failure), so it is dropped from
-  // the palette and its weight redistributed over the rest.
-  const usable = roots >= 3 ? row : Object.fromEntries(
+  // (the vegetation grove-country fixture's failure), so it is dropped and
+  // its weight redistributed.
+  //
+  // G1 finding 3: this counted survivors, not arrivals. Sketch panel 2's
+  // crossroad merges its three feeders onto the through road, leaving two
+  // roots -- so the ring was unreachable there and the panel rendered as the
+  // X the spec explicitly forbids. Four roads still arrive at that village
+  // whatever the merge does with them, and a ring is exactly how panel 2
+  // receives them.
+  const usable = approaches >= 3 ? row : Object.fromEntries(
     Object.entries(row).filter(([k]) => k !== 'loop'),
   );
   return weightedPattern(usable, rng);
@@ -1207,7 +1236,9 @@ export function synthesizeTrunks(
   const pairs = throughPairs(entries, roots, laneIdByEntry);
   const hasThrough = pairs.length > 0;
   const { bestClass, allFeedersTrails } = classifyRoots(roots);
-  const pattern = choosePattern(roots.length, hasThrough, bestClass, allFeedersTrails, rng);
+  const pattern = choosePattern(
+    roots.length, hasThrough, bestClass, allFeedersTrails, rng, entries.length,
+  );
 
   let applied: { trunks: Lane[]; junctions: TrunkJunction[] };
   switch (pattern) {

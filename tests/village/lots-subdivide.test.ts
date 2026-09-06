@@ -79,9 +79,27 @@ describe('subdivideLane', () => {
   });
 
   it('widens frontage outward', () => {
-    const lots = subdivideLane(straightLane, green, 100, 10, 25, new SeededRandom(1))
-      .filter((l) => l.side === 1);
-    expect(lots[lots.length - 1].frontageM).toBeGreaterThan(lots[0].frontageM);
+    // Asserted as a TREND over seeds rather than pinned to one. Frontage
+    // widening outward is a bias applied to a jittered cut, so it holds for
+    // about two thirds of seeds individually and for the mean decisively
+    // (measured across seeds 1..40: mean first 10.08 m, mean last 11.26 m).
+    // It used to be pinned at seed 1, which passed only because the old
+    // `SeededRandom` made neighbouring seeds near-identical -- one lucky
+    // draw stood in for the population. With seeds decorrelated (G1,
+    // 2026-09-06) the honest form of this bar is the trend itself.
+    let first = 0;
+    let last = 0;
+    let n = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const lots = subdivideLane(straightLane, green, 100, 10, 25, new SeededRandom(seed))
+        .filter((l) => l.side === 1);
+      if (lots.length < 2) continue;
+      first += lots[0].frontageM;
+      last += lots[lots.length - 1].frontageM;
+      n += 1;
+    }
+    expect(n).toBeGreaterThan(20);
+    expect(last / n).toBeGreaterThan(first / n);
   });
 
   it('never cuts a lot narrower than the F0 floor ratio', () => {

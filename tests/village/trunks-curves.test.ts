@@ -5,6 +5,7 @@ import { TRUNK_SAGITTA_RATIO } from '../../src/village/constants.js';
 import type { RouteType } from '../../src/village/route-class.js';
 import { Point } from '../../src/types/point.js';
 import { SeededRandom } from '../../src/utils/random.js';
+import { TRUNK_SAGITTA_RATIO } from '../../src/village/constants.js';
 
 /** Max perpendicular distance of any sample from the from-to chord segment. */
 function maxChordDeviation(points: Point[]): number {
@@ -82,6 +83,29 @@ describe('drawTrunkPath', () => {
       for (let i = 1; i < pts.length; i++) {
         const d = Point.distance(pts[i - 1], pts[i]);
         expect(d).toBeLessThanOrEqual(8);
+      }
+    }
+  });
+
+  it('bends every road by a visible amount — a stiff class is not a ruler', () => {
+    // G1 finding 2 (owner-approved 2026-09-06): the sagitta offset used to
+    // be drawn symmetrically in [-1, 1], so it landed near zero often and a
+    // `main` or `royal` road rendered dead straight. Sketch panel 1 asks for
+    // "ONE meandering road S-curving through the settlement"; panel 3's
+    // royal road is meant to read as a confident CURVE, not a ruled line.
+    // The bound stays what `TRUNK_SAGITTA_RATIO` says -- what changes is
+    // that the magnitude no longer collapses.
+    const chord = 200;
+    for (const type of ['royal', 'main', 'town'] as RouteType[]) {
+      const bound = TRUNK_SAGITTA_RATIO[type] * chord;
+      for (let seed = 1; seed <= 30; seed++) {
+        const dev = maxChordDeviation(
+          drawTrunkPath(new Point(0, 0), new Point(chord, 0), type, new SeededRandom(seed)),
+        );
+        expect(dev, `${type} seed ${seed} is drawn near-straight`)
+          // A quadratic Bezier's peak deviation is HALF its control
+  // offset, so the floor here is SAGITTA_MIN_SHARE / 2 of the bound.
+          .toBeGreaterThan(bound * 0.25);
       }
     }
   });

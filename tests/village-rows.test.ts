@@ -425,10 +425,23 @@ describe('fallback chain (gate-tune round 7)', () => {
     // round 9, and the ward type is irrelevant to what this test actually
     // exercises: `materialiseWithFallback` is ward-agnostic (ward type
     // only steers `pickStampGlyph`, which this test does not call).
-    const m = mk(300, 3);
+    //
+    // G1 (2026-09-06): re-found again after the `SeededRandom` seed
+    // scramble, by the same method this comment describes. NO stamp in the
+    // old (300, 3) model qualifies any more, so the sweep was widened over
+    // populations {300,400,500,600,800} x seeds 1-8; (300, 1) carries three
+    // qualifying sites and the first is pinned here. The search verifies the
+    // WHOLE path end to end -- accent rejected by `acceptSlot`, base
+    // accepted, and `materialiseWithFallback` actually returning a polygon
+    // that stamps the base glyph -- because `acceptSlot` alone passing is
+    // not sufficient (the overlap-vs-already-stamped check inside can still
+    // reject, exactly as round 7's comment above warns). The fixture mines a
+    // real stamped site, so it moves whenever the generator's stream does --
+    // which is why the search, not the coordinate, is the durable part.
+    const m = mk(300, 1);
     const sym = m.symbols.find(s =>
       s.id === 'sm-house' &&
-      Math.abs(s.at.x - -28.132847823843818) < 0.1 && Math.abs(s.at.y - 23.334330507444655) < 0.1);
+      Math.abs(s.at.x - -2.594631100182677) < 0.1 && Math.abs(s.at.y - 12.615914614699813) < 0.1);
     expect(sym).toBeDefined();
     const rect = [...m.glyphBackedBuildings].find(r =>
       Math.abs(r.centroid.x - sym!.at.x) < 1e-6 && Math.abs(r.centroid.y - sym!.at.y) < 1e-6);

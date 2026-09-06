@@ -106,7 +106,12 @@ describe('placeWell', () => {
 describe('placeStoneCircle', () => {
   // Seed 1's very first rng.bool(0.08) draw is true -- confirmed by scanning
   // seeds 1..500 for the first that clears the gate on its first draw.
-  const passingSeed = 1;
+  // G1 (2026-09-06): re-found after the SeededRandom seed scramble. The
+  // stone circle only places when a seeded bearing clears every claim, so
+  // this fixture has always been a hand-picked "it does place" seed; the
+  // decorrelation moved which ones qualify (4, 30, 50 and 56 of the first
+  // 60). The sibling test below pins the fail-soft path instead.
+  const passingSeed = 4;
 
   it('is absent when the gate roll fails (an overwhelmingly likely seed)', () => {
     // The LCG's first draw from a small seed is tiny (~seed * 2.2e-5, per

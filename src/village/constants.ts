@@ -773,7 +773,7 @@ export const DISC_ESCALATION_STEP_RATIO = 0.06;
 // through 3, 2, 1 and back. Widening the type here, once, makes every future
 // retune safe regardless of which literal the comparison in that message is
 // written against.
-export const BLOCK_CHASE_ROUND_CAP: number = 1;
+export const BLOCK_CHASE_ROUND_CAP: number = 2;
 
 // Trunks task 5: LANE_EXTENT_FACTOR (how far `runArm`'s straight extent ran
 // past the green) retired with `buildArms`/`runArm`/`laneExtentM` -- a trunk
@@ -1381,9 +1381,13 @@ export const MERGE_BAND_WEIGHTS = { fields: 0.4, edge: 0.35, inner: 0.25 };
 /** A trunk loop's radius as a fraction of the BUILT-EDGE radius (task 4b:
  * the comment used to say "contract radius", which is 2.75x larger -- the
  * doc and the only call site disagreed, and a G1 tuning pass reading the
- * doc would have moved the wrong number). At 0.45 the ring sits inside the
- * fabric; raise it toward 1.0 to ring the built edge as panel 2 does. */
-export const LOOP_RADIUS_FACTOR = 0.45;
+ * doc would have moved the wrong number).
+ *
+ * G1 (owner-approved 2026-09-06): raised 0.45 -> 0.75. At 0.45 the ring sat
+ * deep inside the fabric and read as a small circle drawn around the green
+ * rather than the irregular CORE loop of sketch panel 2. Raise further
+ * toward 1.0 to ring the built edge itself. */
+export const LOOP_RADIUS_FACTOR = 0.75;
 
 /** How much dry ground the trunk network's convergence zone needs around
  * it before a wet site pushes the aim clear (task 4b, F11). Initial value,

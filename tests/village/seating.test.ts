@@ -15,7 +15,7 @@ const offNearestAspect = (bearingDeg: number, squareOn: number): number => Math.
 import { baseDeck } from '../../src/village/deck.js';
 import type { DeckEntry } from '../../src/village/deck.js';
 import type { Lot } from '../../src/village/types.js';
-import { HOUSE_INK_RATIO, nominalFootprint } from '../../src/village/glyphs.js';
+import { HOUSE_INK_RATIO, inkExtent, nominalFootprint } from '../../src/village/glyphs.js';
 import type { Building } from '../../src/village/types.js';
 
 // Family deck at pop 400, seed 1 — the seeded choice picks sm-house.
@@ -214,13 +214,24 @@ describe('seat', () => {
 
 describe('overlaps', () => {
   it('uses ink extents, so glyphs may share their transparent margins', () => {
+    // Derived from the glyphs rather than pinned to a hardcoded 6.5 m. The
+    // property is that collision is judged on PAINTED ink, not on the art
+    // box: two houses set just far enough apart that their ink clears must
+    // not collide, even though their art boxes still overlap at that
+    // distance. Spacing is computed from the seated footprints, so this
+    // stays true whichever glyph the deck picks and however `sizeFor`
+    // jitters it -- the old fixed 6.5 m only worked for one glyph at one
+    // seeded size (G1, 2026-09-06: seeds are no longer near-identical).
     const a = seat(house, lot(12, 0, 0), new SeededRandom(1));
-    const b = seat(house, lot(12, 6.5, 0), new SeededRandom(1));
-    // 6.5 m apart, houses sized near their ~6 m nominal footprint: the
-    // full art boxes would be close enough to read as touching, but the
-    // ink extent (footprint x HOUSE_INK_RATIO, ~0.68) shrinks each house's
-    // collision radius enough that painted walls don't actually meet.
+    const probe = seat(house, lot(12, 0, 0), new SeededRandom(1));
+    const inkHalf = (bld: Building): number =>
+      inkExtent(bld.glyph, bld.footprint).width / 2;
+    const clearance = inkHalf(a) + inkHalf(probe) + 0.25;
+    const b = seat(house, lot(12, clearance, 0), new SeededRandom(1));
     expect(overlaps(a, b)).toBe(false);
+    // ...and the art boxes really do still overlap at that distance, which
+    // is what makes this a statement about ink and not about spacing.
+    expect(clearance).toBeLessThan((a.footprint[0] + b.footprint[0]) / 2);
   });
 
   it('rejects a genuine collision', () => {
