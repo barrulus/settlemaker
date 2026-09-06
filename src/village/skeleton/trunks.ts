@@ -18,6 +18,7 @@ import {
   TRUNK_SAGITTA_RATIO,
 } from '../constants.js';
 import { angularGap, bearingVector, closestPointOnPolyline, segmentIntersection } from '../geometry.js';
+import { pointInPolygon } from '../../geom/point-in-polygon.js';
 import { classRank, isRoadClass, laneWidth, stepDown, type RouteType } from '../route-class.js';
 import { routeProvenanceKey, trunkLaneId, type Lane, type Site, type SiteRoute } from '../types.js';
 
@@ -877,18 +878,47 @@ function applyLoop(
   let outTrunks = [...trunks, ...loopLanes];
   let outJunctions = [...junctions];
 
-  for (const root of roots) {
-    const rootLane = outTrunks.find((t) => t.id === root.id) ?? root;
+  // The ring as a DRAWN line, not just its corners. Landing on the nearest
+  // corner (G1 round 2, owner-spotted in `trunks-tri-300-s2.png`) let a road
+  // that crosses the ring mid-edge -- far from any corner -- keep the part of
+  // itself that had already passed inside, drawing a chord straight through
+  // the middle. Panel 2's approaches LAND on the ring; they do not cut across
+  // it. Cutting against every sample of the ring instead means a road is
+  // always severed where it actually meets it.
+  const ringSamples: Point[] = [];
+  for (const l of loopLanes) ringSamples.push(...l.points);
+
+  // Every road that gets inside the ring is cut at it -- not only the roots.
+  // A lesser trunk that merged onto a greater one earlier is not a root, so
+  // the old root-only loop left it ending at a junction in the middle of the
+  // ring; on `hub` seed 2 that put a trail right through the centre. Walked
+  // in id order so the result can never depend on array position.
+  const ringPolygon = vertices;
+  const entersRing = (lane: Lane): boolean =>
+    lane.points.some((p) => pointInPolygon(p, ringPolygon));
+  const toLand = outTrunks
+    .filter((t) => !t.id.startsWith('trunk-loop-'))
+    .filter((t) => t.points.length >= 2)
+    .filter((t) => roots.some((r) => r.id === t.id) || entersRing(t))
+    .map((t) => t.id)
+    .sort((a, b) => a.localeCompare(b));
+
+  for (const laneId of toLand) {
+    const lane = outTrunks.find((t) => t.id === laneId);
+    if (!lane || lane.points.length < 2) continue;
     // F4: meet the ring where the road actually comes closest to it, not at
     // the vertex nearest the road's far end.
-    const approach = nearestApproach(rootLane.points, vertices);
-    const landing = nearestPoint(approach.point, vertices);
-    const landed = landOn(rootLane, [landing]);
-    outTrunks = replaceLane(outTrunks, root.id, (l) => ({ ...l, points: landed.points }));
+    const approach = nearestApproach(lane.points, ringSamples);
+    // Snapped to a real sample of the ring so the join is a shared point
+    // (`blockAreas` welds on endpoint coincidence, and the acceptance test
+    // checks the inner end lies ON the loop), not merely a point near it.
+    const landing = nearestPoint(approach.point, ringSamples);
+    const landed = landOn(lane, [landing]);
+    outTrunks = replaceLane(outTrunks, laneId, (l) => ({ ...l, points: landed.points }));
     outJunctions = [...outJunctions, {
-      id: `j:${sortedJunctionIds([root.id, 'trunk-loop']).join('+')}:${vertices.indexOf(landing)}`,
+      id: `j:${sortedJunctionIds([laneId, 'trunk-loop']).join('+')}:${ringSamples.indexOf(landing)}`,
       position: landing,
-      laneIds: [root.id],
+      laneIds: [laneId],
     }];
   }
 
@@ -1196,6 +1226,39 @@ function rehomeOrphans(
 }
 
 /**
+ * Drop junction records that no longer describe the network, and trim lane
+ * ids out of the ones that do.
+ *
+ * `mergeTrunks` records a junction where a lesser trunk captured onto a
+ * greater one. Pattern application then rewrites that geometry underneath
+ * it -- a `main-street` spine is redrawn end to end, a loop landing cuts a
+ * road back to the ring -- so the recorded position can end up in open
+ * ground, and a lane it names can have been replaced or removed outright.
+ * Left in, those are phantom junctions: harmless to the drawing, but spec
+ * 5.5 exports this list as the network's junctions, so they would ship as
+ * data.
+ */
+function pruneJunctions(trunks: Lane[], junctions: TrunkJunction[]): TrunkJunction[] {
+  const live = new Set(trunks.filter((t) => t.points.length >= 2).map((t) => t.id));
+  const out: TrunkJunction[] = [];
+  const seen = new Set<string>();
+  for (const j of junctions) {
+    const onRoad = trunks.some(
+      (t) => t.points.length >= 2
+        && closestPointOnPolyline(j.position, t.points).distance <= WELD_TOLERANCE_M,
+    );
+    if (!onRoad) continue;
+    const laneIds = j.laneIds.filter((id) => live.has(id));
+    if (laneIds.length === 0) continue;
+    const kept = { ...j, laneIds };
+    if (seen.has(kept.id)) continue;
+    seen.add(kept.id);
+    out.push(kept);
+  }
+  return out;
+}
+
+/**
  * The trunk-network module's single entry point (spec 5.2). Draws every
  * FMG route's entries inward toward the burg point, merges lesser trunks
  * into greater ones, resolves what survives into one pattern from the
@@ -1262,10 +1325,11 @@ export function synthesizeTrunks(
 
   const rehomed = rehomeOrphans(applied.trunks, applied.junctions, contractRadiusM);
   const resolved = resolveCrossings(rehomed.trunks, rehomed.junctions);
+  const junctions = pruneJunctions(resolved.trunks, resolved.junctions);
 
   return {
     trunks: resolved.trunks,
-    junctions: resolved.junctions,
+    junctions,
     pattern,
     contractRadiusM,
     entries,

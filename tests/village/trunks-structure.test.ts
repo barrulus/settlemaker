@@ -19,6 +19,7 @@ import { closestPointOnPolyline, dist, inAnyWater } from '../../src/village/geom
 import { classRank, laneWidth } from '../../src/village/route-class.js';
 import { SeededRandom } from '../../src/utils/random.js';
 import { Point } from '../../src/types/point.js';
+import { pointInPolygon } from '../../src/geom/point-in-polygon.js';
 import type { Lane, Site, SiteRoute } from '../../src/village/types.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 
@@ -245,6 +246,71 @@ describe('trunk network structural invariants (task 4b)', () => {
     for (let seed = 1; seed <= 200; seed++) {
       const net = synthesizeTrunks(site([]), CONTRACT, BUILT_EDGE, new SeededRandom(seed));
       expect(net.trunks, `seed ${seed} invented lanes from no routes`).toHaveLength(0);
+    }
+  });
+
+  it('lands approach roads ON the ring, never straight through it', () => {
+    // Owner verdict at G1 round 2 (2026-09-06), spotting it in
+    // `trunks-tri-300-s2.png`: a road entered the loop at one junction and
+    // carried on across the middle to another, drawing a chord through the
+    // ring. Sketch panel 2 has the approaches LANDING on the loop -- the
+    // ring is what they arrive at, not something they cut across.
+    //
+    // It passed every existing bar: both ends of the chord were real
+    // junctions, so connectivity held, and `resolveCrossings` had split it
+    // at the ring so there was no un-junctioned crossing either. Nothing
+    // was asking whether the inside of the ring was empty.
+    for (const { name, routes } of SCENARIOS) {
+      for (const { seed, net } of networks(routes)) {
+        if (net.pattern !== 'loop') continue;
+        const ring = net.trunks.filter((t) => t.id.startsWith('trunk-loop-'));
+        if (ring.length < 3) continue;
+        // The ring's own corners, in drawn order, are its polygon.
+        const polygon = ring
+          .slice()
+          .sort((a, b) => Number(a.id.split('-').pop()) - Number(b.id.split('-').pop()))
+          .map((l) => l.points[0]);
+        // Shrink toward the centroid so a lane legitimately RUNNING ALONG
+        // the ring, or ending exactly on it, is not counted as inside it.
+        const cx = polygon.reduce((sum, p) => sum + p.x, 0) / polygon.length;
+        const cy = polygon.reduce((sum, p) => sum + p.y, 0) / polygon.length;
+        const inset = polygon.map((p) => new Point(
+          cx + (p.x - cx) * 0.85, cy + (p.y - cy) * 0.85,
+        ));
+        for (const t of net.trunks) {
+          if (t.id.startsWith('trunk-loop-')) continue;
+          for (const p of t.points) {
+            expect(pointInPolygon(p, inset),
+              `${name} seed ${seed}: ${t.id} runs through the ring at (${p.x.toFixed(1)}, ${p.y.toFixed(1)})`,
+            ).toBe(false);
+          }
+        }
+      }
+    }
+  });
+
+  it('records no junction where no road actually is', () => {
+    // Visible as stray marks inside the ring in `trunks-tri-300-s2.png`:
+    // `mergeTrunks` records a junction where a lesser trunk captured onto a
+    // greater one, and pattern application then moves or truncates that
+    // geometry -- leaving the record pointing at open ground. Harmless to
+    // the drawing today, but Task 10 exports these as the network's
+    // junctions, so a phantom would ship as data.
+    for (const { name, routes } of SCENARIOS) {
+      for (const { seed, net } of networks(routes)) {
+        for (const j of net.junctions) {
+          const onSomeLane = net.trunks.some(
+            (t) => t.points.length >= 2
+              && closestPointOnPolyline(j.position, t.points).distance <= WELD_M,
+          );
+          expect(onSomeLane,
+            `${name} seed ${seed}: junction ${j.id} sits on no road`).toBe(true);
+          for (const id of j.laneIds) {
+            expect(net.trunks.some((t) => t.id === id),
+              `${name} seed ${seed}: junction ${j.id} names a lane that is gone`).toBe(true);
+          }
+        }
+      }
     }
   });
 
