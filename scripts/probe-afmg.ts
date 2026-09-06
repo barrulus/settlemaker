@@ -182,6 +182,43 @@ export const SCENARIOS: Scenario[] = [
       ],
     }),
   },
+  // --- The owner's three sketch panels (spec 2026-08-25 §4), added for the
+  // G1 trunks-only render gate. These are the aesthetic contract the
+  // network is judged against, not numeric fixtures.
+  {
+    name: 'panel-through',
+    note: 'SKETCH PANEL 1: one road passing through, green in the crook of its curve',
+    input: (population) => ({
+      name: 'Probe', population, ...flags,
+      roadBearings: [{ bearing_deg: 58, kind: 'main', through: true, route_id: 'r-through' }],
+    }),
+  },
+  {
+    name: 'panel-cross',
+    note: 'SKETCH PANEL 2: four approaches landing at staggered junctions, no X',
+    input: (population) => ({
+      name: 'Probe', population, ...flags,
+      roadBearings: [
+        { bearing_deg: 40, kind: 'main', through: true, route_id: 'r-main' },
+        { bearing_deg: 130, kind: 'town', route_id: 'r-town' },
+        { bearing_deg: 225, kind: 'local', route_id: 'r-local' },
+        { bearing_deg: 305, kind: 'trail', route_id: 'r-trail' },
+      ],
+    }),
+  },
+  {
+    name: 'panel-royal',
+    note: 'SKETCH PANEL 3: the royal road sweeps through and does not deviate for the village',
+    input: (population) => ({
+      name: 'Probe', population, ...flags,
+      roadBearings: [
+        { bearing_deg: 52, kind: 'royal', through: true, route_id: 'r-royal' },
+        { bearing_deg: 150, kind: 'town', route_id: 'r-town' },
+        { bearing_deg: 250, kind: 'local', route_id: 'r-local' },
+        { bearing_deg: 340, kind: 'trail', route_id: 'r-trail' },
+      ],
+    }),
+  },
   {
     name: 'strangled',
     note: 'FAILURE HUNT: water on three sides, ~70 m of dry land left',
