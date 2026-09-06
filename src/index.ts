@@ -44,6 +44,7 @@ export { Polygon } from './geom/polygon.js';
 export { SeededRandom } from './utils/random.js';
 
 export { computeLocalBounds, computeDiameterLocal } from './generator/bounds.js';
+export { declaredMetersPerUnit } from './output/settlement-tiler.js';
 export type { LocalBounds } from './generator/bounds.js';
 
 export type { Poi, PoiKind } from './poi/poi-kinds.js';
