@@ -73,6 +73,11 @@ function crosses(a: Point[], b: Point[]): boolean {
   return false;
 }
 
+// Each bar below generates TWELVE villages end to end (2 scenarios x 2
+// populations x 3 seeds), so they are slow by construction -- 4-8 s each,
+// and the first also pays module and glyph-manifest warm-up. They rely on
+// the global `testTimeout` in `vitest.config.ts`, which carries the
+// measurement and the reasoning.
 describe('spec 5.6 structural invariants, on the shipped model', () => {
   it('(a) every FMG route is represented exactly once', () => {
     each((m, label, roads) => {

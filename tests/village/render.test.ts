@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { createHash } from 'node:crypto';
 import { generateVillage } from '../../src/village/village-model.js';
 import { renderVillage } from '../../src/village/render.js';
 import { hasGlyph } from '../../src/village/glyphs.js';
@@ -32,6 +33,51 @@ describe('renderVillage', () => {
     expect(svg.startsWith('<svg')).toBe(true);
     expect(svg).toContain('data-bg="paper"');
     expect(svg.trimEnd().endsWith('</svg>')).toBe(true);
+  });
+
+  it('paints water, in its own band beneath everything the village built', () => {
+    // Phase 2: `render.ts` contained the word "water" zero times. The model
+    // has always known about water -- it keeps lots, lanes, fields and trees
+    // out of it -- but nothing drew it, so every coastal render was a
+    // village with an unexplained bite out of it, and we were judging those
+    // renders blind.
+    const coastal = generateVillage({
+      ...input,
+      coastlineGeometry: [[
+        { x: -600, y: 40 }, { x: 600, y: 40 }, { x: 600, y: 600 }, { x: -600, y: 600 },
+      ]],
+    } as AzgaarBurgInput, 1);
+    expect(coastal.site.water.length).toBeGreaterThan(0);
+    const wet = renderVillage(coastal);
+
+    expect(wet).toContain('data-band="water"');
+    // Beneath the fields, the roads and the parcels -- water is ground, and
+    // everything the village put down sits on top of it.
+    expect(wet.indexOf('data-band="water"'))
+      .toBeLessThan(wet.indexOf('data-band="parcel-fields"'));
+    expect(wet.indexOf('data-band="water"')).toBeLessThan(wet.indexOf('data-band="route"'));
+    // ...and above the paper, which is the tiler's crop contract.
+    expect(wet.indexOf('data-bg="paper"')).toBeLessThan(wet.indexOf('data-band="water"'));
+    // One painted shape per drawable water polygon.
+    const drawable = coastal.site.water.filter((poly) => poly.length >= 3).length;
+    expect(drawable).toBeGreaterThan(0);
+    expect((wet.match(/data-water="/g) ?? []).length).toBe(drawable);
+  });
+
+  it('leaves a landlocked village byte-identical', () => {
+    // Phase 2's acceptance bar. The hash was taken from the renderer BEFORE
+    // the water band existed, so this pins that a dry village gained
+    // nothing at all -- not an empty group, not a stray newline.
+    const dry = generateVillage({
+      name: 'Dry', population: 300, port: false, citadel: false, walls: false,
+      plaza: false, temple: false, shanty: false, capital: false,
+      roadBearings: [{ bearing_deg: 225, kind: 'road' }],
+    } as AzgaarBurgInput, 1);
+    expect(dry.site.water).toHaveLength(0);
+    const drySvg = renderVillage(dry);
+    expect(drySvg).not.toContain('data-band="water"');
+    expect(createHash('sha256').update(drySvg).digest('hex'))
+      .toBe('d0b2f4073d031de40f812f222458f39689ae50e0401c7e5b5b08333cefdf8542');
   });
 
   it('carries the contract circle radius for consumers to align against', () => {

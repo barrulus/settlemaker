@@ -10,6 +10,21 @@ const SHADOW_OFFSET: [number, number] = [2.6, 3.6];
 const SHADOW_OPACITY = 0.2;
 const SHADOW_COLOR = '#46303c';
 const GROUND = '#a3c98d';
+/**
+ * Water and its shore stroke (Phase 2).
+ *
+ * Sampled from the project's established water colour -- `PALETTE_PARCHMENT`
+ * in `output/palette.ts`, itself taken from watabou's MFCG renders -- and its
+ * shore is that colour darkened, which is exactly what `render-theme.ts`
+ * derives for the city renderer (`waterEdge = darken(water, 0.2)`). Restated
+ * here rather than imported: the village engine stays independent of the city
+ * output path by design, and the plan says so in as many words.
+ */
+const WATER = '#85bcb2';
+const WATER_EDGE = '#6a968e';
+/** Shore stroke width in METRES, scaled by `pxPerMetre` like everything else
+ * in this renderer. Matches `render-theme.ts`'s `shoreWidth`. */
+const SHORE_WIDTH_M = 0.6;
 
 /**
  * The refined set's own token values (symbols/refined/symbols.json →
@@ -274,6 +289,32 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
   out.push(`<style>${SM_STYLE}</style>`);
   out.push(`<defs>${defs.join('')}${patternDefs.join('')}</defs>`);
   out.push(`<rect data-bg="paper" width="${n(w)}" height="${n(h)}" fill="${GROUND}"/>`);
+
+  // water band (Phase 2) — GROUND, so it goes down first and everything the
+  // village built sits on top of it. The model has always known about water
+  // (it keeps lots, lanes, fields and trees out of it); nothing drew it, so
+  // every coastal render was a village with an unexplained bite out of it.
+  //
+  // Deliberately does NOT touch the bounds computed above: a coastline runs
+  // far past the village, and letting it size the viewBox would zoom every
+  // coastal render out to the whole sea. The path simply extends beyond the
+  // viewBox and is clipped, which is what an edge of water should do.
+  //
+  // Emitted only when there IS water, so a landlocked village's SVG is
+  // byte-identical to what it was before this band existed -- not even an
+  // empty group. Pinned by a hash taken before the change.
+  const waterPolys = model.site.water.filter((poly) => poly.length >= 3);
+  if (waterPolys.length > 0) {
+    out.push('<g data-band="water">');
+    waterPolys.forEach((poly, i) => {
+      out.push(
+        `<path data-water="w${i}" d="${polygonPath(poly, X, Y)}" fill="${WATER}" `
+        + `stroke="${WATER_EDGE}" stroke-width="${n(SHORE_WIDTH_M * pxPerMetre)}" `
+        + 'stroke-linejoin="round"/>',
+      );
+    });
+    out.push('</g>');
+  }
 
   // parcel-fields band — §7.2: the field ring UNDER the route band,
   // casting/receiving no shadow. A block is one pattern-filled polygon: the

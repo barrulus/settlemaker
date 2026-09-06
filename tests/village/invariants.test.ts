@@ -46,7 +46,15 @@ describe('village invariants (design §5.7)', () => {
   // full-census housing after the seatEfficiency fix, so every test below
   // that regenerates the full input x seed grid now runs one more round
   // per village. 20s clears it with headroom even under parallel load.
-  const GRID_TIMEOUT_MS = 20000;
+  //
+  // Raised to 60s on 2026-09-06 (trunk networks), matching the global
+  // `testTimeout` in `vitest.config.ts`, which carries the measurement and
+  // the reasoning: the village engine now draws a synthesized trunk network
+  // sampled at 6 m, which is more geometry through every O(n^2) pass than
+  // the old straight arms. These grid tests regenerate 5 inputs x 8 seeds
+  // apiece and were tipping 20s under full-suite contention. An explicit
+  // timeout overrides the global, so it has to be raised here too.
+  const GRID_TIMEOUT_MS = 60000;
 
   it('never puts a lot in water', () => {
     for (const input of inputs) {

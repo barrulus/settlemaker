@@ -47,7 +47,7 @@ executed as `plans/2026-08-25-trunk-networks.md` (tasks 1-11, ledger
 contract circle and are synthesized inward as a merging trunk network, and the green is sited on the
 finished network rather than the network being aimed at the green.
 
-**Owner gates: G1 PASSED, G2 PASSED, G3 presented.** Three render gates, each judged by the owner.
+**Owner gates: G1 PASSED, G2 PASSED, G3 PASSED (2026-09-06).** Three render gates, each judged by the owner. This plan is COMPLETE.
 
 **Acceptance re-baselined at G3** (36 runs; full table in the ledger's `task-11-g3-report.md`).
 Bars holding on all 36: census housed, zero crossings, land use 69-82% BODY, blocks 3-14 at pop 300
@@ -60,7 +60,9 @@ five standard gate fixtures hold every bar with margin. Suite 1036/1036, both ty
 
 **Open, carried into the rest of this plan:**
 - **Stubs** — interior dead ends unclosed on 22 of 36 runs. Phase 1's carried item, much improved in
-  ratio but not closed. A `connectDeadEnds` question, not a trunk one.
+  ratio but not closed. A `connectDeadEnds` question, not a trunk one. **Owner ruled at G3: carry it
+  forward rather than hold the gate.** It belongs to whichever later phase touches dead-end
+  connection, and must not be quietly dropped.
 - Laneless sector 60 deg on hub 300 s2 (exactly at the "< 60" bar), and ink gap 1.73 m on
   panel-cross 300 s1 (bar <= 1.6). One run of 36 each, neither on a gate fixture, neither tuned away
   because the constants involved were set by the owner's own gate verdicts.
@@ -81,9 +83,11 @@ road AROUND water is Phase 3's own job and was deliberately left there.
 
 **Why:** `src/village/render.ts` contains the word "water" zero times. Water constrains the model but is never drawn, so every coastal/river render is a village with an unexplained bite out of it — and we have been judging those renders blind. Renderer-only; no model change.
 
-- [ ] Paint water polygons in a band beneath the parcel band (the old engine's `svg-builder.ts` water pass is the reference for palette and layering; do not import from it — the village engine stays independent).
-- [ ] Shoreline treatment consistent with the refined asset set; `data-bg="paper"` contract untouched.
-- [ ] Acceptance: coastal and river scenarios render with legible water; a landlocked village is byte-identical to today; render tests extended.
+- [x] Paint water polygons in a band beneath the parcel band (the old engine's `svg-builder.ts` water pass is the reference for palette and layering; do not import from it — the village engine stays independent). *(Done: `data-band="water"` emitted straight after the `data-bg="paper"` rect, so it is GROUND and everything the village built sits on it. `WATER`/`WATER_EDGE` restated from `PALETTE_PARCHMENT`'s water and the same darken the city theme derives its shore from — restated, not imported, per this bullet. `model.site.water` was already on the model, so this is renderer-only as planned.)*
+- [x] Shoreline treatment consistent with the refined asset set; `data-bg="paper"` contract untouched. *(The refined set has no shore/wave glyph — `sm-mill-water` is the only water-named symbol and it is a building — so the shore is a stroke, `SHORE_WIDTH_M = 0.6` scaled by `pxPerMetre`, matching `render-theme.ts`'s `shoreWidth`. `data-bg="paper"` untouched and asserted.)*
+- [x] Acceptance: coastal and river scenarios render with legible water; a landlocked village is byte-identical to today; render tests extended. *(Both new bars written RED first. Landlocked byte-identity pinned by a sha256 taken from the renderer BEFORE the band existed — a dry village gains nothing, not even an empty group. Coastal and brook rendered and LOOKED AT: the sea reads with its shore, and the 4 m brook — previously invisible — now reads as a thin line. The water band deliberately does not enter the bounds computation, or a coastline would zoom every coastal render out to the whole sea.)*
+
+**Phase 2 note for Phase 3:** painting the water immediately showed what Phase 3 is for. In `brook`, the road crosses the stream with no bridge and houses sit along it — previously invisible, now plain.
 
 ## Phase 3 — Narrow water is an obstacle, not a boundary
 
