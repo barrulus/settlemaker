@@ -157,7 +157,20 @@ export function generateVillageGeoJson(model: VillageModel): FeatureCollection {
     });
   }
 
-  // 7. POIs.
+  // 7. Junctions — where the trunk network's roads meet (spec 5.5). The
+  //    model has carried these since Task 5 and `types.ts` promised this
+  //    export; it was never written. `pruneJunctions` guarantees each one
+  //    sits on a road that actually shipped and names only lanes that still
+  //    exist, so a consumer never receives a junction in open ground.
+  for (const j of model.trunkJunctions) {
+    features.push({
+      type: 'Feature',
+      properties: { layer: 'junction', junction_id: j.id, street_ids: j.laneIds },
+      geometry: { type: 'Point', coordinates: pt(j.position) },
+    });
+  }
+
+  // 8. POIs.
   for (const p of model.pois) {
     features.push({
       type: 'Feature',

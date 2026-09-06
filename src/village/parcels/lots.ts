@@ -297,7 +297,7 @@ function claimTouchesWater(lot: Lot, water: Point[][]): boolean {
     obb.center.y + t.y * sw * obb.halfW + nrm.y * sd * obb.halfD,
   );
   const corners = [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)];
-  if (obb.center && inAnyWater(obb.center, water)) return true;
+  if (inAnyWater(obb.center, water)) return true;
   if (corners.some((p) => inAnyWater(p, water))) return true;
 
   for (let i = 0; i < corners.length; i++) {

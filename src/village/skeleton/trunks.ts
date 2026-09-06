@@ -360,6 +360,12 @@ export function mergeTrunks(
   drafts: DraftTrunk[],
   builtEdgeRadiusM: number,
   rng: SeededRandom,
+  /** Where the network converges. Merge BANDS are radial distances measured
+   * from here, not from the origin — on a wet site the two differ (task 4b's
+   * F11 aim), and a band measured from the origin would classify a stretch of
+   * road as `inner` while it sat out in the fields. Defaults to the origin
+   * for callers that build drafts by hand. */
+  aim: Point = new Point(0, 0),
 ): { trunks: Lane[]; junctions: TrunkJunction[]; roots: Lane[] } {
   const ordered = drafts
     .map((d, i) => ({ d, i }))
@@ -405,7 +411,7 @@ export function mergeTrunks(
     ): { idx: number; target: CommittedTrunk; point: Point } | null => {
       for (let idx = from; idx < draft.path.length; idx++) {
         const p = draft.path[idx];
-        if (bandOnly && bandOf(Math.hypot(p.x, p.y), builtEdgeRadiusM) !== band) continue;
+        if (bandOnly && bandOf(Point.distance(p, aim), builtEdgeRadiusM) !== band) continue;
         for (const c of committed) {
           if (c.rank > rank) continue;
           if (c.route === draft.entry.route) continue; // same road, two ends
@@ -538,6 +544,18 @@ export interface TrunkNetwork {
    * `siteGreen` as its own starting point so roads and green cannot end up
    * serving different places. */
   aim: Point;
+  /**
+   * The ring's corners in drawn order, when the pattern is `loop`; empty
+   * otherwise.
+   *
+   * Carried rather than re-derived from lane ids. Re-deriving meant sorting
+   * on `id.split('-').pop()`, which yields `NaN` for a crossing-split half
+   * (`trunk-loop-4~xtrunk_town_r_town`) — so the polygon came back
+   * mis-ordered and over-long, self-intersecting on the 1.6% of runs where a
+   * ring segment gets split. An `enclosed` green is placed at this polygon's
+   * centroid, and two structural bars are evaluated against it.
+   */
+  ring: Point[];
 }
 
 const PATTERN_DRAW_ORDER: ConvergencePattern[] = ['main-street', 'loop', 'y-tree', 'junction'];
@@ -801,9 +819,13 @@ function sortedJunctionIds(ids: string[]): string[] {
  * spine, redrawn end-to-end so both ends stay exactly on the contract
  * circle; every other root lands on the spine at its own nearest point. */
 function applyMainStreet(
-  trunks: Lane[], junctions: TrunkJunction[], roots: Lane[], pairs: ThroughPair[], rng: SeededRandom,
-): { trunks: Lane[]; junctions: TrunkJunction[] } {
-  if (pairs.length === 0) return applyJunction(trunks, junctions, roots);
+  trunks: Lane[], junctions: TrunkJunction[], roots: Lane[], pairs: ThroughPair[],
+  rng: SeededRandom, aim: Point,
+): { trunks: Lane[]; junctions: TrunkJunction[]; pattern?: ConvergencePattern } {
+  // I3: when there is no through pair there is no spine to build, and this
+  // degrades to a junction. Say so, rather than letting the caller report a
+  // `main-street` that was never drawn -- green siting reads that pattern.
+  if (pairs.length === 0) return { ...applyJunction(trunks, junctions, roots, aim), pattern: 'junction' };
 
   let best = pairs[0];
   for (const p of pairs) if (classRank(p.type) < classRank(best.type)) best = p;
@@ -847,9 +869,9 @@ function applyMainStreet(
  * which staggers the landings by construction. */
 function applyLoop(
   trunks: Lane[], junctions: TrunkJunction[], roots: Lane[], builtEdgeRadiusM: number,
-  bestClass: RouteType, rng: SeededRandom,
-): { trunks: Lane[]; junctions: TrunkJunction[] } {
-  if (roots.length === 0) return { trunks, junctions };
+  bestClass: RouteType, rng: SeededRandom, aim: Point,
+): { trunks: Lane[]; junctions: TrunkJunction[]; pattern?: ConvergencePattern; ring?: Point[] } {
+  if (roots.length === 0) return { trunks, junctions, pattern: 'junction' };
   // F13: never wider than the roads feeding it.
   const loopClass = connectorClass(bestClass);
   const vertexCount = 8 + rng.int(0, 3); // 8, 9 or 10
@@ -860,7 +882,9 @@ function applyLoop(
     const angle = (360 / vertexCount) * k;
     const jitter = 1 + (rng.float() * 2 - 1) * 0.25;
     const dir = bearingVector(angle);
-    vertices.push(new Point(dir.x * baseRadius * jitter, dir.y * baseRadius * jitter));
+    // Centred on the AIM, not the origin: on a wet site the aim is pushed
+    // clear of water, and a ring drawn about (0,0) would sit in it.
+    vertices.push(new Point(aim.x + dir.x * baseRadius * jitter, aim.y + dir.y * baseRadius * jitter));
   }
 
   const loopLanes: Lane[] = [];
@@ -915,14 +939,20 @@ function applyLoop(
     const landing = nearestPoint(approach.point, ringSamples);
     const landed = landOn(lane, [landing]);
     outTrunks = replaceLane(outTrunks, laneId, (l) => ({ ...l, points: landed.points }));
+    // Names the ring SEGMENT it lands on, not just the arriving road. A
+    // junction that names one lane is not a junction, and Task 10 exports
+    // these -- a consumer reading `street_ids` would have seen a road
+    // meeting nothing.
+    const segment = loopLanes.find((l) => l.points.some((p) => Point.distance(p, landing) < 1e-9));
+    const laneIds = sortedJunctionIds(segment ? [laneId, segment.id] : [laneId]);
     outJunctions = [...outJunctions, {
-      id: `j:${sortedJunctionIds([laneId, 'trunk-loop']).join('+')}:${ringSamples.indexOf(landing)}`,
+      id: `j:${laneIds.join('+')}`,
       position: landing,
-      laneIds: [laneId],
+      laneIds,
     }];
   }
 
-  return { trunks: outTrunks, junctions: outJunctions };
+  return { trunks: outTrunks, junctions: outJunctions, ring: vertices };
 }
 
 /** y-tree (spec 5.2): repeatedly join the two angularly-closest roots at a
@@ -931,7 +961,7 @@ function applyLoop(
  * than one shared point. */
 function applyYTree(
   trunks: Lane[], junctions: TrunkJunction[], roots: Lane[], entryByLaneId: Map<string, TrunkEntry>,
-  builtEdgeRadiusM: number, rng: SeededRandom,
+  builtEdgeRadiusM: number, rng: SeededRandom, aim: Point,
 ): { trunks: Lane[]; junctions: TrunkJunction[] } {
   let outTrunks = [...trunks];
   let outJunctions = [...junctions];
@@ -984,7 +1014,11 @@ function applyYTree(
     const aDir = pointAtRadius(aLane.points, directionRadius);
     const bDir = pointAtRadius(bLane.points, directionRadius);
     const mid = new Point((aDir.x + bDir.x) / 2, (aDir.y + bDir.y) / 2);
-    const pushed = new Point(mid.x * 0.7, mid.y * 0.7);
+    // Pulled 30% toward the AIM, not toward the origin — the two differ on
+    // any wet site.
+    const pushed = new Point(
+      aim.x + (mid.x - aim.x) * 0.7, aim.y + (mid.y - aim.y) * 0.7,
+    );
 
     outTrunks = replaceLane(outTrunks, a.id, (l) => ({ ...l, points: landOn(l, [pushed]).points }));
     outTrunks = replaceLane(outTrunks, b.id, (l) => ({ ...l, points: landOn(l, [pushed]).points }));
@@ -992,7 +1026,7 @@ function applyYTree(
     const connectorType = connectorClass(classRank(a.type) <= classRank(b.type) ? a.type : b.type);
     connectorSeq += 1;
     const connectorId = `trunk-ytree-${connectorSeq}`;
-    const connectorPoints = drawTrunkPath(pushed, new Point(0, 0), connectorType, rng);
+    const connectorPoints = drawTrunkPath(pushed, aim, connectorType, rng);
     outTrunks = [...outTrunks, {
       id: connectorId,
       type: connectorType,
@@ -1018,13 +1052,16 @@ function applyYTree(
 /** junction (spec 5.2): every root already runs to the aim point -- all
  * that is needed is the record of a single shared junction there. */
 function applyJunction(
-  trunks: Lane[], junctions: TrunkJunction[], roots: Lane[],
-): { trunks: Lane[]; junctions: TrunkJunction[] } {
-  if (roots.length <= 1) return { trunks, junctions };
+  trunks: Lane[], junctions: TrunkJunction[], roots: Lane[], aim: Point,
+): { trunks: Lane[]; junctions: TrunkJunction[]; pattern?: ConvergencePattern } {
+  if (roots.length <= 1) return { trunks, junctions, pattern: 'junction' };
   const laneIds = sortedJunctionIds(roots.map((r) => r.id));
+  // At the AIM, which is where the roads actually converge. Recorded at the
+  // origin, a wet village's only junction sat in open water and was then
+  // dropped by `pruneJunctions` -- so the village exported no junction at all.
   return {
     trunks,
-    junctions: [...junctions, { id: `j:${laneIds.join('+')}`, position: new Point(0, 0), laneIds }],
+    junctions: [...junctions, { id: `j:${laneIds.join('+')}`, position: aim, laneIds }],
   };
 }
 
@@ -1033,8 +1070,8 @@ function applyJunction(
  * own line instead of piling onto the same point. */
 function applyTerminal(
   trunks: Lane[], junctions: TrunkJunction[], roots: Lane[],
-): { trunks: Lane[]; junctions: TrunkJunction[] } {
-  if (roots.length <= 1) return { trunks, junctions };
+): { trunks: Lane[]; junctions: TrunkJunction[]; pattern?: ConvergencePattern } {
+  if (roots.length <= 1) return { trunks, junctions, pattern: 'junction' };
   let primary = roots[0];
   for (const r of roots) if (classRank(r.type) < classRank(primary.type)) primary = r;
 
@@ -1275,7 +1312,7 @@ export function synthesizeTrunks(
     path: drawTrunkPath(entry.point, aim, entry.route.type, rng),
   })));
 
-  const merged = mergeTrunks(drafts, builtEdgeRadiusM, rng);
+  const merged = mergeTrunks(drafts, builtEdgeRadiusM, rng, aim);
   const roots = merged.roots;
 
   // Task 4b (F14). No surviving root means there is nothing for a pattern
@@ -1287,7 +1324,7 @@ export function synthesizeTrunks(
     const bare = resolveCrossings(merged.trunks, merged.junctions);
     return {
       trunks: bare.trunks, junctions: bare.junctions, pattern: 'junction',
-      contractRadiusM, entries, aim,
+      contractRadiusM, entries, aim, ring: [],
     };
   }
 
@@ -1303,23 +1340,31 @@ export function synthesizeTrunks(
     roots.length, hasThrough, bestClass, allFeedersTrails, rng, entries.length,
   );
 
-  let applied: { trunks: Lane[]; junctions: TrunkJunction[] };
+  // I3: each applicator may report the pattern it ACTUALLY applied, which
+  // can differ from the one drawn — `main-street` with no surviving through
+  // pair is a junction, whatever the weights said. The reported pattern is
+  // consumed (green siting weights its relation on it), so it must describe
+  // geometry that exists.
+  let applied: {
+    trunks: Lane[]; junctions: TrunkJunction[];
+    pattern?: ConvergencePattern; ring?: Point[];
+  };
   switch (pattern) {
     case 'main-street':
-      applied = applyMainStreet(merged.trunks, merged.junctions, roots, pairs, rng);
+      applied = applyMainStreet(merged.trunks, merged.junctions, roots, pairs, rng, aim);
       break;
     case 'loop':
-      applied = applyLoop(merged.trunks, merged.junctions, roots, builtEdgeRadiusM, bestClass, rng);
+      applied = applyLoop(merged.trunks, merged.junctions, roots, builtEdgeRadiusM, bestClass, rng, aim);
       break;
     case 'y-tree':
-      applied = applyYTree(merged.trunks, merged.junctions, roots, entryByLaneId, builtEdgeRadiusM, rng);
+      applied = applyYTree(merged.trunks, merged.junctions, roots, entryByLaneId, builtEdgeRadiusM, rng, aim);
       break;
     case 'terminal':
       applied = applyTerminal(merged.trunks, merged.junctions, roots);
       break;
     case 'junction':
     default:
-      applied = applyJunction(merged.trunks, merged.junctions, roots);
+      applied = applyJunction(merged.trunks, merged.junctions, roots, aim);
       break;
   }
 
@@ -1330,9 +1375,10 @@ export function synthesizeTrunks(
   return {
     trunks: resolved.trunks,
     junctions,
-    pattern,
+    pattern: applied.pattern ?? pattern,
     contractRadiusM,
     entries,
     aim,
+    ring: applied.ring ?? [],
   };
 }

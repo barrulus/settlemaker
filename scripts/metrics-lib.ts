@@ -319,6 +319,3 @@ export function interiorDeadEnds(m: VillageModel, fabricR: number): {
  * "zero stubs" also covers a lane that starts a junction but never actually
  * joins (a stub mouth). This reuses the exact endsOnAnother-style adjacency
  * test above; kept separate for callers that only want a boolean. */
-export function hasAnyStub(m: VillageModel, fabricR: number): boolean {
-  return interiorDeadEnds(m, fabricR).deadEnds > 0;
-}

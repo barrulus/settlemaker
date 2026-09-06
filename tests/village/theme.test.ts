@@ -34,7 +34,16 @@ describe('village theming', () => {
       plaza: false, temple: false, shanty: false, capital: false,
       roadBearings: [{ bearing_deg: 225, kind: 'road' }],
     } as AzgaarBurgInput, 1));
-    expect(createHash('sha256').update(svg).digest('hex'))
+    // The hash moved when Phase 6 added the alignment frame
+    // (`data-origin-x/y`, `data-px-per-metre`) to the root element. The
+    // PICTURE did not: stripping those three attributes reproduces the
+    // original hash exactly, which is asserted below rather than asserted
+    // away by simply re-pinning. `d0b2f407...` is the pre-change value,
+    // taken before the water band or theming existed.
+    const stripped = svg.replace(
+      / data-origin-x="[-0-9.]+" data-origin-y="[-0-9.]+" data-px-per-metre="[-0-9.]+"/, '',
+    );
+    expect(createHash('sha256').update(stripped).digest('hex'))
       .toBe('d0b2f4073d031de40f812f222458f39689ae50e0401c7e5b5b08333cefdf8542');
   });
 

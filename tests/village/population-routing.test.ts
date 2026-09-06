@@ -51,6 +51,25 @@ describe('Phase 5: one entry point, routed by population', () => {
     }
   });
 
+  it('gives two differently-named burgs different villages with NO seed', () => {
+    // C1 (whole-branch review): the village branch hard-coded `seed ?? 1`
+    // while the settlement branch defaults to a hash of the burg name. Every
+    // unseeded village on an FMG map with the same route/population shape
+    // was therefore the SAME village, and regenerating the map could not
+    // change it. The Phase 5 grid missed it because every call in it passes
+    // an explicit seed -- so this one deliberately passes none.
+    for (const population of [400, 4000]) {
+      const a = generateSettlement({ ...burg(population), name: 'Ashford' });
+      const b = generateSettlement({ ...burg(population), name: 'Bexley' });
+      expect(a.svg, `pop ${population}: two burgs generated the same settlement`).not.toBe(b.svg);
+    }
+    // ...and the same name still gives the same settlement, on both sides.
+    for (const population of [400, 4000]) {
+      expect(generateSettlement({ ...burg(population), name: 'Ashford' }).svg)
+        .toBe(generateSettlement({ ...burg(population), name: 'Ashford' }).svg);
+    }
+  });
+
   it('is deterministic, and honours the seed on both sides', () => {
     for (const population of [400, 4000]) {
       const a = generateSettlement(burg(population), { seed: 7 });

@@ -279,8 +279,16 @@ export function renderVillage(
   // from the drawing -- the roads are drawn, the circle is not. Sits beside
   // `data-bg="paper"`, settlement-tiler's existing crop contract, which is
   // deliberately untouched.
+  // The radius alone is not actionable: it is in METRES, while this SVG's
+  // coordinates are pixels offset by `minX`/`minY` and scaled by
+  // `pxPerMetre`, neither of which a consumer can see. Publishing where the
+  // burg origin lands and what the scale is makes the alignment contract
+  // usable — a route leaving at bearing B meets the drawing at
+  // `origin + (sin B, -cos B) * contractRadius * pxPerMetre`.
   out.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${n(w)}" height="${n(h)}" `
-    + `viewBox="0 0 ${n(w)} ${n(h)}" data-contract-radius="${n(model.contractRadiusM)}">`);
+    + `viewBox="0 0 ${n(w)} ${n(h)}" data-contract-radius="${n(model.contractRadiusM)}" `
+    + `data-origin-x="${n(X(0))}" data-origin-y="${n(Y(0))}" `
+    + `data-px-per-metre="${n(pxPerMetre)}">`);
   out.push(`<style>${smStyleFor(theme.tokens)}</style>`);
   out.push(`<defs>${defs.join('')}${patternDefs.join('')}</defs>`);
   out.push(`<rect data-bg="paper" width="${n(w)}" height="${n(h)}" fill="${theme.ground}"/>`);

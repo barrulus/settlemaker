@@ -64,10 +64,9 @@ describe('siteGreenOnNetwork', () => {
       const { network, green, relation } = build(THROUGH, seed);
       if (network.pattern !== 'loop') continue;
       expect(relation).toBe('enclosed');
-      const ring = network.trunks
-        .filter((t) => t.id.startsWith('trunk-loop-'))
-        .sort((a, b) => Number(a.id.split('-').pop()) - Number(b.id.split('-').pop()))
-        .map((t) => t.points[0]);
+      // Read off the network, not rebuilt from lane ids — a crossing-split
+      // ring half sorts as NaN and yields a self-intersecting polygon.
+      const ring = network.ring;
       expect(ring.length).toBeGreaterThanOrEqual(3);
       expect(pointInPolygon(green.centre, ring), `seed ${seed}: green outside its own ring`).toBe(true);
     }

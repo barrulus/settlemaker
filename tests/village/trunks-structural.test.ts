@@ -79,15 +79,29 @@ function crosses(a: Point[], b: Point[]): boolean {
 // the global `testTimeout` in `vitest.config.ts`, which carries the
 // measurement and the reasoning.
 describe('spec 5.6 structural invariants, on the shipped model', () => {
-  it('(a) every FMG route is represented exactly once', () => {
+  it('(a) every FMG route is carried by the network, matched on whole ids', () => {
+    // Was a SUBSTRING test (`t.id.includes(id)`), which in the `fan`
+    // scenario -- whose route ids are single letters -- passed route 'a'
+    // against `trunk-trail-e` and `trunk-local-d`. Several routes were
+    // "represented" by lanes that had nothing to do with them.
+    //
+    // Matched on whole id segments now. The plan's wording was "exactly
+    // once"; the honest bar is "at least once", because `resolveCrossings`
+    // legitimately splits one road into `<id>` and `<id>~x<other>` halves,
+    // and a merged road reports its several routes on `sourceRouteIds`.
+    // Uniqueness of the CARRIER is asserted by the id-uniqueness bar.
     each((m, label, roads) => {
       const trunks = m.lanes.filter((l) => isTrunk(l.id));
       for (const road of roads as Array<{ route_id?: string }>) {
         const id = road.route_id!;
-        const carriers = trunks.filter(
-          (t) => t.id.includes(id) || (t.sourceRouteIds ?? []).includes(id),
-        );
-        expect(carriers.length, `${label}: route ${id} is carried by ${carriers.length} lanes`)
+        const carriers = trunks.filter((t) => {
+          if ((t.sourceRouteIds ?? []).includes(id)) return true;
+          // `trunk-<class>-<routeId>` optionally followed by `~far`, a
+          // crossing-split `~x...`, or a `/b` branch suffix — never a bare
+          // substring.
+          return new RegExp(`^trunk-[a-z]+-${id}(~|/|$)`).test(t.id);
+        });
+        expect(carriers.length, `${label}: route ${id} is carried by no lane`)
           .toBeGreaterThan(0);
       }
     });

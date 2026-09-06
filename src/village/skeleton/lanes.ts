@@ -1728,8 +1728,11 @@ export function saturateDisc(
   // village's own growth budget, so none of them should be able to spend
   // it either.
   const budgetM = laneBudgetFor(targetRadiusM);
+  // Hoisted out of the loop condition: this filter allocated a fresh array on
+  // every iteration of a loop bounded by MAX_INVENTED_LANES.
+  const inventedOnly = (all: Lane[]): Lane[] => all.filter((l) => !isTrunk(l.id));
   while (guard < MAX_INVENTED_LANES
-    && laneLengthWithin(out.filter((l) => !isTrunk(l.id)), green, target) < budgetM) {
+    && laneLengthWithin(inventedOnly(out), green, target) < budgetM) {
     guard++;
     // Gate 6.7: coverage comes FIRST, not last. Gate 6.4 added this check
     // as a last resort before widening, which was enough while every street

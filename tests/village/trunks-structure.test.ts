@@ -263,13 +263,14 @@ describe('trunk network structural invariants (task 4b)', () => {
     for (const { name, routes } of SCENARIOS) {
       for (const { seed, net } of networks(routes)) {
         if (net.pattern !== 'loop') continue;
-        const ring = net.trunks.filter((t) => t.id.startsWith('trunk-loop-'));
-        if (ring.length < 3) continue;
-        // The ring's own corners, in drawn order, are its polygon.
-        const polygon = ring
-          .slice()
-          .sort((a, b) => Number(a.id.split('-').pop()) - Number(b.id.split('-').pop()))
-          .map((l) => l.points[0]);
+        // Read the ring off the network. This test used to rebuild it by
+        // sorting lane ids on `id.split('-').pop()`, which is `NaN` for a
+        // crossing-split half (`trunk-loop-4~xtrunk_town_r_town`) — so on the
+        // ~1.6% of runs with a split ring the bar was being evaluated against
+        // a mis-ordered, self-intersecting polygon and read weaker than it
+        // looked.
+        const polygon = net.ring;
+        if (polygon.length < 3) continue;
         // Shrink toward the centroid so a lane legitimately RUNNING ALONG
         // the ring, or ending exactly on it, is not counted as inside it.
         const cx = polygon.reduce((sum, p) => sum + p.x, 0) / polygon.length;

@@ -107,9 +107,5 @@ const BIOME_THEMES: Record<string, Partial<VillageTheme>> = {
 export function villageThemeFor(biome?: string): VillageTheme {
   const over = (biome != null && Object.hasOwn(BIOME_THEMES, biome))
     ? BIOME_THEMES[biome] : {};
-  return {
-    ...TEMPERATE_THEME,
-    ...over,
-    ...(over.tokens ? { tokens: over.tokens } : {}),
-  };
+  return { ...TEMPERATE_THEME, ...over };
 }

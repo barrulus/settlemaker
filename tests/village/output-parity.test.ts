@@ -43,6 +43,50 @@ describe('Phase 4: a village leaves by the same door as a settlement', () => {
     expect(vb!.height).toBeGreaterThan(0);
   });
 
+  it('publishes a usable alignment frame, not just a radius', () => {
+    // The radius is in metres; the SVG's coordinates are pixels, offset and
+    // scaled by numbers a consumer cannot otherwise see. Without the frame,
+    // the contract circle is unusable for the alignment it exists for.
+    const svg = renderVillage(generateVillage(input, 1));
+    const num = (attr: string): number => {
+      const m = new RegExp(`${attr}="([-0-9.]+)"`).exec(svg);
+      expect(m, `no ${attr}`).not.toBeNull();
+      return Number(m![1]);
+    };
+    const r = num('data-contract-radius');
+    const px = num('data-px-per-metre');
+    expect(px).toBeGreaterThan(0);
+    expect(r).toBeGreaterThan(0);
+    // The burg origin must land inside the drawing.
+    const ox = num('data-origin-x');
+    const oy = num('data-origin-y');
+    const vb = parseSvgViewBox(svg)!;
+    expect(ox).toBeGreaterThanOrEqual(0);
+    expect(oy).toBeGreaterThanOrEqual(0);
+    expect(ox).toBeLessThanOrEqual(vb.width);
+    expect(oy).toBeLessThanOrEqual(vb.height);
+  });
+
+  it('exports the junctions its own type doc promises', () => {
+    // `types.ts` called `trunkJunctions` a consumer contract exported by the
+    // GeoJSON. It was not exported at all until the whole-branch review
+    // caught the empty promise.
+    const m = generateVillage(input, 1);
+    const fc = generateVillageGeoJson(m);
+    const junctions = fc.features.filter((f) => f.properties?.layer === 'junction');
+    expect(junctions.length).toBe(m.trunkJunctions.length);
+    if (junctions.length === 0) return;
+    const streetIds = new Set(
+      fc.features.filter((f) => f.properties?.layer === 'street')
+        .map((f) => f.properties?.street_id),
+    );
+    for (const j of junctions) {
+      for (const id of (j.properties?.street_ids as string[])) {
+        expect(streetIds.has(id), `junction ${String(j.properties?.junction_id)} names a missing street`).toBe(true);
+      }
+    }
+  });
+
   it('pins the GeoJSON contract: layers present, and the metadata keys consumers gate on', () => {
     const fc = generateVillageGeoJson(generateVillage(input, 1));
     const layers = new Set(fc.features.map((f) => String(f.properties?.layer)));

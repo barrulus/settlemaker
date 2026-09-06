@@ -228,12 +228,16 @@ function chooseRelation(pattern: string, rng: SeededRandom): GreenRelation {
   return RELATION_DRAW_ORDER[RELATION_DRAW_ORDER.length - 1];
 }
 
-/** The ring's corners, in drawn order, or null when there is no ring. */
+/**
+ * The ring's corners, in drawn order, or null when there is no ring.
+ *
+ * Read from the network rather than re-derived from lane ids: sorting on
+ * `id.split('-').pop()` returns `NaN` for a crossing-split half, which
+ * mis-ordered the polygon and moved the centroid an `enclosed` green is
+ * placed at by up to 5 m.
+ */
 function ringPolygon(network: TrunkNetwork): Point[] | null {
-  const ring = network.trunks
-    .filter((t) => t.id.startsWith('trunk-loop-') && t.points.length >= 2)
-    .sort((a, b) => Number(a.id.split('-').pop()) - Number(b.id.split('-').pop()));
-  return ring.length >= 3 ? ring.map((l) => l.points[0]) : null;
+  return network.ring.length >= 3 ? network.ring : null;
 }
 
 /** The network's best-class road, preferring the longest on a tie. */
@@ -426,10 +430,12 @@ export function siteGreenOnNetwork(
 }
 
 /**
- * Short lanes tying a green to the network when it does not already touch
- * it. Ids are `green-c<k>` ordered by bearing, so they are stable for a
- * given network; class `local`, because a path from a green to the road it
- * serves is a village street, never an inter-settlement route.
+ * A short lane tying a green to the network when it does not already touch
+ * it: `green-c0`, class `local`, because a path from a green to the road it
+ * serves is a village street and never an inter-settlement route. One
+ * connector, to the nearest road — the plural `green-c<k>` the header once
+ * promised was never built, and a green needing several connectors would be
+ * a siting failure rather than something to paper over with more road.
  */
 function connectGreen(green: Green, network: TrunkNetwork, builtRadiusM: number): Lane[] {
   const rim = greenDrawnRadius(green);
@@ -442,7 +448,6 @@ function connectGreen(green: Green, network: TrunkNetwork, builtRadiusM: number)
 
   const maxLen = builtRadiusM * GREEN_CONNECTOR_MAX_SHARE;
   const target = nearest.hit.point;
-  void maxLen;
   const away = unit(target.x - green.centre.x, target.y - green.centre.y);
   const start = new Point(green.centre.x + away.x * rim, green.centre.y + away.y * rim);
   if (dist(start, target) > maxLen) {
