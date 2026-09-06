@@ -80,7 +80,8 @@ import { generateVillage, VILLAGE_POP_CEILING } from './village/village-model.js
 import { renderVillage } from './village/render.js';
 import { generateVillageGeoJson } from './village/geojson.js';
 import type { VillageModel } from './village/types.js';
-import type { VillageTheme } from './village/theme.js';import type { FeatureCollection } from 'geojson';
+import type { VillageTheme } from './village/theme.js';
+import type { FeatureCollection } from 'geojson';
 import type { DegradedFlag } from './generator/generation-params.js';
 import { mapToGenerationParams } from './input/azgaar-input.js';
 import { Model } from './generator/model.js';
