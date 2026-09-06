@@ -204,17 +204,31 @@ export interface VillageModel {
   vegetation: Vegetation[];
   pois: Poi[];
   diagnostics: string[];
-  /** Trunks task 5: the contract circle's radius `synthesizeTrunks` drew
-   * entries on (spec 5.1) -- `contractRadiusFor(closedFormRadius)`. Not
-   * consumed by the renderer this task; carried on the model so a later
-   * task (or a diagnostic) can read where the trunk network's outer
-   * boundary sat without recomputing it. */
+  /**
+   * The contract circle's radius, in burg-local metres (spec 5.1/5.5).
+   *
+   * CONSUMER CONTRACT (task 10). Every FMG route reaches this circle at its
+   * exact bearing, so a consumer holding this number can line our tile up
+   * with FMG's own route lines: a route leaving the burg at bearing B is
+   * guaranteed to meet our drawing at `(sin B, -cos B) * contractRadiusM`
+   * from the burg origin. It is the one part of the boundary contract that
+   * cannot be recovered from the drawing itself -- the roads are painted,
+   * the circle is not -- which is why `render.ts` also states it on the
+   * root SVG element as `data-contract-radius`, and why Phase 4's GeoJSON
+   * echoes it.
+   *
+   * Not a render or tile boundary (ruling 1): it is purely a routing
+   * contract, and the fabric is free to sit well inside it.
+   */
   contractRadiusM: number;
-  /** Trunks task 5: every junction `synthesizeTrunks` recorded while
-   * merging and pattern-applying the network (spec 5.2). The renderer
-   * ignores this field for now -- it exists so a later task can draw or
-   * probe junctions without threading a second return value through
-   * `generateVillage`. */
+  /**
+   * Every junction the trunk network resolved to (spec 5.2).
+   *
+   * CONSUMER CONTRACT (task 10): Phase 4's GeoJSON exports these as the
+   * network's junctions. `pruneJunctions` guarantees each one sits on a
+   * road that actually shipped and names only lanes that still exist, so a
+   * consumer never receives a junction in open ground.
+   */
   trunkJunctions: TrunkJunction[];
   /** Task 7: how the green ended up sitting in its network (spec 5.3) --
    * beside a road, astride one, at the end of one, or enclosed by a ring.

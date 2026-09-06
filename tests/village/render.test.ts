@@ -34,6 +34,20 @@ describe('renderVillage', () => {
     expect(svg.trimEnd().endsWith('</svg>')).toBe(true);
   });
 
+  it('carries the contract circle radius for consumers to align against', () => {
+    // Task 10 (spec 5.5, "boundary alignment"): every FMG route meets the
+    // contract circle at its exact bearing, so a consumer that knows the
+    // circle's radius can line our tile up with FMG's own route lines. The
+    // radius is the one thing it cannot recover from the drawing, so the
+    // SVG states it. `data-bg="paper"` is settlement-tiler's existing crop
+    // contract and must survive untouched beside it.
+    const match = /data-contract-radius="([0-9.]+)"/.exec(svg);
+    expect(match, 'no data-contract-radius on the rendered SVG').not.toBeNull();
+    expect(Number(match![1])).toBeCloseTo(model.contractRadiusM, 2);
+    expect(model.contractRadiusM).toBeGreaterThan(0);
+    expect(svg).toContain('data-bg="paper"');
+  });
+
   it('paints roads first and the green over them (gate-2 band order)', () => {
     // Gate 2: "roads should go under the green". Route band paints first,
     // the green's parcel band paints over it — lane geometry runs into the

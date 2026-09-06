@@ -262,7 +262,15 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
   }
 
   const out: string[] = [];
-  out.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${n(w)}" height="${n(h)}" viewBox="0 0 ${n(w)} ${n(h)}">`);
+  // Task 10 (spec 5.5, "boundary alignment"): the contract circle's radius,
+  // stated on the root element so a consumer can align this tile with FMG's
+  // own route lines. Every FMG route meets that circle at its exact bearing,
+  // and the radius is the one part of the contract a consumer cannot recover
+  // from the drawing -- the roads are drawn, the circle is not. Sits beside
+  // `data-bg="paper"`, settlement-tiler's existing crop contract, which is
+  // deliberately untouched.
+  out.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${n(w)}" height="${n(h)}" `
+    + `viewBox="0 0 ${n(w)} ${n(h)}" data-contract-radius="${n(model.contractRadiusM)}">`);
   out.push(`<style>${SM_STYLE}</style>`);
   out.push(`<defs>${defs.join('')}${patternDefs.join('')}</defs>`);
   out.push(`<rect data-bg="paper" width="${n(w)}" height="${n(h)}" fill="${GROUND}"/>`);
