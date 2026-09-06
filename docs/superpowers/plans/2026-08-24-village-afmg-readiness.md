@@ -39,6 +39,44 @@ The density and anisotropy campaigns (gates 5–8) are ACCEPTED work. No task in
 - [x] Near-duplicate bearings: define and apply a minimum separation for INCOMING arms (they currently only de-duplicate ids, not geometry), so 1.2° apart becomes one road, not three. *(Done 5bc1fa5: `INCOMING_ARM_MERGE_DEG = 5`, highest-class survivor, `sourceRouteIds` provenance.)*
 - [x] Acceptance: at 3, 5 and 8 routes, pop 300 and 900 — census fully housed, blocks ≥ 2 / ≥ 6, no starfish by eye, all standing bars hold. *(Measured 0439db3/7a87432: census 18/18, blocks 18/18, crossings/ink-gap/land-use/polar 18/18 across tri/hub/fan × 300/900 × seeds 1-3. Open, carried to Phase 6 in the SDD ledger: fan arm-tips visual awaits the owner's render call; 4 marginal non-seed-1 bar items — hub300s2 cv 0.148, tri300s3 sector 80°, tri300s2 cv 0.123, tri900s2 stubs 1/3.)*
 
+## Phase 1.5 — Trunk networks — COMPLETE (2026-09-06)
+
+Inserted after Phase 1 by the owner-approved design `specs/2026-08-25-trunk-network-design.md` and
+executed as `plans/2026-08-25-trunk-networks.md` (tasks 1-11, ledger
+`.superpowers/sdd/2026-08-25-trunk-networks/`). The arm model is retired: FMG's routes now enter on a
+contract circle and are synthesized inward as a merging trunk network, and the green is sited on the
+finished network rather than the network being aimed at the green.
+
+**Owner gates: G1 PASSED, G2 PASSED, G3 presented.** Three render gates, each judged by the owner.
+
+**Acceptance re-baselined at G3** (36 runs; full table in the ledger's `task-11-g3-report.md`).
+Bars holding on all 36: census housed, zero crossings, land use 69-82% BODY, blocks 3-14 at pop 300
+and 10-24 at pop 900, anisotropy ratio 1.78-3.70 and cv 0.154-0.350, field curved share 1-6%. The
+five standard gate fixtures hold every bar with margin. Suite 1036/1036, both typechecks clean.
+
+**Phase 1's four carried items are resolved or superseded**: the fan starfish is gone structurally
+(no arm-tips to be bare); hub 300 s2 cv 0.148 -> 0.264; tri 300 s3 sector 80 -> 45; tri 300 s2 cv
+0.123 -> 0.297; tri 900 s2 stubs 1-of-3 -> 1-of-29.
+
+**Open, carried into the rest of this plan:**
+- **Stubs** — interior dead ends unclosed on 22 of 36 runs. Phase 1's carried item, much improved in
+  ratio but not closed. A `connectDeadEnds` question, not a trunk one.
+- Laneless sector 60 deg on hub 300 s2 (exactly at the "< 60" bar), and ink gap 1.73 m on
+  panel-cross 300 s1 (bar <= 1.6). One run of 36 each, neither on a gate fixture, neither tuned away
+  because the constants involved were set by the owner's own gate verdicts.
+- pop 900 s1 anisotropy cv 0.150, exactly at its floor.
+
+**Owner rulings recorded during this phase:** the fabric reading (houses in arcs about the green
+rather than lining the roads) is ACCEPTED as it stands, so no growth task is opened; greens stay
+their current size; the crossroad's ring weighting is left alone; `BLOCK_CHASE_ROUND_CAP` stays at 2.
+
+**Contract consequences for the phases below:** the model and SVG now carry `contractRadiusM` (also
+emitted as `data-contract-radius` on the root SVG element), `trunkJunctions`, per-lane
+`sourceRouteIds` and entry-stub geometry — so Phase 4's output parity is an export, not a
+re-derivation. Phase 2 and 3 inherit one caveat: trunk paths are drawn without consulting water
+between the contract circle and the aim. The network's AIM is pushed clear of water, but routing a
+road AROUND water is Phase 3's own job and was deliberately left there.
+
 ## Phase 2 — Paint the water
 
 **Why:** `src/village/render.ts` contains the word "water" zero times. Water constrains the model but is never drawn, so every coastal/river render is a village with an unexplained bite out of it — and we have been judging those renders blind. Renderer-only; no model change.
