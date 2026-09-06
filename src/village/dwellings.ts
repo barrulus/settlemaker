@@ -1,7 +1,7 @@
 import { Point } from '../types/point.js';
 import { SeededRandom } from '../utils/random.js';
 import {
-  bearingVector, closestPointOnSegment, wrapDeg,
+  bearingVector, closestPointOnSegment, inAnyWater, segmentIntersection, wrapDeg,
 } from './geometry.js';
 import { inkExtent, nominalFootprint, rotationOf } from './glyphs.js';
 import {
@@ -208,6 +208,36 @@ export function overlaps(a: Building, b: Building): boolean {
  * breaks the green's ring where a road passes under the green: a house
  * cannot sit over the road's exit.
  */
+/**
+ * True when the building's painted INK touches water — its four rotated ink
+ * corners, its centre, or an ink edge crossing a water outline (a 4 m stream
+ * can pass through a footprint without wetting any corner).
+ */
+export function standsInWater(b: Building, water: Point[][]): boolean {
+  if (water.length === 0) return false;
+  const ink = inkExtent(b.glyph, b.footprint);
+  const hw = ink.width / 2;
+  const hd = ink.depth / 2;
+  const r = (b.bearingDeg * Math.PI) / 180;
+  const c = Math.cos(r);
+  const s = Math.sin(r);
+  const at = (x: number, y: number): Point =>
+    new Point(b.position.x + x * c - y * s, b.position.y + x * s + y * c);
+  const corners = [at(-hw, -hd), at(hw, -hd), at(hw, hd), at(-hw, hd)];
+  if (inAnyWater(b.position, water)) return true;
+  if (corners.some((p) => inAnyWater(p, water))) return true;
+  for (let i = 0; i < corners.length; i++) {
+    const a = corners[i];
+    const bb = corners[(i + 1) % corners.length];
+    for (const ring of water) {
+      for (let j = 0; j < ring.length; j++) {
+        if (segmentIntersection(a, bb, ring[j], ring[(j + 1) % ring.length])) return true;
+      }
+    }
+  }
+  return false;
+}
+
 export function intrudesOnLane(b: Building, lanes: Lane[]): boolean {
   const o = obbOf(b);
   for (const lane of lanes) {
@@ -282,6 +312,7 @@ export function spendCensus(
     const tangent = new Point(-facing.y, facing.x);
     let intrusionFails = 0;
     let overlapFails = 0;
+    let waterFails = 0;
     for (const share of terrace ? TERRACE_SLIDE_SHARES : SLIDE_SHARES) {
       const offset = share * lot.frontageM;
       const cand: Building = share === 0 ? b : {
@@ -289,9 +320,17 @@ export function spendCensus(
         position: new Point(b.position.x + tangent.x * offset, b.position.y + tangent.y * offset),
       };
       if (intrudesOnLane(cand, lanes)) { intrusionFails++; continue; }
+      // Phase 3: no house may stand in water. `clipLots` has already dropped
+      // lots whose CLAIM is wet, but the slide above moves a candidate along
+      // its frontage, and that can walk it off dry ground into a stream the
+      // claim only just cleared -- measured, 3 houses still in the brook
+      // after the claim test alone. Judged on the painted INK, which is what
+      // a reader sees standing in the river.
+      if (standsInWater(cand, site.water)) { waterFails++; continue; }
       if (buildings.some((other) => overlaps(cand, other))) { overlapFails++; continue; }
       return cand;
     }
+    if (waterFails >= intrusionFails && waterFails >= overlapFails) return 'in-water';
     return intrusionFails >= overlapFails ? 'lane-intrusion' : 'building-overlap';
   };
   const seated = (r: Building | LotFate): r is Building => typeof r !== 'string';

@@ -5,7 +5,7 @@ import {
   PROFILE_HARMONIC_AMPLITUDES, PROFILE_HARMONICS, PROFILE_ROAD_ELONGATION,
   PROFILE_MAX_BOOST, PROFILE_MIN_CV,
   PROFILE_SHAPE_MAX, PROFILE_SHAPE_MIN, PROFILE_WATER_FLOOR, PROFILE_WATER_MARGIN_M,
-  PROFILE_WATER_REACH_RATIO, PROFILE_WATER_STEP_M,
+  NARROW_WATER_M, NARROW_WATER_PROBE_M, PROFILE_WATER_REACH_RATIO, PROFILE_WATER_STEP_M,
 } from '../constants.js';
 
 /**
@@ -159,9 +159,23 @@ function waterDistanceM(input: ProfileInput, bearingDeg: number): number {
   if (input.water.length === 0) return Infinity;
   const dir = bearingVector(bearingDeg);
   const reach = input.radiusM * PROFILE_WATER_REACH_RATIO;
+  const at = (d: number): Point =>
+    new Point(input.centre.x + dir.x * d, input.centre.y + dir.y * d);
+
   for (let d = 0; d <= reach; d += PROFILE_WATER_STEP_M) {
-    const p = new Point(input.centre.x + dir.x * d, input.centre.y + dir.y * d);
-    if (inAnyWater(p, input.water)) return d;
+    if (!inAnyWater(at(d), input.water)) continue;
+    // Phase 3: found water — but is it a BOUNDARY or an OBSTACLE? Walk
+    // across it. Dry ground again within `NARROW_WATER_M` means this is a
+    // stream the village sits on rather than a shore it stops at, so it
+    // does NOT cap the profile and the march continues looking for real
+    // water further out. Capping at every brook is what stretched a pop-900
+    // village to 7:1 against its own dry twin.
+    let crossed = Infinity;
+    for (let w = PROFILE_WATER_STEP_M; w <= NARROW_WATER_PROBE_M; w += PROFILE_WATER_STEP_M) {
+      if (!inAnyWater(at(d + w), input.water)) { crossed = w; break; }
+    }
+    if (crossed >= NARROW_WATER_M) return d;
+    d += crossed;
   }
   return Infinity;
 }

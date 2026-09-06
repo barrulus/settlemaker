@@ -185,6 +185,31 @@ export interface Poi {
   bearingDeg: number;
 }
 
+/**
+ * Where a lane crosses water (Phase 3). A wet run along a lane: the stretch
+ * between entering the water and leaving it again.
+ *
+ * MARKED, not drawn. The plan defers full bridge geometry to the parked
+ * rivers work; what this phase owes is that a road crossing a stream is a
+ * recorded fact rather than a silent overlap, so a later pass (or a
+ * consumer) can put a bridge there without re-deriving where it goes.
+ */
+export interface WaterCrossing {
+  /** `bridge:<laneId>:<k>`, k counting crossings along that lane. */
+  id: string;
+  laneId: string;
+  /** Midpoint of the wet run — where a bridge would sit. */
+  position: Point;
+  /** The lane's bearing across the water, for orienting a span. */
+  bearingDeg: number;
+  /** How much lane is wet, in metres: the span a bridge would need. */
+  spanM: number;
+  /** False when the wet run is wider than `NARROW_WATER_M` — a road running
+   * into real water rather than stepping over a stream, which is a defect
+   * to look at rather than a bridge to build. */
+  narrow: boolean;
+}
+
 export interface VillageModel {
   site: Site;
   green: Green;
@@ -235,6 +260,8 @@ export interface VillageModel {
    * Recorded so a later pass (and the G2 gate) can read the choice without
    * re-deriving it from geometry. */
   greenRelation: GreenRelation;
+  /** Phase 3: every place a lane crosses water. Empty for a dry village. */
+  bridges: WaterCrossing[];
 }
 
 /** Bearing rounded to whole degrees and wrapped to [0, 360). */

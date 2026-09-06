@@ -1,6 +1,8 @@
 import { SeededRandom } from '../../utils/random.js';
 import { offsetPolyline } from './strip.js';
-import { arcLengths, bearingOf, dist, inAnyWater, sampleAt, signedTurnDeg } from '../geometry.js';
+import {
+  arcLengths, bearingOf, dist, inAnyWater, sampleAt, segmentIntersection, signedTurnDeg,
+} from '../geometry.js';
 import {
   CLAIM_TOUCH_EPS_M, F0_FLOOR_RATIO, FRONTAGE_JITTER, GAP_LOOSE_M, GAP_POP_HIGH, GAP_POP_LOW, GAP_TIGHT_M,
   GRADIENT_EXPONENT, GRADIENT_K, GRADIENT_RATIO_CAP, GREEN_JOIN_RATIO, LANE_SETBACK_M,
@@ -8,6 +10,7 @@ import {
   SCORE_BASE, SCORE_CLASS_WEIGHT, SCORE_DISTANCE_PENALTY_PER_M, SCORE_RING_BONUS,
 } from '../constants.js';
 import { Point } from '../../types/point.js';
+import { lotObb } from './overlap.js';
 import { lotId, type Green, type Lane, type Lot } from '../types.js';
 import { classRank, type RouteType } from '../route-class.js';
 
@@ -270,10 +273,57 @@ export function subdivideGreen(
 }
 
 /** Water first, then the green. Anything left too narrow was never cut. */
+/**
+ * True when any part of the lot's claim rectangle stands in water.
+ *
+ * Two tests, because either alone misses a real case:
+ *  - any claim CORNER (or its centre) inside water — catches a claim that
+ *    reaches into a sea or lake;
+ *  - any claim EDGE crossing a water outline — catches narrow water, which
+ *    point sampling cannot see at all. A 4 m stream can pass clean through
+ *    the middle of a lot without putting any corner or the centre wet, and
+ *    that is precisely the brook case this phase exists for.
+ *
+ * `lotObb` is the same claim geometry the overlap resolution uses, so a lot
+ * is judged on the ground it actually takes.
+ */
+function claimTouchesWater(lot: Lot, water: Point[][]): boolean {
+  if (water.length === 0) return false;
+  const obb = lotObb(lot);
+  const t = obb.tangent;
+  const nrm = obb.normal;
+  const corner = (sw: number, sd: number): Point => new Point(
+    obb.center.x + t.x * sw * obb.halfW + nrm.x * sd * obb.halfD,
+    obb.center.y + t.y * sw * obb.halfW + nrm.y * sd * obb.halfD,
+  );
+  const corners = [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)];
+  if (obb.center && inAnyWater(obb.center, water)) return true;
+  if (corners.some((p) => inAnyWater(p, water))) return true;
+
+  for (let i = 0; i < corners.length; i++) {
+    const a = corners[i];
+    const b = corners[(i + 1) % corners.length];
+    for (const ring of water) {
+      for (let j = 0; j < ring.length; j++) {
+        const c = ring[j];
+        const d = ring[(j + 1) % ring.length];
+        if (segmentIntersection(a, b, c, d)) return true;
+      }
+    }
+  }
+  return false;
+}
+
 export function clipLots(lots: Lot[], green: Green, water: Point[][]): Lot[] {
   const greenRadius = green.diameter / 2;
   return lots.filter((l) => {
-    if (inAnyWater(l.front, water)) return false;
+    // Phase 3: the WHOLE claim, not just the frontage midpoint. Testing the
+    // midpoint alone let a lot whose ground was mostly river survive as long
+    // as its front point happened to be dry, and a house was then seated on
+    // it -- measured, 11 of 225 houses standing in the stream at brook pop
+    // 900 seed 1, only 3 of which had a wet CENTRE. A centre test cannot see
+    // this defect, which is exactly why it went unnoticed.
+    if (claimTouchesWater(l, water)) return false;
     const d = dist(l.front, green.centre);
     if (l.laneId !== 'green' && d < greenRadius) return false;
     return true;

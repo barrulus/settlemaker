@@ -780,6 +780,42 @@ export const BLOCK_CHASE_ROUND_CAP: number = 2;
 // lane's outward reach is drawn by `drawTrunkPath` to the contract circle
 // (spec 5.1), not sized off the predicted built radius.
 
+/**
+ * Phase 3: water narrower than this, measured ACROSS at the point a bearing
+ * meets it, is an OBSTACLE — something the fabric steps over or around. At
+ * or above it, water is a BOUNDARY and caps the radius profile as it always
+ * has.
+ *
+ * Why it matters: the profile used to cap every bearing at the first wet
+ * step whatever the water was, so a 4 m stream — AFMG's real river width —
+ * stretched a pop-900 village to 7.0:1 against its own dry twin's 2.1:1. A
+ * village sits ON a brook; it does not stop dead at one.
+ *
+ * 12 m is comfortably over AFMG's river widths and far under any sea or
+ * lake the boundary behaviour is meant for.
+ */
+export const NARROW_WATER_M = 12;
+
+/**
+ * Farmland, as a multiple of the built disc's own area, below which a
+ * water-bounded site counts as HEMMED IN and says so (Phase 3).
+ *
+ * Measured across the probe scenarios (field area / pi*R^2):
+ *   dry villages      ~4.2-4.6
+ *   ordinary coastal  ~3.1-3.7   (they lose a slice of the ring to the sea,
+ *                                 and that is normal, not a failure)
+ *   `strangled`       ~0.11-0.19 (water on three sides, ~70 m of dry land)
+ * A threshold of 1.0 separates the strangled case from every healthy one by
+ * more than an order of magnitude, so this fires on the real condition and
+ * not on ordinary coastline.
+ */
+export const WATER_STRANGLED_FIELD_RATIO = 1.0;
+
+/** How far past a wet step the profile looks for dry ground again before
+ * calling the water a boundary. Must exceed `NARROW_WATER_M` so a narrow
+ * crossing is always resolved one way or the other. */
+export const NARROW_WATER_PROBE_M = 40;
+
 // --- Shorefront (pass 5, declared here so it is not lost) ---------------
 export const SHOREFRONT_REACH_FACTOR = 1.5;
 

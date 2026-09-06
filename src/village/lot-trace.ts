@@ -23,6 +23,11 @@ export type LotFate =
   | 'lane-intrusion'
   /** Every seating offset put the building through an already-placed one. */
   | 'building-overlap'
+  /** Every seating offset put the building's ink in water (Phase 3). The
+   * lot's own claim was dry -- `clipLots` had already dropped the wet ones --
+   * but seating slides a candidate along its frontage, and that slide can
+   * walk it into a stream the claim only just cleared. */
+  | 'in-water'
   /** No deck entry is eligible at this frontage (usually: too narrow). */
   | 'no-deck-entry'
   /** Never attempted — the census was already fully housed. */

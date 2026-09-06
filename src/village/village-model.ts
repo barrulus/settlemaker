@@ -12,6 +12,7 @@ import { contractRadiusFor, synthesizeTrunks } from './skeleton/trunks.js';
 import { buildRadiusProfile, type RadiusProfile } from './skeleton/profile.js';
 import { blockAreas } from './skeleton/blocks.js';
 import { relaxLanes, trimTails } from './skeleton/relax.js';
+import { findWaterCrossings } from './skeleton/crossings.js';
 import {
   clipLots, gapForPopulation, orderLots, scoreLots, subdivideGreen, subdivideLane,
 } from './parcels/lots.js';
@@ -32,6 +33,7 @@ import {
   GAP_TIGHTEN_STEP_M,
   GREEN_JOIN_RATIO, HAMLET_RIBBON_POP,
   AIM_CLEAR_RADIUS_M, INITIAL_MEAN_FRONTAGE_FACTOR, LANE_SETBACK_M, LOT_DEPTH_M,
+  WATER_STRANGLED_FIELD_RATIO,
   MAX_FEEDBACK_ROUNDS, MAX_LOT_FRONTAGE_RATIO, MEAN_LOT_AREA_M2, RECUT_MAX_PASSES,
   DISC_ESCALATION_STEP_RATIO, RING_SETBACK_M, SPACING_RELAX_FLOOR, SPACING_RELAX_STEP,
   PROFILE_SEED_MULTIPLIER, PROFILE_SEED_OFFSET,
@@ -780,6 +782,35 @@ export function generateVillage(
     builtRadiusM: lotRadiusM, f0, rng,
   });
 
+  // Phase 3: a site hemmed in by water grows almost no farmland, and used to
+  // do so in silence. The `strangled` fixture (water on three sides, ~70 m of
+  // dry land) came out with 3.4k-9.5k m2 of field against the ~130k a
+  // pop-900 village normally carries -- a collapse of that size is a fact
+  // about the site the caller needs told, not a number to be quietly shipped.
+  // Never silent, per the standing bars.
+  if (site.water.length > 0) {
+    const fieldArea = dressing.fields.reduce((sum, f) => {
+      let a = 0;
+      for (let i = 0; i < f.polygon.length; i++) {
+        const p = f.polygon[i];
+        const q = f.polygon[(i + 1) % f.polygon.length];
+        a += p.x * q.y - q.x * p.y;
+      }
+      return sum + Math.abs(a) / 2;
+    }, 0);
+    // Judged against the built disc's own area, which is the one figure
+    // available here that scales with the village. See the constant for the
+    // measurements that set the threshold.
+    const discArea = Math.PI * lotRadiusM * lotRadiusM;
+    if (discArea > 0 && fieldArea < discArea * WATER_STRANGLED_FIELD_RATIO) {
+      diagnostics.push(
+        `water: the site is hemmed in — ${(fieldArea / 1000).toFixed(1)}k m2 of farmland, `
+        + `${(fieldArea / discArea).toFixed(2)}x the built area against `
+        + `${WATER_STRANGLED_FIELD_RATIO.toFixed(1)}x expected of a village with room`,
+      );
+    }
+  }
+
   return {
     site, green, lanes: relaxed, lots: survivingLots, buildings: spend.buildings,
     edgeStyle: dressing.edgeStyle, crofts: dressing.crofts, fields: dressing.fields,
@@ -790,6 +821,9 @@ export function generateVillage(
     contractRadiusM: network.contractRadiusM,
     trunkJunctions: network.junctions,
     greenRelation,
+    // Phase 3: computed on the FINAL lanes, after trimming and relaxation,
+    // so a crossing describes a road that actually shipped.
+    bridges: findWaterCrossings(relaxed, site.water),
   };
 }
 
