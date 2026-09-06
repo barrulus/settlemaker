@@ -111,9 +111,9 @@ road AROUND water is Phase 3's own job and was deliberately left there.
 
 ## Phase 5 — Population routing
 
-- [ ] Route by population at the documented ceiling (`VILLAGE_POP_CEILING` = 1000): below → village engine, above → existing engine.
-- [ ] One entry point for callers; the choice is an implementation detail, not a caller decision.
-- [ ] Acceptance: a sweep across the boundary produces valid output either side with no contract difference visible to a consumer.
+- [x] Route by population at the documented ceiling (`VILLAGE_POP_CEILING` = 1000): below → village engine, above → existing engine. *(Done. The boundary VALUE was unsaid in the prose — 1000 itself is neither "below" nor "above" — so it is pinned INCLUSIVE (a population of exactly 1000 is the top of the band the village engine serves, which is what "ceiling" means) and asserted in the test at 999/1000/1001 rather than left to the next reader.)*
+- [x] One entry point for callers; the choice is an implementation detail, not a caller decision. *(`generateSettlement(burg, options)` in `src/index.ts`, returning a union discriminated on `kind: 'village' | 'settlement'`. The engine is REPORTED for diagnostics, never chosen: there is no option to force one.)*
+- [x] Acceptance: a sweep across the boundary produces valid output either side with no contract difference visible to a consumer. *(Swept 200/600/999/1000/1001/1400/4000: both engines return an `<svg` carrying the tiler's `data-bg="paper"`, a non-empty FeatureCollection, and `degradedFlags`. A metadata-parity bar then found the real gap — the village export was missing `local_bounds`, `scale`, `stable_ids`, `poi_density`, `degraded_flags` and `local_origin_shift`, so a consumer reading a settlement's metadata would have crashed on a village. All six now present with the village's own honest values, not stubs: measured bounds, metres-per-unit 1 because the village works in metres, its real id prefixes, and an explicit no-shift because the village never pre-shifts.)*
 
 ## Phase 6 — Merge and ship
 

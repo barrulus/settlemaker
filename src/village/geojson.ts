@@ -17,6 +17,7 @@
  */
 import type { Feature, FeatureCollection } from 'geojson';
 import { GEOJSON_SCHEMA_VERSION, SETTLEMAKER_VERSION } from '../output/geojson-builder.js';
+import { regimeFor } from '../poi/poi-selector.js';
 import { inkExtent } from './glyphs.js';
 import { Point } from '../types/point.js';
 import type { Building, VillageModel } from './types.js';
@@ -44,6 +45,34 @@ function footprintRing(b: Building): Pos[] {
   const at = (x: number, y: number): Point =>
     new Point(b.position.x + x * c - y * s, b.position.y + x * s + y * c);
   return ring([at(-hw, -hd), at(hw, -hd), at(hw, hd), at(-hw, hd)]);
+}
+
+/** AABB of everything that paints ink, plus the same 20 m padding the
+ * settlement path's `computeLocalBounds` applies. */
+function bounds(model: VillageModel): {
+  min_x: number; min_y: number; max_x: number; max_y: number;
+} {
+  const xs: number[] = [];
+  const ys: number[] = [];
+  const take = (p: { x: number; y: number }): void => { xs.push(p.x); ys.push(p.y); };
+  for (const b of model.buildings) take(b.position);
+  for (const l of model.lanes) for (const p of l.points) take(p);
+  for (const f of model.fields) for (const p of f.polygon) take(p);
+  for (const v of model.vegetation) take(v.position);
+  take(model.green.centre);
+  if (xs.length === 0) return { min_x: 0, min_y: 0, max_x: 0, max_y: 0 };
+  const PAD = 20;
+  return {
+    min_x: Math.min(...xs) - PAD, min_y: Math.min(...ys) - PAD,
+    max_x: Math.max(...xs) + PAD, max_y: Math.max(...ys) + PAD,
+  };
+}
+
+/** The village's overall extent in metres — its own diameter, measured, not
+ * predicted from population. */
+function diameterM(model: VillageModel): number {
+  const b = bounds(model);
+  return Math.max(b.max_x - b.min_x, b.max_y - b.min_y);
 }
 
 export function generateVillageGeoJson(model: VillageModel): FeatureCollection {
@@ -149,9 +178,38 @@ export function generateVillageGeoJson(model: VillageModel): FeatureCollection {
       schema_version: GEOJSON_SCHEMA_VERSION,
       settlemaker_version: SETTLEMAKER_VERSION,
       settlement_generation_version: 'village',
-      coordinate_system: 'burg-local',
+      coordinate_system: 'burg_local_y_down',
       coordinate_units: 'metres',
       generated_at: new Date().toISOString(),
+      // Phase 5 parity: every key the SETTLEMENT path publishes also appears
+      // here, or a consumer that reads one engine's output crashes on the
+      // other's. Values are the village's own honest answers, not stubs.
+      local_bounds: bounds(model),
+      scale: {
+        // The village engine works in metres throughout, so there is no unit
+        // conversion to describe -- unlike the settlement path, whose local
+        // units are scaled from a population heuristic.
+        meters_per_unit: 1,
+        diameter_meters: diameterM(model),
+        diameter_local: diameterM(model),
+        source: 'village_metres',
+      },
+      /** The village mints its own content-derived ids rather than allocating
+       * them (see the module header), so these are the shapes a consumer will
+       * see rather than allocator prefixes. */
+      stable_ids: {
+        prefixes: {
+          building: 'bld:', poi: 'poi:', street: '<lane id>', crossing: 'bridge:',
+        },
+      },
+      poi_density: regimeFor(model.site.population),
+      degraded_flags: [],
+      /** The settlement path can pre-shift its model to pull a distant coast
+       * toward the origin. The village engine never does: it works in
+       * burg-local metres with the burg at (0,0) throughout. Reported as an
+       * explicit no-shift rather than omitted, so a consumer's shift maths is
+       * identical for both engines. */
+      local_origin_shift: { dx: 0, dy: 0, source: 'none' },
       /** Spec 5.5: every FMG route meets this circle at its exact bearing, so
        * a consumer holding it can align this tile with FMG's route lines. */
       contract_radius_m: model.contractRadiusM,

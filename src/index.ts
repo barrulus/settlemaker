@@ -73,7 +73,13 @@ export { parseSettlementUrl } from './url/params.js';
 export type { ParsedSettlementUrl } from './url/params.js';
 
 import type { AzgaarBurgInput } from './input/azgaar-input.js';
-import type { FeatureCollection } from 'geojson';
+
+// Phase 5: the village engine, imported (not merely re-exported) so
+// `generateSettlement` below can call it.
+import { generateVillage, VILLAGE_POP_CEILING } from './village/village-model.js';
+import { renderVillage } from './village/render.js';
+import { generateVillageGeoJson } from './village/geojson.js';
+import type { VillageModel } from './village/types.js';import type { FeatureCollection } from 'geojson';
 import type { DegradedFlag } from './generator/generation-params.js';
 import { mapToGenerationParams } from './input/azgaar-input.js';
 import { Model } from './generator/model.js';
@@ -164,12 +170,53 @@ export function generateFromBurg(
 // fields, vegetation, POIs) — so a village renders as buildings and roads on
 // bare ground. Those are missing capabilities, not compatibility concerns.
 // Wire the threshold once they exist.
-export { generateVillage, VILLAGE_POP_CEILING } from './village/village-model.js';
-export { renderVillage } from './village/render.js';
+export { generateVillage, VILLAGE_POP_CEILING };
+
+/**
+ * Ship plan Phase 5 — the ONE entry point.
+ *
+ * Two engines now exist: the village engine for the small end and the
+ * original settlement generator above it. A caller should not have to know
+ * that. They hand over a burg and get a settlement back; which engine ran is
+ * reported on `kind` for diagnostics, but it is never something they choose.
+ *
+ * The boundary is `VILLAGE_POP_CEILING`, INCLUSIVE — a population of exactly
+ * 1000 is the top of the band the village engine serves, which is what
+ * "ceiling" means. The plan's prose ("below -> village, above -> existing")
+ * leaves the boundary value itself unsaid, so it is pinned here and in the
+ * test rather than left to whoever reads it next.
+ */
+export type GenerateSettlementResult =
+  | ({ kind: 'village'; model: VillageModel } & {
+      svg: string;
+      geojson: FeatureCollection;
+      degradedFlags: DegradedFlag[];
+    })
+  | ({ kind: 'settlement' } & GenerateFromBurgResult);
+
+export function generateSettlement(
+  burg: AzgaarBurgInput,
+  options?: { seed?: number; svg?: SvgOptions; geojson?: GenerateGeoJsonOptions },
+): GenerateSettlementResult {
+  if ((burg.population ?? 0) <= VILLAGE_POP_CEILING) {
+    const model = generateVillage(burg, options?.seed ?? 1);
+    return {
+      kind: 'village',
+      model,
+      svg: renderVillage(model),
+      geojson: generateVillageGeoJson(model),
+      // The village engine degrades nothing: it has no walls or citadel to
+      // drop. Present and empty so a consumer reads it the same either way.
+      degradedFlags: [],
+    };
+  }
+  return { kind: 'settlement', ...generateFromBurg(burg, options) };
+}
+export { renderVillage };
 // Phase 4 (output parity): the village's GeoJSON, in the same
 // `layer`-discriminated schema and at the same `schema_version` as the city
 // builder's, so an existing consumer needs no new branch to read a village.
-export { generateVillageGeoJson } from './village/geojson.js';
+export { generateVillageGeoJson };
 // Phase 4 (theming): a village's ground follows its biome, because the glyph
 // set already resolves desert/tundra/tropical/coastal dwellings. Consumers can
 // pass their own theme to `renderVillage` for a night scene or a snow one.
