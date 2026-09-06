@@ -5,23 +5,15 @@ import { REFINED_GLYPHS } from '../assets/refined-glyphs.js';
 import { FURROW_PATTERN_STEP_DEG, RENDER_MINOR_LANE_WIDTH_SHARE } from './constants.js';
 import { classRank, type RouteType } from './route-class.js';
 
+import { villageThemeFor, type VillageTheme } from './theme.js';
+
 /** integration.md's shadow contract: one light, never rotated with the mark. */
 const SHADOW_OFFSET: [number, number] = [2.6, 3.6];
-const SHADOW_OPACITY = 0.2;
-const SHADOW_COLOR = '#46303c';
-const GROUND = '#a3c98d';
-/**
- * Water and its shore stroke (Phase 2).
- *
- * Sampled from the project's established water colour -- `PALETTE_PARCHMENT`
- * in `output/palette.ts`, itself taken from watabou's MFCG renders -- and its
- * shore is that colour darkened, which is exactly what `render-theme.ts`
- * derives for the city renderer (`waterEdge = darken(water, 0.2)`). Restated
- * here rather than imported: the village engine stays independent of the city
- * output path by design, and the plan says so in as many words.
- */
-const WATER = '#85bcb2';
-const WATER_EDGE = '#6a968e';
+// The ground, water, shore and shadow colours moved to `theme.ts` when
+// Phase 4 made the village themeable per biome (the glyph set already
+// resolves desert/tundra/tropical/coastal dwellings, so a desert village was
+// drawing sand houses on a temperate lawn). `TEMPERATE_THEME` carries the
+// exact values that used to live here, so the approved look did not move.
 /** Shore stroke width in METRES, scaled by `pxPerMetre` like everything else
  * in this renderer. Matches `render-theme.ts`'s `shoreWidth`. */
 const SHORE_WIDTH_M = 0.6;
@@ -79,8 +71,9 @@ const SM_FILL_INK_CLASSES = [
 ];
 const SM_LINE_INK_CLASSES = ['sm-hatch', 'sm-ridge', 'sm-spire'];
 
-const SM_STYLE = [
-  `:root{${Object.entries(SM_TOKENS).map(([k, v]) => `${k}:${v}`).join(';')}}`,
+const smStyleFor = (tokens?: Record<string, string | number>): string => [
+  `:root{${Object.entries({ ...SM_TOKENS, ...(tokens ?? {}) })
+    .map(([k, v]) => `${k}:${v}`).join(';')}}`,
   ...SM_FILL_INK_CLASSES.map((c) => `.${c}{stroke:var(--sm-ink,#33262e);stroke-linejoin:round;stroke-linecap:round}`),
   ...SM_LINE_INK_CLASSES.map((c) => `.${c}{fill:none;stroke:var(--sm-ink,#33262e);stroke-linecap:round}`),
   // Pass 5: field furrow and edge-stamp line strokes carry no class of
@@ -172,7 +165,9 @@ function fieldPatternId(glyph: string, furrowBearingDeg: number): string {
  * id the vendored artwork carries (e.g. a field tile's own <clipPath id>)
  * is never duplicated across two pattern instances of the same glyph.
  */
-export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
+export function renderVillage(
+  model: VillageModel, pxPerMetre = 4, theme: VillageTheme = villageThemeFor(model.site.biome),
+): string {
   // Bounds must cover every lane point, not just buildings and the green:
   // ruling R15 leaves arm- lanes (FMG's incoming roads) untrimmed out to
   // roughly builtRadius * 2 past the green whether or not anything is
@@ -286,9 +281,9 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
   // deliberately untouched.
   out.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${n(w)}" height="${n(h)}" `
     + `viewBox="0 0 ${n(w)} ${n(h)}" data-contract-radius="${n(model.contractRadiusM)}">`);
-  out.push(`<style>${SM_STYLE}</style>`);
+  out.push(`<style>${smStyleFor(theme.tokens)}</style>`);
   out.push(`<defs>${defs.join('')}${patternDefs.join('')}</defs>`);
-  out.push(`<rect data-bg="paper" width="${n(w)}" height="${n(h)}" fill="${GROUND}"/>`);
+  out.push(`<rect data-bg="paper" width="${n(w)}" height="${n(h)}" fill="${theme.ground}"/>`);
 
   // water band (Phase 2) — GROUND, so it goes down first and everything the
   // village built sits on top of it. The model has always known about water
@@ -308,8 +303,8 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
     out.push('<g data-band="water">');
     waterPolys.forEach((poly, i) => {
       out.push(
-        `<path data-water="w${i}" d="${polygonPath(poly, X, Y)}" fill="${WATER}" `
-        + `stroke="${WATER_EDGE}" stroke-width="${n(SHORE_WIDTH_M * pxPerMetre)}" `
+        `<path data-water="w${i}" d="${polygonPath(poly, X, Y)}" fill="${theme.water}" `
+        + `stroke="${theme.waterEdge}" stroke-width="${n(SHORE_WIDTH_M * pxPerMetre)}" `
         + 'stroke-linejoin="round"/>',
       );
     });
@@ -377,7 +372,7 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
   out.push('<g data-band="structure">');
   out.push(
     `<g transform="translate(${n(SHADOW_OFFSET[0])},${n(SHADOW_OFFSET[1])})" ` +
-    `opacity="${SHADOW_OPACITY}" color="${SHADOW_COLOR}">`,
+    `opacity="${theme.shadowOpacity}" color="${theme.shadowColor}">`,
   );
   for (const item of structureItems) {
     if (!REFINED_GLYPHS[item.glyph]?.sil) continue;
@@ -405,7 +400,7 @@ export function renderVillage(model: VillageModel, pxPerMetre = 4): string {
   out.push('<g data-band="canopy">');
   out.push(
     `<g transform="translate(${n(SHADOW_OFFSET[0])},${n(SHADOW_OFFSET[1])})" ` +
-    `opacity="${SHADOW_OPACITY}" color="${SHADOW_COLOR}">`,
+    `opacity="${theme.shadowOpacity}" color="${theme.shadowColor}">`,
   );
   for (const veg of model.vegetation) {
     if (!REFINED_GLYPHS[veg.glyph]?.sil) continue;

@@ -170,6 +170,12 @@ export { renderVillage } from './village/render.js';
 // `layer`-discriminated schema and at the same `schema_version` as the city
 // builder's, so an existing consumer needs no new branch to read a village.
 export { generateVillageGeoJson } from './village/geojson.js';
+// Phase 4 (theming): a village's ground follows its biome, because the glyph
+// set already resolves desert/tundra/tropical/coastal dwellings. Consumers can
+// pass their own theme to `renderVillage` for a night scene or a snow one.
+export {
+  villageThemeFor, TEMPERATE_THEME, VILLAGE_BIOMES, type VillageTheme, type VillageBiome,
+} from './village/theme.js';
 export type {
   Site, SiteRoute, Green, GreenShape, Lane, Lot, Building, Croft, EdgeStyle, EdgeStamp,
   FieldBlock, Vegetation,
