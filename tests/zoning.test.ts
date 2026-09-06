@@ -132,6 +132,13 @@ describe('zoning', () => {
     }
   }, 20000);
 
+  // G1 (2026-09-06): headroom raised, no assertion changed. These two sweeps
+  // generate whole cities across a grid and have always sat near their limits;
+  // the SeededRandom seed scramble moved which meshes each seed builds, and
+  // measured cost is now ~36 s run alone against ~15 s inside the full suite
+  // (earlier tests warm the module and glyph caches). Either of them could tip
+  // over depending on scheduling, which is a wall-clock fact about worst-case
+  // city generation, not a property of the code under test.
   it('builds nothing on water (seed sweep)', () => {
     // seed 5 alone is clean by luck (same seed-luck problem the satellite
     // test above was fixed for) — the outskirts "Outskirts" gate-ward loop
@@ -171,7 +178,7 @@ describe('zoning', () => {
       const { model } = generateFromBurg(bigPort, { seed });
       check(model.patches, model);
     }
-  }, 30000);
+  }, 90000);
 
   it('exposes the urbanisation field it built', () => {
     const { model } = generateFromBurg(metropolis([0, 120, 240]), { seed: 5 });
@@ -191,6 +198,7 @@ describe('zoning', () => {
     }
   });
 
+  // Same headroom note as the water sweep above.
   it('built total honours MAX_PATCHES end to end at the worst-case coreCapacity', () => {
     // The structural test above proves nPatches/nCore never exceed the
     // budget; this is the ONE full generation (not a sampled sweep) that
@@ -203,7 +211,7 @@ describe('zoning', () => {
     const { model } = generateFromBurg(burg, { seed: 1 });
     const built = model.patches.filter(p => p.zone === 'core' || p.zone === 'suburb' || p.zone === 'satellite');
     expect(built.length).toBeLessThanOrEqual(MAX_PATCHES);
-  }, 20000);
+  }, 90000);
 
   it('sub-cap sprawl budget is never zero (structural: every population 100-14000 has nPatches - nCore >= 1)', () => {
     // Root cause fixed in azgaar-input.ts's corePatchCount: nCore and

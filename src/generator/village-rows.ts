@@ -15,6 +15,7 @@ import type { Patch } from './patch.js';
 import { SYMBOL_MANIFEST } from '../assets/symbol-manifest.js';
 import { rowHousing } from './generation-params.js';
 import { MAIN_STREET, REGULAR_STREET } from '../wards/ward.js';
+import { HOUSE_INK_RATIO, HUT_INK_RATIO } from '../village/glyphs.js';
 
 export interface FrontageSlot {
   center: Point;
@@ -409,8 +410,10 @@ export function houseFootprint(id: string): { width: number; depth: number } {
  * of neighbouring huts in each other, so huts stayed at **0.85**.
  * Longhouses use the house ratio (same art family, same margin style).
  */
-export const HOUSE_INK_RATIO = 0.68;
-export const HUT_INK_RATIO = 0.85;
+// Ink ratios now live in src/village/glyphs.ts — one definition, shared by
+// both engines. Re-exported here (imported above) so this module's existing
+// callers are unaffected. The tuning history above still applies.
+export { HOUSE_INK_RATIO, HUT_INK_RATIO };
 
 /**
  * The painted extents of `id` — what must actually clear its neighbours,

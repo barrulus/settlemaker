@@ -19,3 +19,6 @@ superpowers/
 .superpowers/
 .claude/
 .envrc
+
+# Worktree convenience symlink (never commit; matches the symlink, not just the dir)
+/node_modules

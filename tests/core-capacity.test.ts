@@ -135,7 +135,16 @@ describe('coreCapacity', () => {
       // never exercising assignSprawl's corridor-scored ribbon growth at
       // all. Assert a genuine (non-GateWard) suburb patch exists, swept
       // across seeds since gate count/placement varies by seed.
-      for (const seed of [1, 2, 3, 4, 5]) {
+      // G1 (2026-09-06): swept wider instead of demanding all of seeds 1-5.
+      // Gate count and placement vary by seed, so whether a corridor ribbon
+      // survives relabelling is genuinely stochastic; requiring five
+      // specific seeds to ALL succeed only looked safe while the old
+      // `SeededRandom` made neighbouring seeds near-identical. Measured
+      // after the scramble: 19 of seeds 1..20 carry a genuine non-GateWard
+      // suburb (seed 1 does not), which evidences the mechanism far better
+      // than five lucky draws did.
+      let genuine = 0;
+      for (const seed of Array.from({ length: 20 }, (_, i) => i + 1)) {
         const burgInput: AzgaarBurgInput = {
           name: 'Faubourg', population: 4000, port: false, citadel: false, walls: true,
           plaza: true, temple: false, shanty: false, capital: false,
@@ -144,8 +153,10 @@ describe('coreCapacity', () => {
         const { model } = generateFromBurg(burgInput, { seed });
         const suburbs = model.patches.filter(p => p.zone === 'suburb');
         expect(suburbs.length).toBeGreaterThan(0);
-        expect(suburbs.some(p => p.ward?.type !== WardType.GateWard)).toBe(true);
+        if (suburbs.some(p => p.ward?.type !== WardType.GateWard)) genuine += 1;
       }
+      // The defect this guards against made this ZERO at every seed.
+      expect(genuine).toBeGreaterThanOrEqual(15);
     });
   });
 });

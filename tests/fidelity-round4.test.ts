@@ -51,7 +51,11 @@ describe('fidelity round 4: probe path', () => {
     // so the retry path is rarer but intact. Re-pinned to seed 19 at pop
     // 20000, the larger of the two (probe ~63.475, full ~70.633, an 11%
     // divergence against seed 11's 2.5%).
-    const params = mapToGenerationParams(aldford(20000), 19);
+    // G1 (2026-09-06): the seed scramble moved which seeds retry again.
+    // Re-swept the same {350, 4200, 20000} x seeds 1-20 grid: 4 of the 60
+    // still diverge, so the retry path is intact. Re-pinned to seed 10 at
+    // pop 350, the largest (probe ~31.257, full ~27.628, 13.1%).
+    const params = mapToGenerationParams(aldford(350), 10);
     const probe = new Model({ ...params, coastlineGeometry: undefined, harbourSize: undefined });
     const probeRadius = probe.probeWallRadius();
     const full = new Model({ ...params, coastlineGeometry: undefined, harbourSize: undefined }).generate();
@@ -64,8 +68,8 @@ describe('fidelity round 4: probe path', () => {
     // Not equal within 0.5 units — i.e. the divergence is real and not noise.
     expect(Math.abs(probeRadius - fullRadius)).toBeGreaterThan(0.5);
     // Pin the measured values.
-    expect(probeRadius).toBeCloseTo(63.474896, 3);
-    expect(fullRadius).toBeCloseTo(70.632921, 3);
+    expect(probeRadius).toBeCloseTo(31.257319, 3);
+    expect(fullRadius).toBeCloseTo(27.627579, 3);
   });
 
   it('generateFromBurg output is unchanged for an inland burg (probe swap is invisible)', () => {
@@ -160,9 +164,15 @@ describe('fidelity round 4: probe path', () => {
     // 323 patches, 19 wards with geometry), confirming no geometry moved.
     // Verified non-degenerate and deterministic: svg.length 45832 (measured
     // locally).
+    // G1 (2026-09-06): re-pinned after the `SeededRandom` seed scramble.
+    // The generator's recurrence is unchanged; the caller's seed is now
+    // avalanche-hashed once before the first draw, because the raw
+    // multiplicative LCG made the k-th draw an affine function of the seed
+    // and neighbouring seeds moved in lockstep. Every seeded artefact in the
+    // project moves exactly once as a result, this snapshot included.
     const { svg } = generateFromBurg(aldford(1400), { seed: 9 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('f2fd95600e0f1ab49ea931af01ce711821a34eb76e0e01b4ba759e22287672be');
+    expect(sha256(svg)).toBe('be7a2f719a0de9e33571010ff0f169f99243565d2651ba0ba8df5cab703fac22');
   });
 
   it('pins current village output at pop 800 (not a base-equality guarantee)', () => {
@@ -252,9 +262,15 @@ describe('fidelity round 4: probe path', () => {
     // counts are unchanged (-71.4 -71.8 146.3 143.7, 327 patches, 18 wards
     // with geometry). Verified non-degenerate and deterministic: svg.length
     // 40843 (measured locally).
+    // G1 (2026-09-06): re-pinned after the `SeededRandom` seed scramble.
+    // The generator's recurrence is unchanged; the caller's seed is now
+    // avalanche-hashed once before the first draw, because the raw
+    // multiplicative LCG made the k-th draw an affine function of the seed
+    // and neighbouring seeds moved in lockstep. Every seeded artefact in the
+    // project moves exactly once as a result, this snapshot included.
     const { svg } = generateFromBurg(aldford(800), { seed: 1 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('9ab1e3e87a0a17f3172e1947b5213da9b8037c0e6987c62e6a80866bb9bc51fb');
+    expect(sha256(svg)).toBe('a5ab4c9c63fb8d62cdea3643e8fdbd81f90d12a4f3f4e40e9b50ee2ac516aa3a');
   });
 });
 

@@ -74,13 +74,17 @@ describe('citadel fallback via staged retries', () => {
   // Task 9: seed 43 stopped exhausting it. The MECHANISM was verified first,
   // not just the pin — swept seeds 1-500 at pop 170 with citadel: 101 seeds
   // still take the fallback, 0 throw, 500 generate. Re-pinned to seed 44.
-  it('drops citadel via fallback instead of throwing (seed 44, pop=170)', () => {
+  // G1 (2026-09-06): the SeededRandom seed scramble moved the qualifying
+  // seeds again. MECHANISM VERIFIED FIRST, as this comment's own practice
+  // requires: swept seeds 1-300 at pop 170 with citadel -- 300 generate, 0
+  // throw, 61 still take the fallback. Re-pinned to seed 5.
+  it('drops citadel via fallback instead of throwing (seed 5, pop=170)', () => {
     const result = generateFromBurg(burg({
-      name: 'S44',
+      name: 'S5',
       population: 170,
       citadel: true,
       walls: false,
-    }), { seed: 44 });
+    }), { seed: 5 });
     expect(result.model.degradedFlags.has('citadel')).toBe(true);
     expect(result.model.citadel).toBeNull();
   });

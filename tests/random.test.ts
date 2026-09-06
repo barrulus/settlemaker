@@ -49,10 +49,21 @@ describe('SeededRandom', () => {
     expect(trueCount / n).toBeCloseTo(0.3, 1);
   });
 
-  it('matches LCG algorithm: seed * 48271 % 2147483647', () => {
+  it('advances by the LCG recurrence, from a scrambled starting state', () => {
+    // The recurrence is unchanged (`state = state * 48271 % 2147483647`);
+    // what changed at G1 (2026-09-06, owner-approved) is that the caller's
+    // seed is now avalanche-hashed ONCE before the first step. It has to
+    // be: the raw recurrence is purely multiplicative, so the k-th draw was
+    // an affine function of the seed and neighbouring seeds moved in
+    // lockstep -- seeds 1..8 all produced the same convergence pattern in
+    // the village generator. `tests/utils/random.test.ts` pins the
+    // decorrelation; this pins that the step itself still works.
     const rng = new SeededRandom(1);
-    // First call: seed = 1 * 48271 % 2147483647 = 48271
     const first = rng.float();
-    expect(first).toBeCloseTo(48271 / 2147483647, 10);
+    const second = rng.float();
+    const G = 48271;
+    const N = 2147483647;
+    const firstState = Math.round(first * N);
+    expect(second).toBeCloseTo(((firstState * G) % N) / N, 10);
   });
 });

@@ -61,13 +61,39 @@ export function computeSettlementScale(population: number): SettlementScale {
 }
 
 /**
+ * The scale an SVG DECLARES, in metres per SVG unit, or null when it declares
+ * none.
+ *
+ * The village renderer states `data-px-per-metre` on its root element; the
+ * city renderer states nothing, because its own units are derived from the
+ * population heuristic in the first place and there is no independent truth
+ * to declare.
+ */
+export function declaredMetersPerUnit(svg: string): number | null {
+  const m = /data-px-per-metre\s*=\s*"([0-9.]+)"/i.exec(svg);
+  if (!m) return null;
+  const pxPerMetre = Number(m[1]);
+  return Number.isFinite(pxPerMetre) && pxPerMetre > 0 ? 1 / pxPerMetre : null;
+}
+
+/**
  * Compute full tile layout info from an SVG viewBox and population.
  * Pads the viewBox to a square (centered) for a standard 2^z x 2^z grid.
+ *
+ * `metersPerUnitOverride` is the scale the SVG declared, when it declared one
+ * (see `declaredMetersPerUnit`). Without it, scale is estimated from
+ * population — which is right for a city, whose drawn extent IS the
+ * settlement, and wrong for a village, whose viewBox also contains the whole
+ * field ring and woodland scatter. Measured: the heuristic under-scaled
+ * villages by 1.8x at pop 900 and 2.1x at pop 300, so a village 643 m across
+ * was geo-referenced as 310 m. Cities declare nothing and are unaffected.
  */
-export function computeTileInfo(viewBox: SvgViewBox, population: number): TileInfo {
+export function computeTileInfo(
+  viewBox: SvgViewBox, population: number, metersPerUnitOverride?: number | null,
+): TileInfo {
   const scale = computeSettlementScale(population);
   const squareExtent = Math.max(viewBox.width, viewBox.height);
-  const metersPerUnit = scale.diameterMeters / squareExtent;
+  const metersPerUnit = metersPerUnitOverride ?? scale.diameterMeters / squareExtent;
 
   // Center the original viewBox within the square
   const dx = (squareExtent - viewBox.width) / 2;
