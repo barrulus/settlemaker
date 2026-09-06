@@ -73,6 +73,43 @@ const result = generateFromBurg({
 const result = generateFromBurg(burg, { seed: 42 });
 ```
 
+### Villages
+
+Settlements of 1,000 people or fewer are drawn by a separate engine — roads
+first, then the buildings that line them — rather than by the city pipeline.
+`generateSettlement` picks the engine from the population and tells you which
+one ran:
+
+```typescript
+import { generateSettlement } from 'settlemaker';
+
+const result = generateSettlement({ name: 'Ashford', population: 400, /* ... */ });
+
+if (result.kind === 'village') {
+  result.svg;      // village SVG
+  result.geojson;  // village GeoJSON
+  result.model;    // VillageModel
+} else {
+  result.model;    // Model, as generateFromBurg returns
+}
+```
+
+The boundary is `VILLAGE_POP_CEILING` (1,000), inclusive. Both branches emit an
+SVG and a GeoJSON carrying the same `schema_version` and `settlemaker_version`
+metadata, so a consumer can treat the two uniformly.
+
+Village-only options go under `village`, settlement-only options under `svg` and
+`geojson`; the compiler rejects an option the chosen engine cannot honour rather
+than dropping it silently.
+
+```typescript
+generateSettlement(burg, { village: { theme: villageThemeFor('desert') } });
+```
+
+Villages are themed by biome — `villageThemeFor(biome)` selects the ground,
+vegetation and dwelling glyphs. Only the temperate theme has been through a
+render gate so far; the others are usable but unreviewed.
+
 ### Port cities
 
 ```typescript
@@ -144,7 +181,9 @@ The `AzgaarBurgInput` interface maps from [Azgaar's Fantasy Map Generator](https
 | `oceanBearing` | `number?` | Bearing to nearest ocean (enables coastline) |
 | `harbourSize` | `'large' \| 'small'?` | Harbour scale for port cities |
 
-Population determines settlement size:
+Population determines settlement size. The patch counts below describe the
+city pipeline; at 1,000 and under, `generateSettlement` uses the village
+engine instead, which does not work in patches (see [Villages](#villages)):
 
 | Population | Type | Patches |
 |-----------|------|---------|
