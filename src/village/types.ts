@@ -3,6 +3,7 @@ import type { RouteType } from './route-class.js';
 // Type-only: erased at compile time, so this does not create a runtime
 // import cycle even though trunks.ts imports Lane/Site/SiteRoute from here.
 import type { TrunkJunction } from './skeleton/trunks.js';
+import type { GreenRelation } from './skeleton/green-siting.js';
 
 export type GreenShape =
   | 'sm-green-round' | 'sm-green-lens' | 'sm-green-lens-long'
@@ -215,6 +216,11 @@ export interface VillageModel {
    * probe junctions without threading a second return value through
    * `generateVillage`. */
   trunkJunctions: TrunkJunction[];
+  /** Task 7: how the green ended up sitting in its network (spec 5.3) --
+   * beside a road, astride one, at the end of one, or enclosed by a ring.
+   * Recorded so a later pass (and the G2 gate) can read the choice without
+   * re-deriving it from geometry. */
+  greenRelation: GreenRelation;
 }
 
 /** Bearing rounded to whole degrees and wrapped to [0, 360). */

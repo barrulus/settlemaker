@@ -2,7 +2,9 @@ import { Point } from '../types/point.js';
 import { SeededRandom } from '../utils/random.js';
 import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import { buildSite } from './site.js';
-import { predictedBuiltRadius, siteGreen, waterPushedCentre } from './skeleton/green-siting.js';
+import {
+  predictedBuiltRadius, siteGreenOnNetwork, waterPushedCentre, type GreenRelation,
+} from './skeleton/green-siting.js';
 import {
   availableFrontage, connectDeadEnds, discRadiusFor, lotReachAt, saturateDisc,
 } from './skeleton/lanes.js';
@@ -190,7 +192,15 @@ export function generateVillage(
   const network = synthesizeTrunks(
     site, contractRadiusFor(closedFormRadius), closedFormRadius, rng, aim,
   );
-  const green = siteGreen(site, preFabricRadius, rng, aim);
+  // Task 7 (spec 5.3): the inversion this plan is named for. The green is
+  // no longer placed at the origin with roads aimed at it -- the roads are
+  // drawn first and the green is sited as a RESIDENT of them: beside one,
+  // astride one, at the end of one, or enclosed by a ring. Where it does not
+  // already touch a road, short connectors tie it in, and they seed growth
+  // alongside the trunks.
+  const sited = siteGreenOnNetwork(site, network, preFabricRadius, rng);
+  const green = sited.green;
+  const greenRelation: GreenRelation = sited.relation;
 
   let f0 = nominalF0;
   let lotFloorM = nominalLotFloorM;
@@ -199,7 +209,7 @@ export function generateVillage(
   // `buildArms`'s FMG-arm lanes (spec §5.4) -- `network.trunks` already
   // carries every route's contract-to-junction geometry, merges and
   // convergence pattern (`synthesizeTrunks`, `skeleton/trunks.ts`).
-  let lanes = network.trunks;
+  let lanes = [...network.trunks, ...sited.connectors];
   let lots: Lot[] = [];
   // Annotated, not inferred: an empty literal would infer `never[]`.
   let spend: SpendResult = { buildings: [], housed: 0, unhoused: site.population };
@@ -779,6 +789,7 @@ export function generateVillage(
     // task (see `types.ts`'s field comments).
     contractRadiusM: network.contractRadiusM,
     trunkJunctions: network.junctions,
+    greenRelation,
   };
 }
 
