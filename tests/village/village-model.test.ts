@@ -9,6 +9,7 @@ import {
 import {
   coverageThresholdDeg, discRadiusFor, lotReachFor,
 } from '../../src/village/skeleton/lanes.js';
+import { isTrunk } from '../../src/village/skeleton/trunks.js';
 import { blockAreas } from '../../src/village/skeleton/blocks.js';
 import { buildSite } from '../../src/village/site.js';
 import { SeededRandom } from '../../src/utils/random.js';
@@ -280,7 +281,23 @@ describe('generateVillage: frontage feedback loop escalation (R16)', () => {
     // deliberately absurd 20x-out-of-band fixture now walks three times as
     // many rounds before it gives up. Measured ~45 s; the in-band fixtures
     // are unaffected (a pop-900 village is well under a second).
-  }, 120000);
+    //
+    // Trunks task 5 (2026-08-25): 120000 -> 200000 ms. `synthesizeTrunks`
+    // draws each trunk lane's contract-to-aim geometry at a finer 6 m
+    // sample step (`SAMPLE_STEP_M`, `skeleton/trunks.ts`) than growth's own
+    // 12 m (`LANE_SAMPLE_STEP_M`), and the contract circle itself sits at
+    // `CONTRACT_RADIUS_FACTOR` (2.75) of the closed-form radius rather than
+    // the old arm's `LANE_EXTENT_FACTOR` (2) of the cruder pre-fabric
+    // guess -- both scale with population, so this absurd 20x-out-of-band
+    // fixture (whose closed-form radius is itself huge) pays proportionally
+    // more for the same O(lanes^2)-ish per-round trim/weld/block passes.
+    // Measured in isolation (no parallel test-run contention): 105 s before
+    // this task's swap, 136 s after, for the identical seed -- a real,
+    // modest, and expected cost of finer/longer trunk geometry, not a
+    // runaway. The in-band fixtures this engine actually serves are
+    // unaffected (see `scripts/gate-metrics.ts`'s fixtures, all well under
+    // a second each).
+  }, 200000);
 
   it('stays deterministic across a multi-round escalation: same seed, identical model', () => {
     const a = generateVillage({ ...base, population: 900 }, 11);
@@ -369,7 +386,7 @@ describe('connectDeadEnds (gate 6.3: red connectors)', () => {
       // conflated the two.
       const dists = m.buildings.map((b) => dist(b.position, m.green.centre)).sort((a, c) => a - c);
       const fabricR = dists[Math.floor(dists.length * 0.95)];
-      const invented = m.lanes.filter((l) => !l.id.startsWith('arm-'));
+      const invented = m.lanes.filter((l) => !isTrunk(l.id));
       const interior = invented.filter(
         (l) => dist(l.points[l.points.length - 1], m.green.centre) <= fabricR,
       );
@@ -900,30 +917,23 @@ describe('block-aware chase (fix round: three review findings)', () => {
   //
   // Task 5 REVIEW, finding #3+#4: this is now the ONE real-seed smoke test
   // the brief allows to stand alongside the mock-driven
-  // `village-model-block-chase-entry.test.ts` -- kept because a real,
-  // non-mocked confirmation that SOME seed still walks the "genuinely
-  // short, reports honestly" path is worth having, not because the
-  // control-flow guarantee depends on it. FRAGILE: seed 38 (hub, pop 300)
-  // was the only seed of a 200-seed sweep still short of its own blocks
-  // floor at round 0 as of this task; an unrelated future change to
-  // growth/trimming could move it back over the floor the same way it did
-  // to this test's own former seed (3), at which point this test should be
-  // re-pointed (or dropped, since the mock test already covers the
-  // guarantee) rather than patched to force a shortfall.
+  // Task 4b RETIRED the "fragility smoke test" that stood here.
   //
-  // Finding #4: this used to duplicate the "enters the block chase" test
-  // above (same scenario/seed, same `overflow:`/`blocks short:` checks)
-  // plus one more assertion -- that any `disc widened ... N of pop still
-  // unhoused` diagnostic has N > 0 -- inherited from an older, unrelated
-  // review finding about a different seed (hub pop 900 seed 3). Checked
-  // directly: seed 38's real run never emits a `disc widened` diagnostic at
-  // all (it houses immediately and only falls short on blocks), so that
-  // assertion's loop body never executed -- vacuous, not merely redundant.
-  // Dropped rather than folded in for that reason.
-  it('reports the honest shortfall, not an overflow, for a real seed the chase cannot clear (fragility smoke test)', () => {
-    const m = generateVillage(hubInput(300), 38);
-    expect(blockAreas(m.lanes, m.green).length).toBeLessThan(blockFloorFor(300));
-    expect(m.diagnostics.some((d) => d.startsWith('overflow:'))).toBe(false);
-    expect(m.diagnostics.some((d) => d.startsWith('blocks short:'))).toBe(true);
-  });
+  // It generated a real (un-mocked) hub/pop-300 village at whichever seed
+  // still fell short of its own blocks floor at round 0, to confirm that
+  // SOME seed really walks the "genuinely short, reports honestly" path.
+  // Its own comment set the terms: "an unrelated future change to
+  // growth/trimming could move it back over the floor, at which point this
+  // test should be re-pointed (or dropped, since the mock test already
+  // covers the guarantee) rather than patched to force a shortfall."
+  //
+  // That has now happened for the third and last time. The seed moved 3 ->
+  // 38 -> 31, and under the trunk network a fresh 200-seed sweep of this
+  // exact scenario finds NO seed short of the floor at all -- the roads
+  // close blocks far more reliably than the arms did. There is nothing to
+  // re-point to, and forcing a shortfall is what the comment forbids. The
+  // control-flow guarantee is covered by the mock-driven tests in
+  // `village-model-block-chase-entry.test.ts` and
+  // `village-model-chase-regression.test.ts`, both of which force zero
+  // blocks directly rather than shopping for a seed.
 });

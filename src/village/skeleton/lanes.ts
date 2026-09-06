@@ -11,54 +11,22 @@ import {
   GREEN_UNDERLAP_RATIO, RIB_COUNT_MAX, RIB_COUNT_MIN, RIB_SPACING_M, SLOT_PITCH_MIN_M,
   INVENTED_ARM_LENGTH_FACTOR, JUNCTION_CLEAR_M, LANE_MIN_SPACING_M, LANE_SAMPLE_STEP_M,
   ARM_LOT_RADIUS_SHARE, CONNECT_MAX_M, CONNECT_MIN_M, HAMLET_RIBBON_POP, LANE_CURVE_MAX_M,
-  INCOMING_ARM_MERGE_DEG, LOOP_SNAP_M, MAX_INVENTED_LANES, MIN_ARM_SEPARATION_DEG, SATURATION_RING_START_M,
+  LOOP_SNAP_M, MAX_INVENTED_LANES, MIN_ARM_SEPARATION_DEG, SATURATION_RING_START_M,
   SATURATION_RING_STEP_M, SECTOR_SAMPLE_DEG,
   VOID_SCAN_STEP_M, VOID_SPACING_M, LANE_SEATING_YIELD, LANE_TILE_SPACING_M,
   ARC_MAX_SWEEP_DEG, ARC_NEIGHBOURHOOD_M, ARC_RADIAL_TOL_DEG, LANE_PARALLEL_TOL_DEG,
   PROFILE_SHAPE_MAX,
 } from '../constants.js';
 import { type RadiusProfile } from './profile.js';
+import { isTrunk } from './trunks.js';
 import {
   armLaneId, branchLaneId, inventedLaneId,
-  type Building, type Green, type Lane, type Site, type SiteRoute,
+  type Building, type Green, type Lane,
 } from '../types.js';
 
 // geometry.ts owns polylineLength; re-exported here since Task 8's tests
 // import it from this module alongside the frontage helpers that use it.
 export { polylineLength };
-
-/**
- * One arm: a polyline from the green's rim outward along `bearingDeg`,
- * wandering sideways a little so it never reads as surveyed.
- *
- * R4: the point is pushed BEFORE the drift accumulates for next time, so
- * the first sample lands exactly on the green's rim. Accumulating drift
- * before the first push (as the brief originally had it) starts the arm
- * up off the rim, leaving a visible gap between the green's edge and the
- * road that feeds it. (The curve now starts at zero anyway, but the
- * ordering is kept: it is the rule, not an accident of the shape.)
- */
-function runArm(
-  green: Green, bearingDeg: number, extentM: number, rng: SeededRandom,
-): Point[] {
-  const dir = bearingVector(bearingDeg);
-  const normal = new Point(-dir.y, dir.x);
-  // Gate 2 junction rule: roads go UNDER the green. The lane starts deep
-  // inside the green's interior and the green is painted over it, so the
-  // road visibly disappears beneath the turf rather than stopping at (or
-  // worse, just short of) the rim.
-  const start = (green.diameter / 2) * GREEN_UNDERLAP_RATIO;
-  const curve = laneCurve(rng);
-  const points: Point[] = [];
-  for (let d = start; d <= start + extentM; d += LANE_SAMPLE_STEP_M) {
-    const offset = curveOffsetM(curve, d - start, extentM);
-    points.push(new Point(
-      green.centre.x + dir.x * d + normal.x * offset,
-      green.centre.y + dir.y * d + normal.y * offset,
-    ));
-  }
-  return points;
-}
 
 /**
  * Gate 5: ONE smooth curve per lane, not a random kick per sample.
@@ -159,210 +127,62 @@ function insideRing(
   return d <= profile.ringAt(nominalRadiusM, bearingOf(green.centre, p));
 }
 
-/**
- * Task 3: one INCOMING arm after near-duplicate bearings have been merged.
- * `sourceRouteIds` is set only when more than one FMG route fed this arm.
- */
-interface MergedRoute {
-  bearingDeg: number;
-  type: RouteType;
-  through: boolean;
-  routeId?: string;
-  sourceRouteIds?: string[];
-}
-
-interface ArmEmission {
-  route: MergedRoute;
-  bearingDeg: number;
-  /** True for a `through` route's far-side echo, not the route itself. */
-  isFarSide: boolean;
-}
+// Trunks task 5: `buildArms`, `mergeIncomingRoutes`, `MergedRoute` and
+// `ArmEmission` are retired -- the pipeline now seeds growth with
+// `synthesizeTrunks`'s output (`skeleton/trunks.ts`, spec 2026-08-25 §5).
+// That module owns the entire boundary-to-junction pipeline `buildArms`
+// used to (contract-circle entries, near-duplicate handling -- now a
+// deliberate NON-merge at the boundary, spec 5.1 -- staggered merges deeper
+// in, and the convergence-pattern palette), so there is no direct
+// replacement function here: `village-model.ts` calls `synthesizeTrunks`
+// itself. `armLaneId` (`types.ts`) and the `arm-` id space survive only as
+// a still-tested, otherwise-unused naming utility (see `ids.test.ts`);
+// nothing in this file emits an `arm-` id any more.
 
 /**
- * Task 3: FMG routes whose incoming bearings are near-duplicates (`fan`'s
- * 90.0/90.5/91.2 trio) collapse into ONE arm rather than three near-parallel
- * roads. Clustering rule: sort incoming routes by bearing, then walk the
- * sorted list merging each route into the current cluster while its gap to
- * the PREVIOUS route (not the cluster's first member) is under
- * `INCOMING_ARM_MERGE_DEG` — pairwise-adjacent, so a long chain of
- * routes each within threshold of its neighbour merges as one cluster even
- * if its ends are far apart, and a route just past the threshold starts a
- * new one. A final wrap check merges the last cluster into the first when
- * the circular gap (e.g. 358 degrees to 2 degrees) is also under threshold,
- * so the merge is bearing-space-circular like everything else here.
- *
- * Survivor selection mirrors `buildArms`'s own bucket-collision rule
- * (below) for the same reason: the highest road class present wins — never
- * a demotion, per the owner's ruling that a king's road absorbed into a
- * track should not become a track — and ties break on the lexically
- * smallest `routeId` (falling back to the bearing when FMG left it out),
- * so the outcome depends only on cluster CONTENT, never on input order.
- * `through` is inherited if ANY merged route is through, since the
- * survivor now stands in for every road that arrives near that bearing.
- *
- * The clustering itself needs routes sorted by bearing, but the RETURNED
- * order is the ORIGINAL input order (each cluster takes the position of
- * whichever member appeared earliest in `routes`) — not the sorted one.
- * `buildArms` draws from `rng` once per emission in array order, so an
- * arm's exact curve depends on where it falls in that sequence; reordering
- * routes that never merge would silently redraw every OTHER arm's geometry
- * too, for no reason connected to this task. Keeping input order when
- * nothing merges makes this a true no-op for every route set with no
- * near-duplicate pair, which is what "must not regress" requires.
+ * Trunks task 5 audit finding: every OTHER lane in this engine (an
+ * invented radial, a branch, or -- before this task -- an FMG arm) is
+ * built outward from the green, so its `points[0]` IS its nearest point to
+ * the green by construction. A trunk lane is not guaranteed that:
+ * `synthesizeTrunks` (spec 5.2) is inner-first for a plain root (so
+ * `points[0]` is still the green-nearest sample there), but a captured/
+ * merged trunk's remaining polyline starts at its merge JUNCTION --
+ * mid-network, not the green -- and a loop segment or a main-street spine
+ * can have NEITHER end anywhere near the green at all. Scanning the whole
+ * polyline for its nearest sample is the only assumption-free way to ask
+ * "where does this lane meet the green, if it does at all", and it costs
+ * nothing extra for the ordinary case (`points[0]` still wins the scan).
  */
-function mergeIncomingRoutes(routes: SiteRoute[]): MergedRoute[] {
-  if (routes.length <= 1) {
-    return routes.map((r) => ({
-      bearingDeg: r.bearingDeg, type: r.type, through: r.through, routeId: r.routeId,
-    }));
+function nearestToGreen(green: Green, lane: Lane): Point {
+  let best = lane.points[0];
+  let bestD = dist(best, green.centre);
+  for (const p of lane.points) {
+    const d = dist(p, green.centre);
+    if (d < bestD) { bestD = d; best = p; }
   }
-  const indexed = routes.map((r, i) => ({ r, i }));
-  const sorted = [...indexed].sort((a, b) => a.r.bearingDeg - b.r.bearingDeg);
-  const clusters: Array<typeof indexed> = [[sorted[0]]];
-  for (let i = 1; i < sorted.length; i++) {
-    const gap = angularGap(sorted[i].r.bearingDeg, sorted[i - 1].r.bearingDeg);
-    if (gap < INCOMING_ARM_MERGE_DEG) {
-      clusters[clusters.length - 1].push(sorted[i]);
-    } else {
-      clusters.push([sorted[i]]);
-    }
-  }
-  if (clusters.length > 1) {
-    const first = clusters[0][0].r.bearingDeg;
-    const lastCluster = clusters[clusters.length - 1];
-    const last = lastCluster[lastCluster.length - 1].r.bearingDeg;
-    if (angularGap(first, last) < INCOMING_ARM_MERGE_DEG) {
-      clusters[0] = [...lastCluster, ...clusters[0]];
-      clusters.pop();
-    }
-  }
-  const merged = clusters.map((cluster) => {
-    const minIndex = Math.min(...cluster.map((c) => c.i));
-    if (cluster.length === 1) {
-      const r = cluster[0].r;
-      return { minIndex, route: { bearingDeg: r.bearingDeg, type: r.type, through: r.through, routeId: r.routeId } };
-    }
-    const routeKey = (r: SiteRoute): string => r.routeId ?? String(r.bearingDeg);
-    const survivor = [...cluster].sort((a, b) => {
-      const rankDiff = classRank(a.r.type) - classRank(b.r.type);
-      if (rankDiff !== 0) return rankDiff;
-      const aKey = routeKey(a.r); const bKey = routeKey(b.r);
-      return aKey < bKey ? -1 : aKey > bKey ? 1 : 0;
-    })[0].r;
-    return {
-      minIndex,
-      route: {
-        bearingDeg: survivor.bearingDeg,
-        type: survivor.type,
-        through: cluster.some((c) => c.r.through),
-        routeId: survivor.routeId,
-        sourceRouteIds: cluster.map((c) => routeKey(c.r)).sort(),
-      },
-    };
-  });
-  return merged.sort((a, b) => a.minIndex - b.minIndex).map((m) => m.route);
+  return best;
 }
 
 /**
- * Every incoming route becomes an arm leaving the green at its bearing.
- * A `through` route also leaves on the far side — it passes across the
- * green rather than stopping at it, which is what later makes a single
- * through route swell into the lens-shaped green: the road passes through
- * and the green is a swelling of it.
- *
- * FINDING 1 fix: `armLaneId` rounds its bearing to the nearest degree, so
- * two routes at nearly the same bearing (e.g. 90.0 and 90.2), or a
- * `through` route's far side landing on a bearing another route already
- * occupies (e.g. a route in at 0° through, another out at 180°), can both
- * want `arm-090` or `arm-180` — and lot ids are built from lane ids, so a
- * collision here becomes a duplicate lot id downstream, breaking the
- * stable-id invariant.
- *
- * Every emission (a route's near side, and a through route's far side) is
- * grouped by its rounded bearing bucket. A bucket with only one member is
- * unaffected. A bucket with more than one is resolved deterministically by
- * CONTENT, never by array position, so the same input always resolves the
- * same way regardless of route ordering:
- *   1. the highest road class present keeps the bare `arm-NNN` id — the
- *      lowest classRank wins, matching the intuition that the more
- *      important road is the "real" one at that bearing;
- *   2. ties (equal class) prefer the near side over a through route's far
- *      side, since an arriving route is more "itself" than an echo of one;
- *   3. every loser gets a suffix built from something stable about IT:
- *      its own `route_id` when FMG supplied one, else its own unrounded
- *      bearing (so `90.2` doesn't collide with `90.0`'s bare id), and a
- *      through route's far side specifically gets a `~far` marker — it is
- *      genuinely a different lane from any route that happens to arrive on
- *      that reciprocal bearing, not a coincidental duplicate of it.
- * All suffixed ids still start with `arm-` and never contain `/b`, so
- * `trimTails`'s `isFmgArm` check (which relies on exactly that) keeps
- * treating them as untrimmed FMG roads, which is what they are.
+ * How far a lane's green-nearest sample (see `nearestToGreen`) may sit
+ * from the green's own drawn rim and still count as reaching it, as a
+ * multiple of `greenDrawnRadius`. Generous rather than tight: a genuinely
+ * green-attached lane (an invented rib, or a trunk root/y-tree landing)
+ * starts well UNDER the rim, at `GREEN_UNDERLAP_RATIO` of the nominal
+ * radius -- comfortably inside 1x `greenDrawnRadius` already -- while
+ * anything that is NOT green-attached (a loop segment at the built edge, a
+ * captured trunk's mid-network merge point) sits many multiples of the
+ * green's own size further out. The exact factor is not gate-tuned; it
+ * only has to separate those two regimes, which it does by a wide margin
+ * on every scale this engine builds.
  */
-export function buildArms(
-  site: Site, green: Green, extentM: number, rng: SeededRandom,
-): Lane[] {
-  const merged = mergeIncomingRoutes(site.routes);
-  const emissions: ArmEmission[] = [];
-  for (const r of merged) {
-    emissions.push({ route: r, bearingDeg: r.bearingDeg, isFarSide: false });
-    if (r.through) emissions.push({ route: r, bearingDeg: (r.bearingDeg + 180) % 360, isFarSide: true });
-  }
+const GREEN_ATTACH_SLACK_FACTOR = 1.5;
 
-  const groups = new Map<string, ArmEmission[]>();
-  for (const e of emissions) {
-    const base = armLaneId(e.bearingDeg);
-    const arr = groups.get(base);
-    if (arr) arr.push(e); else groups.set(base, [e]);
-  }
-
-  const idOf = new Map<ArmEmission, string>();
-  for (const [base, group] of groups) {
-    if (group.length === 1) {
-      idOf.set(group[0], base);
-      continue;
-    }
-    const sorted = [...group].sort((a, b) => {
-      const rankDiff = classRank(a.route.type) - classRank(b.route.type);
-      if (rankDiff !== 0) return rankDiff;
-      if (a.isFarSide !== b.isFarSide) return a.isFarSide ? 1 : -1;
-      const aKey = a.route.routeId ?? String(a.bearingDeg);
-      const bKey = b.route.routeId ?? String(b.bearingDeg);
-      return aKey < bKey ? -1 : aKey > bKey ? 1 : 0;
-    });
-    idOf.set(sorted[0], base);
-    const used = new Set<string>([base]);
-    for (let i = 1; i < sorted.length; i++) {
-      const e = sorted[i];
-      let id = e.isFarSide
-        ? `${base}~far`
-        : e.route.routeId
-          ? `${base}~${e.route.routeId}`
-          : `${base}~${e.bearingDeg.toFixed(4)}`;
-      // Last-resort dedup for a truly pathological input (e.g. two
-      // identical duplicate route records): extend precision
-      // deterministically until unique, still content-derived.
-      let precision = 5;
-      while (used.has(id)) {
-        id = `${base}~${e.bearingDeg.toFixed(precision)}`;
-        precision++;
-      }
-      used.add(id);
-      idOf.set(e, id);
-    }
-  }
-
-  return emissions.map((e) => ({
-    id: idOf.get(e) as string,
-    type: e.route.type,
-    points: runArm(green, e.bearingDeg, extentM, rng),
-    widthM: laneWidth(e.route.type),
-    ...(e.route.sourceRouteIds ? { sourceRouteIds: e.route.sourceRouteIds } : {}),
-  }));
-}
-
-/** Which way a lane leaves the green — geometry.ts owns the trigonometry. */
+/** Which way a lane leaves the green — geometry.ts owns the trigonometry.
+ * Bearing is taken at the lane's green-NEAREST sample, not blindly
+ * `points[0]` -- see `nearestToGreen`. */
 function laneBearing(green: Green, lane: Lane): number {
-  return bearingOf(green.centre, lane.points[0]);
+  return bearingOf(green.centre, nearestToGreen(green, lane));
 }
 
 /**
@@ -381,9 +201,22 @@ function inventedChildClass(parent: RouteType): RouteType {
   return classRank(stepped) < classRank('local') ? 'local' : stepped;
 }
 
-/** Lanes attached to the green: FMG arms plus the village's own streets. */
-function isGreenAttached(lane: Lane): boolean {
-  return lane.parentId === undefined;
+/**
+ * Lanes attached to the green: trunk roots/landings plus the village's own
+ * first-ring streets. `parentId === undefined` alone used to be sufficient
+ * -- every un-parented lane (an FMG arm, or a green-seeded invented rib)
+ * genuinely started at the green. Trunks task 5 breaks that: a captured/
+ * merged trunk, a loop segment or a y-tree connector can also come out of
+ * `synthesizeTrunks` without a `parentId`, even though its polyline may
+ * never come near the green at all (see `nearestToGreen`'s comment). Being
+ * un-parented is still NECESSARY -- a branch off any lane never counts,
+ * wherever its parent attaches -- it is just no longer sufficient on its
+ * own, so it is joined by an actual distance check against the green.
+ */
+function isGreenAttached(green: Green, lane: Lane): boolean {
+  if (lane.parentId !== undefined) return false;
+  return dist(nearestToGreen(green, lane), green.centre)
+    <= greenDrawnRadius(green) * GREEN_ATTACH_SLACK_FACTOR;
 }
 
 /**
@@ -518,8 +351,16 @@ export function lotReachFor(
   lane: Lane, saturatedRadiusM: number, population: number,
 ): number {
   if (population < HAMLET_RIBBON_POP) return saturatedRadiusM;
-  const isTrunk = classRank(lane.type) <= classRank('town');
-  return isTrunk ? saturatedRadiusM * ARM_LOT_RADIUS_SHARE : saturatedRadiusM;
+  // Trunks task 5 audit: this is a ROUTE-CLASS check (royal/main/market/
+  // town, i.e. an inter-settlement class per the owner's ruling above) --
+  // unrelated to, and named before, `skeleton/trunks.ts`'s `isTrunk(laneId)`
+  // lane-ID predicate this file now also imports. `isTrunkClass` so the two
+  // never read as the same test: a `local` branch grown off a `trunk-*`
+  // lane is trunk-CLASS false but lane-ID `isTrunk` false too (it has a
+  // `/b` suffix), while a captured `trunk-footpath-...` sub-trunk is
+  // lane-ID `isTrunk` true but trunk-CLASS false (footpath outranks town).
+  const isTrunkClass = classRank(lane.type) <= classRank('town');
+  return isTrunkClass ? saturatedRadiusM * ARM_LOT_RADIUS_SHARE : saturatedRadiusM;
 }
 
 /**
@@ -625,22 +466,13 @@ export function laneBudgetFor(radiusM: number): number {
   return (Math.PI * radiusM * radiusM) / (LANE_TILE_SPACING_M * DISC_MARGIN * DISC_MARGIN);
 }
 
-/**
- * True for a lane that IS an FMG arm itself -- not a branch or extension
- * grown off one. Arm ids live in the `arm-` space (`armLaneId`) and never
- * contain `/b` (`branchLaneId`'s separator); a branch off an arm keeps the
- * `arm-` prefix as its parent id but is invented growth all the same, so it
- * must not be exempted.
- *
- * Final-fix-wave dedup: this used to have a verbatim copy in `relax.ts`
- * (both files needed the same distinction, for different reasons -- this
- * one for the invented-lane growth budget, `relax.ts` for which lanes
- * `trimTails` may drop). Exported from here and imported there instead, so
- * there is exactly one definition to keep in sync.
- */
-export function isFmgArm(laneId: string): boolean {
-  return laneId.startsWith('arm-') && !laneId.includes('/b');
-}
+// Trunks task 5: `isFmgArm` (the `arm-`-prefix, no-`/b` test that used to
+// live here and be imported into `relax.ts`) is retired. Its two call
+// sites -- the invented-lane growth budget below, and `relax.ts`'s
+// `trimTails` exemption -- now both import `isTrunk` from
+// `skeleton/trunks.ts` directly (spec 2026-08-25 §5.1: `trunk-` prefix, no
+// `/b` branch suffix), so there is still exactly one definition, just owned
+// by the module that also builds the ids it recognises.
 
 /** Lane length inside the profile BODY, segment by segment (gate 8: the
  * budget is spent on ground inside the village, and the village is not a
@@ -921,16 +753,19 @@ function earnsItsSpace(
 
 /**
  * Lengthen the shortest extendable street whose length is still under
- * `maxLengthM`, from its end along its end direction. FMG arms are never
- * extended — they already run to the map's edge. Shortest-first keeps the
- * cluster balanced instead of streaming out one long tentacle.
+ * `maxLengthM`, from its end along its end direction. Trunk lanes are
+ * never extended — they already run to the contract circle (`drawTrunkPath`,
+ * spec 5.1) or to whatever junction/loop/spine point pattern-application
+ * landed them on (spec 5.2); either way, growth does not own their far end.
+ * Shortest-first keeps the cluster balanced instead of streaming out one
+ * long tentacle.
  */
 function extendOne(
   out: Lane[], green: Green, meanFrontageM: number, profile: RadiusProfile,
   rng: SeededRandom, maxLengthM: number, satRadiusM: number,
 ): boolean {
   const extendable = out
-    .filter((l) => !l.id.startsWith('arm-') && l.points.length >= 2
+    .filter((l) => !isTrunk(l.id) && l.points.length >= 2
       && polylineLength(l.points) < maxLengthM
       // Gate 3: extension is confined to the cluster — a street whose end
       // has left the growth circle stops growing outward.
@@ -1002,9 +837,19 @@ function growOne(
   // ids live in the `lane-` space, R10) count against it. Gate 4: counting
   // FMG's own arms let two incoming routes eat a cap of 3, leaving a
   // pop-900 green a single radial and a dead quadrant.
-  if (out.filter((l) => isGreenAttached(l) && l.id.startsWith('lane-')).length
+  if (out.filter((l) => isGreenAttached(green, l) && l.id.startsWith('lane-')).length
       < ribCountFor(profile.radiusM)) {
-    const taken = out.filter(isGreenAttached).map((l) => laneBearing(green, l));
+    // Task 4b (F15). `taken` is the bearing-collision list the
+    // MIN_ARM_SEPARATION_DEG check below tests a candidate rib against, and
+    // it must contain every road already occupying a bearing -- which is
+    // every UN-PARENTED lane, exactly as it was before Task 5 narrowed
+    // `isGreenAttached` with a distance test. Under the loop pattern no
+    // trunk sits within that distance of the green, so `taken` came back
+    // empty and the separation check had nothing to compare against: growth
+    // seeded an invented rib at the very bearing a trunk already ran along.
+    // The narrowed predicate still governs the rib COUNT above (that cap is
+    // about the green's own ring), just not this.
+    const taken = out.filter((l) => l.parentId === undefined).map((l) => laneBearing(green, l));
     for (let attempt = 0; attempt < 36; attempt++) {
       const candidate = Math.round(widestGapBearing(taken, rng)) % 360;
       const collides = taken.some((t) => angularGap(candidate, t) < MIN_ARM_SEPARATION_DEG)
@@ -1238,7 +1083,7 @@ export function connectDeadEnds(
 ): Lane[] {
   const out = [...lanes];
   const candidates = lanes
-    .filter((l) => !l.id.startsWith('arm-') && l.points.length >= 2)
+    .filter((l) => !isTrunk(l.id) && l.points.length >= 2)
     .slice()
     .sort((a, b) => a.id.localeCompare(b.id));
 
@@ -1865,7 +1710,7 @@ export function saturateDisc(
   // round it collide and §5.4 resolution drops them). Measured at gate 6.5,
   // that is where two thirds of every village's cut frontage went.
   // Task 2 (2026-08-24): the budget counts only INVENTED lane -- an FMG
-  // arm never counts against it, mirroring the invented-rib cap's own
+  // arm never counted against it, mirroring the invented-rib cap's own
   // distinction (`growOne`'s comment above: "the count governs what the
   // village ADDS: only invented radials... count against it"). Without
   // this, a village with several incoming routes spends its whole budget
@@ -1873,11 +1718,18 @@ export function saturateDisc(
   // 5-route village measured at 115% of round-0 budget spent by arms
   // alone, an 8-route one at 172%) -- the census then starves for want of
   // an interior mesh no matter how many arms it has. The arm length itself
-  // is unbounded by design (it is FMG's road, not ours to shorten); what
+  // was unbounded by design (it was FMG's road, not ours to shorten); what
   // must not shrink is how much the VILLAGE gets to build around it.
+  //
+  // Trunks task 5: the same exemption, `isTrunk`-keyed. It now also covers
+  // every lane `synthesizeTrunks` ever commits, not only a plain root --
+  // loop segments, y-tree connectors and captured/merged sub-trunks all
+  // carry `trunk-` ids (spec 5.1/5.2) and none of them were laid by the
+  // village's own growth budget, so none of them should be able to spend
+  // it either.
   const budgetM = laneBudgetFor(targetRadiusM);
   while (guard < MAX_INVENTED_LANES
-    && laneLengthWithin(out.filter((l) => !isFmgArm(l.id)), green, target) < budgetM) {
+    && laneLengthWithin(out.filter((l) => !isTrunk(l.id)), green, target) < budgetM) {
     guard++;
     // Gate 6.7: coverage comes FIRST, not last. Gate 6.4 added this check
     // as a last resort before widening, which was enough while every street

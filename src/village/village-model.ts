@@ -1,11 +1,12 @@
-import type { Point } from '../types/point.js';
+import { Point } from '../types/point.js';
 import { SeededRandom } from '../utils/random.js';
 import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import { buildSite } from './site.js';
-import { predictedBuiltRadius, siteGreen } from './skeleton/green-siting.js';
+import { predictedBuiltRadius, siteGreen, waterPushedCentre } from './skeleton/green-siting.js';
 import {
-  availableFrontage, buildArms, connectDeadEnds, discRadiusFor, lotReachAt, saturateDisc,
+  availableFrontage, connectDeadEnds, discRadiusFor, lotReachAt, saturateDisc,
 } from './skeleton/lanes.js';
+import { contractRadiusFor, synthesizeTrunks } from './skeleton/trunks.js';
 import { buildRadiusProfile, type RadiusProfile } from './skeleton/profile.js';
 import { blockAreas } from './skeleton/blocks.js';
 import { relaxLanes, trimTails } from './skeleton/relax.js';
@@ -28,7 +29,7 @@ import {
   ARM_LOT_RADIUS_SHARE, BLOCK_CHASE_ROUND_CAP, BRANCH_SPACING_M, FRONT_ON_LANE_EPS_M,
   GAP_TIGHTEN_STEP_M,
   GREEN_JOIN_RATIO, HAMLET_RIBBON_POP,
-  INITIAL_MEAN_FRONTAGE_FACTOR, LANE_EXTENT_FACTOR, LANE_SETBACK_M, LOT_DEPTH_M,
+  AIM_CLEAR_RADIUS_M, INITIAL_MEAN_FRONTAGE_FACTOR, LANE_SETBACK_M, LOT_DEPTH_M,
   MAX_FEEDBACK_ROUNDS, MAX_LOT_FRONTAGE_RATIO, MEAN_LOT_AREA_M2, RECUT_MAX_PASSES,
   DISC_ESCALATION_STEP_RATIO, RING_SETBACK_M, SPACING_RELAX_FLOOR, SPACING_RELAX_STEP,
   PROFILE_SEED_MULTIPLIER, PROFILE_SEED_OFFSET,
@@ -124,12 +125,9 @@ export function generateVillage(
   // PRE-FABRIC ONLY (gate 6.6, and the rule that has bitten four times):
   // `predictedBuiltRadius` is a census-to-area guess made before any
   // geometry exists. It may size things that are themselves pre-fabric --
-  // the green, and how far FMG's arms are drawn past it -- and NOTHING
-  // downstream of growth. Everything after growth keys off `discRadiusM`,
-  // the disc growth actually saturated.
+  // the green -- and NOTHING downstream of growth. Everything after growth
+  // keys off `discRadiusM`, the disc growth actually saturated.
   const preFabricRadius = predictedBuiltRadius(site.population, occupancy, MEAN_LOT_AREA_M2);
-  const green = siteGreen(site, preFabricRadius, rng);
-  const laneExtentM = preFabricRadius * LANE_EXTENT_FACTOR;
 
   // Finding 5: f0 is spec §5.2's "widest common dwelling in the deck" plus
   // the population gap term — not an unrelated literal.
@@ -153,10 +151,55 @@ export function generateVillage(
   // The ink floor: a lot exactly this wide puts two neighbours' painted
   // walls in contact. Nothing may tighten past it.
   const inkFloorM = widestDwellingM;
+  // The disc the census needs, in closed form -- see `discRadiusFor`.
+  // Landmarks are counted in: the inn, chapel and large house each take a
+  // lot, and the chapel houses nobody at all, so a disc sized for
+  // `population / occupancy` alone comes up a few plots short.
+  const landmarkLots = deck.filter((e) => e.cap && eligible(e, site, Infinity)).length;
+  const dwellingsNeeded = Math.ceil(site.population / ordinaryOccupancy(deck)) + landmarkLots;
+  // Floored so the FIRST branch-slot ring (BRANCH_SPACING_M from the green
+  // edge) plus a lot's depth always fits: a hamlet's disc can undercut the
+  // slot spacing, and a radius that excludes every slot freezes growth
+  // entirely -- the escalation loop then cannot house the census at all.
+  // The cut width, not the ideal: `lotFloorM` (the deck's narrowest usable
+  // dwelling) overrides f0 wherever it is wider, and then IT is what every
+  // metre of frontage actually costs. Sizing the disc from f0 alone
+  // under-counted the ground the same houses need.
+  const meanLotFrontageM = Math.max(nominalF0, nominalLotFloorM);
+  // Trunks task 5 (spec §5.4): the closed-form radius the census needs, in
+  // isolation from every downstream geometry decision -- both its inputs
+  // (`dwellingsNeeded`, `meanLotFrontageM`) come off the deck alone, so this
+  // is computed BEFORE the green or the trunk network exist, not folded
+  // into `cappedRadiusM` below (which still needs the green's own size, so
+  // it stays where it was). `synthesizeTrunks`'s contract circle is drawn
+  // at `contractRadiusFor` of THIS radius -- the trunk network's outer
+  // boundary is sized off the same closed form the fabric inside it will
+  // be, before either exists.
+  const closedFormRadius = discRadiusFor(dwellingsNeeded, meanLotFrontageM);
+  // Task 4b (F11): the network's AIM. `synthesizeTrunks` used to aim every
+  // road at a hard-coded origin while `siteGreen` pushed the green off that
+  // origin by up to 34 m on a wet site -- the roads converged on the exact
+  // point the green had just been rejected from, and ran into open water
+  // besides. The aim is pushed clear of water FIRST, and then handed to
+  // both: the network converges there, and the green starts its own search
+  // there, so the two can no longer disagree about where the village is.
+  // (Trunk paths themselves are still water-blind between the boundary and
+  // the aim -- routing roads AROUND water is ship-plan Phase 3's job, not
+  // this task's.)
+  const aim = waterPushedCentre(new Point(0, 0), AIM_CLEAR_RADIUS_M, site.water).centre;
+  const network = synthesizeTrunks(
+    site, contractRadiusFor(closedFormRadius), closedFormRadius, rng, aim,
+  );
+  const green = siteGreen(site, preFabricRadius, rng, aim);
+
   let f0 = nominalF0;
   let lotFloorM = nominalLotFloorM;
   let activeDeck = deck;
-  let lanes = buildArms(site, green, laneExtentM, rng);
+  // Trunks task 5: growth is seeded with the trunk network in place of
+  // `buildArms`'s FMG-arm lanes (spec §5.4) -- `network.trunks` already
+  // carries every route's contract-to-junction geometry, merges and
+  // convergence pattern (`synthesizeTrunks`, `skeleton/trunks.ts`).
+  let lanes = network.trunks;
   let lots: Lot[] = [];
   // Annotated, not inferred: an empty literal would infer `never[]`.
   let spend: SpendResult = { buildings: [], housed: 0, unhoused: site.population };
@@ -173,27 +216,12 @@ export function generateVillage(
   // cut) an over-tiled fabric reported itself as a seating failure and
   // demanded yet more lane: the spiral gate 6.6 removes.
   let deckUsableLotCount = 0;
-  // The disc the census needs, in closed form -- see `discRadiusFor`.
-  // Landmarks are counted in: the inn, chapel and large house each take a
-  // lot, and the chapel houses nobody at all, so a disc sized for
-  // `population / occupancy` alone comes up a few plots short.
-  const landmarkLots = deck.filter((e) => e.cap && eligible(e, site, Infinity)).length;
-  const dwellingsNeeded = Math.ceil(site.population / ordinaryOccupancy(deck)) + landmarkLots;
-  // Floored so the FIRST branch-slot ring (BRANCH_SPACING_M from the green
-  // edge) plus a lot's depth always fits: a hamlet's disc can undercut the
-  // slot spacing, and a radius that excludes every slot freezes growth
-  // entirely -- the escalation loop then cannot house the census at all.
-  // The cut width, not the ideal: `lotFloorM` (the deck's narrowest usable
-  // dwelling) overrides f0 wherever it is wider, and then IT is what every
-  // metre of frontage actually costs. Sizing the disc from f0 alone
-  // under-counted the ground the same houses need.
-  const meanLotFrontageM = Math.max(nominalF0, nominalLotFloorM);
   // GATE 6.9: THE CAP. Computed once, from the nominal cut width, and never
   // recomputed as the ladder tightens — tightening is meant to fit the same
   // census into the SAME ground, and a cap that shrank alongside it would
   // hand back every metre the tightening won.
   const cappedRadiusM = Math.max(
-    discRadiusFor(dwellingsNeeded, meanLotFrontageM),
+    closedFormRadius,
     green.diameter / 2 + BRANCH_SPACING_M + LOT_DEPTH_M,
   );
   // How far the cut width may come down before two painted walls touch, in
@@ -747,6 +775,10 @@ export function generateVillage(
     edgeStyle: dressing.edgeStyle, crofts: dressing.crofts, fields: dressing.fields,
     fieldEdges: dressing.fieldEdges, vegetation: dressing.vegetation, pois: dressing.pois,
     diagnostics,
+    // Trunks task 5: carried on the model, unread by the renderer this
+    // task (see `types.ts`'s field comments).
+    contractRadiusM: network.contractRadiusM,
+    trunkJunctions: network.junctions,
   };
 }
 

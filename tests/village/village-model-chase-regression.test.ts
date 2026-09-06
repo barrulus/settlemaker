@@ -48,17 +48,26 @@ const mockedSpendCensus = vi.mocked(spendCensus);
 const mockedBlockAreas = vi.mocked(blockAreas);
 
 // Five mixed-class routes (the report's "hub" probe scenario) at pop 300,
-// seed 38: Task 5's trimTails weld fix (see relax.ts) closes far more of
-// growth's own loops into the SHIPPED geometry than before, which raises
-// round 0's real block count comfortably over the floor for nearly every
-// seed this suite otherwise samples -- so this test was re-pointed at a
-// seed that STILL falls short (measured directly with a one-off seed
-// sweep run during this task, not kept in scripts/: seed 38 is the one
-// hit in a 200-seed sweep of this exact scenario whose round-0 fabric
-// stays under its own
-// pop-300 floor of 2, letting rounds 1..N still run under the
-// forced-unhoused override below). The seed choice is load-bearing for
-// the MOCK to reach the code path at all; it is not otherwise special.
+// seed 31: the (earlier, village-afmg-readiness plan) Task 5's trimTails
+// weld fix (see relax.ts) closes far more of growth's own loops into the
+// SHIPPED geometry than before, which raises round 0's real block count
+// comfortably over the floor for nearly every seed this suite otherwise
+// samples -- so this test was re-pointed at a seed that STILL falls short
+// (measured directly with a one-off seed sweep run during that task, not
+// kept in scripts/: seed 38 was the one hit in a 200-seed sweep of this
+// exact scenario whose round-0 fabric stayed under its own pop-300 floor
+// of 2, letting rounds 1..N still run under the forced-unhoused override
+// below).
+//
+// Trunks task 5 (2026-08-25) re-pointed the seed a second time: the
+// pipeline swap from `buildArms` to `synthesizeTrunks` reshapes every
+// village's fabric (topology AND the rng draw order both moved), and seed
+// 38 no longer falls short at round 0 under the trunk pipeline (measured:
+// it now closes well over the floor). A fresh 200-seed sweep of this same
+// scenario under the trunk pipeline found seed 31 as the one still short
+// at round 0 (`blocks short: 1 of 2 enclosed`), so it takes over as the
+// load-bearing seed. The seed choice is load-bearing for the MOCK to reach
+// the code path at all; it is not otherwise special.
 const base: AzgaarBurgInput = {
   name: 'Wick', population: 300, port: false, citadel: false, walls: false,
   plaza: false, temple: false, shanty: false, capital: false,
@@ -74,6 +83,18 @@ const base: AzgaarBurgInput = {
 describe('generateVillage: block-chase overflow-arm regression (finding #1)', () => {
   it('restores the first-housed round instead of shipping a later un-housed one', () => {
     const defaultImpl = mockedSpendCensus.getMockImplementation()!;
+    const defaultBlocks = mockedBlockAreas.getMockImplementation()!;
+    // Task 4b: the chase is forced with a MOCK rather than a hand-picked
+    // seed. This test used to hunt for whichever seed happened to fall
+    // short of its own blocks floor at round 0 (seed 3, then 38, then 31),
+    // and every change to growth or topology moved it again -- the trunk
+    // network closes blocks so much more reliably that a 200-seed sweep now
+    // finds NO seed short at all, so there is nothing left to re-point to.
+    // Forcing zero blocks is exactly what the sibling trace test below
+    // already does, and it makes the guarantee under test -- restore the
+    // first-housed round rather than ship a later un-housed one -- depend
+    // on the mechanism instead of on a seed's luck.
+    mockedBlockAreas.mockImplementation(() => []);
     let call = 0;
     mockedSpendCensus.mockImplementation((...args) => {
       call += 1;
@@ -88,7 +109,7 @@ describe('generateVillage: block-chase overflow-arm regression (finding #1)', ()
         : { ...real, unhoused: Math.max(1, real.unhoused) };
     });
 
-    const m = generateVillage(base, 38);
+    const m = generateVillage(base, 1);
 
     // The bug: shipping the unhoused final round and discarding the
     // housed one silently. The fix: restore the first-housed round and
@@ -97,6 +118,7 @@ describe('generateVillage: block-chase overflow-arm regression (finding #1)', ()
     expect(m.diagnostics.some((d) => d.startsWith('restored:'))).toBe(true);
 
     mockedSpendCensus.mockImplementation(defaultImpl);
+    mockedBlockAreas.mockImplementation(defaultBlocks);
   });
 });
 
@@ -155,7 +177,7 @@ describe('cloneLotTrace / restoreLotTrace (F3: a faithful trace snapshot for the
     mockedBlockAreas.mockImplementation(() => []);
 
     const trace = newLotTrace();
-    const m = generateVillage(base, 38, trace);
+    const m = generateVillage(base, 1, trace);
 
     expect(m.diagnostics.some((d) => d.startsWith('overflow:'))).toBe(false);
     expect(m.diagnostics.some((d) => d.startsWith('blocks short:'))).toBe(true);

@@ -24,16 +24,19 @@ import { generateVillage } from '../src/village/village-model.js';
 import { buildSite } from '../src/village/site.js';
 import { siteGreen, predictedBuiltRadius } from '../src/village/skeleton/green-siting.js';
 import {
-  buildArms, discRadiusFor, polylineLength, laneBudgetFor,
+  discRadiusFor, polylineLength, laneBudgetFor,
 } from '../src/village/skeleton/lanes.js';
+import { contractRadiusFor, synthesizeTrunks } from '../src/village/skeleton/trunks.js';
 import {
   buildDeck, eligible, meanOccupancy, minDwellingFrontageM, ordinaryOccupancy, widestDwellingWidthM,
 } from '../src/village/deck.js';
 import { gapForPopulation } from '../src/village/parcels/lots.js';
 import { newLotTrace, type LotFate } from '../src/village/lot-trace.js';
 import {
-  MEAN_LOT_AREA_M2, LANE_EXTENT_FACTOR, MIN_ARM_SEPARATION_DEG, BRANCH_SPACING_M, LOT_DEPTH_M,
+  AIM_CLEAR_RADIUS_M, MEAN_LOT_AREA_M2, MIN_ARM_SEPARATION_DEG, BRANCH_SPACING_M, LOT_DEPTH_M,
 } from '../src/village/constants.js';
+import { waterPushedCentre } from '../src/village/skeleton/green-siting.js';
+import { Point } from '../src/types/point.js';
 import { SCENARIOS } from './probe-afmg.js';
 import type { AzgaarBurgInput } from '../src/input/azgaar-input.js';
 
@@ -56,9 +59,21 @@ function armBudgetReport(name: string, input: AzgaarBurgInput): void {
   const { entries: deck } = buildDeck(site.biome, site.population, rng);
   const occupancy = meanOccupancy(deck);
   const preFabricRadius = predictedBuiltRadius(site.population, occupancy, MEAN_LOT_AREA_M2);
-  const green = siteGreen(site, preFabricRadius, rng);
-  const laneExtentM = preFabricRadius * LANE_EXTENT_FACTOR;
-  const arms = buildArms(site, green, laneExtentM, rng);
+  // Task 4b: `buildArms` and `LANE_EXTENT_FACTOR` were retired with the
+  // pipeline swap (Trunks task 5); this probe now measures the same thing
+  // -- how much lane FMG's own roads lay down before the village invents
+  // anything -- against the trunk network that replaced them. Mirrors
+  // `generateVillage`'s own ordering: aim, then network, then green.
+  const aim = waterPushedCentre(new Point(0, 0), AIM_CLEAR_RADIUS_M, site.water).centre;
+  const closedFormRadius = discRadiusFor(
+    Math.ceil(site.population / ordinaryOccupancy(deck)),
+    minDwellingFrontageM(deck) + gapForPopulation(site.population),
+  );
+  const network = synthesizeTrunks(
+    site, contractRadiusFor(closedFormRadius), closedFormRadius, rng, aim,
+  );
+  const green = siteGreen(site, preFabricRadius, rng, aim);
+  const arms = network.trunks;
   const armLenTotal = arms.reduce((s, a) => s + polylineLength(a.points), 0);
 
   // Reported so the ratio's order of magnitude is visible, but named as
@@ -84,7 +99,7 @@ function armBudgetReport(name: string, input: AzgaarBurgInput): void {
 
   process.stdout.write(
     `${name.padEnd(12)} pop=${site.population.toString().padEnd(4)} arms=${arms.length} `
-    + `armLenTotal=${armLenTotal.toFixed(0)}m laneExtentM=${laneExtentM.toFixed(0)} `
+    + `armLenTotal=${armLenTotal.toFixed(0)}m contractRadiusM=${network.contractRadiusM.toFixed(0)} `
     + `preFabricR=${preFabricRadius.toFixed(0)}m budgetAtPreFabricR=${budgetAtPreFabric.toFixed(0)}m `
     + `armLen/preFabricBudget=${(armLenTotal / budgetAtPreFabric * 100).toFixed(0)}% `
     + `|| cappedRadiusM(round0)=${cappedRadiusM.toFixed(0)}m realBudgetM=${realBudget.toFixed(0)}m `

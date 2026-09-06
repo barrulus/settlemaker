@@ -8,18 +8,18 @@ const defaultPoints = () => [
 ];
 
 const lane = (): Lane => ({
-  id: 'arm-090', type: 'main', widthM: 5, points: defaultPoints(),
+  id: 'trunk-main-090', type: 'main', widthM: 5, points: defaultPoints(),
 });
 
-const armLane = (): Lane => ({
-  id: 'arm-090', type: 'main', widthM: 5, points: defaultPoints(),
+const trunkLane = (): Lane => ({
+  id: 'trunk-main-090', type: 'main', widthM: 5, points: defaultPoints(),
 });
 
 const inventedLane = (): Lane => ({
   id: 'lane-090', type: 'local', widthM: 5, points: defaultPoints(),
 });
 
-const building = (x: number, y: number, id = 'bld:a', lotId = 'arm-090:R0'): Building => ({
+const building = (x: number, y: number, id = 'bld:a', lotId = 'trunk-main-090:R0'): Building => ({
   id, lotId, glyph: 'sm-house', position: new Point(x, y),
   bearingDeg: 0, footprint: [8, 6.6], occupancy: 5,
 });
@@ -84,8 +84,8 @@ describe('relaxLanes', () => {
 
 describe('trimTails', () => {
   describe('provenance (ruling R15)', () => {
-    it('an arm- lane with no buildings survives at full length', () => {
-      const before = armLane();
+    it('a trunk- lane with no buildings survives at full length', () => {
+      const before = trunkLane();
       const out = trimTails([before], []);
       expect(out).toHaveLength(1);
       expect(out[0].points).toHaveLength(before.points.length);
@@ -93,12 +93,12 @@ describe('trimTails', () => {
         .toEqual(before.points.map((p) => [p.x, p.y]));
     });
 
-    it('an arm- lane with buildings also survives at full length, not trimmed to its last building', () => {
-      const before = armLane();
-      // A single building well short of the far end — if the arm exemption
-      // were missing, this would trim back to last-building + stub, well
-      // short of the last point.
-      const out = trimTails([before], [building(20, 6, 'bld:a', 'arm-090:R0')]);
+    it('a trunk- lane with buildings also survives at full length, not trimmed to its last building', () => {
+      const before = trunkLane();
+      // A single building well short of the far end — if the trunk
+      // exemption were missing, this would trim back to last-building +
+      // stub, well short of the last point.
+      const out = trimTails([before], [building(20, 6, 'bld:a', 'trunk-main-090:R0')]);
       expect(out).toHaveLength(1);
       expect(out[0].points).toHaveLength(before.points.length);
       expect(out[0].points[out[0].points.length - 1].x).toBe(60);
@@ -149,10 +149,13 @@ describe('trimTails', () => {
     expect(out.find((l) => l.id === 'lane-090')).toBeUndefined();
   });
 
-  it('a branch of an arm (.../bNN) is treated as invented, not exempt', () => {
-    // arm-090/b50 starts with "arm-" but the /b marks it as an invented
-    // branch — it must still be droppable when it earns no building.
-    const branch: Lane = { id: 'arm-090/b50', type: 'local', widthM: 4, points: defaultPoints() };
+  it('a branch of a trunk (.../bNN) is treated as invented, not exempt', () => {
+    // trunk-main-090/b50 starts with "trunk-" but the /b marks it as an
+    // invented branch — it must still be droppable when it earns no
+    // building.
+    const branch: Lane = {
+      id: 'trunk-main-090/b50', type: 'local', widthM: 4, points: defaultPoints(),
+    };
     const out = trimTails([branch], []);
     expect(out).toHaveLength(0);
   });

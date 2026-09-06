@@ -71,9 +71,17 @@ describe('mergeTrunks', () => {
   });
 
   it('(d) merge-band staggering over seeds 1..40', () => {
+    // Task 4b re-pointed this from the near-duplicate pair to a pair that
+    // arrives APART. A lesser road already within capture of its neighbour
+    // at the contract circle now merges there and then (F3): staggering it
+    // would mean 50 m of two roads two metres apart, which is the defect
+    // the band staggering was never meant to license. Roads that arrive on
+    // genuinely different bearings still converge at a seeded band, which
+    // is the property this bar exists to pin.
+    const spread = (): DraftTrunk[] => [draft(0, 'main', 'r-main'), draft(20, 'trail', 'r-trail')];
     const bands = new Set<string>();
     for (let seed = 1; seed <= 40; seed++) {
-      const { junctions } = mergeTrunks(twoRoutes(), BUILT_EDGE, new SeededRandom(seed));
+      const { junctions } = mergeTrunks(spread(), BUILT_EDGE, new SeededRandom(seed));
       expect(junctions).toHaveLength(1);
       const r = Math.hypot(junctions[0].position.x, junctions[0].position.y);
       if (r > BUILT_EDGE * 1.15) bands.add('fields');

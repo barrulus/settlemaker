@@ -5,7 +5,7 @@ import {
   RELAX_CLEARANCE_M, RELAX_ITERATIONS, RELAX_MAX_DISPLACEMENT_M, TAIL_STUB_M,
 } from '../constants.js';
 import type { Building, Lane } from '../types.js';
-import { isFmgArm } from './lanes.js';
+import { isTrunk } from './trunks.js';
 
 /**
  * Lanes bend around the houses they acquired. The skeleton was solved
@@ -74,23 +74,30 @@ export function relaxLanes(lanes: Lane[], buildings: Building[]): Lane[] {
  * Ruling R15: trim by provenance. Lanes in this engine come from two
  * different places, and trimming means something different for each:
  *
- *  - `arm-*` lanes are FMG's roads — the route to the next town, arriving
- *    at this village. They exist whether or not anyone builds on them
- *    (the empty-site wireframe is precisely an arm with zero buildings), so
- *    housing is irrelevant to their length: an arm is never trimmed, full
- *    stop, whether it has zero buildings or buildings that stop short of
- *    the map edge.
+ *  - `trunk-*` lanes are FMG's roads made physical — the route to the next
+ *    town, arriving at this village (Trunks task 5: previously `arm-*`,
+ *    built by the now-retired `buildArms`; now every lane
+ *    `synthesizeTrunks` commits, spec 2026-08-25 §5.1/5.2 — a plain root,
+ *    a captured/merged sub-trunk, a loop segment, a y-tree connector, or a
+ *    main-street spine). They exist whether or not anyone builds on them
+ *    (the empty-site wireframe is precisely a trunk with zero buildings),
+ *    so housing is irrelevant to their length: a trunk is never trimmed,
+ *    full stop, whether it has zero buildings or buildings that stop short
+ *    of the contract circle.
  *  - Everything else — `lane-*` (invented lanes) and any `.../bNN` branch,
- *    including a branch off an arm — was invented by the frontage budget
+ *    including a branch off a trunk — was invented by the frontage budget
  *    purely to supply frontage. If it earned no dwelling, it should not be
  *    drawn at all; if it earned some, it is trimmed to the last one plus a
  *    TAIL_STUB_M stub.
  *
- * A branch id such as `arm-090/b50` starts with `arm-` but is NOT exempt —
- * the `/b` marks it as an invented branch, checked before the arm test.
+ * A branch id such as `trunk-main-r1/b50` starts with `trunk-` but is NOT
+ * exempt — the `/b` marks it as an invented branch, checked before the
+ * trunk test (`isTrunk`, spec 5.1).
  *
- * `isFmgArm` itself is defined once, in `lanes.ts` (final fix wave: this
- * file used to carry a verbatim copy), and imported from there.
+ * `isTrunk` itself is defined once, in `skeleton/trunks.ts` (the module
+ * that also builds the ids it recognises — Trunks task 5 moved the single
+ * definition there from `lanes.ts`'s now-retired `isFmgArm`), and imported
+ * from there.
  */
 
 /**
@@ -118,11 +125,15 @@ function buildingsOf(lane: Lane, buildings: Building[]): Building[] {
  * placed, and its output only feeds rendering and the model.
  *
  * The keep-filter below assumes a lane's points increase roughly
- * monotonically in distance from its own start point. That holds for this
- * engine because every lane — arm or invented — is built outward from the
- * green, so a point further along the array is, by construction, further
- * from the start; a lane that wandered back toward its own beginning would
- * break the assumption, but no pass in this engine produces one.
+ * monotonically in distance from its own start point. That only has to
+ * hold for the lanes that reach this code at all -- every trunk lane is
+ * exempted above and never gets here (Trunks task 5: `isTrunk`'s early
+ * `continue`) -- and it does hold for the rest: every invented lane and
+ * every branch off one is built outward from its own anchor (the green, or
+ * a slot on its parent), so a point further along the array is, by
+ * construction, further from the start; a lane that wandered back toward
+ * its own beginning would break the assumption, but no pass in this engine
+ * produces one.
  */
 /** Arc length along `points` of the position nearest `p` — where a
  * building sits ALONG its lane, as opposed to how far it is from the
@@ -271,7 +282,7 @@ export function trimTails(
     ? weldJoins(lanes) : { floorS: new Map<string, number>(), joiners: new Set<string>() };
 
   for (const lane of lanes) {
-    if (isFmgArm(lane.id)) {
+    if (isTrunk(lane.id)) {
       result.push(lane);
       continue;
     }

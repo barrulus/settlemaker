@@ -141,7 +141,42 @@ function awayFromWater(centre: Point, radiusM: number, water: Point[][]): Point 
  * from the water itself (see `awayFromWater`) until the rim, plus margin,
  * is dry.
  */
-export function siteGreen(site: Site, builtRadiusM: number, rng: SeededRandom): Green {
+/**
+ * `origin` walked clear of water in `PUSH_STEP_M` increments, re-steering
+ * away from the wet side each step, until a disc of `clearRadiusM` around
+ * it is dry (or the step budget runs out).
+ *
+ * Task 4b (finding F11) extracted this from `siteGreen`'s body so the trunk
+ * network's AIM POINT can be pushed by exactly the same rule. Before that
+ * the two disagreed: `synthesizeTrunks` aimed every road at a hard-coded
+ * origin while `siteGreen` pushed the green off it by up to 34 m on a wet
+ * site, so the roads converged on the one point the green had just been
+ * rejected from — measured at 118-283 lane metres of open water. The green
+ * now starts its own push FROM the aim, so the two can only ever coincide
+ * or differ by the extra clearance the green itself needs.
+ */
+export function waterPushedCentre(
+  origin: Point, clearRadiusM: number, water: Point[][],
+): { centre: Point; clipped: boolean } {
+  let centre = origin;
+  if (!waterClips(centre, clearRadiusM, water)) return { centre, clipped: false };
+  for (let i = 0; i < MAX_PUSH_STEPS; i++) {
+    const away = awayFromWater(centre, clearRadiusM, water);
+    centre = new Point(centre.x + away.x * PUSH_STEP_M, centre.y + away.y * PUSH_STEP_M);
+    if (!waterClips(centre, clearRadiusM, water)) break;
+  }
+  return { centre, clipped: true };
+}
+
+/**
+ * `origin` is where the green STARTS its search, not where it lands: the
+ * trunk network's aim point (Task 4b), so a village whose roads converged
+ * on pushed-clear ground puts its green on that same ground. Defaults to
+ * the burg origin, which is what it was before the aim existed.
+ */
+export function siteGreen(
+  site: Site, builtRadiusM: number, rng: SeededRandom, origin: Point = new Point(0, 0),
+): Green {
   const arms = roadArms(site);
   const through = arms.find((a) => a.through);
 
@@ -151,17 +186,10 @@ export function siteGreen(site: Site, builtRadiusM: number, rng: SeededRandom): 
   const radius = diameter / 2;
   const clearRadius = radius + GREEN_WATER_MARGIN_M;
 
-  // Position: origin, then pushed clear of water, re-steering each step.
-  let centre = new Point(0, 0);
-  let clipped = false;
-  if (waterClips(centre, clearRadius, site.water)) {
-    clipped = true;
-    for (let i = 0; i < MAX_PUSH_STEPS; i++) {
-      const away = awayFromWater(centre, clearRadius, site.water);
-      centre = new Point(centre.x + away.x * PUSH_STEP_M, centre.y + away.y * PUSH_STEP_M);
-      if (!waterClips(centre, clearRadius, site.water)) break;
-    }
-  }
+  // Position: the aim, then pushed clear of water, re-steering each step.
+  const pushed = waterPushedCentre(origin, clearRadius, site.water);
+  const centre = pushed.centre;
+  const clipped = pushed.clipped;
 
   const shape = clipped ? 'sm-green-d' : provisionalShape;
   const bearingDeg = through ? through.bearingDeg : 0;

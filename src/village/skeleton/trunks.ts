@@ -1,11 +1,15 @@
 /**
- * Trunk network, boundary contract (spec 2026-08-25 §5.1).
+ * Trunk network (spec 2026-08-25 §5): the contract circle's entries, curve
+ * drawing, class-aware merging, the convergence-pattern palette, and the
+ * no-proper-crossing invariant -- everything `synthesizeTrunks` needs to
+ * turn a `Site`'s FMG routes into the lanes growth seeds on.
  *
- * This module owns only the contract circle's entries and the trunk lane
- * id namespace this task requires -- curve drawing, merging with the
- * grown fabric, and loop patterns are later tasks in this plan. Nothing
- * in the existing arm pipeline changes: `buildArms` keeps running,
- * untouched, until this network replaces it.
+ * Trunks task 5 retired `buildArms` (the FMG-arm pipeline this module
+ * replaces) and wired `synthesizeTrunks` directly into
+ * `village-model.ts`'s `generateVillage` -- see that file's own comment at
+ * the call site for the ordering this needed (the closed-form radius,
+ * computed before any geometry, sizes the contract circle this module
+ * draws entries on).
  */
 import { Point } from '../../types/point.js';
 import type { SeededRandom } from '../../utils/random.js';
@@ -14,7 +18,7 @@ import {
   TRUNK_SAGITTA_RATIO,
 } from '../constants.js';
 import { angularGap, bearingVector, closestPointOnPolyline, segmentIntersection } from '../geometry.js';
-import { classRank, laneWidth, stepDown, type RouteType } from '../route-class.js';
+import { classRank, isRoadClass, laneWidth, stepDown, type RouteType } from '../route-class.js';
 import { routeProvenanceKey, trunkLaneId, type Lane, type Site, type SiteRoute } from '../types.js';
 
 /** Wanderer classes (ratio >= 0.12) get a second control jitter and are
@@ -23,6 +27,28 @@ const WANDER_THRESHOLD = 0.12;
 
 /** Sample points are spaced roughly this far apart along the curve. */
 const SAMPLE_STEP_M = 6;
+
+/** How far inside the contract circle a draft that arrives ALREADY within
+ * capture distance of a neighbour is allowed to run before merging, in
+ * samples (task 4b, F3). Enough that the merging road reads as its own
+ * road at the boundary -- the contract's promise -- without letting a pair
+ * of near-duplicate bearings run visibly parallel. */
+const MIN_CAPTURE_SAMPLES = 3;
+
+/** How near in bearing two roads of the SAME class must arrive before one
+ * may merge into the other (task 4b, F3). Comfortably clear of the `fan`
+ * fixture's 1.2-degree near-duplicate spread and far under the 38.8 degrees
+ * that separates its real roads. Wider gaps are distinct roads meeting,
+ * which is a junction, not a merge. */
+const SAME_CLASS_MERGE_DEG = 12;
+
+/** The distance `blockAreas` welds an endpoint onto another lane at. A
+ * junction closer than this IS a junction as far as the rest of the engine
+ * is concerned; anything further is a dangling end. */
+const WELD_TOLERANCE_M = 1.5;
+
+/** A relanded road may not kink harder than this at its new inner end. */
+const JOIN_SMOOTH_DEG = 45;
 
 function quadraticBezier(p0: Point, p1: Point, p2: Point, t: number): Point {
   const mt = 1 - t;
@@ -122,6 +148,21 @@ export function drawTrunkPath(from: Point, to: Point, type: RouteType, rng: Seed
   return points;
 }
 
+/**
+ * One class below `t`, but NEVER wider than `t` itself (task 4b, F13).
+ *
+ * `stepDown(t, floor)` is a CLAMP, not a step: it returns `floor` whenever
+ * the next class down is already past it, so `stepDown('trail', 'local')`
+ * returns `local` -- a 3.5 m road stepped "down" from a 2 m one. A village
+ * fed only by trails was getting an invented ring road wider than every
+ * road feeding it, and `laneWidth` drives the parcel setback too, so its
+ * lots sat back further than the lots on the real roads.
+ */
+function connectorClass(t: RouteType): RouteType {
+  const stepped = stepDown(t, 'local');
+  return classRank(stepped) < classRank(t) ? t : stepped;
+}
+
 export interface TrunkEntry {
   point: Point;
   bearingDeg: number;
@@ -190,6 +231,50 @@ export interface DraftTrunk {
   entry: TrunkEntry;
   /** Circle -> inward, matching `drawTrunkPath`'s own point order. */
   path: Point[];
+  /**
+   * The lane id this draft will carry. Assigned once by `synthesizeTrunks`
+   * via `mintTrunkIds` so it is UNIQUE across the network (task 4b, F12);
+   * absent when a caller builds drafts by hand, in which case the plain
+   * content-derived `trunkLaneId` is used and collisions are the caller's
+   * problem.
+   */
+  laneId?: string;
+}
+
+/**
+ * One unique lane id per draft (task 4b, F12).
+ *
+ * `trunkLaneId` alone is not injective: `routeProvenanceKey` rounds a
+ * missing `routeId` to 2 decimal places, so two id-less routes of the same
+ * class within 0.01 deg both mint `trunk-main-90`. The retired `buildArms`
+ * carried an explicit `used`-set guard with deterministic precision
+ * escalation for exactly this ("FINDING 1 fix"); it was deleted with the
+ * function and nothing replaced it, and lot and building ids are built from
+ * lane ids, so a collision here breaks the R-series stable-id invariant all
+ * the way downstream.
+ *
+ * Resolution is content-derived and order-independent: escalate the bearing
+ * precision until unique, and only if that still collides (two genuinely
+ * identical route records) fall back to an occurrence counter. Drafts
+ * arrive in `contractEntries`'s stable sort order, so the outcome depends
+ * on the route set, never on the order FMG listed it in.
+ */
+function mintTrunkIds(drafts: DraftTrunk[]): DraftTrunk[] {
+  const used = new Set<string>();
+  return drafts.map((draft) => {
+    const { route, bearingDeg, farSide } = draft.entry;
+    let id = trunkLaneId(route.type, route.routeId, bearingDeg, farSide);
+    if (used.has(id)) {
+      let resolved = id;
+      for (let precision = 3; precision <= 8 && used.has(resolved); precision++) {
+        resolved = `trunk-${route.type}-${bearingDeg.toFixed(precision)}${farSide ? '~far' : ''}`;
+      }
+      for (let n = 2; used.has(resolved); n++) resolved = `${id}~${n}`;
+      id = resolved;
+    }
+    used.add(id);
+    return { ...draft, laneId: id };
+  });
 }
 
 /** Where two (or more) trunks meet after merging (spec 5.2). Id is
@@ -226,6 +311,12 @@ interface CommittedTrunk {
   type: RouteType;
   rank: number;
   routeId?: string;
+  /** Which FMG route this lane came from. A through route's near and far
+   * halves share it -- they are one road, and must never merge into each
+   * other (task 4b: allowing equal-class capture made them try, which
+   * dissolved the through pair `main-street` needs and silently demoted the
+   * village to a junction). */
+  route: SiteRoute;
   bearingDeg: number;
   /** Circle -> inward, truncated at the junction if this draft merged. */
   points: Point[];
@@ -266,32 +357,103 @@ export function mergeTrunks(
   for (const draft of ordered) {
     const type = draft.entry.route.type;
     const rank = classRank(type);
-    const laneId = trunkLaneId(type, draft.entry.route.routeId, draft.entry.bearingDeg, draft.entry.farSide);
+    const laneId = draft.laneId
+      ?? trunkLaneId(type, draft.entry.route.routeId, draft.entry.bearingDeg, draft.entry.farSide);
     const band = drawBand(rng);
 
     let capturedAt: { idx: number; target: CommittedTrunk; point: Point } | null = null;
 
-    for (let idx = 0; idx < draft.path.length && !capturedAt; idx++) {
-      const p = draft.path[idx];
-      const radial = Math.hypot(p.x, p.y);
-      if (bandOf(radial, builtEdgeRadiusM) !== band) continue;
-      for (const c of committed) {
-        if (c.rank >= rank) continue; // only a STRICTLY greater class can capture
-        const capture = MERGE_CAPTURE_M[c.type];
-        const { distance, point } = closestPointOnPolyline(p, c.points);
-        if (distance <= capture) {
-          capturedAt = { idx, target: c, point };
-          break;
+    // Task 4b (F3). Two changes to what may capture, and where.
+    //
+    // CLASS: the old rule was `c.rank >= rank -> skip`, i.e. only a
+    // STRICTLY greater class could capture. Spec 5.1 retired
+    // `INCOMING_ARM_MERGE_DEG` on the promise that near-duplicate bearings
+    // "merge within the first metres inside because the merge rules make it
+    // so" -- but two `main` routes 0.5 deg apart are the same rank, so
+    // nothing merged them and the AFMG `fan` fixture ran two roads under
+    // 4 m apart for ~73 m in every seed. Equal class may now capture; the
+    // already-committed lane wins, which is deterministic because drafts
+    // are walked in the stable class-then-entry order above.
+    //
+    // BAND: the band was gating WHETHER a merge happened, not just where.
+    // A draft already within capture at its contract entry either merged at
+    // sample 0 (leaving a one-point lane -- a route reduced to a dot) or,
+    // if its drawn band lay further in, ran parallel to its neighbour for
+    // 50+ m before merging. A draft that arrives already touching its
+    // neighbour now merges at a fixed short offset regardless of band; the
+    // band still staggers every draft that arrives clear.
+    const captureIdx = (
+      from: number, bandOnly: boolean,
+    ): { idx: number; target: CommittedTrunk; point: Point } | null => {
+      for (let idx = from; idx < draft.path.length; idx++) {
+        const p = draft.path[idx];
+        if (bandOnly && bandOf(Math.hypot(p.x, p.y), builtEdgeRadiusM) !== band) continue;
+        for (const c of committed) {
+          if (c.rank > rank) continue;
+          if (c.route === draft.entry.route) continue; // same road, two ends
+          // Equal standing merges only for roads arriving on very nearly
+          // the SAME BEARING. Every road aims at the same point, so any two
+          // of them pass within capture of each other on the way in --
+          // letting an equal-class road be swallowed there turns a
+          // crossroads into a T, and a perfect junction is exactly one of
+          // the possibilities ruling 5 preserves. What must merge is one
+          // road arriving twice: the `fan` fixture's 90.0/90.5/91.2 trio,
+          // whose widest gap is 1.2 degrees against the 38.8 degrees that
+          // separates its genuinely distinct roads. (A lesser class still
+          // captures onto a greater one at any angle -- that is a feeder
+          // joining a road, which is what the capture distances are for.)
+          if (c.rank === rank
+            && angularGap(c.bearingDeg, draft.entry.bearingDeg) > SAME_CLASS_MERGE_DEG) continue;
+          const { distance, point } = closestPointOnPolyline(p, c.points);
+          if (distance <= MERGE_CAPTURE_M[c.type]) return { idx, target: c, point };
         }
       }
+      return null;
+    };
+    // Arrives already within capture? Merge just inside the boundary rather
+    // than at it, so the survivor keeps a drawable stub of its own.
+    const atEntry = captureIdx(0, false);
+    const immediate = atEntry !== null && atEntry.idx === 0;
+    capturedAt = immediate && atEntry
+      ? { ...atEntry, idx: Math.min(MIN_CAPTURE_SAMPLES, draft.path.length - 1) }
+      // The band is a PREFERENCE, not a veto (task 4b, F3). Staggering the
+      // merge point is the goal, but a draft whose band window never brings
+      // it near a greater lane used to give up and stay a root -- and then
+      // simply ran alongside that lane all the way in, 40-70 m of two roads
+      // under 4 m apart (measured on hub and fan). Try the drawn band
+      // first, then anywhere: the stagger survives wherever it is possible
+      // and never at the price of a shadowed road.
+      : captureIdx(1, true) ?? captureIdx(1, false);
+    // Never truncate a route to fewer than two points: `withinLaneCorridor`
+    // rejects a one-point lane, `polylineLength` is 0, and the renderer
+    // draws nothing -- the FMG route silently vanishes from the map.
+    if (capturedAt && capturedAt.idx < 1) {
+      capturedAt = { ...capturedAt, idx: Math.min(1, draft.path.length - 1) };
     }
 
     let points = draft.path;
     let captured = false;
 
     if (capturedAt) {
-      points = draft.path.slice(0, capturedAt.idx);
-      points.push(capturedAt.point);
+      // A stub that merges the moment it enters the contract circle is a
+      // near-duplicate bearing (spec 5.1 keeps its own entry deliberately),
+      // and over ~18 m it has no room to wander: drawn STRAIGHT from its
+      // entry to the junction. A bowed stub that short can cross its
+      // equally-short neighbour, and `resolveCrossings` then chops both
+      // into fragments that double back through 167 degrees. Collinear
+      // points cannot kink, however they are later split.
+      if (immediate) {
+        const from = draft.path[0];
+        const to = capturedAt.point;
+        points = [
+          from,
+          new Point((from.x + to.x) / 2, (from.y + to.y) / 2),
+          to,
+        ];
+      } else {
+        points = draft.path.slice(0, capturedAt.idx);
+        points.push(capturedAt.point);
+      }
       captured = true;
 
       const target = capturedAt.target;
@@ -309,6 +471,7 @@ export function mergeTrunks(
       type,
       rank,
       routeId: draft.entry.route.routeId,
+      route: draft.entry.route,
       bearingDeg: draft.entry.bearingDeg,
       points,
       sourceRouteIds: undefined,
@@ -322,7 +485,11 @@ export function mergeTrunks(
     const lane: Lane = {
       id: c.laneId,
       type: c.type,
-      points: [...c.points].reverse(), // circle-first -> inner-first
+      // Circle-first -> inner-first, then smoothed: a captured draft's new
+      // inner end is a junction point snapped sideways onto the survivor's
+      // polyline, which can meet the rest of the road at a sharp angle
+      // (task 4b, F4) exactly as a pattern reland can.
+      points: smoothJoin([...c.points].reverse()),
       widthM: laneWidth(c.type),
       sourceRouteIds: c.sourceRouteIds,
     };
@@ -348,6 +515,11 @@ export interface TrunkNetwork {
   pattern: ConvergencePattern;
   contractRadiusM: number;
   entries: TrunkEntry[];
+  /** Where the network converges (task 4b, F11). The burg origin on dry
+   * ground; pushed clear of water by the caller otherwise, and handed to
+   * `siteGreen` as its own starting point so roads and green cannot end up
+   * serving different places. */
+  aim: Point;
 }
 
 const PATTERN_DRAW_ORDER: ConvergencePattern[] = ['main-street', 'loop', 'y-tree', 'junction'];
@@ -362,7 +534,12 @@ function weightedPattern(row: Record<string, number>, rng: SeededRandom): Conver
   // per-seed determinism (a fresh SeededRandom(seed) still always burns the
   // same way, so the same seed still always yields the same pattern).
   rng.float();
-  const r = rng.float();
+  // Normalised, because `choosePattern` may drop a pattern from the row
+  // (task 4b: no ring road under 3 roots) and an un-normalised remainder
+  // would silently bias the draw toward the last entry in draw order.
+  const total = PATTERN_DRAW_ORDER.reduce((sum, p) => sum + (row[p] ?? 0), 0);
+  if (total <= 0) return PATTERN_DRAW_ORDER[PATTERN_DRAW_ORDER.length - 1];
+  const r = rng.float() * total;
   let acc = 0;
   for (const p of PATTERN_DRAW_ORDER) {
     acc += row[p] ?? 0;
@@ -391,12 +568,25 @@ export function choosePattern(
   const primaryIsMajor = classRank(bestClass) <= classRank('main');
   if (!hasThrough && primaryIsMajor && allFeedersTrails) return 'terminal';
 
-  const row = hasThrough && primaryIsMajor
+  // Task 4b (F1). `through` used to require a royal or main road, so an
+  // ordinary through TOWN road -- FMG's commonest village -- drew from
+  // `few`, where main-street carries 0.1 and y-tree 0.6: the road that is
+  // supposed to run through the village was cut into a Y nine times in ten.
+  // Any ROAD-class through route now reads as panel 1/3's spine.
+  const throughSpine = hasThrough && isRoadClass(bestClass);
+  const row = throughSpine
     ? PATTERN_WEIGHTS.through
     : roots >= 4
       ? PATTERN_WEIGHTS.many
       : PATTERN_WEIGHTS.few;
-  return weightedPattern(row, rng);
+  // A ring road needs something to ring. With one or two approaches the
+  // loop has nothing to enclose and lands as a bare circle around the green
+  // (the vegetation grove-country fixture's failure), so it is dropped from
+  // the palette and its weight redistributed over the rest.
+  const usable = roots >= 3 ? row : Object.fromEntries(
+    Object.entries(row).filter(([k]) => k !== 'loop'),
+  );
+  return weightedPattern(usable, rng);
 }
 
 /** The best (lowest-rank) class among the survivors, and whether every
@@ -427,7 +617,9 @@ interface ThroughPair {
 
 /** Through routes whose near AND far entries both survived merging as
  * roots -- the only candidates `main-street` can join into one spine. */
-function throughPairs(entries: TrunkEntry[], roots: Lane[]): ThroughPair[] {
+function throughPairs(
+  entries: TrunkEntry[], roots: Lane[], laneIdByEntry: Map<TrunkEntry, string>,
+): ThroughPair[] {
   const rootById = new Map(roots.map((r) => [r.id, r]));
   const seen = new Set<string>();
   const pairs: ThroughPair[] = [];
@@ -437,13 +629,30 @@ function throughPairs(entries: TrunkEntry[], roots: Lane[]): ThroughPair[] {
     if (seen.has(key)) continue;
     seen.add(key);
     const farBearingDeg = (e.bearingDeg + 180) % 360;
-    const nearId = trunkLaneId(e.route.type, e.route.routeId, e.bearingDeg, false);
-    const farId = trunkLaneId(e.route.type, e.route.routeId, farBearingDeg, true);
+    // The MINTED ids (task 4b, F12) -- recomputing `trunkLaneId` here would
+    // miss any collision disambiguation and pair the wrong halves.
+    const nearId = laneIdByEntry.get(e)
+      ?? trunkLaneId(e.route.type, e.route.routeId, e.bearingDeg, false);
+    const farEntry = entries.find(
+      (x) => x.farSide && x.route === e.route && Math.abs(x.bearingDeg - farBearingDeg) < 1e-9,
+    );
+    const farId = (farEntry && laneIdByEntry.get(farEntry))
+      ?? trunkLaneId(e.route.type, e.route.routeId, farBearingDeg, true);
     const near = rootById.get(nearId);
     const far = rootById.get(farId);
     if (near && far) pairs.push({ near, far, type: e.route.type, nearBearingDeg: e.bearingDeg, farBearingDeg });
   }
   return pairs;
+}
+
+/** The circular mean of two bearings -- the midpoint of the SHORTER arc,
+ * so 350 and 10 average to 0, not to 180 (task 4b, F7). */
+function meanBearing(a: number, b: number): number {
+  const rad = Math.PI / 180;
+  const x = Math.sin(a * rad) + Math.sin(b * rad);
+  const y = Math.cos(a * rad) + Math.cos(b * rad);
+  if (Math.abs(x) < 1e-12 && Math.abs(y) < 1e-12) return a;
+  return ((Math.atan2(x, y) / rad) % 360 + 360) % 360;
 }
 
 /** The vertex/point of `points` closest to `target`. */
@@ -471,7 +680,72 @@ function relandInnerEnd(points: Point[], landing: Point): Point[] {
     const d = Point.distance(points[i], landing);
     if (d < bestDist) { bestDist = d; bestIdx = i; }
   }
-  return [landing.clone(), ...points.slice(bestIdx + 1)];
+  const out = [landing.clone(), ...points.slice(bestIdx + 1)];
+  return out.length >= 2 ? out : [landing.clone(), points[points.length - 1].clone()];
+}
+
+/**
+ * Where a feeder should meet a target polyline: the pair of points, one on
+ * each, that come CLOSEST together -- and the feeder sample index at which
+ * to cut (task 4b, F4).
+ *
+ * The old rule took the target vertex nearest the feeder's OUTER (contract
+ * circle) end, then cut the feeder at whichever of its own samples happened
+ * to lie nearest THAT. Those two choices are made against different points,
+ * so the straight segment joining them routinely doubled back: measured
+ * turns of 78-89 degrees at the join on the tri and hub scenarios, and on a
+ * y-tree the feeder could be relanded on the far side of the green from
+ * where its road actually arrives. Minimising over the pair makes the join
+ * tangential by construction.
+ */
+function nearestApproach(
+  feeder: Point[], target: Point[],
+): { feederIdx: number; point: Point } {
+  let best = { feederIdx: 0, point: target[0], distance: Infinity };
+  for (let i = 0; i < feeder.length; i++) {
+    const { distance, point } = closestPointOnPolyline(feeder[i], target);
+    if (distance < best.distance) best = { feederIdx: i, point, distance };
+  }
+  return { feederIdx: best.feederIdx, point: best.point };
+}
+
+/** Reland `lane` onto `target` at the two polylines' nearest approach. */
+function landOn(lane: Lane, target: Point[]): { points: Point[]; landing: Point } {
+  const { feederIdx, point } = nearestApproach(lane.points, target);
+  const kept = lane.points.slice(feederIdx + 1);
+  const points = kept.length >= 1
+    ? [point.clone(), ...kept]
+    : [point.clone(), lane.points[lane.points.length - 1].clone()];
+  return { points: smoothJoin(points), landing: point };
+}
+
+/**
+ * Drop samples immediately after a reland until the road stops kinking
+ * (task 4b, F4).
+ *
+ * Relanding splices a new inner end onto a polyline that was drawn toward
+ * somewhere else, so the very first segment can meet the second at a sharp
+ * angle even when the landing point itself is well chosen -- measured up to
+ * 89 degrees. Dropping the sample the join is fighting with lets the road
+ * bend into its old line over a longer run instead. Bounded: never below
+ * two points, and never more than a handful of samples.
+ */
+function smoothJoin(points: Point[]): Point[] {
+  const out = [...points];
+  // Floor of three: a merged draft that arrived already touching its
+  // neighbour keeps only a short stub of its own, and smoothing it down to
+  // two coincident samples turns an FMG route into an invisible sliver at
+  // the boundary -- the same disappearance the capture clamp exists to
+  // prevent, arrived at from the other side.
+  for (let guard = 0; guard < 6 && out.length > 3; guard++) {
+    const v1 = Math.atan2(out[1].y - out[0].y, out[1].x - out[0].x);
+    const v2 = Math.atan2(out[2].y - out[1].y, out[2].x - out[1].x);
+    let turn = Math.abs((v2 - v1) * 180 / Math.PI);
+    if (turn > 180) turn = 360 - turn;
+    if (turn <= JOIN_SMOOTH_DEG) break;
+    out.splice(1, 1);
+  }
+  return out;
 }
 
 /** The first sample of an inner-first polyline whose radial distance from
@@ -523,8 +797,10 @@ function applyMainStreet(
   for (const feeder of roots) {
     if (feeder.id === best.near.id || feeder.id === best.far.id) continue;
     const spineLane = outTrunks.find((t) => t.id === spineId)!;
-    const landing = nearestPoint(feeder.points[feeder.points.length - 1], spineLane.points);
-    outTrunks = replaceLane(outTrunks, feeder.id, (l) => ({ ...l, points: relandInnerEnd(l.points, landing) }));
+    const feederLane = outTrunks.find((t) => t.id === feeder.id) ?? feeder;
+    const landed = landOn(feederLane, spineLane.points);
+    const landing = landed.landing;
+    outTrunks = replaceLane(outTrunks, feeder.id, (l) => ({ ...l, points: landed.points }));
     outJunctions = [...outJunctions, {
       id: `j:${sortedJunctionIds([spineId, feeder.id]).join('+')}`,
       position: landing,
@@ -543,7 +819,9 @@ function applyLoop(
   trunks: Lane[], junctions: TrunkJunction[], roots: Lane[], builtEdgeRadiusM: number,
   bestClass: RouteType, rng: SeededRandom,
 ): { trunks: Lane[]; junctions: TrunkJunction[] } {
-  const loopClass = stepDown(bestClass, 'local');
+  if (roots.length === 0) return { trunks, junctions };
+  // F13: never wider than the roads feeding it.
+  const loopClass = connectorClass(bestClass);
   const vertexCount = 8 + rng.int(0, 3); // 8, 9 or 10
   const baseRadius = builtEdgeRadiusM * LOOP_RADIUS_FACTOR;
 
@@ -571,9 +849,13 @@ function applyLoop(
   let outJunctions = [...junctions];
 
   for (const root of roots) {
-    const circlePoint = root.points[root.points.length - 1];
-    const landing = nearestPoint(circlePoint, vertices);
-    outTrunks = replaceLane(outTrunks, root.id, (l) => ({ ...l, points: relandInnerEnd(l.points, landing) }));
+    const rootLane = outTrunks.find((t) => t.id === root.id) ?? root;
+    // F4: meet the ring where the road actually comes closest to it, not at
+    // the vertex nearest the road's far end.
+    const approach = nearestApproach(rootLane.points, vertices);
+    const landing = nearestPoint(approach.point, vertices);
+    const landed = landOn(rootLane, [landing]);
+    outTrunks = replaceLane(outTrunks, root.id, (l) => ({ ...l, points: landed.points }));
     outJunctions = [...outJunctions, {
       id: `j:${sortedJunctionIds([root.id, 'trunk-loop']).join('+')}:${vertices.indexOf(landing)}`,
       position: landing,
@@ -604,12 +886,25 @@ function applyYTree(
 
   let connectorSeq = 0;
   // A radius comfortably past `builtEdgeRadiusM * 0.5` -- the threshold the
-  // final landing spread (below) must stay INSIDE -- so an intermediate
-  // merge point never accidentally reads as one of the final "reached the
-  // core" survivors.
+  // acceptance test uses for "reached the core" -- so an intermediate merge
+  // point never accidentally reads as one of the final survivors.
   const directionRadius = builtEdgeRadiusM * 1.5;
 
-  while (active.length > 3) {
+  // Task 4b (F1). The old loop was `while (active.length > 3)`, so a
+  // village with 3 or fewer surviving roots -- which is most villages --
+  // merged NOTHING and fell through to a "spread" step that re-landed every
+  // survivor at index-derived angles (0, 120, 240 deg) taking no account of
+  // the bearing the road actually arrives on. A road coming in from the
+  // south was routinely relanded due north of the green, doubling back
+  // across the core; a through route was cut into two halves ~33 m apart.
+  // A y-tree now always merges at least one pair when there is a pair to
+  // merge, down to a seeded 1..3 survivors, and those survivors simply keep
+  // running to the aim on their own geometry -- the spread step is gone.
+  const target = active.length <= 1
+    ? active.length
+    : 1 + rng.int(0, Math.min(3, active.length - 1));
+
+  while (active.length > target) {
     let bi = 0;
     let bj = 1;
     let bestGap = Infinity;
@@ -632,10 +927,10 @@ function applyYTree(
     const mid = new Point((aDir.x + bDir.x) / 2, (aDir.y + bDir.y) / 2);
     const pushed = new Point(mid.x * 0.7, mid.y * 0.7);
 
-    outTrunks = replaceLane(outTrunks, a.id, (l) => ({ ...l, points: relandInnerEnd(l.points, pushed) }));
-    outTrunks = replaceLane(outTrunks, b.id, (l) => ({ ...l, points: relandInnerEnd(l.points, pushed) }));
+    outTrunks = replaceLane(outTrunks, a.id, (l) => ({ ...l, points: landOn(l, [pushed]).points }));
+    outTrunks = replaceLane(outTrunks, b.id, (l) => ({ ...l, points: landOn(l, [pushed]).points }));
 
-    const connectorType = stepDown(classRank(a.type) <= classRank(b.type) ? a.type : b.type, 'local');
+    const connectorType = connectorClass(classRank(a.type) <= classRank(b.type) ? a.type : b.type);
     connectorSeq += 1;
     const connectorId = `trunk-ytree-${connectorSeq}`;
     const connectorPoints = drawTrunkPath(pushed, new Point(0, 0), connectorType, rng);
@@ -652,16 +947,11 @@ function applyYTree(
     }];
 
     active = active.filter((x) => x.id !== a.id && x.id !== b.id);
-    active.push({ id: connectorId, type: connectorType, bearingDeg: (a.bearingDeg + b.bearingDeg) / 2 });
+    // F7: bearings are circular. The arithmetic mean of 350 and 10 is 180 --
+    // due south of a pair pointing due north -- which then drove every
+    // later pairing in this loop toward the wrong side of the village.
+    active.push({ id: connectorId, type: connectorType, bearingDeg: meanBearing(a.bearingDeg, b.bearingDeg) });
   }
-
-  const spreadRadius = builtEdgeRadiusM * 0.3;
-  active.forEach((r, idx) => {
-    const angle = (360 / Math.max(active.length, 1)) * idx;
-    const dir = bearingVector(angle);
-    const landing = new Point(dir.x * spreadRadius, dir.y * spreadRadius);
-    outTrunks = replaceLane(outTrunks, r.id, (l) => ({ ...l, points: relandInnerEnd(l.points, landing) }));
-  });
 
   return { trunks: outTrunks, junctions: outJunctions };
 }
@@ -697,8 +987,10 @@ function applyTerminal(
     // Exclude the primary's own inner (aim) point -- landing there would be
     // exactly the "at origin" outcome ruling 4 rules out for a feeder.
     const candidates = primaryLane.points.length > 1 ? primaryLane.points.slice(1) : primaryLane.points;
-    const landing = nearestPoint(feeder.points[feeder.points.length - 1], candidates);
-    outTrunks = replaceLane(outTrunks, feeder.id, (l) => ({ ...l, points: relandInnerEnd(l.points, landing) }));
+    const feederLane = outTrunks.find((t) => t.id === feeder.id) ?? feeder;
+    const landed = landOn(feederLane, candidates);
+    const landing = landed.landing;
+    outTrunks = replaceLane(outTrunks, feeder.id, (l) => ({ ...l, points: landed.points }));
     outJunctions = [...outJunctions, {
       id: `j:${sortedJunctionIds([primary.id, feeder.id]).join('+')}`,
       position: landing,
@@ -706,6 +998,11 @@ function applyTerminal(
     }];
   }
   return { trunks: outTrunks, junctions: outJunctions };
+}
+
+/** `smoothJoin` applied at the FAR end instead of the near one. */
+function smoothTail(points: Point[]): Point[] {
+  return smoothJoin([...points].reverse()).reverse();
 }
 
 /** `<laneId>~x<otherId>` -- the crossing-split sub-space `resolveCrossings`
@@ -781,10 +1078,14 @@ export function resolveCrossings(trunks: Lane[], junctions: TrunkJunction[]): { 
     const a = currentTrunks[i];
     const b = currentTrunks[j];
 
-    const aInner: Lane = { ...a, points: [...a.points.slice(0, hit.aIdx + 1), hit.point] };
-    const aOuter: Lane = { ...a, id: `${a.id}~x${sanitizeForId(b.id)}`, points: [hit.point, ...a.points.slice(hit.aIdx + 1)] };
-    const bInner: Lane = { ...b, points: [...b.points.slice(0, hit.bIdx + 1), hit.point] };
-    const bOuter: Lane = { ...b, id: `${b.id}~x${sanitizeForId(a.id)}`, points: [hit.point, ...b.points.slice(hit.bIdx + 1)] };
+    // Both halves are smoothed at the cut (task 4b, F4): a split splices
+    // the intersection point onto a polyline drawn toward somewhere else,
+    // and the outer half in particular could double back on itself through
+    // nearly 180 degrees at its new first vertex.
+    const aInner: Lane = { ...a, points: smoothTail([...a.points.slice(0, hit.aIdx + 1), hit.point]) };
+    const aOuter: Lane = { ...a, id: `${a.id}~x${sanitizeForId(b.id)}`, points: smoothJoin([hit.point, ...a.points.slice(hit.aIdx + 1)]) };
+    const bInner: Lane = { ...b, points: smoothTail([...b.points.slice(0, hit.bIdx + 1), hit.point]) };
+    const bOuter: Lane = { ...b, id: `${b.id}~x${sanitizeForId(a.id)}`, points: smoothJoin([hit.point, ...b.points.slice(hit.bIdx + 1)]) };
 
     const nextTrunks = [...currentTrunks];
     nextTrunks[i] = aInner;
@@ -807,6 +1108,65 @@ export function resolveCrossings(trunks: Lane[], junctions: TrunkJunction[]): { 
 }
 
 /**
+ * Any trunk whose inner end no longer touches the network gets re-snapped
+ * onto whatever it comes closest to (task 4b, F2).
+ *
+ * `mergeTrunks` snaps a captured lesser trunk onto the GREATER lane's
+ * polyline as it stood at capture time. Pattern application then rewrites
+ * that polyline underneath it: `applyMainStreet` redraws the spine
+ * end-to-end and deletes the far half (dropping its junctions with it),
+ * and the loop and y-tree truncate roots at their landings. The lesser
+ * trunk is left ending in open ground -- measured at 1.7 floating ends per
+ * run on the hub scenario -- and because it is not a root, no pattern's own
+ * feeder loop ever re-lands it. `blockAreas` welds junctions within 1.5 m,
+ * so a floating end is also a block that never closes.
+ *
+ * Walked in id order so the outcome can never depend on array position.
+ */
+function rehomeOrphans(
+  trunks: Lane[], junctions: TrunkJunction[], contractRadiusM: number,
+): { trunks: Lane[]; junctions: TrunkJunction[] } {
+  let out = [...trunks];
+  const extra: TrunkJunction[] = [];
+  const order = [...out].sort((a, b) => a.id.localeCompare(b.id)).map((l) => l.id);
+
+  for (const id of order) {
+    const lane = out.find((l) => l.id === id);
+    if (!lane || lane.points.length < 2) continue;
+    const inner = lane.points[0];
+    // NOTE: reaching the aim is NOT on its own a connection. Under a
+    // `main-street` spine nothing sits at the aim at all -- the spine bows
+    // off the chord by up to its sagitta -- so a root that ran to the aim
+    // unmerged, or a lesser trunk that captured onto a half the spine
+    // redraw then replaced, ends there touching nothing. Where several
+    // lanes really do meet at the aim they are within weld of EACH OTHER,
+    // which the distance test below already accepts.
+    // An end sitting ON the contract circle is not an orphan, it is the
+    // boundary contract itself (spec 5.5: each entry stub is exactly one
+    // FMG route at its exact bearing). A `main-street` spine has TWO such
+    // ends -- it runs through the village rather than terminating in it --
+    // and relanding one of them would pull the road off the circle and
+    // break the alignment consumers use to match our tile to FMG's routes.
+    if (Math.hypot(inner.x, inner.y) >= contractRadiusM - SAMPLE_STEP_M) continue;
+
+    let best: { target: Lane; point: Point; distance: number } | null = null;
+    for (const other of out) {
+      if (other.id === lane.id || other.points.length < 2) continue;
+      const { distance, point } = closestPointOnPolyline(inner, other.points);
+      if (!best || distance < best.distance) best = { target: other, point, distance };
+    }
+    if (!best || best.distance <= WELD_TOLERANCE_M) continue;
+
+    const landed = landOn(lane, best.target.points);
+    out = replaceLane(out, lane.id, (l) => ({ ...l, points: landed.points }));
+    const laneIds = sortedJunctionIds([lane.id, best.target.id]);
+    extra.push({ id: `j:${laneIds.join('+')}`, position: landed.landing, laneIds });
+  }
+
+  return { trunks: out, junctions: [...junctions, ...extra] };
+}
+
+/**
  * The trunk-network module's single entry point (spec 5.2). Draws every
  * FMG route's entries inward toward the burg point, merges lesser trunks
  * into greater ones, resolves what survives into one pattern from the
@@ -815,23 +1175,36 @@ export function resolveCrossings(trunks: Lane[], junctions: TrunkJunction[]): { 
  */
 export function synthesizeTrunks(
   site: Site, contractRadiusM: number, builtEdgeRadiusM: number, rng: SeededRandom,
+  aim: Point = new Point(0, 0),
 ): TrunkNetwork {
-  const aim = new Point(0, 0);
   const entries = contractEntries(site, contractRadiusM);
-  const drafts: DraftTrunk[] = entries.map((entry) => ({
+  const drafts: DraftTrunk[] = mintTrunkIds(entries.map((entry) => ({
     entry,
     path: drawTrunkPath(entry.point, aim, entry.route.type, rng),
-  }));
+  })));
 
   const merged = mergeTrunks(drafts, builtEdgeRadiusM, rng);
   const roots = merged.roots;
 
-  const entryByLaneId = new Map<string, TrunkEntry>();
-  for (const e of entries) {
-    entryByLaneId.set(trunkLaneId(e.route.type, e.route.routeId, e.bearingDeg, e.farSide), e);
+  // Task 4b (F14). No surviving root means there is nothing for a pattern
+  // to resolve, and `applyLoop` in particular would happily ring a village
+  // that has no roads at all with 8-10 invented lanes connected to nothing
+  // -- 15% of seeds, exactly its weight in the `few` row. Every other
+  // pattern is a no-op here anyway; say so once, explicitly.
+  if (roots.length === 0) {
+    const bare = resolveCrossings(merged.trunks, merged.junctions);
+    return {
+      trunks: bare.trunks, junctions: bare.junctions, pattern: 'junction',
+      contractRadiusM, entries, aim,
+    };
   }
 
-  const pairs = throughPairs(entries, roots);
+  const entryByLaneId = new Map<string, TrunkEntry>();
+  for (const d of drafts) entryByLaneId.set(d.laneId!, d.entry);
+  const laneIdByEntry = new Map<TrunkEntry, string>();
+  for (const d of drafts) laneIdByEntry.set(d.entry, d.laneId!);
+
+  const pairs = throughPairs(entries, roots, laneIdByEntry);
   const hasThrough = pairs.length > 0;
   const { bestClass, allFeedersTrails } = classifyRoots(roots);
   const pattern = choosePattern(roots.length, hasThrough, bestClass, allFeedersTrails, rng);
@@ -856,7 +1229,8 @@ export function synthesizeTrunks(
       break;
   }
 
-  const resolved = resolveCrossings(applied.trunks, applied.junctions);
+  const rehomed = rehomeOrphans(applied.trunks, applied.junctions, contractRadiusM);
+  const resolved = resolveCrossings(rehomed.trunks, rehomed.junctions);
 
   return {
     trunks: resolved.trunks,
@@ -864,5 +1238,6 @@ export function synthesizeTrunks(
     pattern,
     contractRadiusM,
     entries,
+    aim,
   };
 }

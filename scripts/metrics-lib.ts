@@ -22,6 +22,7 @@ import {
   segmentIntersection, closestPointOnSegment, dist,
 } from '../src/village/geometry.js';
 import { inkExtent } from '../src/village/glyphs.js';
+import { isTrunk } from '../src/village/skeleton/trunks.js';
 import type { VillageModel, Lane } from '../src/village/types.js';
 
 const BINS = 24;
@@ -301,7 +302,12 @@ export function interiorDeadEnds(m: VillageModel, fabricR: number): {
     }
     return false;
   });
-  const invented = m.lanes.filter((l) => !l.id.startsWith('arm-'));
+  // Task 4b (F/T8): `arm-` ids were retired with `buildArms`, so this
+  // filter matched EVERY lane -- loop segments and y-tree connectors, whose
+  // last point sits inside the fabric, were being counted as invented
+  // interior lanes in a standing-bar measurement. `isTrunk` is the live
+  // predicate for "a road the village did not invent".
+  const invented = m.lanes.filter((l) => !isTrunk(l.id));
   const interior = invented.filter(
     (l) => dist(l.points[l.points.length - 1], m.green.centre) <= fabricR,
   );

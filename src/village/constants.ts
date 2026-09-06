@@ -35,19 +35,11 @@ export const LANE_CURVE_MAX_M = 10;
 export const MIN_ARM_SEPARATION_DEG = 35;
 export const MAX_INVENTED_LANES = 60;
 
-/**
- * Task 3: incoming FMG routes whose bearings land closer together than
- * this merge into ONE arm rather than three near-parallel roads a hair's
- * width apart (the AFMG `fan` fixture's 90.0/90.5/91.2 trio). This is
- * deliberately NOT `MIN_ARM_SEPARATION_DEG` — that constant governs the
- * spacing this village INVENTS for its own ribs, and reusing it here would
- * also swallow `fan`'s real ~38.8 degree junction gaps, which FMG's data is
- * authoritative about: those are distinct roads, not survey noise. 5
- * degrees clears the near-duplicate trio (max gap 1.2 degrees) with room
- * to spare while sitting well under the smallest genuine gap in the
- * scenario matrix (38.8 degrees, nearly 8x the threshold).
- */
-export const INCOMING_ARM_MERGE_DEG = 5;
+// Trunks task 5: INCOMING_ARM_MERGE_DEG (Task 3's boundary-level
+// near-duplicate merge, consumed only by `mergeIncomingRoutes`/`buildArms`)
+// retired along with them. The trunk network never merges at the boundary
+// (spec 5.1: every route always gets its own contract-circle entry); its
+// merging happens deeper in, band-staggered, via `MERGE_CAPTURE_M` below.
 
 // --- Cluster growth (2026-08-21 gate rework) ---------------------------
 // The first render gate rejected the starburst the original growth rule
@@ -431,19 +423,10 @@ export const GREEN_JOIN_RATIO = 0.82;
  * green is painted over them, so each road visibly disappears beneath the
  * turf instead of kissing its rim. */
 export const GREEN_UNDERLAP_RATIO = 0.35;
-/**
- * How far a green-attached invented lane reaches out, as a fraction of the
- * arm extent (`builtRadius * 2`, see LANE_EXTENT_FACTOR below). A gate
- * verdict of "the invented streets run too far past the built-up edge"
- * lowers this; "invented lanes read stubby/cramped against real arms"
- * raises it toward 1.0.
- */
-/**
- * How far a lane BRANCH (off another lane, once the green itself has no
- * free bearing left) reaches out, as a fraction of the arm extent. A gate
- * verdict of "branches read as short dead-end nubs" raises this; "branches
- * sprawl further than the lane they're hanging off" lowers it.
- */
+// (Trunks task 5, incidental cleanup: two orphaned doc comments that named
+// no constant of their own -- already stale before this task, both
+// referencing the now-fully-retired `LANE_EXTENT_FACTOR` -- were removed
+// here rather than left pointing at a deleted symbol.)
 
 // --- Relaxation --------------------------------------------------------
 export const RELAX_ITERATIONS = 3;
@@ -792,13 +775,10 @@ export const DISC_ESCALATION_STEP_RATIO = 0.06;
 // written against.
 export const BLOCK_CHASE_ROUND_CAP: number = 1;
 
-/**
- * How far an arm/lane extends past the green, as a multiple of the
- * predicted built radius. A gate verdict of "the village reads too tight,
- * roads stop short of the fabric" raises this; "lanes run out into empty
- * ground past the houses" lowers it.
- */
-export const LANE_EXTENT_FACTOR = 2;
+// Trunks task 5: LANE_EXTENT_FACTOR (how far `runArm`'s straight extent ran
+// past the green) retired with `buildArms`/`runArm`/`laneExtentM` -- a trunk
+// lane's outward reach is drawn by `drawTrunkPath` to the contract circle
+// (spec 5.1), not sized off the predicted built radius.
 
 // --- Shorefront (pass 5, declared here so it is not lost) ---------------
 export const SHOREFRONT_REACH_FACTOR = 1.5;
@@ -1398,8 +1378,17 @@ export const MERGE_CAPTURE_M: Record<RouteType, number> = {
  * so trunks merge with the existing fabric before they cut through it. */
 export const MERGE_BAND_WEIGHTS = { fields: 0.4, edge: 0.35, inner: 0.25 };
 
-/** A trunk loop's radius as a fraction of the contract radius. */
+/** A trunk loop's radius as a fraction of the BUILT-EDGE radius (task 4b:
+ * the comment used to say "contract radius", which is 2.75x larger -- the
+ * doc and the only call site disagreed, and a G1 tuning pass reading the
+ * doc would have moved the wrong number). At 0.45 the ring sits inside the
+ * fabric; raise it toward 1.0 to ring the built edge as panel 2 does. */
 export const LOOP_RADIUS_FACTOR = 0.45;
+
+/** How much dry ground the trunk network's convergence zone needs around
+ * it before a wet site pushes the aim clear (task 4b, F11). Initial value,
+ * tuned at G1 like the rest of this section. */
+export const AIM_CLEAR_RADIUS_M = 15;
 
 /**
  * Task 4: convergence-pattern weights, keyed by which weight row

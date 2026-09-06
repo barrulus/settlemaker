@@ -10,6 +10,7 @@ import {
 // they used to pass -- `circularProfile`. The anisotropy the profile exists
 // for has its own tests in `profile.test.ts` and `village-model.test.ts`.
 import { buildRadiusProfile, circularProfile } from '../../src/village/skeleton/profile.js';
+import { isTrunk } from '../../src/village/skeleton/trunks.js';
 import {
   DISC_MARGIN, LANE_SEATING_YIELD, LANE_TILE_SPACING_M,
 } from '../../src/village/constants.js';
@@ -94,13 +95,13 @@ describe('saturateDisc', () => {
     // A hamlet's disc can be smaller than the turf at its centre. Growth
     // still opens the green's own radials (that ring is what makes a green
     // a green), but the lane budget stops it there -- no fabric.
-    const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -35))];
+    const lanes = [lane('trunk-main-000', new Point(0, -10), new Point(0, -35))];
     const out = grow(lanes, green, 12, circularProfile(8), new SeededRandom(1));
     expect(out.length).toBeLessThanOrEqual(3);
   });
 
   it('fills a real disc with streets', () => {
-    const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -110))];
+    const lanes = [lane('trunk-main-000', new Point(0, -10), new Point(0, -110))];
     const out = grow(lanes, green, 12, circularProfile(120), new SeededRandom(1));
     expect(out.length).toBeGreaterThan(1);
   });
@@ -111,18 +112,18 @@ describe('saturateDisc', () => {
     // the same ground. Measured over the whole fabric, which is why the
     // allowance below is generous -- the last lane may straddle the rim,
     // and the FMG arm is drawn to the map edge whatever growth does.
-    const arm = lane('arm-000', new Point(0, -10), new Point(0, -400));
+    const arm = lane('trunk-main-000', new Point(0, -10), new Point(0, -400));
     const targetR = 120;
     const out = grow([arm], green, 12, circularProfile(targetR), new SeededRandom(5));
     const inventedLength = out
-      .filter((l) => l.id !== 'arm-000')
+      .filter((l) => l.id !== 'trunk-main-000')
       .reduce((sum, l) => sum + polylineLength(l.points), 0);
     expect(inventedLength).toBeLessThan(laneBudgetFor(targetR) * 1.5);
   });
 
   it('never saturates past the disc it was given', () => {
     const out = saturateDisc(
-      [lane('arm-000', new Point(0, -10), new Point(0, -400))],
+      [lane('trunk-main-000', new Point(0, -10), new Point(0, -400))],
       green, 12, circularProfile(90), new SeededRandom(2),
     );
     expect(out.radiusM).toBeLessThanOrEqual(90);
@@ -132,7 +133,7 @@ describe('saturateDisc', () => {
     // Owner ruling (2026-08-21): royal/main/market/town are INTER-SETTLEMENT
     // classes — market lanes connect market towns, they are not suburban
     // routes. A branch off a `main` road is a `local` street, never `market`.
-    const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -60))];
+    const lanes = [lane('trunk-main-000', new Point(0, -10), new Point(0, -60))];
     const out = grow(lanes, green, 12, circularProfile(120), new SeededRandom(3));
     // Excluded by original id, not by prefix: green-attached invented lanes
     // now use their own `lane-` id space (ruling R10), but excluding by id
@@ -146,14 +147,14 @@ describe('saturateDisc', () => {
 
   it('is deterministic for a seed', () => {
     const mk = () => grow(
-      [lane('arm-000', new Point(0, -10), new Point(0, -60))], green, 12,
+      [lane('trunk-main-000', new Point(0, -10), new Point(0, -60))], green, 12,
       circularProfile(120), new SeededRandom(11),
     );
     expect(JSON.stringify(mk())).toBe(JSON.stringify(mk()));
   });
 
-  it('gives green-attached invented lanes their own id space, distinct from arms (R10)', () => {
-    const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -60))];
+  it('gives green-attached invented lanes their own id space, distinct from trunks (R10)', () => {
+    const lanes = [lane('trunk-main-000', new Point(0, -10), new Point(0, -60))];
     const out = grow(lanes, green, 12, circularProfile(120), new SeededRandom(3));
     const invented = out.filter((l) => !lanes.some((orig) => orig.id === l.id));
     const greenAttached = invented.filter((l) => l.parentId === undefined);
@@ -161,10 +162,10 @@ describe('saturateDisc', () => {
     for (const l of greenAttached) {
       expect(l.id.startsWith('lane-')).toBe(true);
     }
-    // No invented id may alias an arm id, in either direction.
-    const armIds = out.filter((l) => l.id.startsWith('arm-')).map((l) => l.id);
+    // No invented id may alias a trunk id, in either direction.
+    const trunkIds = out.filter((l) => isTrunk(l.id)).map((l) => l.id);
     const inventedIds = greenAttached.map((l) => l.id);
-    expect(inventedIds.every((id) => !armIds.includes(id))).toBe(true);
+    expect(inventedIds.every((id) => !trunkIds.includes(id))).toBe(true);
   });
 
   it('never collides branch-lane ids, even in a disc big enough to exhaust the green', () => {
@@ -174,56 +175,66 @@ describe('saturateDisc', () => {
     // exactly where `branchLaneId`'s ~35 percentage buckets can collide if
     // the fallback probing is missing.
     for (const seed of [2, 5, 7, 13, 21, 42]) {
-      const lanes = [lane('arm-000', new Point(0, -10), new Point(0, -60))];
+      const lanes = [lane('trunk-main-000', new Point(0, -10), new Point(0, -60))];
       const out = grow(lanes, green, 12, circularProfile(600), new SeededRandom(seed));
       const ids = out.map((l) => l.id);
       expect(new Set(ids).size).toBe(ids.length);
     }
   });
 
-  it('does not starve invented growth when many FMG arms already crowd the budget', () => {
+  it('does not starve invented growth when many trunk lanes already crowd the budget', () => {
     // Task 1's diagnosis: `laneLengthWithin` summed every FMG arm into the
     // SAME budget `saturateDisc`'s growth loop spends against, so a village
     // with several incoming routes starved growth before it invented a
     // single street. Reproduces `hub` (Task 1 report, pop 300: 5 routes at
     // its exact bearings 12/78/155/231/304deg, 6 arm-lanes incl. one
     // through-echo, arms alone at 115% of the round-0 budget) at the same
-    // round-0 radius (~52 m), against one arm at the bearing set's first
+    // round-0 radius (~52 m), against one trunk at the bearing set's first
     // member, same target disc and seed -- and compares how much INVENTED
-    // (non-arm) lane each grows. Before this fix: many-arm invented is 0 m
-    // (the exact "zero blocks, starfish" symptom); one arm alone gets
-    // ~366 m.
+    // (non-trunk) lane each grows. Before Task 1's fix: many-arm invented
+    // was 0 m (the exact "zero blocks, starfish" symptom); one arm alone
+    // got ~366 m.
+    //
+    // Trunks task 5 RED test (Step 2): re-pointed from `arm-*` fixture ids
+    // to `trunk-*` ones. `isFmgArm` only ever recognised `arm-`, so this
+    // failed red the moment `saturateDisc`'s budget filter (and this test)
+    // moved to `isTrunk` while the fixtures still said `arm-` -- exactly
+    // the regression the brief asked this test to catch: a lane whose id
+    // the exemption no longer recognises gets double-counted against the
+    // budget and CAN starve invented growth again.
     const targetR = 52;
-    const armEnd = (bearingDeg: number, lengthM: number): Point => {
+    const trunkEnd = (bearingDeg: number, lengthM: number): Point => {
       const rad = (bearingDeg * Math.PI) / 180;
       const dir = { x: Math.sin(rad), y: -Math.cos(rad) };
       return new Point(dir.x * lengthM, dir.y * lengthM);
     };
-    const armAt = (id: string, bearingDeg: number): Lane =>
-      lane(id, armEnd(bearingDeg, 10), armEnd(bearingDeg, 400));
+    const trunkAt = (id: string, bearingDeg: number): Lane =>
+      lane(id, trunkEnd(bearingDeg, 10), trunkEnd(bearingDeg, 400));
     const bearings = [12, 78, 155, 231, 304];
 
-    const inventedLength = (out: Lane[], armIds: Set<string>) => out
-      .filter((l) => !armIds.has(l.id))
+    const inventedLength = (out: Lane[], trunkIds: Set<string>) => out
+      .filter((l) => !trunkIds.has(l.id))
       .reduce((sum, l) => sum + polylineLength(l.points), 0);
 
-    const singleArms = [armAt('arm-012', 12)];
-    const singleOut = grow(singleArms, green, 12, circularProfile(targetR), new SeededRandom(9));
+    const singleTrunks = [trunkAt('trunk-main-012', 12)];
+    const singleOut = grow(singleTrunks, green, 12, circularProfile(targetR), new SeededRandom(9));
     const singleInvented = inventedLength(
-      singleOut, new Set(singleArms.map((l) => l.id)),
+      singleOut, new Set(singleTrunks.map((l) => l.id)),
     );
 
-    const manyArms = bearings.map((b) => armAt(`arm-${String(Math.round(b)).padStart(3, '0')}`, b));
-    const manyOut = grow(manyArms, green, 12, circularProfile(targetR), new SeededRandom(9));
-    const manyInvented = inventedLength(manyOut, new Set(manyArms.map((l) => l.id)));
+    const manyTrunks = bearings.map(
+      (b) => trunkAt(`trunk-main-${String(Math.round(b)).padStart(3, '0')}`, b),
+    );
+    const manyOut = grow(manyTrunks, green, 12, circularProfile(targetR), new SeededRandom(9));
+    const manyInvented = inventedLength(manyOut, new Set(manyTrunks.map((l) => l.id)));
 
-    // Five arms must not starve invented growth to nothing, nor to a small
-    // fraction of what one arm gets on the identical disc -- the budget is
-    // meant to be spent on ground the census needs housed, not eaten by
-    // however many routes FMG happened to draw. (Measured post-fix: ~59%
-    // of the single-arm figure -- some falloff is real, since five arms
-    // legitimately leave less clear ground than one; the bar here is
-    // "not starved to zero", not parity.)
+    // Five trunks must not starve invented growth to nothing, nor to a
+    // small fraction of what one trunk gets on the identical disc -- the
+    // budget is meant to be spent on ground the census needs housed, not
+    // eaten by however many routes FMG happened to draw. (Measured
+    // post-fix: ~59% of the single-trunk figure -- some falloff is real,
+    // since five trunks legitimately leave less clear ground than one; the
+    // bar here is "not starved to zero", not parity.)
     expect(manyInvented).toBeGreaterThan(singleInvented * 0.4);
   });
 
@@ -241,12 +252,12 @@ describe('saturateDisc', () => {
       rng: new SeededRandom(4),
     });
     const out = grow(
-      [lane('arm-000', new Point(0, -10), new Point(0, -110))], green, 12,
+      [lane('trunk-main-000', new Point(0, -10), new Point(0, -110))], green, 12,
       profile, new SeededRandom(4),
     );
     let along = 0;
     let across = 0;
-    for (const l of out.filter((x) => x.id !== 'arm-000')) {
+    for (const l of out.filter((x) => x.id !== 'trunk-main-000')) {
       for (const p of l.points) {
         along = Math.max(along, Math.abs(p.y - green.centre.y));
         across = Math.max(across, Math.abs(p.x - green.centre.x));
