@@ -58,7 +58,18 @@ src/village/route-class.ts <- src/input/azgaar-input.ts     <- src/generator/mod
 
 `src/input/azgaar-input.ts:3` imports `toLegacyKind` and `RouteType`, and line 208 calls `toLegacyKind` on **every road bearing of every burg**, cities included. `ROUTE_CLASS_ORDER`, `classRank`, `laneWidth` and `stepDown` all live in that same file. A roads change that wants a new class, a width tweak or a rank adjustment lands squarely in a file city output depends on — and city SVG byte-identity is the release's only clean regression signal (spec §7, Task 7).
 
-The sharp version of the rule, which is narrower and more useful than "don't touch it": **cities see `toLegacyKind`'s output and nothing else in this file.** `laneWidth` is village-only. `classRank` reaches cities only through `isRoadClass` inside `toLegacyKind`, and that comparison is relative to `'local'` itself, so inserting a class into `ROUTE_CLASS_ORDER` is safe as long as `'local'` does not move relative to `'trail'` and `'footpath'`. Pin that and the exposure stops being something to remember.
+The sharp version of the rule, which is narrower and more useful than "don't touch it": **cities see `toLegacyKind`'s output and nothing else in this file.** `laneWidth` is village-only. `classRank` reaches cities only through `isRoadClass` inside `toLegacyKind` — and `trail` and `footpath` never get that far, because an explicit literal check catches them first:
+
+```ts
+  if (k === 'trail' || k === 'footpath') return 'foot';
+  if (isRoadClass(k as RouteType)) return 'road';
+```
+
+So only `royal`, `main`, `market`, `town` and `local` ever reach `classRank`, and `isRoadClass` compares against `'local'`. The invariant is therefore:
+
+> **`'local'` must remain the LAST of the five road classes** — `royal`, `main`, `market` and `town` must each keep a rank below it.
+
+Verified by simulation against the real function, not by reading: moving `'local'` ahead of `'town'` makes `toLegacyKind('town')` return `undefined` instead of `'road'`, changing behaviour for every city burg with a town-class bearing, while nothing in the file looks like it moved. Moving `'trail'` and `'footpath'` anywhere at all changes nothing. Inserting a class before `'royal'`, between `'local'` and `'trail'`, or after `'footpath'` all leave every existing kind mapping as before — so **the apron work can have a new class; it just must not reorder the five road classes among themselves.**
 
 **Files:**
 - Test: `tests/village/route-class.test.ts` (extend)
@@ -99,12 +110,15 @@ describe('toLegacyKind is city-visible and must not drift', () => {
     expect(toLegacyKind(undefined)).toBeUndefined();
   });
 
-  it('keeps local the lowest road class — the boundary toLegacyKind reads', () => {
-    // isRoadClass compares against 'local', so a class inserted anywhere is
-    // harmless UNTIL 'local' moves relative to the path classes.
-    expect(classRank('local')).toBeLessThan(classRank('trail'));
-    expect(classRank('local')).toBeLessThan(classRank('footpath'));
-  });
+  it.each(['royal', 'main', 'market', 'town'] as const)(
+    'keeps %s ranked below local, the boundary isRoadClass reads', (kind) => {
+      // `trail` and `footpath` are caught by a literal check BEFORE
+      // isRoadClass, so their position is irrelevant here -- these four are
+      // the ones that reach classRank. Move 'local' ahead of 'town' and
+      // toLegacyKind('town') silently becomes undefined for every city burg.
+      expect(classRank(kind)).toBeLessThan(classRank('local'));
+    },
+  );
 });
 ```
 
