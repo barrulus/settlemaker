@@ -9,7 +9,7 @@ import type { AzgaarBurgInput } from '../input/azgaar-input.js';
  */
 export const URL_PAYLOAD_VERSION = 1;
 
-export type UrlCodecFailure = 'base64' | 'inflate' | 'json' | 'version' | 'shape';
+export type UrlCodecFailure = 'base64' | 'inflate' | 'json' | 'version' | 'shape' | 'villageTheme';
 
 export class UrlCodecError extends Error {
   constructor(readonly reason: UrlCodecFailure, message: string) {

@@ -100,12 +100,75 @@ const BIOME_THEMES: Record<string, Partial<VillageTheme>> = {
 };
 
 /**
+ * Azgaar/FMG's biome vocabulary (integer codes 0-12) mapped onto ours.
+ *
+ * WHY: every per-biome table in this engine — dwelling deck, field deck,
+ * canopy deck, plot-edge treatment, theme — is an exact-match lookup on a
+ * handful of lowercase keys, and FMG's names are almost entirely different
+ * words. Measured on the shipped 2.0.0 bundle: 12 of the 13 fell through to
+ * temperate, "tundra" being the only accidental collision, so "hot desert"
+ * drew a green temperate village while desert ground, desert dwellings and
+ * irrigated fields sat unreachable.
+ *
+ * The mapping is climate-family, not colour: `savanna` goes to tropical
+ * because it IS a tropical biome, and `wetland`/`marine` to coastal because
+ * coastal is our "more water about" look. These are judgement calls on a
+ * provisional palette set — the owner gated all four non-temperate themes as
+ * knowingly first-draft on 2026-09-07, intending to adjust flora later — so
+ * changing a destination here is expected, and cheap.
+ */
+const FMG_BIOME_TO_VILLAGE: Readonly<Record<string, VillageBiome>> = {
+  'marine': 'coastal',
+  'hot desert': 'desert',
+  'cold desert': 'desert',
+  'savanna': 'tropical',
+  'grassland': 'temperate',
+  'tropical seasonal forest': 'tropical',
+  'temperate deciduous forest': 'temperate',
+  'tropical rainforest': 'tropical',
+  'temperate rainforest': 'temperate',
+  'taiga': 'tundra',
+  'tundra': 'tundra',
+  'glacier': 'tundra',
+  'wetland': 'coastal',
+};
+
+/**
+ * Biome keys this engine looks up that are NOT theme biomes. `steppe` has a
+ * field deck (`BIOME_FIELD_DECKS`) but no ground of its own; normalising it
+ * away to temperate would silently delete that deck, so it passes through.
+ */
+const EXTRA_CANONICAL_BIOMES = new Set(['steppe']);
+
+/**
+ * A caller's biome name → the biome this engine's tables are keyed by.
+ *
+ * Applied once, at the site boundary (`buildSite`), so the theme, the
+ * dwellings, the fields, the canopies and the plot edges cannot disagree
+ * about what the village is. Normalising in `villageThemeFor` alone would
+ * give a "hot desert" village sand ground under temperate houses.
+ *
+ * Unknown names fall back to temperate, as they always did.
+ */
+export function normaliseVillageBiome(biome?: string): string {
+  if (biome == null) return 'temperate';
+  const key = biome.trim().toLowerCase();
+  if (key === '') return 'temperate';
+  if ((VILLAGE_BIOMES as readonly string[]).includes(key)) return key;
+  if (EXTRA_CANONICAL_BIOMES.has(key)) return key;
+  return FMG_BIOME_TO_VILLAGE[key] ?? 'temperate';
+}
+
+/**
  * The theme for a biome. Unknown or missing biome falls back to temperate —
  * which is also what `resolveGlyphFor` does with an unknown biome, so the
  * ground and the dwellings always agree about what they are.
  */
 export function villageThemeFor(biome?: string): VillageTheme {
-  const over = (biome != null && Object.hasOwn(BIOME_THEMES, biome))
-    ? BIOME_THEMES[biome] : {};
+  // Normalised here as well as in `buildSite` so the exported helper is
+  // correct on its own: a consumer handing it a raw FMG name straight off a
+  // map gets the right ground rather than a silent temperate.
+  const key = normaliseVillageBiome(biome);
+  const over = Object.hasOwn(BIOME_THEMES, key) ? BIOME_THEMES[key] : {};
   return { ...TEMPERATE_THEME, ...over };
 }

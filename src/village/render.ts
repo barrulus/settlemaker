@@ -71,8 +71,46 @@ const SM_FILL_INK_CLASSES = [
 ];
 const SM_LINE_INK_CLASSES = ['sm-hatch', 'sm-ridge', 'sm-spire'];
 
+/** A custom property name: `--` then letters, digits and hyphens only. */
+const SM_TOKEN_KEY = /^--[a-z0-9-]+$/i;
+/** `#rgb` .. `#rrggbbaa`. */
+const SM_TOKEN_HEX = /^#[0-9a-f]{3,8}$/i;
+/** The only bare words a token may carry. */
+const SM_TOKEN_KEYWORDS = new Set(['none', 'transparent', 'currentColor']);
+
+/**
+ * Whitelist caller-supplied theme tokens before they are concatenated into
+ * the `:root{...}` rule.
+ *
+ * Every value here is untrusted: it is written into CSS by string
+ * concatenation and consumers render the result with `innerHTML`, so a value
+ * containing `;}` could close the declaration and the block and append rules
+ * of its own. Anything that is not a hex colour, a finite number or one of a
+ * few keywords is DROPPED rather than escaped — the built-in token then
+ * applies, which degrades to the stock look instead of to broken CSS. This
+ * mirrors `sanitizeThemeOverrides` on the city branch, which guards the
+ * equivalent `style=` payload.
+ */
+export function sanitizeVillageTokens(
+  tokens?: Record<string, string | number>,
+): Record<string, string | number> {
+  const out: Record<string, string | number> = {};
+  if (tokens == null) return out;
+  for (const [k, v] of Object.entries(tokens)) {
+    if (!SM_TOKEN_KEY.test(k)) continue;
+    if (typeof v === 'number') {
+      if (Number.isFinite(v)) out[k] = v;
+      continue;
+    }
+    if (typeof v !== 'string') continue;
+    const s = v.trim();
+    if (SM_TOKEN_HEX.test(s) || SM_TOKEN_KEYWORDS.has(s)) out[k] = s;
+  }
+  return out;
+}
+
 const smStyleFor = (tokens?: Record<string, string | number>): string => [
-  `:root{${Object.entries({ ...SM_TOKENS, ...(tokens ?? {}) })
+  `:root{${Object.entries({ ...SM_TOKENS, ...sanitizeVillageTokens(tokens) })
     .map(([k, v]) => `${k}:${v}`).join(';')}}`,
   ...SM_FILL_INK_CLASSES.map((c) => `.${c}{stroke:var(--sm-ink,#33262e);stroke-linejoin:round;stroke-linecap:round}`),
   ...SM_LINE_INK_CLASSES.map((c) => `.${c}{fill:none;stroke:var(--sm-ink,#33262e);stroke-linecap:round}`),

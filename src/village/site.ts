@@ -3,6 +3,7 @@ import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import type { Site, SiteRoute } from './types.js';
 import { ROUTE_CLASS_ORDER, fromLegacyKind, type RouteType } from './route-class.js';
 import { bearingVector } from './geometry.js';
+import { normaliseVillageBiome } from './theme.js';
 
 /** The seven land classes, from route-class.ts's single source of truth. */
 const LAND_CLASSES = new Set<string>(ROUTE_CLASS_ORDER);
@@ -96,7 +97,11 @@ export function buildSite(input: AzgaarBurgInput): Site {
 
   return {
     population: input.population,
-    biome: input.biome ?? 'temperate',
+    // Normalised once, here, because every per-biome table downstream (theme,
+    // dwelling deck, field deck, canopy deck, plot edges) is an exact-match
+    // lookup on this string. FMG sends its own vocabulary; without this, 12 of
+    // its 13 biome names fell through to temperate.
+    biome: normaliseVillageBiome(input.biome),
     routes,
     water,
     flags: {

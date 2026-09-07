@@ -244,8 +244,13 @@ export { generateVillageGeoJson };
 // set already resolves desert/tundra/tropical/coastal dwellings. Consumers can
 // pass their own theme to `renderVillage` for a night scene or a snow one.
 export {
-  villageThemeFor, TEMPERATE_THEME, VILLAGE_BIOMES, type VillageTheme, type VillageBiome,
+  villageThemeFor, normaliseVillageBiome,
+  TEMPERATE_THEME, VILLAGE_BIOMES, type VillageTheme, type VillageBiome,
 } from './village/theme.js';
+// Exported so a consumer that builds a VillageTheme from its own untrusted
+// input can apply the same gate the renderer does. Callers do NOT need to
+// call it — `renderVillage` sanitizes what it is given regardless.
+export { sanitizeVillageTokens } from './village/render.js';
 export type {
   Site, SiteRoute, Green, GreenShape, Lane, Lot, Building, Croft, EdgeStyle, EdgeStamp,
   FieldBlock, Vegetation,

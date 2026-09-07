@@ -296,7 +296,7 @@ below — it has no equivalent for `roadBearings` or `coastlineGeometry`.
 | `trade` | boolean | `false` | only present at all when true |
 | `oceanBearing` | number | (unset) | compass degrees, 0=N clockwise |
 | `harbourSize` | `large` \| `small` | (unset) | any other value is dropped, not passed through |
-| `biome` | string | (unset) | |
+| `biome` | string | (unset) | data, not presentation: also picks the village dwelling/field/canopy decks. Azgaar's own biome names are accepted and normalised — see §Villages |
 | `urbanDensity` | number | (unset) | only kept if `> 0`; when unset, the generator falls back to a population-scaled default curve — see §6 |
 | `coreCapacity` | number | `10000` | only kept if `> 0`; people the walled core may hold — see §6 |
 
@@ -311,10 +311,16 @@ the flat tier.
 
 ## 5. Presentation parameters
 
-Two additional params control appearance only. They apply identically in
+Three additional params control appearance only. They apply identically in
 both the `i=` tier and the flat tier, and **never affect geometry** — the
-same burg with different `theme=`/`style=` values produces the same street
-plan, walls, and building placement, only different colors/strokes.
+same burg with different `theme=`/`style=`/`villageTheme=` values produces
+the same street plan, walls, and building placement, only different
+colors/strokes.
+
+`theme=` and `style=` dress the settlement engine; `villageTheme=` dresses
+the village engine. All three are parsed whichever engine ends up running,
+so a caller never has to know the population boundary in advance — the one
+that does not apply is simply ignored.
 
 ### `theme=<preset>`
 
@@ -328,6 +334,38 @@ default, classic, parchment, blueprint, bw, ink, night, ancient, colour, simple
 (`default` and `parchment` are the same palette; `default` is the
 alias used when `theme=` is omitted entirely.) An unrecognized `theme=`
 value renders a visible error card rather than silently falling back.
+
+### `villageTheme=<biome>`
+
+Village branch only. Names the village look explicitly:
+
+```
+temperate, desert, tundra, tropical, coastal
+```
+
+Distinct from `biome=` on purpose. `biome=` is a **data** parameter: it also
+selects which dwellings, fields, canopies and plot edges get built, so using
+it to restyle a village rebuilds it out of different houses. `villageTheme=`
+changes only ground, water, shadow and the glyph material tokens. It is also
+distinct from `theme=`, which names a *city* palette and has no effect on a
+village.
+
+Omit it and the village is themed from its `biome=`, which is the normal
+path.
+
+An unrecognized value is a **hard error**: `parseSettlementUrl` throws
+`UrlCodecError` with `reason: 'villageTheme'` and a message naming the legal
+set. It does not fall back to temperate — a silent fallback would be
+byte-identical to omitting the parameter, so a typo would look like "the
+feature does nothing". Validation lives in the library rather than in each
+consumer so that a caller which has not migrated still cannot miss it. This
+is checked whichever engine ends up running, so the same URL behaves the same
+way either side of the population boundary.
+
+**Status:** only `temperate` has been through a render gate. The other four
+shipped as knowingly provisional first drafts (owner ruling, 2026-09-07) —
+in particular no theme yet restyles the tree canopy, so vegetation stays
+temperate-green on every ground. Expect them to change.
 
 ### `style=<compressed JSON>`
 
@@ -395,7 +433,7 @@ contract (`docs/scene-schema.md` §3), not an internal implementation detail,
 so this rule is safe to depend on. It applies to any consumer that gets hold
 of the SVG markup directly — e.g. a library caller reading `svg` off
 `generateFromBurg`'s result and post-processing or wrapping it before
-display. **Note:** in villages (population ≤ 600), dwellings along roads
+display. **Note:** in villages (population ≤ 1,000 — see §Villages), dwellings along roads
 arrive as glyphs backed by building rects (`BuildingFeature.glyphBacked`).
 When glyphs render, the assembler never emits the backing rects as SVG
 paths at all — CSS hiding of `#symbols`/`#marks` on an already-rendered
@@ -414,6 +452,52 @@ retroactively swap in geometry the assembler chose not to draw. No
 `i=`/flat/presentation param exists or is planned for this; the off-switch
 is deliberately a plain-CSS consumer concern, consistent with every other
 appearance override in this document (§5), rather than a new query-string knob.
+
+## 5b. Villages
+
+Since 2.0.0 the renderer runs **two** engines and picks by population:
+
+| Population | Engine | `kind` |
+|---|---|---|
+| ≤ 1,000 | village (roads synthesised first, buildings line them) | `village` |
+| > 1,000 | settlement (the ward-partition city pipeline) | `settlement` |
+
+The boundary is **inclusive**: 1,000 is a village, 1,001 is a settlement.
+Verified as tested behaviour, not intent.
+
+Both engines emit an SVG and a GeoJSON carrying the same `schema_version`
+and `settlemaker_version` metadata, so a consumer can treat the two
+uniformly. A village SVG is standalone and self-contained: one root `<svg>`
+with `viewBox`, every glyph defined inline in a single `<defs>`, no external
+asset references and no `preserveAspectRatio` (set your own). It also
+carries `data-contract-radius`, `data-origin-x`, `data-origin-y` and
+`data-px-per-metre`.
+
+### Biome names
+
+`biome=` accepts **Azgaar's own biome vocabulary** and normalises it onto the
+five the village tables are keyed by:
+
+| Azgaar biome | village biome |
+|---|---|
+| `marine`, `wetland` | coastal |
+| `hot desert`, `cold desert` | desert |
+| `savanna`, `tropical seasonal forest`, `tropical rainforest` | tropical |
+| `grassland`, `temperate deciduous forest`, `temperate rainforest` | temperate |
+| `taiga`, `tundra`, `glacier` | tundra |
+
+Matching is case- and whitespace-insensitive, and the five village names are
+themselves accepted unchanged. Anything unrecognised falls back to temperate.
+
+This normalisation exists because the lookup is exact-match: before 2.0.1,
+twelve of Azgaar's thirteen biome names fell through to temperate, so
+`biome=hot+desert` drew a green temperate village while the desert ground,
+desert dwellings and irrigated fields sat unreachable. If you pinned
+appearance against the older behaviour, villages will now look different —
+correctly so.
+
+`biome=` drives geometry as well as colour (dwelling, field and canopy
+decks). To change only the look, use `villageTheme=`.
 
 ## 6. Guarantees
 
