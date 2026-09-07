@@ -366,8 +366,17 @@ export function generateVillage(
     lotFloorM = Math.max(inkFloorM, nominalLotFloorM - tightenM);
     activeDeck = tightenDeck(deck, tightenM);
     targetRadiusM = cappedRadiusM * (1 + extraRings * DISC_ESCALATION_STEP_RATIO);
+    // Aprons are OUT of growth's own reckoning -- no budget, no coverage,
+    // no branch slots -- and IN its crossing checks, as the last argument.
+    // Owner ruling 2026-09-07: those are two questions, and taking aprons
+    // out of growth wholesale answered both with the same "no". A coast
+    // apron runs LATERALLY past the fabric, so unlike a radial one it is
+    // somewhere growth genuinely reaches, and a growth branch crossed one
+    // with no junction at pop 40 on the coastal fixture. See
+    // `withObstacles` for what the obstacle list may and may not touch.
     const grown = saturateDisc(lanes.filter((l) => !isApron(l.id)), green, measuredMeanFrontage,
-      discProfile.scaled(targetRadiusM / cappedRadiusM), rng, spacingScale());
+      discProfile.scaled(targetRadiusM / cappedRadiusM), rng, spacingScale(),
+      lanes.filter((l) => isApron(l.id)));
     lanes = [...grown.lanes, ...lanes.filter((l) => isApron(l.id))];
     lotRadiusM = grown.radiusM;
     lotProfile = grown.profile;

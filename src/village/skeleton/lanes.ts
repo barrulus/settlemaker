@@ -559,6 +559,40 @@ function loopSnap(
 }
 
 /**
+ * The lane list a crossing check is run against: everything growth has laid
+ * so far, plus the CROSSING-ONLY OBSTACLES the caller handed in.
+ *
+ * Owner ruling 2026-09-07, correcting the earlier one that took aprons out
+ * of growth wholesale: those were two questions collapsed into one. An
+ * apron must not make a sector look covered, buy frontage, open a branch
+ * slot or spend the budget -- growth still cannot see it for any of that --
+ * but a lane growth is about to lay must not be allowed to CROSS one. The
+ * guard for that was `trunks-structural.test.ts` (c), and it fired: a
+ * growth branch crossed a coast apron with no junction on the coastal
+ * fixture at pop 40 (the coast bend runs a road laterally past the fabric,
+ * where a radial apron never went).
+ *
+ * So the obstacles reach `truncateAtFirstCrossing` and `extendOne`'s
+ * crossing probe, and nothing else. `out` itself is never widened, so no
+ * budget, coverage, void, branch-slot, loop-snap or earns-its-space
+ * decision can see them -- verified by running the whole dry panel with
+ * this function forced to ignore its obstacles: byte-identical, so the
+ * plumbing itself decides nothing.
+ *
+ * It does NOT leave landlocked villages untouched, and the expectation
+ * that it would was wrong: growth reaches PAST the contract circle at pop
+ * 40 (the block chase escalates the disc; `apron.ts` records the same
+ * finding as "at pop 40 arms ran past the fabric"), so a radial apron is
+ * in growth's way there too. Measured over 60 dry villages -- 3-route and
+ * 4-route fixtures, pops 40..1000, 5 seeds -- growth crossed a radial
+ * apron twice, both at pop 40, and both are gone. Four of those villages
+ * change as a result, all pop 40.
+ */
+function withObstacles(out: Lane[], obstacles: Lane[]): Lane[] {
+  return obstacles.length > 0 ? [...out, ...obstacles] : out;
+}
+
+/**
  * Gate 2: "too chaotic, many roads crossing over each other in nonsensical
  * manners". A growing lane's BODY may not cross an existing lane: it is cut
  * at the first intersection and joined there, turning a paint-over into a
@@ -763,7 +797,9 @@ function earnsItsSpace(
 function extendOne(
   out: Lane[], green: Green, meanFrontageM: number, profile: RadiusProfile,
   rng: SeededRandom, maxLengthM: number, satRadiusM: number,
+  obstacles: Lane[] = [],
 ): boolean {
+  const blockers = withObstacles(out, obstacles);
   const extendable = out
     .filter((l) => !isTrunk(l.id) && l.points.length >= 2
       && polylineLength(l.points) < maxLengthM
@@ -789,7 +825,7 @@ function extendOne(
     const extension = truncateAtFirstCrossing(
       runLine(lane.points[n - 1], endDir,
         streetRunM(lane.points[n - 1], endDir, green, profile, satRadiusM), rng),
-      out.filter((l) => l.id !== lane.id), green);
+      blockers.filter((l) => l.id !== lane.id), green);
     if (extension.length < 2) continue;
     // Gate 5.4: an extension leaves from the lane's OLD END -- which is
     // exactly where a child branch may also leave. segmentIntersection
@@ -804,7 +840,7 @@ function extendOne(
       extension[0].x + (extension[1].x - extension[0].x) * 0.05,
       extension[0].y + (extension[1].y - extension[0].y) * 0.05,
     );
-    const crosses = out.some((other) => {
+    const crosses = blockers.some((other) => {
       if (other.id === lane.id) return false;
       for (let i = 1; i < probe.length; i++) {
         for (let j = 1; j < other.points.length; j++) {
@@ -826,7 +862,9 @@ function extendOne(
 function growOne(
   out: Lane[], green: Green, meanFrontageM: number, profile: RadiusProfile,
   rng: SeededRandom, satRadiusM: number, spacingScale: number,
+  obstacles: Lane[] = [],
 ): boolean {
+  const blockers = withObstacles(out, obstacles);
   // 1. The green may still host a street of its own: an invented rib, up
   //    to the DISC-derived rib count (gate 6.11 -- see `ribCountFor`; it
   //    used to come off the green's own circumference, which says nothing
@@ -867,7 +905,7 @@ function growOne(
       const points = truncateAtFirstCrossing(
         runLine(start, candidate,
           streetRunM(start, candidate, green, profile, satRadiusM) * lengthJitter, rng),
-        out, green);
+        blockers, green);
       // Gate 6.6: a radial that never leaves its neighbours' ground only
       // splits the same frontage in two -- see `earnsItsSpace`.
       if (points.length < 2 || !earnsItsSpace(points, out, spacingScale)) continue;
@@ -899,7 +937,8 @@ function growOne(
       // because a radial-ish branch into a radial fabric is what built the
       // starfish; where the fabric is not radial `seedArcThrough` declines
       // and the ordinary branch below is unchanged.
-      if (seedArcThrough(out, green, profile, slot.anchor, slot.parent, spacingScale)) return true;
+      if (seedArcThrough(out, green, profile, slot.anchor, slot.parent, spacingScale,
+        obstacles)) return true;
       // branchLaneId formats `at` as a 2-digit percent (~100 buckets per
       // parent); if this slot's bucket is taken, probe deterministically.
       // The id is identity, the anchor is authoritative for position.
@@ -935,7 +974,7 @@ function growOne(
       const snap = loopSnap(out, points[points.length - 1], new Set([slot.parent.id]));
       if (snap) points = [...points, snap];
       const assembled = points.length;
-      points = truncateAtFirstCrossing(points, out, green, slot.parent.id);
+      points = truncateAtFirstCrossing(points, blockers, green, slot.parent.id);
       if (snap || points.length < assembled) {
         cls = stepDown(cls, 'footpath');
       }
@@ -1000,7 +1039,7 @@ function growOne(
   // 3. Nothing new to open in this ring, so lengthen what is here -- still
   //    only streets whose end lies inside it.
   if (extendOne(out, green, meanFrontageM, profile, rng,
-    satRadiusM * 2, satRadiusM)) {
+    satRadiusM * 2, satRadiusM, obstacles)) {
     return true;
   }
 
@@ -1008,7 +1047,7 @@ function growOne(
   //    is at full length, so lengthen one past its nominal length anyway.
   //    Still ring-bounded -- when this also fails, the caller widens the
   //    ring, which is the only way growth ever moves outward.
-  return extendOne(out, green, meanFrontageM, profile, rng, Infinity, satRadiusM);
+  return extendOne(out, green, meanFrontageM, profile, rng, Infinity, satRadiusM, obstacles);
 }
 
 /**
@@ -1360,7 +1399,7 @@ function buildArc(
  */
 function seedArcThrough(
   out: Lane[], green: Green, profile: RadiusProfile, through: Point,
-  parent: Lane | undefined, spacingScale: number,
+  parent: Lane | undefined, spacingScale: number, obstacles: Lane[] = [],
 ): boolean {
   if (!locallyRadial(out, through, green)) return false;
   const snapExclude = new Set<string>(parent ? [parent.id] : []);
@@ -1378,7 +1417,7 @@ function seedArcThrough(
   // the host here let an arc whose back sweep joined its own host cross
   // that host for free near the join — measured as the one crossing at pop
   // 300 seed 1, which is how this was found.
-  points = truncateAtFirstCrossing(points, out, green);
+  points = truncateAtFirstCrossing(points, withObstacles(out, obstacles), green);
   if (points.length < 2 || polylineLength(points) < BRANCH_MIN_M) return false;
 
   // Whose branch space? The lane the arc was seeded from, or — for an arc
@@ -1477,6 +1516,7 @@ function seedArcThrough(
 function seedVoidLane(
   out: Lane[], green: Green, meanFrontageM: number, profile: RadiusProfile,
   satRadiusM: number, rng: SeededRandom, spacingScale: number,
+  obstacles: Lane[] = [],
 ): boolean {
   const void_ = widestVoid(out, green, profile, satRadiusM);
   if (!void_ || void_.distance <= VOID_SPACING_M) return false;
@@ -1485,7 +1525,8 @@ function seedVoidLane(
   // fills a wedge runs across it, not out of it. No parent is handed to the
   // arc here: the void point is in open ground, so every lane around it —
   // the nearest one included — is a candidate to join.
-  if (seedArcThrough(out, green, profile, void_.point, undefined, spacingScale)) return true;
+  if (seedArcThrough(out, green, profile, void_.point, undefined, spacingScale,
+    obstacles)) return true;
 
   const bearing = Math.round(bearingOf(void_.junction, void_.point)) % 360;
   // Long enough to run THROUGH the void rather than stop at its near edge,
@@ -1523,7 +1564,9 @@ function seedVoidLane(
   const snap = loopSnap(out, points[points.length - 1], new Set([void_.parent.id]));
   if (snap) points = [...points, snap];
   const assembled = points.length;
-  points = truncateAtFirstCrossing(points, out, green, void_.parent.id);
+  points = truncateAtFirstCrossing(
+    points, withObstacles(out, obstacles), green, void_.parent.id,
+  );
   if (snap || points.length < assembled) cls = stepDown(cls, 'footpath');
   if (points.length < 2 || polylineLength(points) < BRANCH_MIN_M) return false;
   if (crossesParentTwice(points, void_.parent)) return false;
@@ -1605,6 +1648,7 @@ function circumferentialityDeg(lane: Lane, green: Green): number {
 function seedCoverageLane(
   out: Lane[], green: Green, meanFrontageM: number, profile: RadiusProfile,
   satRadiusM: number, rng: SeededRandom, spacingScale: number,
+  obstacles: Lane[] = [],
 ): boolean {
   const gap = widestGap(angularCoverage(out, green, profile, satRadiusM));
   if (gap.widthDeg <= coverageThresholdDeg(satRadiusM)) return false;
@@ -1633,7 +1677,8 @@ function seedCoverageLane(
     const at = new Point(
       green.centre.x + dir.x * radiusM, green.centre.y + dir.y * radiusM,
     );
-    if (seedArcThrough(out, green, profile, at, undefined, spacingScale)) return true;
+    if (seedArcThrough(out, green, profile, at, undefined, spacingScale,
+      obstacles)) return true;
   }
 
   const reach = Math.max(0, ringHere - greenDrawnRadius(green));
@@ -1651,7 +1696,9 @@ function seedCoverageLane(
       green.centre.x + dir.x * (green.diameter / 2) * GREEN_UNDERLAP_RATIO,
       green.centre.y + dir.y * (green.diameter / 2) * GREEN_UNDERLAP_RATIO,
     );
-    const points = truncateAtFirstCrossing(runLine(start, bearing, nominal, rng), out, green);
+    const points = truncateAtFirstCrossing(
+      runLine(start, bearing, nominal, rng), withObstacles(out, obstacles), green,
+    );
     if (points.length < 2 || polylineLength(points) < BRANCH_MIN_M) continue;
     out.push({
       id, type: 'local', points, widthM: laneWidth('local'),
@@ -1681,6 +1728,7 @@ function seedCoverageLane(
 export function saturateDisc(
   lanes: Lane[], green: Green, meanFrontageM: number,
   target: RadiusProfile, rng: SeededRandom, spacingScale = 1,
+  obstacles: Lane[] = [],
 ): { lanes: Lane[]; radiusM: number; profile: RadiusProfile } {
   // GATE 8: the disc is a PROFILE. `targetRadiusM` below is its
   // area-equivalent radius -- every ring test in growth goes through
@@ -1742,15 +1790,18 @@ export function saturateDisc(
     // as a 66 deg laneless sector at pop 300, over the 60 deg bar. Coverage
     // is a hard constraint on the shape; meshing an already-covered ring is
     // discretionary, so the constraint goes first.
-    if (seedCoverageLane(out, green, meanFrontageM, target, satRadiusM, rng, spacingScale)) {
+    if (seedCoverageLane(out, green, meanFrontageM, target, satRadiusM, rng, spacingScale,
+      obstacles)) {
       continue;
     }
-    if (growOne(out, green, meanFrontageM, target, rng, satRadiusM, spacingScale)) continue;
+    if (growOne(out, green, meanFrontageM, target, rng, satRadiusM, spacingScale,
+      obstacles)) continue;
     // Gate 6.5: and even with every bearing covered, a RADIAL tree leaves
     // widening wedges of untouched ground between its tendrils -- the
     // spider. Measure the GROUND, not the network: if anywhere in the disc
     // is further than VOID_SPACING_M from a lane, put a lane there.
-    if (seedVoidLane(out, green, meanFrontageM, target, satRadiusM, rng, spacingScale)) continue;
+    if (seedVoidLane(out, green, meanFrontageM, target, satRadiusM, rng, spacingScale,
+      obstacles)) continue;
     // This ring is genuinely full. Widen it -- or, at the target, stop:
     // the disc is saturated and growing past it is exactly the over-tiling
     // gate 6.6 removed.
