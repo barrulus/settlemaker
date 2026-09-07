@@ -1515,6 +1515,14 @@ Numbers do not close this work. The owner gates on renders, and this session has
 
 Populations 40 / 120 / 300 / 500 / 1000 landlocked; the coastal fixture with a seaward route; a four-route junction village; a through route; and the five biomes at pop 500. Two seeds each where it is cheap.
 
+**Include the specimen the owner has already seen the bug in**, so the before/after is against a picture he recognises rather than a fresh one — the settlemaker-web session put this in front of him at the theme re-gate and its three approach roads cross the field belt properly and then end in open sand at ~60% of the half-width:
+
+```
+/fmg?name=Qasr&pop=600&seed=3&biome=desert&roads=40:main,165:main,285:main
+```
+
+**Do not touch field density while you are in there.** That same render prompted "desert shouldn't have so much farm land", which he explicitly classed as future work; it is recorded in the memory directory as `desert-farmland-density`. Changing it here would put an unrequested change inside a gate about roads.
+
 - [ ] **Step 2: Check them yourself first**
 
 Look for: a road that stops short; a road crossing another with no junction drawn; a coast road that reads as invented rather than as a road; a field ring that got worse now that `exitRoads` cuts to the frame (spec §11.1); trees standing in a road.
