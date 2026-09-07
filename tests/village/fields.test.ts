@@ -234,6 +234,30 @@ describe('exitRoads', () => {
     expect(roads[0].dirDeg).toBeCloseTo(90, 6);
     expect(roads[0].halfWidthM).toBeGreaterThan(3.5 / 2);
   });
+
+  it('does not draw a second corridor when crossing resolution has renamed the trunk that owns an apron', () => {
+    // `growAprons` computes an apron's id from `rehomed.trunks`, BEFORE the
+    // combined `resolveCrossings` call. If crossing resolution later splits
+    // the trunk that owns an apron, the outer half -- the one carrying the
+    // tip and the contract entry -- comes out renamed `T~xB`, while the
+    // apron is still named from the unsplit id `T/a`. An id-strip match
+    // would miss this and cut a second corridor from the same tip the
+    // apron already leaves from.
+    const belt = beltPolygon(green, circularExtent(new Point(0, 0), 60), new SeededRandom(1));
+    const r = (90 * Math.PI) / 180;
+    const dir = new Point(Math.sin(r), -Math.cos(r));
+    const tip = new Point(dir.x * 150, dir.y * 150);
+    const splitTrunk: Lane = {
+      id: 'trunk-main-045~xtrunk-local-120', type: 'main', widthM: 5,
+      points: [new Point(dir.x * 11, dir.y * 11), tip],
+    };
+    const apron: Lane = {
+      id: 'trunk-main-045/a', type: 'main', widthM: 5,
+      points: [tip.clone(), new Point(dir.x * 300, dir.y * 300)],
+    };
+    const roads = exitRoads(green, [splitTrunk, apron], belt);
+    expect(roads).toHaveLength(1);
+  });
 });
 
 describe('buildFields', () => {
