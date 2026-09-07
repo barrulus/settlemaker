@@ -1564,10 +1564,24 @@ Message it with the tag and a re-baseline note split by kind of change — the l
 
 - **Villages, on screen:** every village changes, coastal or not — the field-ring corridor is now cut to the frame rather than to the contract circle.
 - **Villages, data:** roads run to the tile edge; `VillageModel` carries a new `frame`; village GeoJSON `bounds` moves by up to 20 m on whichever axes a road exits (see the Self-Review's known gap). `frame` itself is **not** in the GeoJSON — spec §10 — so a consumer diffing GeoJSON will not see it appear; a consumer using the TypeScript API will.
-- **Cities, SVG:** byte-identical, and safe to assert as a regression signal. Verified by import inspection on 2026-09-07: `src/generator/model.ts` and `src/output/svg-builder.ts` import nothing from `src/village/`, this plan modifies nothing outside it, and `svg-builder.ts` carries no version stamp.
+- **Cities, SVG:** byte-identical, and safe to assert as a regression signal — but **not** because the settlement path is insulated from `src/village/`. It is not. Walking the transitive import graph from `src/generator/model.ts` and `src/output/svg-builder.ts` reaches 57 files, two of which are village files: **`src/village/glyphs.ts`** (via `src/generator/village-rows.ts`, which imports `HOUSE_INK_RATIO` and `HUT_INK_RATIO` from it) and **`src/village/route-class.ts`**. City SVG holds still because this work modifies neither of those two, and because `svg-builder.ts` carries no version stamp.
 - **Cities, GeoJSON:** differs by exactly one field, `settlemaker_version`, from the release bump in `src/output/geojson-builder.ts` — the same single-field diff every release produces, and the one their 2.0.3 check caught. Anything beyond that field is a real regression.
 
-Re-verify the city claim rather than copying it forward: if any task ended up touching a file outside `src/village/`, it no longer holds.
+**Re-verify the city claim rather than copying it forward, and verify the right thing.** The question is NOT "does the settlement path import `src/village/`" — it does, and a direct-import check answers that wrongly. The question is whether this work touched either of the two village files the city pipeline actually reaches:
+
+```bash
+# The two files the settlement path reaches into, transitively.
+git diff --name-only <base>..HEAD -- src/village/glyphs.ts src/village/route-class.ts
+# ...and everything this work touched outside the village engine.
+git diff --name-only <base>..HEAD -- src/ | grep -v '^src/village/'
+```
+
+Both must come back empty. If either does not, city SVG may move and the byte-identity assertion is off the table until it is explained.
+
+**Two traps, both real, both hit on 2026-09-07:**
+
+- **Name-based searching gives a false positive.** `src/generator/model.ts` imports `./village-rows.js` — that is `src/generator/village-rows.ts`, the 1.2.0 city-pipeline village rows, not the village engine. Grepping the *word* "village" in the city files hits it and looks exactly like the dependency being checked for. (Caught by the settlemaker-web session.)
+- **Direct-import checking gives a false negative.** Both sessions checked only the imports written in `model.ts` and `svg-builder.ts`, concluded the city path was insulated from `src/village/`, and were wrong: `village-rows.ts` imports `../village/glyphs.js` one hop further down. The insulation claim was false; the byte-identity conclusion survived only because this work happens not to touch that file. **Walk the graph, don't read the top of two files.** The scratchpad script that found it is four lines of `node` following `from '...'` specifiers transitively.
 
 Rucio/questables is dormant by ruling: no deploy, no cache wipe.
 
