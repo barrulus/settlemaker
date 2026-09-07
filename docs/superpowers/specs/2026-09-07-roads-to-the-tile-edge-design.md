@@ -450,6 +450,19 @@ cost:
   `bounds()` helper feeds both the exported `local_bounds` and `diameterM`,
   and those ask different questions — the ruling was about the exported field.
   The helper stays as `inkBounds`, serving `diameterM` alone.
+
+  **And `inkBounds` must itself exclude aprons — a seventh exclusion site,
+  corrected during implementation.** Keeping the helper unchanged carried the
+  right intent to the wrong input: aprons are clipped to the tile edge, so
+  counting them made "the village's extent" the TILE's extent. Measured before
+  the correction, `diameter_meters` came out LARGER than the whole tile — 727.0
+  against a 711.5 tile at pop 500, 402.4 against 371.6 at pop 40, 884.4 against
+  844.3 at pop 1000 — for a field whose doc comment calls it "the village's
+  overall extent … its own diameter, measured". With aprons excluded it sits
+  consistently ~40 m inside the tile span, which makes
+  `diameter_meters < tileSpan` a real invariant (the tile is the fabric plus a
+  40 m pad, so the village cannot exceed the tile that frames it) rather than
+  the coincidence it would otherwise be.
 - **`GEOJSON_SCHEMA_VERSION` is NOT bumped, because this is a BUG FIX.**
   Corrected 2026-09-07 after the settlemaker-web session measured the
   production artifact: `local_bounds` has always meant the drawn tile, and
