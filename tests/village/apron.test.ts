@@ -5,8 +5,10 @@
 import { describe, it, expect } from 'vitest';
 import { Point } from '../../src/types/point.js';
 import { apronLaneId, isApron, type Lane } from '../../src/village/types.js';
-import { apronReachM, growApronPath, growAprons } from '../../src/village/skeleton/apron.js';
-import { dist, polylineLength } from '../../src/village/geometry.js';
+import {
+  apronReachM, coastEscapeRadiusM, growApronPath, growAprons,
+} from '../../src/village/skeleton/apron.js';
+import { dist, inAnyWater, polylineLength } from '../../src/village/geometry.js';
 import { APRON_REACH_FLOOR_M } from '../../src/village/constants.js';
 
 /** A straight trunk running inward along -y, outer end at (0, -100). */
@@ -156,5 +158,129 @@ describe('growAprons', () => {
       growApronPath(b, apronReachM(100)),
     ));
     expect(junctions[0].laneIds).toEqual(['trunk-main-000/a', 'trunk-main-001/a']);
+  });
+});
+
+/**
+ * The coast bend (spec §5.4, owner ruling 2026-09-07): a road whose bearing
+ * points out to sea turns and follows the shore until it leaves the tile.
+ * It does not stop at the water, and it is not left short.
+ */
+describe('the coast bend', () => {
+  // Water filling y > 40: a road heading +y meets it head on.
+  const sea = [[
+    new Point(-1000, 40), new Point(1000, 40),
+    new Point(1000, 2000), new Point(-1000, 2000),
+  ]];
+  const seaward: Lane = {
+    id: 'trunk-main-180', type: 'main', widthM: 5,
+    points: [new Point(0, -20), new Point(0, 0)],
+  };
+  const entries = [{
+    point: new Point(0, 0), bearingDeg: 180,
+    route: { bearingDeg: 180, type: 'main' as const, through: false }, farSide: false,
+  }];
+  const wet = (p: Point): boolean => inAnyWater(p, sea);
+
+  it('never puts a point in the water', () => {
+    const { lanes } = growAprons([seaward], entries as never, 60, sea);
+    expect(lanes.flatMap((l) => l.points).filter(wet)).toHaveLength(0);
+  });
+
+  it('turns instead of stopping at the shore', () => {
+    const { lanes } = growAprons([seaward], entries as never, 60, sea);
+    const tip = lanes[0].points[lanes[0].points.length - 1];
+    // It got a long way sideways, which a road that merely stopped could not.
+    expect(Math.abs(tip.x)).toBeGreaterThan(200);
+  });
+
+  it('runs a standoff clear of the waterline, not on it', () => {
+    const { lanes } = growAprons([seaward], entries as never, 60, sea);
+    const alongShore = lanes[0].points.filter((p) => Math.abs(p.x) > 100);
+    expect(alongShore.length).toBeGreaterThan(0);
+    for (const p of alongShore) expect(p.y).toBeLessThanOrEqual(31);
+  });
+
+  it('leaves the tile: it gets clear of the escape radius', () => {
+    // The frame does not exist yet at synthesis time, so the road runs
+    // until no point of any possible tile could still contain it.
+    const { lanes, diagnostics } = growAprons([seaward], entries as never, 60, sea);
+    const tip = lanes[0].points[lanes[0].points.length - 1];
+    expect(Math.hypot(tip.x, tip.y)).toBeGreaterThanOrEqual(coastEscapeRadiusM(60));
+    expect(diagnostics).toEqual([]);
+  });
+
+  it('is deterministic — the same input gives the same road', () => {
+    const a = growAprons([seaward], entries as never, 60, sea);
+    const b = growAprons([seaward], entries as never, 60, sea);
+    expect(JSON.stringify(a.lanes)).toBe(JSON.stringify(b.lanes));
+  });
+
+  it('is unchanged by which way round the water ring is wound', () => {
+    // The dry side is TESTED, never derived from the winding, so a ring
+    // handed over clockwise gives the same road as the same ring
+    // anticlockwise.
+    const reversed = [[...sea[0]].reverse()];
+    const a = growAprons([seaward], entries as never, 60, sea);
+    const b = growAprons([seaward], entries as never, 60, reversed);
+    expect(a.lanes[0].points.filter(wet)).toHaveLength(0);
+    expect(b.lanes[0].points.filter(wet)).toHaveLength(0);
+    const far = (l: typeof a.lanes[0]): number =>
+      Math.hypot(l.points[l.points.length - 1].x, l.points[l.points.length - 1].y);
+    expect(far(b.lanes[0])).toBeCloseTo(far(a.lanes[0]), 6);
+  });
+
+  it('lands a second seaward road on the first and records a junction', () => {
+    const second: Lane = {
+      id: 'trunk-local-170', type: 'local', widthM: 3,
+      points: [new Point(-6, -20), new Point(-6, 0)],
+    };
+    const both = [...(entries as never[]), {
+      point: new Point(-6, 0), bearingDeg: 170,
+      route: { bearingDeg: 170, type: 'local', through: false }, farSide: false,
+    }];
+    const { lanes, junctions } = growAprons([seaward, second], both as never, 60, sea);
+    expect(lanes).toHaveLength(2);
+    expect(junctions.length).toBeGreaterThan(0);
+  });
+
+  it('crosses a brook rather than turning to follow it', () => {
+    // AFMG's real river width is 4 m. `profile.ts` already treats water
+    // this narrow as an obstacle the village sits on, not a boundary it
+    // stops at, and so must the apron -- otherwise the `brook` fixture's
+    // through road runs along the stream instead of over it.
+    const brook = [[
+      new Point(-1000, 40), new Point(1000, 40),
+      new Point(1000, 44), new Point(-1000, 44),
+    ]];
+    const { lanes, diagnostics } = growAprons([seaward], entries as never, 60, brook);
+    const tip = lanes[0].points[lanes[0].points.length - 1];
+    expect(Math.abs(tip.x)).toBeLessThan(1);
+    expect(tip.y).toBeGreaterThan(400);
+    expect(diagnostics).toEqual([]);
+  });
+
+  it('ends at the shore, and says so, when the coast never leaves the tile', () => {
+    // A lagoon small enough that the road can walk right round it and be no
+    // further out than when it started.
+    const lagoon = [[
+      new Point(-30, 40), new Point(30, 40), new Point(30, 100), new Point(-30, 100),
+    ]];
+    const { lanes, diagnostics } = growAprons([seaward], entries as never, 60, lagoon);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toMatch(/^coast:/);
+    // Ended at the water, dry, rather than running on into it.
+    expect(lanes[0].points.filter((p) => inAnyWater(p, lagoon))).toHaveLength(0);
+    const tip = lanes[0].points[lanes[0].points.length - 1];
+    expect(tip.y).toBeGreaterThan(25);
+    expect(tip.y).toBeLessThan(40);
+    expect(Math.hypot(tip.x, tip.y)).toBeLessThan(coastEscapeRadiusM(60));
+  });
+
+  it('leaves a dry village’s aprons exactly as they were', () => {
+    const dry = growAprons([seaward], entries as never, 60);
+    const withEmptyWater = growAprons([seaward], entries as never, 60, []);
+    expect(JSON.stringify(withEmptyWater.lanes)).toBe(JSON.stringify(dry.lanes));
+    expect(dry.diagnostics).toEqual([]);
   });
 });

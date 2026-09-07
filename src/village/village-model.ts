@@ -195,6 +195,11 @@ export function generateVillage(
   const network = synthesizeTrunks(
     site, contractRadiusFor(closedFormRadius), closedFormRadius, rng, aim,
   );
+  // The network's own honesty channel, folded in before the lot chase's
+  // first snapshot so a restored round cannot rewind these away: they
+  // describe the skeleton, which the chase never touches. Today that is
+  // the coast bend giving up short of the tile (spec §5.4.5).
+  diagnostics.push(...network.diagnostics);
   // Task 7 (spec 5.3): the inversion this plan is named for. The green is
   // no longer placed at the origin with roads aimed at it -- the roads are
   // drawn first and the green is sited as a RESIDENT of them: beside one,

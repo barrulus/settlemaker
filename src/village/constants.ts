@@ -1460,6 +1460,48 @@ export const APRON_CURVATURE_DAMP = 0.5;
 export const APRON_MAX_TURN_PER_STEP_DEG = 2;
 export const APRON_MAX_TOTAL_TURN_DEG = 30;
 
+// --- THE COAST BEND (spec 2026-09-07 §5.4) ------------------------------
+// An apron whose bearing points out to sea is neither truncated at the
+// shore nor left short: it turns and follows the coast until it leaves the
+// tile. Measured on the coastal fixture (oceanBearing 123, pop 500, seed
+// 55337, a main road at bearing 123): the apron met water 60 m past the
+// contract circle with the frame a further 90 m out, and two of its points
+// were in the sea.
+
+/** How far inland of the waterline a coast road runs. Enough that no lane
+ * point is ever wet -- `coastline.test.ts` asserts exactly that. */
+export const COAST_ROAD_STANDOFF_M = 10;
+
+/**
+ * How far from the origin a coast road must get before it is CERTAINLY
+ * outside the drawn tile: past this radius no point of the frame rectangle
+ * can reach it, so `clipApronsToFrame` is guaranteed something to cut.
+ *
+ * Not `apronReachM` -- that is an 8x overshoot a straight road covers for
+ * free, but a shore-following road has to travel nearly all of it
+ * TANGENTIALLY, which on the coastal fixture is 1.5 km of wiggling shore
+ * for a tile 300 m wide. Measured tile-corner distances across pops
+ * 40..1000 x seeds 1/2/7/55337, wet and dry: 209 m (pop 40) to 643 m (pop
+ * 1000), i.e. 2.27x-6.03x the contract radius. `max(3x, 700 m)` clears
+ * every one of those rows -- the floor carries the small villages, whose
+ * tile is set by their fields rather than by their radius, and the factor
+ * carries the large ones, whose ratio is already down at 2.3x and falling.
+ */
+export const COAST_ROAD_ESCAPE_FACTOR = 3;
+export const COAST_ROAD_ESCAPE_FLOOR_M = 700;
+
+/**
+ * Cap on a coast-following run before the road simply ends at the shore
+ * (spec §5.4.5). Where a bay curls back on itself the shore never leaves
+ * the tile, and without a cap the road would walk the whole ring.
+ *
+ * 1600 m against a measured worst real run of 1296 m (pop 1000 seed 55337
+ * on the coastal fixture, every route bent in turn): the run is longer than
+ * the straight-line escape distance because a real shore has bays and
+ * headlands to go round.
+ */
+export const COAST_ROAD_MAX_RUN_M = 1600;
+
 /** Relative weight given to a candidate merge point depending which band
  * of the village it falls in -- fields pull hardest, the inner body least,
  * so trunks merge with the existing fabric before they cut through it. */

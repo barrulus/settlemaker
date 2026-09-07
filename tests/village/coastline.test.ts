@@ -20,6 +20,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildSite } from '../../src/village/site.js';
 import { generateVillage } from '../../src/village/village-model.js';
+import { isApron } from '../../src/village/types.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 import type { Point } from '../../src/types/point.js';
 
@@ -96,5 +97,73 @@ describe('village coastline', () => {
 
     const wetLanePoints = m.lanes.flatMap((l) => l.points).filter((p) => inPoly(p, ring));
     expect(wetLanePoints).toHaveLength(0);
+  });
+});
+
+/**
+ * THE COAST BEND (spec §5.4, owner ruling 2026-09-07).
+ *
+ * `COASTAL` above carries no `roadBearings` at all, so it has no trunks and
+ * therefore no approach roads to point at the sea -- the case this describe
+ * block is about cannot arise on it. The same village with FMG routes on it
+ * has one road at the ocean bearing, and measured before the bend it met
+ * water 60 m past the contract circle and carried on into the sea.
+ */
+const COASTAL_ROADS: AzgaarBurgInput = {
+  ...COASTAL,
+  roadBearings: [
+    { bearing_deg: 123, kind: 'main', route_id: 'r-sea' },
+    { bearing_deg: 300, kind: 'local', route_id: 'r-land' },
+  ],
+} as AzgaarBurgInput;
+
+describe('a seaward road follows the coast', () => {
+  it('runs along the coast instead of into the sea, and still leaves the tile', () => {
+    const m = generateVillage(COASTAL_ROADS, 55337);
+    const ring = m.site.water[0];
+    const wet = m.lanes.flatMap((l) => l.points).filter((p) => inPoly(p, ring));
+    expect(wet, 'a road is in the water').toHaveLength(0);
+
+    const { minX, minY, maxX, maxY } = m.frame;
+    const reaches = m.lanes.some((l) => l.points.some((p) => (
+      Math.min(p.x - minX, maxX - p.x, p.y - minY, maxY - p.y) <= 1
+    )));
+    expect(reaches, 'no road reaches the tile edge on a coastal village').toBe(true);
+  });
+
+  it('keeps the coast road on the seaward side of every building', () => {
+    const m = generateVillage(COASTAL_ROADS, 55337);
+    const ring = m.site.water[0];
+    const toWater = (p: { x: number; y: number }): number => Math.min(
+      ...ring.map((q) => Math.hypot(q.x - p.x, q.y - p.y)),
+    );
+    const nearestRoad = Math.min(...m.lanes.flatMap((l) => l.points).map(toWater));
+    const nearestBuilding = Math.min(...m.buildings.map((b) => toWater(b.position)));
+    expect(nearestRoad).toBeLessThanOrEqual(nearestBuilding);
+  });
+
+  it('is deterministic, coast road and all', () => {
+    const a = generateVillage(COASTAL_ROADS, 55337);
+    const b = generateVillage(COASTAL_ROADS, 55337);
+    expect(JSON.stringify(a.lanes)).toBe(JSON.stringify(b.lanes));
+  });
+
+  it('says so when a route leaves the village from an entry already in the sea', () => {
+    // Trunk paths are water-blind between the boundary and the aim (a
+    // documented limit of route drawing, not of the apron), and on seed 2
+    // the seaward trunk ends in the water. The approach road cannot bend at
+    // a shore it never crosses, so it goes ashore at the nearest one -- and
+    // never silently.
+    const m = generateVillage(COASTAL_ROADS, 2);
+    expect(m.diagnostics.some((d) => d.startsWith('water:') && d.includes('goes ashore')),
+      `no diagnostic; got: ${m.diagnostics.join(' | ')}`).toBe(true);
+    // Whatever the trunk did, the approach road is dry past the contract
+    // vertex it shares with it -- which it may not move, that vertex being
+    // the boundary contract itself.
+    const ring = m.site.water[0];
+    const wetApron = m.lanes.filter((l) => isApron(l.id))
+      .flatMap((l) => l.points.slice(1))
+      .filter((p) => inPoly(p, ring));
+    expect(wetApron, 'an approach road runs on into the sea past its entry').toHaveLength(0);
   });
 });
