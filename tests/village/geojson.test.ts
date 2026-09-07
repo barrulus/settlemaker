@@ -11,6 +11,7 @@
 import { describe, expect, it } from 'vitest';
 import { generateVillage } from '../../src/village/village-model.js';
 import { generateVillageGeoJson } from '../../src/village/geojson.js';
+import { renderVillage } from '../../src/village/render.js';
 import { GEOJSON_SCHEMA_VERSION } from '../../src/output/geojson-builder.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 
@@ -34,6 +35,8 @@ const wet: AzgaarBurgInput = {
 const model = generateVillage(wet, 1);
 const fc = generateVillageGeoJson(model);
 const layer = (name: string) => fc.features.filter((f) => f.properties?.layer === name);
+const metadata = (c: typeof fc) => (c as unknown as { metadata: Record<string, any> }).metadata;
+const input = wet;
 
 describe('generateVillageGeoJson', () => {
   it('is a FeatureCollection carrying the schema consumers gate on', () => {
@@ -118,5 +121,86 @@ describe('generateVillageGeoJson', () => {
   it('carries the contract circle so a consumer can align with FMG\'s routes', () => {
     const meta = (fc as unknown as { metadata: Record<string, unknown> }).metadata;
     expect(meta.contract_radius_m).toBeCloseTo(model.contractRadiusM, 6);
+  });
+});
+
+describe('local_bounds satisfies the settlemaker viewBox invariant', () => {
+  it('spans exactly what the SVG viewBox spans, as cities already do', () => {
+    // `tests/entrance-output.test.ts:389` asserts this for the settlement
+    // engine and questables' design doc calls it a settlemaker invariant,
+    // persisting local_bounds as a jsonb column and fitting its projection
+    // to it. The village engine violated it by exactly 40 m in each
+    // dimension -- geojson's PAD was 20 against the renderer's 40 -- so a
+    // village mis-fitted that projection by 400x its stated tolerance.
+    const m = generateVillage(input, 1);
+    const svg = renderVillage(m);
+    const vb = /viewBox="0 0 ([0-9.]+) ([0-9.]+)"/.exec(svg)!;
+    const pxPerMetre = Number(/data-px-per-metre="([0-9.]+)"/.exec(svg)![1]);
+    const b = metadata(generateVillageGeoJson(m)).local_bounds;
+    // `render.ts`'s `n()` rounds every SVG coordinate to 2 decimal PIXELS
+    // before printing the viewBox, so the tightest precision this
+    // comparison can honestly hold is that rounding's -- about 0.0025 m at
+    // 4 px/m -- not float-exact. `toBeCloseTo(x, 2)` (tolerance 0.005) is
+    // already 8000x tighter than the 40 m bug this guards against.
+    expect(Number(vb[1]) / pxPerMetre).toBeCloseTo(b.max_x - b.min_x, 2);
+    expect(Number(vb[2]) / pxPerMetre).toBeCloseTo(b.max_y - b.min_y, 2);
+  });
+});
+
+describe('local_bounds is the drawn tile', () => {
+  it('matches the model frame exactly, not the box around the lanes', () => {
+    const m = generateVillage(input, 1);
+    const meta = metadata(generateVillageGeoJson(m));
+    expect(meta.local_bounds).toEqual({
+      min_x: m.frame.minX, min_y: m.frame.minY,
+      max_x: m.frame.maxX, max_y: m.frame.maxY,
+    });
+  });
+
+  it('contains every lane point, since roads are clipped to the tile', () => {
+    const m = generateVillage(input, 1);
+    const b = metadata(generateVillageGeoJson(m)).local_bounds;
+    for (const lane of m.lanes) {
+      for (const p of lane.points) {
+        expect(p.x).toBeGreaterThanOrEqual(b.min_x - 0.001);
+        expect(p.x).toBeLessThanOrEqual(b.max_x + 0.001);
+        expect(p.y).toBeGreaterThanOrEqual(b.min_y - 0.001);
+        expect(p.y).toBeLessThanOrEqual(b.max_y + 0.001);
+      }
+    }
+  });
+
+  it('leaves diameter_m measuring the village\'s own ink extent, not the tile', () => {
+    // Two different questions: the tile is `frame` (non-apron content plus
+    // FRAME_PAD_M=40, with aprons then clipped to it); the diameter is the
+    // settlement's OWN extent -- ink AABB (buildings, ALL lane points
+    // including aprons, field polygons, vegetation, green centre) plus a
+    // 20 m pad, per `inkBounds`.
+    //
+    // A plain `toBeLessThan(tileSpan)` is not reliable here: once an apron is
+    // clipped exactly onto the frame edge (the whole point of this release),
+    // ink's raw extent in that direction already touches the frame boundary,
+    // and depending on the opposite edge's own shortfall the padded ink span
+    // can equal or exceed the frame span by coincidence of geometry, not by
+    // a bug. So this recomputes `inkBounds`' own formula independently and
+    // checks `diameter_m` still matches it exactly -- which a regression to
+    // reading `model.frame` instead would not survive in general, even where
+    // this particular fixture's numbers happen to coincide.
+    const m = generateVillage(input, 1);
+    const meta = metadata(generateVillageGeoJson(m));
+    const xs: number[] = [m.green.centre.x];
+    const ys: number[] = [m.green.centre.y];
+    const take = (p: { x: number; y: number }): void => { xs.push(p.x); ys.push(p.y); };
+    for (const b of m.buildings) take(b.position);
+    for (const l of m.lanes) for (const p of l.points) take(p);
+    for (const f of m.fields) for (const p of f.polygon) take(p);
+    for (const v of m.vegetation) take(v.position);
+    const PAD = 20;
+    const expectedDiameter = Math.max(
+      (Math.max(...xs) + PAD) - (Math.min(...xs) - PAD),
+      (Math.max(...ys) + PAD) - (Math.min(...ys) - PAD),
+    );
+    expect((meta.scale as { diameter_meters: number }).diameter_meters)
+      .toBeCloseTo(expectedDiameter, 6);
   });
 });
