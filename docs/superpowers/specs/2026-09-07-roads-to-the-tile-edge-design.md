@@ -190,6 +190,23 @@ per segment with the existing `segmentIntersection`, not by marching — it:
 4. **A second seaward arm does not lay a parallel coast road.** It runs into
    the first within `MERGE_CAPTURE_M` for its class, lands on it, and records
    a junction — the same capture vocabulary `mergeTrunks` already uses.
+
+   **Generalised 2026-09-07 during implementation: this applies to EVERY
+   apron, not only coast roads.** Two FMG routes half a degree apart sit
+   ~1.6 m apart on the contract circle, so their aprons run within 4 m of each
+   other for hundreds of metres and draw as one road with a doubled stroke.
+   `trunks-structure.test.ts`'s near-parallel bar catches it, and its `joined`
+   exemption is exactly how the same case is already handled for trunks, which
+   merge via `mergeTrunks`. So an apron that comes within
+   `MERGE_CAPTURE_M[its class]` of an already-emitted apron lands on it and
+   records a junction.
+
+   **This does not violate spec 5.1.** That rule forbids merging ENTRIES: every
+   route still gets its own point on the circle at its exact bearing, and none
+   of them move. The merge happens outside the circle, in the apron, where two
+   converging routes genuinely would converge. §9's first invariant is
+   therefore satisfied TRANSITIVELY — an entry whose apron merged reaches the
+   tile edge via the road it merged into, traceable through the junction.
 5. **Fallback**: if the shore curves such that following it never leaves the
    frame within `COAST_ROAD_MAX_RUN_M`, the road ends at the shore and the
    model records a diagnostic naming the lane. A documented, counted
@@ -237,6 +254,7 @@ collection, and `TrunkNetwork` gains no field.
 | `connectDeadEnds` | **No** | Already excluded via `isTrunk`. An apron end at the tile edge is not a dead end to be closed. |
 | `blockAreas` / the block floor | **No** | Two aprons and a coast road must not enclose "a block" in open field and satisfy the block floor with it. |
 | `relaxLanes` | **No** | It nudges lanes off buildings; there are none out here. |
+| Green siting (`green-siting.ts`) | **No** | Added 2026-09-07 during implementation — this row was missing and the omission was caught by `green-on-network.test.ts`. `spineOf`/`nearestOnNetwork` read `network.trunks` directly and picked the longer, same-class apron as the spine the green is sited against. An apron is road OUTSIDE the village; the green is sited relative to the village's own network. |
 | The frame (§7) | **No** | The whole point. This is the "lanes stop driving the bounds" half of the constraint in §2. |
 | `resolveCrossings` | **Yes** | A crossing without a junction is a defect wherever it happens. |
 | `exitRoads` (field-ring corridor) | **Yes** | It is now the road that leaves the village. A trunk that has an apron continuation is skipped there, so the corridor is cut once, from the road that actually exits. |
