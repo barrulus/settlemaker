@@ -42,7 +42,14 @@ const LAND_CLASSES = new Set<string>(ROUTE_CLASS_ORDER);
  * margin that a large one wades straight through.
  */
 const COAST_FAR_M = 5000;
-const COAST_WIDE_M = 5000;
+/**
+ * Half-width of the sea body, as a multiple of the standoff. Generous — the
+ * render only ever shows a few standoffs either side of the village, and the
+ * band is clipped to the viewBox — but NOT the old flat 5 km, because the
+ * shore is sampled across this width and 5 km of it made every sample
+ * interval longer than the waves themselves.
+ */
+const COAST_WIDE_MULT = 24;
 /**
  * Standoff = COAST_STANDOFF_K * sqrt(population), against a measured built
  * extent of ~3.6 * sqrt(population). The margin over 3.6 is what keeps the
@@ -50,15 +57,24 @@ const COAST_WIDE_M = 5000;
  * that a port still reads as a port.
  */
 const COAST_STANDOFF_K = 4.6;
-/** Samples along the near edge. Enough to draw a bay, cheap to clip against. */
-const COAST_SAMPLES = 64;
+/**
+ * Sample spacing as a fraction of the SHORTEST wavelength.
+ *
+ * This is the fix for a bug worth recording: the first version used a flat 64
+ * samples across a 10 km width, i.e. one point every 156 m, while the
+ * shortest wave was ~36 m. The polyline drew straight chords across whole
+ * cycles and the coast aliased back into the ruled line it was supposed to
+ * replace — the owner's "coastlines are still lacking, they are very
+ * straight". Amplitude was never the problem; resolution was.
+ */
+const COAST_SAMPLE_PER_WAVE = 6;
 /** Bay depth as a share of the standoff. */
-const COAST_AMPLITUDE_SHARE = 0.34;
+const COAST_AMPLITUDE_SHARE = 0.85;
 /**
  * Wavelengths as multiples of the standoff. Deliberately incommensurate so
  * the three waves never line up into a repeating scallop.
  */
-const COAST_WAVELENGTHS = [3.1, 1.7, 0.83];
+const COAST_WAVELENGTHS = [2.2, 1.15, 0.55];
 const COAST_WAVE_WEIGHTS = [0.55, 0.30, 0.15];
 /** Its own stream, so adding the coastline displaced no other draw. */
 const COAST_SEED_MULTIPLIER = 7919;
@@ -78,9 +94,14 @@ function oceanBearingFallback(input: AzgaarBurgInput, seed: number): Point[][] {
 
   // Sampled across the full width so the coast keeps its character all the
   // way to the corners; a straight run either side would read as a seam.
+  const wide = standoff * COAST_WIDE_MULT;
+  const shortestWavelength = standoff * Math.min(...COAST_WAVELENGTHS);
+  const spacing = shortestWavelength / COAST_SAMPLE_PER_WAVE;
+  const samples = Math.ceil((2 * wide) / spacing);
+
   const shore: Point[] = [];
-  for (let i = 0; i <= COAST_SAMPLES; i++) {
-    const t = -COAST_WIDE_M + (2 * COAST_WIDE_M * i) / COAST_SAMPLES;
+  for (let i = 0; i <= samples; i++) {
+    const t = -wide + (2 * wide * i) / samples;
     let wobble = 0;
     for (let w = 0; w < COAST_WAVELENGTHS.length; w++) {
       // 2*PI over the wavelength: without it the divisor is a RADIAN scale,
@@ -101,12 +122,12 @@ function oceanBearingFallback(input: AzgaarBurgInput, seed: number): Point[][] {
   }
 
   const farL = new Point(
-    dir.x * COAST_FAR_M - normal.x * COAST_WIDE_M,
-    dir.y * COAST_FAR_M - normal.y * COAST_WIDE_M,
+    dir.x * COAST_FAR_M - normal.x * wide,
+    dir.y * COAST_FAR_M - normal.y * wide,
   );
   const farR = new Point(
-    dir.x * COAST_FAR_M + normal.x * COAST_WIDE_M,
-    dir.y * COAST_FAR_M + normal.y * COAST_WIDE_M,
+    dir.x * COAST_FAR_M + normal.x * wide,
+    dir.y * COAST_FAR_M + normal.y * wide,
   );
   // shore runs -WIDE..+WIDE; close the ring out to sea the other way round.
   return [[...shore, farR, farL]];

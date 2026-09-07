@@ -372,6 +372,55 @@ export function renderVillage(
   // casting/receiving no shadow. A block is one pattern-filled polygon: the
   // ploughed look comes from the crop tile's own furrow texture, not from
   // any outline (gate 5 — no hedge outlines anywhere).
+  // jetty band — over the water, under the structures, so the boathouse
+  // glyph sits on the landward end of its own deck. Drawn as a plank deck:
+  // the deck rectangle plus cross-planks, which reads as timber at village
+  // scale where a plain rectangle reads as a wall.
+  const jetties = model.pois.flatMap((poi) => (poi.jetty ? [poi.jetty] : []));
+  if (jetties.length > 0) {
+    out.push('<g data-band="jetty">');
+    for (const j of jetties) {
+      const dx = j.to.x - j.from.x;
+      const dy = j.to.y - j.from.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len;
+      const uy = dy / len;
+      // half-width perpendicular
+      const hx = (-uy * j.widthM) / 2;
+      const hy = (ux * j.widthM) / 2;
+      // Built as a path string directly: `Point` is a type-only import here
+      // and the renderer has no value dependency on the geometry module.
+      const deck = [
+        [j.from.x + hx, j.from.y + hy], [j.to.x + hx, j.to.y + hy],
+        [j.to.x - hx, j.to.y - hy], [j.from.x - hx, j.from.y - hy],
+      ].map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${n(X(x))},${n(Y(y))}`).join(' ');
+      out.push(
+        `<path data-jetty="deck" d="${deck} Z" `
+        + `fill="var(--sm-timber, #d9c39a)" stroke="var(--sm-ink, #33262e)" `
+        + `stroke-width="${n(0.25 * pxPerMetre)}" stroke-linejoin="round"/>`,
+      );
+      // cross-planks every ~1.2 m along the deck
+      const planks = Math.max(2, Math.floor(len / 1.2));
+      const lines: string[] = [];
+      for (let i = 1; i < planks; i++) {
+        const s = i / planks;
+        const px = j.from.x + dx * s;
+        const py = j.from.y + dy * s;
+        lines.push(
+          `M${n(X(px + hx))},${n(Y(py + hy))} L${n(X(px - hx))},${n(Y(py - hy))}`,
+        );
+      }
+      if (lines.length > 0) {
+        out.push(
+          `<path data-jetty="planks" d="${lines.join(' ')}" fill="none" `
+          + `stroke="var(--sm-ink, #33262e)" stroke-width="${n(0.12 * pxPerMetre)}" `
+          + 'stroke-linecap="round" opacity="0.55"/>',
+        );
+      }
+    }
+    out.push('</g>');
+  }
+
   out.push('<g data-band="parcel-fields">');
   for (const field of model.fields) {
     if (!REFINED_GLYPHS[field.glyph]) continue;

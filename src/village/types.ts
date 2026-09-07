@@ -183,6 +183,14 @@ export interface Poi {
   glyph: string;
   position: Point;
   bearingDeg: number;
+  /**
+   * Boathouse only: the jetty running from its seaward face out over the
+   * water. A boathouse standing wholly on dry land with no way to reach a
+   * boat was the owner's report of 2026-09-07 ("no jetty and no boathouse on
+   * the water"). `from` is on the building's seaward face, `to` is out in
+   * the water; `widthM` is the deck width.
+   */
+  jetty?: { from: Point; to: Point; widthM: number };
 }
 
 /**

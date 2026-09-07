@@ -10,7 +10,8 @@ import {
   inAnyWater, sampleAt, unit,
 } from '../geometry.js';
 import {
-  BOATHOUSE_SLIDE_RANGE_M, BOATHOUSE_SLIDE_STEP_M,
+  BOATHOUSE_OVERHANG_SHARE, BOATHOUSE_SLIDE_RANGE_M, BOATHOUSE_SLIDE_STEP_M,
+  JETTY_LENGTH_SHARE, JETTY_PROBE_STEP_M, JETTY_WATER_SHARE, JETTY_WIDTH_SHARE,
   STONE_CIRCLE_BEARING_TRIES, STONE_CIRCLE_CHANCE,
   STONE_CIRCLE_FOOTPRINT_RADIUS_M, STONE_CIRCLE_RADIUS_FACTOR, STONE_CIRCLE_VEG_CLEAR_M,
   WELL_LANE_CLEAR_M, WELL_MIN_POP, WELL_NUDGE_CAP_RATIO, WELL_NUDGE_STEP_M,
@@ -275,7 +276,10 @@ export function placeBoathouse(
   if (!hasGlyph(glyph)) return null;
   const [w, d] = nominalFootprint(glyph);
   const clearRadius = Math.max(w, d) / 2;
-  const inlandOffset = 0.5 + d / 2;
+  // Seaward part of the footprint sits PAST the waterline: a boathouse
+  // stands over the water on piles, opening seaward. Offsetting it wholly
+  // inland (the old `0.5 + d / 2`) left the boat with nowhere to be.
+  const inlandOffset = d / 2 - d * BOATHOUSE_OVERHANG_SHARE;
 
   const total = nearest.acc[nearest.acc.length - 1];
   const closedRing = [...nearest.ring, nearest.ring[0]];
@@ -293,12 +297,52 @@ export function placeBoathouse(
     if (!circleClearOfClaims(position, clearRadius, lanes, lots, crofts, fields)) continue;
 
     const bearingToWater = bearingOf(position, sample.p);
+    // The jetty runs on out from the seaward face, so a boat can reach it.
+    const seaward = new Point(-inlandDir.x, -inlandDir.y);
+    const faceX = position.x + seaward.x * (d / 2);
+    const faceY = position.y + seaward.y * (d / 2);
+    // Trim so the jetty ENDS IN WATER. Across a narrow inlet the nominal
+    // length can span the whole channel and land the far end on the opposite
+    // bank, which reads as a bridge, not a jetty. Walk out in short steps and
+    // keep the last point that is still wet.
+    const nominal = d * JETTY_LENGTH_SHARE;
+    // How far the water actually runs ahead of the face. Probed BEYOND the
+    // nominal length so a jetty in open sea is distinguishable from one in a
+    // channel barely wider than itself.
+    const probeLimit = nominal / JETTY_WATER_SHARE;
+    let wetRun = 0;
+    for (let s = JETTY_PROBE_STEP_M; s <= probeLimit; s += JETTY_PROBE_STEP_M) {
+      const probe = new Point(faceX + seaward.x * s, faceY + seaward.y * s);
+      if (!inAnyWater(probe, site.water)) break;
+      wetRun = s;
+    }
+    // Open water: the full nominal jetty. A narrow inlet: a share of the
+    // channel, so the deck ends in water instead of landing on the far bank
+    // and reading as a bridge.
+    const jettyLength = wetRun >= probeLimit
+      ? nominal
+      : wetRun * JETTY_WATER_SHARE;
+    // Nothing wet within a step of the face: no jetty rather than a stub.
+    if (jettyLength < JETTY_PROBE_STEP_M) {
+      return {
+        id: 'poi:boathouse',
+        kind: 'boathouse',
+        glyph,
+        position,
+        bearingDeg: renderBearingFor(glyph, bearingToWater),
+      };
+    }
     return {
       id: 'poi:boathouse',
       kind: 'boathouse',
       glyph,
       position,
       bearingDeg: renderBearingFor(glyph, bearingToWater),
+      jetty: {
+        from: new Point(faceX, faceY),
+        to: new Point(faceX + seaward.x * jettyLength, faceY + seaward.y * jettyLength),
+        widthM: w * JETTY_WIDTH_SHARE,
+      },
     };
   }
   return null;

@@ -1275,6 +1275,29 @@ export const STONE_CIRCLE_VEG_CLEAR_M = 4;
 export const BOATHOUSE_SLIDE_RANGE_M = 40;
 export const BOATHOUSE_SLIDE_STEP_M = 4;
 
+/**
+ * How far the boathouse OVERHANGS the water, as a share of its own depth.
+ *
+ * It used to be offset wholly inland (`0.5 + d/2`), which put a building
+ * whose entire purpose is to hold a boat on dry land with the water beyond
+ * it — the owner's 2026-09-07 report. A boathouse stands over the water on
+ * piles with its opening seaward, so the seaward part of the footprint
+ * belongs past the waterline.
+ */
+export const BOATHOUSE_OVERHANG_SHARE = 0.4;
+
+/** Jetty length as a multiple of the boathouse's depth. */
+export const JETTY_LENGTH_SHARE = 1.8;
+/** Jetty deck width as a share of the boathouse's width. */
+export const JETTY_WIDTH_SHARE = 0.34;
+/**
+ * The most of a narrow channel a jetty may occupy. Below 1 so the deck always
+ * stops short of the far bank: a jetty that reaches the other side is a bridge.
+ */
+export const JETTY_WATER_SHARE = 0.6;
+/** Step used to walk the jetty out and stop before it leaves the water. */
+export const JETTY_PROBE_STEP_M = 0.5;
+
 export interface VegGlyphWeight { glyph: string; weight: number }
 /**
  * Per-biome scatter mix, walked in array order (never object-key order)
