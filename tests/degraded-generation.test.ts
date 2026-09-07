@@ -196,10 +196,10 @@ describe('degraded_flags in GeoJSON metadata', () => {
     expect(meta(result.geojson).degraded_flags).toEqual([]);
   });
 
-  it('bumps settlemaker_version to 2.0.4', () => {
-    expect(SETTLEMAKER_VERSION).toBe('2.0.4');
+  it('bumps settlemaker_version to 2.0.5', () => {
+    expect(SETTLEMAKER_VERSION).toBe('2.0.5');
     const result = generateFromBurg(burg({ name: 'V', population: 5000 }));
-    expect(meta(result.geojson).settlemaker_version).toBe('2.0.4');
+    expect(meta(result.geojson).settlemaker_version).toBe('2.0.5');
   });
 });
 
