@@ -340,8 +340,29 @@ both wanted:
 - The shared `rng` stream that `synthesizeTrunks` and everything downstream
   draws from is untouched, so the fabric of an existing village does not
   re-roll. A 2.0.5 → this-release diff is attributable: new apron lanes, a
-  changed field ring, vegetation cleared along the new corridor. Anything else
-  is a regression.
+  changed field ring, vegetation cleared along the new corridor.
+
+  **One measured exception, found during implementation 2026-09-08.** I claimed
+  repeatedly that landlocked villages would be geometrically unchanged. That is
+  false for **4 of 90 dry villages measured**, all pop-40 `panel-cross`, and the
+  reason is worth stating because it corrects a premise I had been reasoning
+  from: **growth reaches PAST the contract circle at pop 40**, because the block
+  chase escalates the disc. `apron.ts` already recorded the same observation in
+  its own words — "at pop 40 arms ran past the fabric" — which is why aprons are
+  identified by entry proximity rather than by radius. So a radial apron is in
+  growth's way at that size, not only a coast road.
+
+  Those four villages change because growth now refuses to cross an apron it
+  previously crossed. Two real crossing violations on dry ground —
+  `lane-269 × trunk-local-r-local/a` and
+  `trunk-main-r-main/b31/b75 × trunk-trail-r-trail/a` — were being shipped
+  before this work and are removed by it. The change is a strict improvement,
+  and byte-identity was the wrong bar to have set.
+
+  That the difference comes ONLY from crossing decisions was proved, not
+  asserted: with the obstacle list forced to a plain copy — plumbing live,
+  obstacles ignored — the same 90-village dump is byte-identical to the
+  pre-change one.
 - Same seed, same village, still byte-identical — the existing determinism
   test covers it unchanged.
 
