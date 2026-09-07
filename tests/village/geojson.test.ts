@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { generateVillage } from '../../src/village/village-model.js';
 import { generateVillageGeoJson } from '../../src/village/geojson.js';
 import { renderVillage } from '../../src/village/render.js';
+import { isApron } from '../../src/village/types.js';
 import { GEOJSON_SCHEMA_VERSION } from '../../src/output/geojson-builder.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 
@@ -173,26 +174,38 @@ describe('local_bounds is the drawn tile', () => {
   it('leaves diameter_m measuring the village\'s own ink extent, not the tile', () => {
     // Two different questions: the tile is `frame` (non-apron content plus
     // FRAME_PAD_M=40, with aprons then clipped to it); the diameter is the
-    // settlement's OWN extent -- ink AABB (buildings, ALL lane points
-    // including aprons, field polygons, vegetation, green centre) plus a
-    // 20 m pad, per `inkBounds`.
+    // settlement's OWN extent -- ink AABB (buildings, NON-APRON lane points,
+    // field polygons, vegetation, green centre) plus a 20 m pad, per
+    // `inkBounds`.
     //
-    // A plain `toBeLessThan(tileSpan)` is not reliable here: once an apron is
-    // clipped exactly onto the frame edge (the whole point of this release),
-    // ink's raw extent in that direction already touches the frame boundary,
-    // and depending on the opposite edge's own shortfall the padded ink span
-    // can equal or exceed the frame span by coincidence of geometry, not by
-    // a bug. So this recomputes `inkBounds`' own formula independently and
-    // checks `diameter_m` still matches it exactly -- which a regression to
-    // reading `model.frame` instead would not survive in general, even where
-    // this particular fixture's numbers happen to coincide.
+    // Ruling 2026-09-07 (follow-up): `inkBounds` must exclude aprons, the
+    // same `isApron` filter used at six other fabric-measurement sites. An
+    // apron is clipped exactly onto the tile edge, so counting it would drag
+    // "the village's own extent" out to the tile's extent -- which is
+    // exactly what was observed before this fix (`diameter_meters` reported
+    // LARGER than the tile span, by 15-40 m across several seeds). With
+    // aprons excluded, the village is genuinely smaller than the tile that
+    // frames it (tile = fabric + 40 m pad), so `toBeLessThan(tileSpan)` is
+    // now a real invariant, not a geometry coincidence -- restored below.
+    // The independent recomputation of `inkBounds`' own (apron-excluding)
+    // formula is kept alongside it: it still catches a regression to reading
+    // `model.frame` directly, which the inequality alone would not.
     const m = generateVillage(input, 1);
     const meta = metadata(generateVillageGeoJson(m));
+    const tileSpan = Math.max(
+      m.frame.maxX - m.frame.minX, m.frame.maxY - m.frame.minY,
+    );
+    const diameterMeters = (meta.scale as { diameter_meters: number }).diameter_meters;
+    expect(diameterMeters).toBeLessThan(tileSpan);
+
     const xs: number[] = [m.green.centre.x];
     const ys: number[] = [m.green.centre.y];
     const take = (p: { x: number; y: number }): void => { xs.push(p.x); ys.push(p.y); };
     for (const b of m.buildings) take(b.position);
-    for (const l of m.lanes) for (const p of l.points) take(p);
+    for (const l of m.lanes) {
+      if (isApron(l.id)) continue;
+      for (const p of l.points) take(p);
+    }
     for (const f of m.fields) for (const p of f.polygon) take(p);
     for (const v of m.vegetation) take(v.position);
     const PAD = 20;
@@ -200,7 +213,6 @@ describe('local_bounds is the drawn tile', () => {
       (Math.max(...xs) + PAD) - (Math.min(...xs) - PAD),
       (Math.max(...ys) + PAD) - (Math.min(...ys) - PAD),
     );
-    expect((meta.scale as { diameter_meters: number }).diameter_meters)
-      .toBeCloseTo(expectedDiameter, 6);
+    expect(diameterMeters).toBeCloseTo(expectedDiameter, 6);
   });
 });

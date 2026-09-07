@@ -20,7 +20,7 @@ import { GEOJSON_SCHEMA_VERSION, SETTLEMAKER_VERSION } from '../output/geojson-b
 import { regimeFor } from '../poi/poi-selector.js';
 import { inkExtent } from './glyphs.js';
 import { Point } from '../types/point.js';
-import type { Building, VillageModel } from './types.js';
+import { isApron, type Building, type VillageModel } from './types.js';
 
 type Pos = [number, number];
 
@@ -60,7 +60,14 @@ function inkBounds(model: VillageModel): {
   const ys: number[] = [];
   const take = (p: { x: number; y: number }): void => { xs.push(p.x); ys.push(p.y); };
   for (const b of model.buildings) take(b.position);
-  for (const l of model.lanes) for (const p of l.points) take(p);
+  // An apron is CLIPPED to the tile edge (`clipApronsToFrame`), so counting
+  // its points would make "the village's own extent" measure the tile
+  // instead -- the seventh `isApron` exclusion site alongside the six
+  // fabric-measurement ones in `village-model.ts`/`frame.ts`.
+  for (const l of model.lanes) {
+    if (isApron(l.id)) continue;
+    for (const p of l.points) take(p);
+  }
   for (const f of model.fields) for (const p of f.polygon) take(p);
   for (const v of model.vegetation) take(v.position);
   take(model.green.centre);
