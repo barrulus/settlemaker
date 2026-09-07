@@ -299,6 +299,26 @@ export function branchLaneId(parentId: string, atFraction: number): string {
   return `${parentId}/b${pct}`;
 }
 
+/**
+ * A trunk's APRON: its continuation past the contract entry, out to the edge
+ * of the drawn tile (spec 2026-09-07 §5.1). `/a` joins the `/b` branch and
+ * `/c` connector id vocabulary.
+ *
+ * `isTrunk` deliberately still returns true for an apron id. Every one of
+ * its call sites asks "is this structural road rather than village-grown
+ * frontage?", and an apron is. `isApron` is the narrower question, asked
+ * only where an apron must be held back from something a trunk is fed to.
+ */
+export function apronLaneId(trunkLaneId: string): string {
+  return `${trunkLaneId}/a`;
+}
+
+/** True for an apron lane, including one `resolveCrossings` has split (it
+ * appends its own `~x...` suffix). */
+export function isApron(laneId: string): boolean {
+  return /\/a(~|$)/.test(laneId);
+}
+
 export function lotId(laneId: string, side: 1 | -1, ordinal: number): string {
   return `${laneId}:${side === 1 ? 'R' : 'L'}${ordinal}`;
 }

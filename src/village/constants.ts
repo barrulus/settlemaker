@@ -1432,6 +1432,34 @@ export const MERGE_CAPTURE_M: Record<RouteType, number> = {
   footpath: 8,
 };
 
+// --- APRON (spec 2026-09-07 §5) -----------------------------------------
+// The continuation of a trunk past its contract entry, out to the edge of
+// the drawn tile. All initial, all expected to move at the render gate.
+
+/** Apron length as a multiple of the contract radius. An OVERSHOOT, not a
+ * target: `frame.ts` clips it to the tile exactly, so it only has to be
+ * long enough. Measured worst case for tile-corner over contract radius is
+ * 5.47 (pop 40 seed 1) against 2.26 at pop 1000; 8 clears both. */
+export const APRON_REACH_FACTOR = 8;
+
+/** Floor on that overshoot, for villages whose contract circle is tiny. */
+export const APRON_REACH_FLOOR_M = 500;
+
+/** Vertex spacing along an apron. Coarser than `LANE_SAMPLE_STEP_M` (12):
+ * an apron is nearly straight and can be long, and every vertex is tested
+ * against by the field and vegetation rejection passes. */
+export const APRON_SAMPLE_STEP_M = 25;
+
+/** How much of the arm's own terminal curvature the apron continues. A road
+ * that was bending as it entered goes on bending, gently; 0 would draw a
+ * ruled line off the end of a curve, which reads as a kink. */
+export const APRON_CURVATURE_DAMP = 0.5;
+
+/** Clamps on that continuation, so a footpath cannot spiral: the most an
+ * apron may turn per sample step, and the most it may turn in total. */
+export const APRON_MAX_TURN_PER_STEP_DEG = 2;
+export const APRON_MAX_TOTAL_TURN_DEG = 30;
+
 /** Relative weight given to a candidate merge point depending which band
  * of the village it falls in -- fields pull hardest, the inner body least,
  * so trunks merge with the existing fabric before they cut through it. */
