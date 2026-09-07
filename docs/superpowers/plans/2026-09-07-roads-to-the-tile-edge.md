@@ -1560,9 +1560,14 @@ Push `settlemaker` only. **Do not push `settlemaker-web`** — that repo's sessi
 
 - [ ] **Step 4: Tell the web session**
 
-Message it with the tag and a re-baseline note split into two lines, one per kind of change — the lesson from 2.0.5, where a single-sentence note conflated a rasteriser-only change with a browser-visible one and nearly caused a false regression report:
-- what changes in the **data/geometry** (roads now run to the tile edge; the field ring's corridor is cut to the frame; a new `frame` on the model);
-- what changes **on screen** (every village, coastal or not, because of the field ring).
+Message it with the tag and a re-baseline note split by kind of change — the lesson from 2.0.5, where a single-sentence note conflated a rasteriser-only change with a browser-visible one and nearly caused a false regression report. It must cover **cities as well as villages**: "every village changes" tells a consumer that village bytes are useless as a regression signal, which leaves cities as their only clean one, and a note silent on cities sends them hunting the wrong thing.
+
+- **Villages, on screen:** every village changes, coastal or not — the field-ring corridor is now cut to the frame rather than to the contract circle.
+- **Villages, data:** roads run to the tile edge; `VillageModel` carries a new `frame`; village GeoJSON `bounds` moves by up to 20 m on whichever axes a road exits (see the Self-Review's known gap). `frame` itself is **not** in the GeoJSON — spec §10 — so a consumer diffing GeoJSON will not see it appear; a consumer using the TypeScript API will.
+- **Cities, SVG:** byte-identical, and safe to assert as a regression signal. Verified by import inspection on 2026-09-07: `src/generator/model.ts` and `src/output/svg-builder.ts` import nothing from `src/village/`, this plan modifies nothing outside it, and `svg-builder.ts` carries no version stamp.
+- **Cities, GeoJSON:** differs by exactly one field, `settlemaker_version`, from the release bump in `src/output/geojson-builder.ts` — the same single-field diff every release produces, and the one their 2.0.3 check caught. Anything beyond that field is a real regression.
+
+Re-verify the city claim rather than copying it forward: if any task ended up touching a file outside `src/village/`, it no longer holds.
 
 Rucio/questables is dormant by ruling: no deploy, no cache wipe.
 
