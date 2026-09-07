@@ -21,6 +21,7 @@ import { describe, it, expect } from 'vitest';
 import { buildSite } from '../../src/village/site.js';
 import { generateVillage } from '../../src/village/village-model.js';
 import { isApron } from '../../src/village/types.js';
+import { segmentIntersection } from '../../src/village/geometry.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 import type { Point } from '../../src/types/point.js';
 
@@ -165,5 +166,94 @@ describe('a seaward road follows the coast', () => {
       .flatMap((l) => l.points.slice(1))
       .filter((p) => inPoly(p, ring));
     expect(wetApron, 'an approach road runs on into the sea past its entry').toHaveLength(0);
+  });
+});
+
+/**
+ * NOTHING CROSSES A COAST ROAD (owner ruling 2026-09-07, fix round 1).
+ *
+ * `trunks-structural.test.ts` (c) -- no two lanes cross without a junction
+ * -- runs DRY fixtures only, and that blind spot shipped a real violation:
+ * a growth branch crossing a coast apron with no junction, measured at four
+ * FMG routes on a pop-40 hamlet. The coast road is the one apron that runs
+ * LATERALLY, close past the fabric, where a radial apron never goes, and at
+ * pop 40 growth reaches past the contract circle anyway (the block chase
+ * escalates the disc), so that corner is where the two meet.
+ *
+ * The fix was to let growth SEE aprons for crossing avoidance while still
+ * ignoring them for budget, coverage and branching (`withObstacles` in
+ * `skeleton/lanes.ts`). This is its guard, on coastal ground, and it is
+ * deliberately small: bar (c) already covers everything dry, and re-proving
+ * that here would only spend seconds it has already spent.
+ *
+ * Self-crossing is checked too, because the coast-following path is the one
+ * geometry in the engine that could double back on itself (`dropLoops` in
+ * `skeleton/apron.ts` is what stops it).
+ */
+const COASTAL_FOUR: AzgaarBurgInput = {
+  ...COASTAL,
+  roadBearings: [
+    { bearing_deg: 123, kind: 'main', route_id: 'r-sea' },
+    { bearing_deg: 300, kind: 'local', route_id: 'r-land' },
+    { bearing_deg: 90, kind: 'trail', route_id: 'r-east' },
+    { bearing_deg: 160, kind: 'town', route_id: 'r-se' },
+  ],
+} as AzgaarBurgInput;
+
+/**
+ * The proper-crossing predicate, IDENTICAL to the one
+ * `trunks-structural.test.ts` (c) uses -- same `segmentIntersection`, same
+ * shape -- so the two bars can never drift apart in what they mean by
+ * "cross". Shared endpoints are already excluded, so a junction is not a
+ * crossing.
+ */
+function crossesPolyline(a: Point[], b: Point[]): boolean {
+  for (let i = 1; i < a.length; i++) {
+    for (let j = 1; j < b.length; j++) {
+      if (segmentIntersection(a[i - 1], a[i], b[j - 1], b[j])) return true;
+    }
+  }
+  return false;
+}
+
+const COASTAL_CASES: Array<{ label: string; input: AzgaarBurgInput; seed: number }> = [
+  // The corner the defect was measured in: four routes on a hamlet, both
+  // the seeds whose geometry moved when it was fixed.
+  { label: 'four routes pop 40 seed 1', input: { ...COASTAL_FOUR, population: 40 }, seed: 1 },
+  { label: 'four routes pop 40 seed 2', input: { ...COASTAL_FOUR, population: 40 }, seed: 2 },
+  // And a full-sized coastal village, where the coast road is longest.
+  { label: 'four routes pop 500 seed 55337', input: COASTAL_FOUR, seed: 55337 },
+];
+
+describe('a coast road is crossed by nothing', () => {
+  it('no two lanes cross without a junction, on coastal ground', () => {
+    for (const { label, input, seed } of COASTAL_CASES) {
+      const lanes = generateVillage(input, seed).lanes.filter((l) => l.points.length >= 2);
+      let found = '';
+      for (let i = 0; i < lanes.length && !found; i++) {
+        for (let j = i + 1; j < lanes.length; j++) {
+          if (crossesPolyline(lanes[i].points, lanes[j].points)) {
+            found = `${lanes[i].id} x ${lanes[j].id}`;
+            break;
+          }
+        }
+      }
+      expect(found, `${label}: ${found}`).toBe('');
+    }
+  });
+
+  it('no approach road crosses itself', () => {
+    for (const { label, input, seed } of COASTAL_CASES) {
+      for (const lane of generateVillage(input, seed).lanes) {
+        if (!isApron(lane.id)) continue;
+        const p = lane.points;
+        for (let i = 1; i < p.length; i++) {
+          for (let j = i + 2; j < p.length; j++) {
+            expect(segmentIntersection(p[i - 1], p[i], p[j - 1], p[j]),
+              `${label}: ${lane.id} crosses itself`).toBeNull();
+          }
+        }
+      }
+    }
   });
 });
