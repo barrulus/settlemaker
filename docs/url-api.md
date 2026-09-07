@@ -279,7 +279,15 @@ iframe.src = url;
 
 For manual testing and simple links, the renderer also accepts flat query
 parameters instead of `i=`. This tier can only express the fields listed
-below — it has no equivalent for `roadBearings` or `coastlineGeometry`.
+below — it has no equivalent for `coastlineGeometry`.
+
+**Do not omit `roads=` on a village.** The village engine builds its road
+network inward from the bearings on its contract circle, so a burg of 1,000
+or under with no approach roads has no main roads at all and nothing reaching
+its own boundary — an island, with no way to join it to the map around it.
+Measured on a pop-500 village: with no bearings the furthest lane point is
+85 m and every lane is local/trail/footpath; with three bearings it is 188 m,
+the contract radius exactly, with three main roads and two market streets.
 
 | Param | Type | Default | Notes |
 |---|---|---|---|
@@ -296,6 +304,7 @@ below — it has no equivalent for `roadBearings` or `coastlineGeometry`.
 | `trade` | boolean | `false` | only present at all when true |
 | `oceanBearing` | number | (unset) | compass degrees, 0=N clockwise |
 | `harbourSize` | `large` \| `small` | (unset) | any other value is dropped, not passed through |
+| `roads` | string | (unset) | approach roads: comma-separated `bearing[:class[:through]]` — see below |
 | `biome` | string | (unset) | data, not presentation: also picks the village dwelling/field/canopy decks. Azgaar's own biome names are accepted and normalised — see §Villages |
 | `urbanDensity` | number | (unset) | only kept if `> 0`; when unset, the generator falls back to a population-scaled default curve — see §6 |
 | `coreCapacity` | number | `10000` | only kept if `> 0`; people the walled core may hold — see §6 |
@@ -308,6 +317,33 @@ values `1` or `true`; anything else (including absence) is `false`.
 **Precedence rule:** if `i=` is present in the query string, every flat data
 param above is ignored entirely — `i=` wins outright, it is not merged with
 the flat tier.
+
+### `roads=<bearing[:class[:through]]>,...`
+
+The flat-tier equivalent of `roadBearings`. Each entry is a compass bearing
+(0 = north, clockwise), optionally a route class, optionally the word
+`through`:
+
+```
+roads=45,170,290                  three terminating main roads
+roads=45:trail,170:royal          explicit classes
+roads=20:main:through,140:main    a road that passes through, and one that ends
+```
+
+Classes, highest to lowest: `royal`, `main`, `market`, `town`, `local`,
+`trail`, `footpath`. Omitting the class gives `main`; omitting the third
+field gives a road that terminates in the settlement rather than passing
+through.
+
+Bearings are normalised into 0–359, so `-90` and `450` are both legal. An
+unrecognised class, a non-numeric bearing, or a third field that isn't
+`through` is a **hard error** (`UrlCodecError`, `reason: 'roads'`) naming the
+legal set — a silent fall back to `main` would be indistinguishable from a
+typo quietly working.
+
+`roads=` counts as a data parameter, so a URL carrying only `roads=` builds a
+real burg rather than the random demo one. `i=` still wins over it, as over
+every flat parameter.
 
 ## 5. Presentation parameters
 

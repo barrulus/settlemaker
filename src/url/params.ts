@@ -2,6 +2,7 @@ import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import type { RenderTheme } from '../output/render-theme.js';
 import { decodeBurgParam, decodeJsonParam, UrlCodecError } from './codec.js';
 import { VILLAGE_BIOMES } from '../village/theme.js';
+import { ROUTE_CLASS_ORDER, type RouteType } from '../village/route-class.js';
 
 export interface ParsedSettlementUrl {
   burg: AzgaarBurgInput;
@@ -87,7 +88,58 @@ export function sanitizeThemeOverrides(value: unknown): Partial<RenderTheme> {
 const FLAT_DATA_PARAMS = [
   'name', 'pop', 'seed', 'port', 'citadel', 'walls', 'plaza', 'temple',
   'shanty', 'capital', 'trade', 'oceanBearing', 'harbourSize', 'biome', 'urbanDensity', 'coreCapacity',
+  'roads',
 ] as const;
+
+/**
+ * `roads=` — approach roads in the flat tier.
+ *
+ * WHY: `roadBearings` was reachable only through the compressed `i=`
+ * envelope, so a hand-built link or the builder page produced a village with
+ * NOTHING connecting it to the outside. For a city that is cosmetic; for a
+ * village it is structural, because the engine synthesises its whole road
+ * network inward from bearings on the contract circle. Measured before this
+ * existed: no bearings meant no main roads at all and no lane reaching the
+ * village's own boundary.
+ *
+ * Syntax: comma-separated `bearing[:class[:through]]`, e.g.
+ *   roads=45,170,290                 three terminating main roads
+ *   roads=45:trail,170:royal         explicit classes
+ *   roads=45:main:through            a road that passes through
+ *
+ * Bearings are normalised into 0..359 so -90 and 450 are both legal. An
+ * unrecognised class is a hard error rather than a silent fall back to
+ * `main`, for the same reason `villageTheme=` is: a typo that quietly works
+ * is indistinguishable from the feature not working.
+ */
+function parseRoads(raw: string): AzgaarBurgInput['roadBearings'] {
+  const out: { bearing_deg: number; kind: RouteType; through: boolean }[] = [];
+  for (const entry of raw.split(',')) {
+    const piece = entry.trim();
+    if (piece === '') continue;
+    const [bearingRaw, kindRaw, throughRaw] = piece.split(':').map(s => s.trim());
+    const bearing = Number(bearingRaw);
+    if (!Number.isFinite(bearing)) {
+      throw new UrlCodecError('roads',
+        `roads="${piece}" — bearing must be a number, e.g. roads=45 or roads=45:main:through`);
+    }
+    const kind = (kindRaw === undefined || kindRaw === '') ? 'main' : kindRaw;
+    if (!(ROUTE_CLASS_ORDER as readonly string[]).includes(kind)) {
+      throw new UrlCodecError('roads',
+        `roads="${piece}" — unknown class "${kind}"; known classes: ${ROUTE_CLASS_ORDER.join(', ')}`);
+    }
+    if (throughRaw !== undefined && throughRaw !== '' && throughRaw !== 'through') {
+      throw new UrlCodecError('roads',
+        `roads="${piece}" — third field may only be "through"`);
+    }
+    out.push({
+      bearing_deg: ((bearing % 360) + 360) % 360,
+      kind: kind as RouteType,
+      through: throughRaw === 'through',
+    });
+  }
+  return out;
+}
 
 function bool(params: URLSearchParams, key: string): boolean {
   const v = params.get(key);
@@ -143,6 +195,7 @@ export async function parseSettlementUrl(
     seedOverride = decoded.seed;
   } else if (FLAT_DATA_PARAMS.some(k => params.has(k))) {
     const name = params.get('name') ?? `Burg ${num(params, 'seed') ?? num(params, 'pop') ?? 0}`;
+    const roadsRaw = params.get('roads');
     const harbourSizeRaw = params.get('harbourSize');
     const urbanDensity = num(params, 'urbanDensity');
     const coreCapacity = num(params, 'coreCapacity');
@@ -161,6 +214,7 @@ export async function parseSettlementUrl(
       ...(oceanBearing !== undefined ? { oceanBearing } : {}),
       ...(harbourSizeRaw === 'large' || harbourSizeRaw === 'small' ? { harbourSize: harbourSizeRaw } : {}),
       ...(params.get('biome') !== null ? { biome: params.get('biome')! } : {}),
+      ...(roadsRaw !== null ? { roadBearings: parseRoads(roadsRaw) } : {}),
       ...(urbanDensity !== undefined && urbanDensity > 0 ? { urbanDensity } : {}),
       ...(coreCapacity !== undefined && coreCapacity > 0 ? { coreCapacity } : {}),
     };
