@@ -26,6 +26,27 @@ const each = (fn: (m: ReturnType<typeof generateVillage>, label: string) => void
   }
 };
 
+/**
+ * Is THIS apron excused, by a `coast:` diagnostic naming THIS lane?
+ *
+ * Fix round 3: this used to ask whether the village had any `coast:` line
+ * at all, so one road that gave up at a bay silenced the assertion for
+ * every other road in the village -- the blanket excuse the escape hatch
+ * was deliberately kept narrow to avoid. The diagnostic names its lane, so
+ * match on that.
+ *
+ * A crossing-split apron ships as `<laneId>~x<other>` while the diagnostic
+ * was written before the split, hence the prefix form. `apron:` is NOT an
+ * excuse: it says an apron was DROPPED for starting outside the tile, which
+ * says nothing about the ones that remain.
+ */
+const excusedByCoast = (laneId: string, diagnostics: string[]): boolean =>
+  diagnostics.some((d) => {
+    if (!d.startsWith('coast: ')) return false;
+    const named = d.slice('coast: '.length).split(' ')[0];
+    return laneId === named || laneId.startsWith(`${named}~`);
+  });
+
 describe('roads reach the edge of the tile', () => {
   it('every contract entry ends on the frame boundary', () => {
     each((m, label) => {
@@ -35,7 +56,7 @@ describe('roads reach the edge of the tile', () => {
       for (const a of aprons) {
         const tip = a.points[a.points.length - 1];
         const toEdge = Math.min(tip.x - minX, maxX - tip.x, tip.y - minY, maxY - tip.y);
-        const excused = m.diagnostics.some((d) => d.startsWith('coast:') || d.startsWith('apron:'));
+        const excused = excusedByCoast(a.id, m.diagnostics);
         expect(toEdge <= 1 || excused, `${label}: ${a.id} stops ${toEdge.toFixed(0)} m short`).toBe(true);
       }
     });
@@ -49,7 +70,7 @@ describe('roads reach the edge of the tile', () => {
       for (const a of m.lanes.filter((l) => isApron(l.id))) {
         const tip = a.points[a.points.length - 1];
         const onEdge = Math.min(tip.x - minX, maxX - tip.x, tip.y - minY, maxY - tip.y) <= 1;
-        const excused = m.diagnostics.some((d) => d.startsWith('coast:'));
+        const excused = excusedByCoast(a.id, m.diagnostics);
         expect(onEdge || excused, `${label}: ${a.id} was never clipped`).toBe(true);
       }
     });

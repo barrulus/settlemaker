@@ -21,7 +21,7 @@ import { describe, it, expect } from 'vitest';
 import { buildSite } from '../../src/village/site.js';
 import { generateVillage } from '../../src/village/village-model.js';
 import { isApron } from '../../src/village/types.js';
-import { segmentIntersection } from '../../src/village/geometry.js';
+import { closestPointOnPolyline, segmentIntersection } from '../../src/village/geometry.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 import type { Point } from '../../src/types/point.js';
 
@@ -253,6 +253,58 @@ describe('a coast road is crossed by nothing', () => {
               `${label}: ${lane.id} crosses itself`).toBeNull();
           }
         }
+      }
+    }
+  });
+});
+
+/**
+ * Is THIS apron excused, by a `coast:` diagnostic naming THIS lane? The
+ * same rule `roads-reach-the-edge.test.ts` applies on dry ground, stated
+ * here too because the two files may not import from each other -- a
+ * village where one road gives up at a bay must still get every other road
+ * to the tile edge.
+ */
+const excusedByCoast = (laneId: string, diagnostics: string[]): boolean =>
+  diagnostics.some((d) => {
+    if (!d.startsWith('coast: ')) return false;
+    const named = d.slice('coast: '.length).split(' ')[0];
+    return laneId === named || laneId.startsWith(`${named}~`);
+  });
+
+describe('every coastal approach road reaches the tile edge', () => {
+  // The dry bar (`roads-reach-the-edge.test.ts`) asserts this of EVERY
+  // apron over 20 villages; the coastal side used to assert only that SOME
+  // lane got there, on one fixture and one seed -- far weaker than the case
+  // that was broken. Same bar, coastal fixtures, per-lane excuse.
+  //
+  // With ONE allowance the dry bar does not need: an apron may also end ON
+  // ANOTHER LANE. A coast road runs laterally, so coastal aprons merge into
+  // each other and `resolveCrossings` splits them, which a radial apron
+  // never does -- measured at four routes pop 40 seed 1, three of six
+  // aprons end at such a junction (`trunk-main-r-sea/a` and
+  // `trunk-town-r-se/a` at their crossing point, exactly 0.00 m from each
+  // other, and `trunk-town-r-se/a~x...` 6 m from the road it merged onto),
+  // while the halves that carry on do reach the edge. Ending at a junction
+  // is a road arriving somewhere; what this bar forbids is a road stopping
+  // in OPEN GROUND short of the tile. The tolerance is one apron sample
+  // step, the same slack `trunks-structural.test.ts` (b) and (d) allow.
+  const ON_ANOTHER_LANE_M = 8;
+
+  it('or ends on another road, or says by name why it could not', () => {
+    for (const { label, input, seed } of COASTAL_CASES) {
+      const m = generateVillage(input, seed);
+      const { minX, minY, maxX, maxY } = m.frame;
+      const aprons = m.lanes.filter((l) => isApron(l.id));
+      expect(aprons.length, `${label}: no aprons at all`).toBeGreaterThan(0);
+      for (const a of aprons) {
+        const tip = a.points[a.points.length - 1];
+        const toEdge = Math.min(tip.x - minX, maxX - tip.x, tip.y - minY, maxY - tip.y);
+        const onAnother = m.lanes.some((l) => l.id !== a.id && l.points.length >= 2
+          && closestPointOnPolyline(tip, l.points).distance <= ON_ANOTHER_LANE_M);
+        expect(toEdge <= 1 || onAnother || excusedByCoast(a.id, m.diagnostics),
+          `${label}: ${a.id} stops ${toEdge.toFixed(0)} m short of the tile `
+          + 'in open ground').toBe(true);
       }
     }
   });

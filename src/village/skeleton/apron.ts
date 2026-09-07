@@ -137,22 +137,42 @@ interface ShoreHit {
 }
 
 /**
- * The first place `points` runs into water it cannot simply cross.
+ * Is the water at `p`, met travelling along the unit vector `dir`, a
+ * BOUNDARY the road must respect, or something it simply crosses?
  *
- * NARROW WATER IS SKIPPED, with the same probe `profile.ts` uses: dry
- * ground again within `NARROW_WATER_M` means this is a brook the village
- * sits on, not a shore it stops at, and the road crosses it (`crossings.ts`
- * records the fact). Without this the `brook` fixture's through road --
- * AFMG's real 4 m river width -- would turn and run along the stream
- * instead of over it.
+ * The same probe `profile.ts` uses: dry ground again within
+ * `NARROW_WATER_M` means this is a stream the village sits on, not a shore
+ * it stops at, and the road crosses it (`crossings.ts` records the fact).
+ * Without this the `brook` fixture's through road turns and runs along the
+ * stream instead of over it. Note the threshold is inherited, not chosen
+ * here: at `NARROW_WATER_M` = 12 with a 1 m probe step, a wet run of up to
+ * 17 m has been measured passing through as crossable.
+ */
+function isBoundaryWater(p: Point, dir: Point, water: Point[][]): boolean {
+  for (let w = WATER_PROBE_STEP_M; w <= NARROW_WATER_PROBE_M; w += WATER_PROBE_STEP_M) {
+    if (!inAnyWater(new Point(p.x + dir.x * w, p.y + dir.y * w), water)) {
+      return w >= NARROW_WATER_M;
+    }
+  }
+  return true;
+}
+
+/** The unit vector from `a` to `b`, or null when they coincide. */
+function unitTo(a: Point, b: Point): Point | null {
+  const len = dist(a, b);
+  return len === 0 ? null : new Point((b.x - a.x) / len, (b.y - a.y) / len);
+}
+
+/**
+ * The first place `points` runs into water it cannot simply cross: a proper
+ * crossing of a ring edge, into water `isBoundaryWater` calls a boundary.
  */
 function firstShoreHit(points: Point[], water: Point[][]): ShoreHit | null {
   for (let i = 1; i < points.length; i++) {
     const a = points[i - 1];
     const b = points[i];
-    const len = dist(a, b);
-    if (len === 0) continue;
-    const dir = new Point((b.x - a.x) / len, (b.y - a.y) / len);
+    const dir = unitTo(a, b);
+    if (!dir) continue;
 
     // Every ring edge this segment crosses, in order along the segment, so
     // the outcome cannot depend on the order the rings arrived in.
@@ -166,15 +186,12 @@ function firstShoreHit(points: Point[], water: Point[][]): ShoreHit | null {
     hits.sort((x, y) => x.d - y.d || x.edge - y.edge);
 
     for (const hit of hits) {
-      const at = (m: number): Point =>
-        new Point(hit.point.x + dir.x * m, hit.point.y + dir.y * m);
       // A crossing on the way OUT of water is not a landfall.
-      if (!inAnyWater(at(WATER_PROBE_STEP_M), water)) continue;
-      let crossedM = Infinity;
-      for (let w = WATER_PROBE_STEP_M; w <= NARROW_WATER_PROBE_M; w += WATER_PROBE_STEP_M) {
-        if (!inAnyWater(at(w), water)) { crossedM = w; break; }
-      }
-      if (crossedM >= NARROW_WATER_M) {
+      const ahead = new Point(
+        hit.point.x + dir.x * WATER_PROBE_STEP_M, hit.point.y + dir.y * WATER_PROBE_STEP_M,
+      );
+      if (!inAnyWater(ahead, water)) continue;
+      if (isBoundaryWater(hit.point, dir, water)) {
         return { index: i, point: hit.point, ring: hit.ring, edge: hit.edge };
       }
     }
@@ -209,6 +226,19 @@ function nearestShore(p: Point, water: Point[][]): ShoreHit | null {
   }
   return best;
 }
+
+/**
+ * How much RAW waterline may be walked per metre of road the cap allows.
+ *
+ * The cap belongs to the ROAD (`followShore` counts it there), not to the
+ * shore: a wiggly coastline is longer than the road that follows it, so
+ * spending the cap on raw waterline let short-wave wiggle burn the budget
+ * before the road had made any ground. This is only a cheapness guard, so
+ * a pathological ring cannot be walked end to end: measured over 286
+ * escaping shore walks on the coastal fixture, the worst waterline-consumed
+ * per metre of road was 1.72, so four times over is 2.3x clear of it.
+ */
+const RAW_WALK_ALLOWANCE = 4;
 
 /**
  * The waterline itself, from `from` (a point on ring edge `edge`) in
@@ -360,15 +390,17 @@ const MAX_STANDOFFS = 4;
  * lake (dry outside) as readily as a sea (dry inside).
  *
  * It stops at the first sample clear of `escapeRadiusM` (there is no point
- * drawing road the tile will only cut off), at `COAST_ROAD_MAX_RUN_M`, or
- * when the ring runs out -- a small lake can be walked right round.
+ * drawing road the tile will only cut off), at `COAST_ROAD_MAX_RUN_M` of
+ * ROAD (not of waterline -- see `RAW_WALK_ALLOWANCE`), or when the ring
+ * runs out: a small lake can be walked right round.
  */
 function followShore(
   from: Point, ring: Point[], edge: number, direction: 1 | -1,
   water: Point[][], escapeRadiusM: number,
 ): ShoreRun {
   const shore = smooth(resample(
-    shoreWalk(from, ring, edge, direction, COAST_ROAD_MAX_RUN_M), APRON_SAMPLE_STEP_M,
+    shoreWalk(from, ring, edge, direction, COAST_ROAD_MAX_RUN_M * RAW_WALK_ALLOWANCE),
+    APRON_SAMPLE_STEP_M,
   ));
 
   const points: Point[] = [];
@@ -377,7 +409,7 @@ function followShore(
   let escaped = false;
   let hand: 1 | -1 | 0 = 0;
 
-  for (let i = 0; i < shore.length && !escaped; i++) {
+  for (let i = 0; i < shore.length && !escaped && runM < COAST_ROAD_MAX_RUN_M; i++) {
     // The heading here, taken across the neighbouring samples so a single
     // wiggle cannot swing the standoff round.
     const a = shore[Math.max(i - 1, 0)];
@@ -441,6 +473,32 @@ function chooseShoreRun(a: ShoreRun, b: ShoreRun): ShoreRun {
   return pa.y <= pb.y ? a : b;
 }
 
+/**
+ * The first sample of `points` that is IN boundary water although no
+ * crossing was registered on the way to it -- the endpoint blind spot.
+ *
+ * `segmentIntersection` rejects an intersection within 1e-6 of either
+ * segment's ends (by design: a branch starting on its parent must not read
+ * as crossing it). So a waterline met exactly AT a ring vertex, or exactly
+ * AT an apron sample, registers as no crossing at all, and the road used to
+ * run on into the sea saying nothing -- measured on a lattice-aligned
+ * synthetic ring, 19 of 21 apron points wet and `diagnostics: []`. Real
+ * coordinates make it measure-zero, but this is the one path where the
+ * headline bar fails SILENTLY, and nothing here is ever silent.
+ *
+ * Narrow water is still passed over: the road crosses a stream whether or
+ * not the arithmetic happened to land on a vertex.
+ */
+function firstWetSample(points: Point[], water: Point[][]): number | null {
+  for (let i = 1; i < points.length; i++) {
+    if (!inAnyWater(points[i], water)) continue;
+    const dir = unitTo(points[i - 1], points[i]);
+    if (!dir || !isBoundaryWater(points[i], dir, water)) continue;
+    return i;
+  }
+  return null;
+}
+
 /** What the coast bend did to one apron: the road it ends up drawing, and
  * anything it had to say about the water on the way. */
 interface CoastBend {
@@ -463,7 +521,26 @@ function bendAlongCoast(
   // the road DOES reach the tile and it is the trunk, not the apron, that
   // this reports on.
   const wetEntry = inAnyWater(points[0], water);
-  const hit = wetEntry ? nearestShore(points[0], water) : firstShoreHit(points, water);
+  let hit = wetEntry ? nearestShore(points[0], water) : firstShoreHit(points, water);
+
+  // No crossing found, yet the road is wet further along: the endpoint
+  // blind spot (`firstWetSample`). Bend at the shore nearest the last dry
+  // sample -- the same landfall the crossing case would have found, one
+  // sample step coarser.
+  if (!hit && !wetEntry) {
+    const wet = firstWetSample(points, water);
+    if (wet !== null) {
+      const nearest = nearestShore(points[wet - 1], water);
+      hit = nearest ? { ...nearest, index: wet } : null;
+      if (!hit) {
+        return {
+          points: points.slice(0, wet),
+          diagnostics: [`coast: ${laneId} runs into water with no waterline to follow `
+            + 'and ends at the last dry ground it had'],
+        };
+      }
+    }
+  }
   if (!hit) return { points, diagnostics: [] };
   const ashore = wetEntry
     ? `water: ${laneId} leaves the village from a contract entry that is itself `

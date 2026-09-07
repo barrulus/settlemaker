@@ -284,3 +284,58 @@ describe('the coast bend', () => {
     expect(dry.diagnostics).toEqual([]);
   });
 });
+
+/**
+ * THE ENDPOINT BLIND SPOT (review finding, fix round 3).
+ *
+ * `segmentIntersection` rejects an intersection within 1e-6 of either
+ * segment's ends. So a waterline met EXACTLY at a ring vertex, or exactly
+ * at an apron sample, registers as no crossing at all -- and the road used
+ * to run on into the sea saying nothing at all, which is the one path where
+ * this task's headline bar failed silently.
+ *
+ * Every ordinate here is a multiple of the apron's own 25 m sample step, so
+ * the apron lands exactly ON the waterline rather than across it. Real
+ * coordinates never do this (they come out of trigonometry), which is why
+ * it took a lattice to find.
+ */
+describe('a waterline met exactly on a sample', () => {
+  const seaward: Lane = {
+    id: 'trunk-main-180', type: 'main', widthM: 5,
+    points: [new Point(0, -20), new Point(0, 0)],
+  };
+  const entries = [{
+    point: new Point(0, 0), bearingDeg: 180,
+    route: { bearingDeg: 180, type: 'main' as const, through: false }, farSide: false,
+  }];
+
+  it('still bends, rather than running on into the sea in silence', () => {
+    // The apron samples at y = 0, 25, 50, ...; the shore IS y = 50.
+    const sea = [[
+      new Point(-1000, 50), new Point(1000, 50),
+      new Point(1000, 2000), new Point(-1000, 2000),
+    ]];
+    const { lanes, diagnostics } = growAprons([seaward], entries as never, 60, sea);
+    expect(lanes[0].points.filter((p) => inAnyWater(p, sea)),
+      'the road is in the sea').toHaveLength(0);
+    const tip = lanes[0].points[lanes[0].points.length - 1];
+    expect(Math.abs(tip.x), 'it did not turn').toBeGreaterThan(200);
+    // It got out, so there is nothing to report; what must never happen is
+    // a wet road AND an empty diagnostics list.
+    expect(diagnostics).toEqual([]);
+  });
+
+  it('still crosses a stream met exactly on a sample', () => {
+    // Same lattice, but the water is 4 m of brook. The blind-spot fallback
+    // must not turn a road that should simply cross.
+    const brook = [[
+      new Point(-1000, 50), new Point(1000, 50),
+      new Point(1000, 54), new Point(-1000, 54),
+    ]];
+    const { lanes, diagnostics } = growAprons([seaward], entries as never, 60, brook);
+    const tip = lanes[0].points[lanes[0].points.length - 1];
+    expect(Math.abs(tip.x), 'it turned along a brook').toBeLessThan(1);
+    expect(tip.y).toBeGreaterThan(400);
+    expect(diagnostics).toEqual([]);
+  });
+});

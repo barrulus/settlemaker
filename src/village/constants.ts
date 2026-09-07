@@ -1495,12 +1495,20 @@ export const COAST_ROAD_ESCAPE_FLOOR_M = 700;
  * (spec §5.4.5). Where a bay curls back on itself the shore never leaves
  * the tile, and without a cap the road would walk the whole ring.
  *
- * 1600 m against a measured worst real run of 1296 m (pop 1000 seed 55337
- * on the coastal fixture, every route bent in turn): the run is longer than
- * the straight-line escape distance because a real shore has bays and
- * headlands to go round.
+ * It bounds the ROAD, not the waterline under it (`followShore` counts it
+ * there; see `RAW_WALK_ALLOWANCE`). Spending it on raw shore was the
+ * defect: a wiggly coastline is longer than the road that follows it, so
+ * short-wave wiggle burned the budget before the road had made any ground.
+ *
+ * 2400 m, measured over 500 shore walks on the coastal fixture (pops
+ * 40..1000, 5 seeds, every route bent in turn, both directions): the
+ * longest run that actually got clear of the tile was 1590 m and the
+ * longest road SHIPPED after clipping was 1296 m, so the cap sits 51% above
+ * the first and 85% above the second. At the old 1600 it sat 0.6% above the
+ * first, which would have cut a road that was one sample from escaping and
+ * reported it as a give-up.
  */
-export const COAST_ROAD_MAX_RUN_M = 1600;
+export const COAST_ROAD_MAX_RUN_M = 2400;
 
 /** Relative weight given to a candidate merge point depending which band
  * of the village it falls in -- fields pull hardest, the inner body least,
