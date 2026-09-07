@@ -459,13 +459,22 @@ cost:
   schema version to fix an implementation that was breaking the schema. The
   shared-constant argument is a second reason, not the main one.
 
-  This has a live victim. questables persists `local_bounds` as a
-  `jsonb NOT NULL` column, configures its projection from it, and calls
-  `view.fit(sidecar.local_bounds)`; its design doc calls
-  `svg_viewbox == local_bounds` within 0.1 "a settlemaker invariant". Villages
-  miss that by 400x. Every village it has ingested is mis-framed until it
-  re-reads, so the release note is a FIX notice telling it to re-ingest — not
-  a breaking-change notice inviting it to audit its assumptions.
+  **The case rests on the invariant, not on any consumer.** Villages violate
+  something cities honour and the codebase already asserts; that was true
+  before anyone went looking for a consumer and stays true regardless of
+  whether one exists.
+
+  Context for whoever rebuilds questables, recorded because it is worth
+  inheriting rather than because anything is pending: it persisted
+  `local_bounds` as a `jsonb NOT NULL` column, configured its projection from
+  it, called `view.fit(sidecar.local_bounds)`, and its design doc called
+  `svg_viewbox == local_bounds` within 0.1 "a settlemaker invariant" — which
+  villages missed by 400x. It is **parked, and due a major overhaul after this
+  work** (owner, 2026-09-07), so its stored 40 m-short values die with the old
+  system; there is no migration to write and no warning anyone must act on.
+  Explicitly: this must not constrain design here. Where a correct change to
+  settlemaker would be awkward for questables' stored data, make the correct
+  change.
 
   The village engine never had the test cities have. Task 3.5 adds it.
 
