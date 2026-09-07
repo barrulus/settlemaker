@@ -392,6 +392,38 @@ version bump attached. Reversible in a later release if the tiler ever wants
 it; the viewBox already carries the same information for anyone reading the
 SVG.
 
+### 10.1 `bounds` — owner ruling 2026-09-07, target recorded, work not yet scheduled
+
+`src/village/geojson.ts:50`'s `bounds` helper computes its own AABB over
+buildings, **all lanes**, fields, vegetation and the green centre, padded by
+20 m. It therefore tracks the LANES, and this release moves it: roads now
+reach further, so the box grows on whichever axes a road exits.
+
+**Barry has ruled that `bounds` should mean THE DRAWN TILE** — the same
+rectangle the SVG viewBox covers — **not the lane box.** Both options were put
+to him explicitly (keep the lane AABB, no schema decision; or make it the
+rendered frame) and he chose the drawn tile.
+
+That target is recorded here even though the work is not scheduled in this
+plan, because the failure mode to avoid is a future reader finding "bounds:
+no change needed" and treating the lane box as settled intent. It is not. The
+lane box is the status quo, not the goal.
+
+**What is still open is the SEQUENCING, and it is the owner's call**, because
+a schema version bump is a consumer-contract decision:
+
+- **Now**, in this release: the model gains a `frame` in §7 anyway, so
+  `bounds` becomes close to reading it off. One disturbance to the field
+  instead of two.
+- **Later**, as its own release: keeps §10's no-schema-change rule intact, at
+  the cost of `bounds` moving in this release (because roads reach further)
+  and then changing meaning in the next — two disturbances to one field, in
+  consecutive releases, where one would do.
+
+Until he rules on sequencing, the code ships unchanged: `bounds` keeps
+computing the lane AABB. That is the status quo path and it forecloses
+neither option, since after §7 lands the change is close to a one-liner.
+
 ## 11. Risks, carried openly
 
 1. **`exitRoads` changes every village.** The field-ring corridor is cut from
