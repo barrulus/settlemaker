@@ -64,15 +64,21 @@ describe('buildSite', () => {
   });
 
   // Finding 2: coastlineGeometry is the primary source of Site.water, but
-  // spec §3 also promises an oceanBearing half-plane fallback when no
-  // vector coastline was supplied. That leg was simply missing.
-  it('synthesises a water half-plane from oceanBearing when no coastlineGeometry is given', () => {
-    const site = buildSite({ ...base, port: true, oceanBearing: 90 });
+  // spec §3 also promises an oceanBearing fallback when no vector coastline
+  // was supplied. That leg was simply missing.
+  //
+  // UPDATED 2026-09-07 (owner ruling "move the village back"): this used to
+  // assert the ORIGIN reads as water, because the synthesised near edge sat
+  // 1 m behind it. That was the defect, not the contract — the village was
+  // built astride its own shore and lanes ran into the sea. The sea now
+  // stands off the settlement, so the origin is dry and the water starts out
+  // along the bearing.
+  it('synthesises water out along oceanBearing when no coastlineGeometry is given', () => {
+    const site = buildSite({ ...base, port: true, oceanBearing: 90 }, 1);
     expect(site.water.length).toBeGreaterThan(0);
-    // Origin (the burg centre) should read as water: bearing 90 = east,
-    // and the origin sits just inside the near edge of the half-plane.
-    expect(inAnyWater(new Point(0, 0), site.water)).toBe(true);
-    // A point far to the west (opposite the ocean bearing) must stay dry.
+    // Bearing 90 = east. Far east is sea; the burg centre and far west are not.
+    expect(inAnyWater(new Point(2000, 0), site.water)).toBe(true);
+    expect(inAnyWater(new Point(0, 0), site.water)).toBe(false);
     expect(inAnyWater(new Point(-2000, 0), site.water)).toBe(false);
   });
 
@@ -85,11 +91,27 @@ describe('buildSite', () => {
     expect(site.water[0]).toHaveLength(3);
   });
 
-  it('a port sited only by oceanBearing still pushes its green away from the water', () => {
+  // The green-displacement guarantee still matters, but the oceanBearing
+  // fallback no longer exercises it: the sea now stands off the settlement,
+  // so nothing intrudes on the green's probe ring and there is correctly
+  // nothing to push away from. Re-aimed at a supplied coastline that DOES
+  // reach the burg centre, so the protection survives the ruling rather than
+  // being deleted with the case that used to trigger it.
+  it('pushes its green away from water that actually reaches the village', () => {
     const m = generateVillage({
-      ...base, port: true, oceanBearing: 90, population: 300,
+      ...base, port: true, population: 300,
+      // Sea immediately east of the origin, overlapping where the green
+      // would otherwise sit.
+      coastlineGeometry: [[
+        { x: 5, y: -400 }, { x: 400, y: -400 }, { x: 400, y: 400 }, { x: 5, y: 400 },
+      ]],
     }, 1);
     expect(m.green.centre.x).toBeLessThan(0);
+  });
+
+  it('leaves the green unpushed when the sea stands off, and keeps it dry', () => {
+    const m = generateVillage({ ...base, port: true, oceanBearing: 90, population: 300 }, 1);
+    expect(inAnyWater(m.green.centre, m.site.water)).toBe(false);
   });
 
   it('object-form bearing with no kind defaults to main road', () => {

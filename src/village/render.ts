@@ -338,15 +338,26 @@ export function renderVillage(
   //
   // Deliberately does NOT touch the bounds computed above: a coastline runs
   // far past the village, and letting it size the viewBox would zoom every
-  // coastal render out to the whole sea. The path simply extends beyond the
-  // viewBox and is clipped, which is what an edge of water should do.
+  // coastal render out to the whole sea.
+  //
+  // It IS clipped to the canvas here, in the document. This used to rely on
+  // the viewBox clipping it, which is only true while the consumer leaves the
+  // root <svg> at its default `overflow: hidden` -- settlemaker.com attaches
+  // pan/zoom and sizes the SVG with CSS, so nothing clipped it and a
+  // bearing-only sea (5 km deep, 10 km wide, against a ~190 m village) filled
+  // the entire browser window with the village on a small square of land in
+  // the middle. Reported from production, seed 55337. The SVG claims to be
+  // standalone, so it has to be right on its own rather than only inside a
+  // host that happens not to override overflow.
   //
   // Emitted only when there IS water, so a landlocked village's SVG is
   // byte-identical to what it was before this band existed -- not even an
   // empty group. Pinned by a hash taken before the change.
   const waterPolys = model.site.water.filter((poly) => poly.length >= 3);
   if (waterPolys.length > 0) {
-    out.push('<g data-band="water">');
+    out.push(`<defs><clipPath id="v-water-clip">`
+      + `<rect width="${n(w)}" height="${n(h)}"/></clipPath></defs>`);
+    out.push('<g data-band="water" clip-path="url(#v-water-clip)">');
     waterPolys.forEach((poly, i) => {
       out.push(
         `<path data-water="w${i}" d="${polygonPath(poly, X, Y)}" fill="${theme.water}" `

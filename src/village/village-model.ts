@@ -115,7 +115,7 @@ export function generateVillage(
   input: AzgaarBurgInput, seed: number, trace?: LotTrace,
 ): VillageModel {
   const rng = new SeededRandom(seed);
-  const site = buildSite(input);
+  const site = buildSite(input, seed);
   const diagnostics: string[] = [];
 
   // One dwelling family per village: the deck is built per (biome,
