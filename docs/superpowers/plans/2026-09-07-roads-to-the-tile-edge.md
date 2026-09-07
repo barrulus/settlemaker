@@ -1230,6 +1230,125 @@ the tile edge."
 
 ---
 
+## Task 3.5: `bounds` becomes the drawn tile
+
+**Owner ruling, 2026-09-07: `local_bounds` in the village GeoJSON should mean THE DRAWN TILE, not the box around the lanes — and it happens in THIS release**, while the frame is in hand, rather than letting the field move once now (because roads reach further) and change meaning again next release. Spec §10.1 records the ruling; this task is the work.
+
+Runs after Task 3, because it reads the `frame` Task 3 puts on the model.
+
+**Files:**
+- Modify: `src/village/geojson.ts:50-75`, `:200`
+- Test: `tests/village/geojson.test.ts`
+
+**Interfaces:**
+- Consumes: `VillageModel.frame` (Task 3).
+- Produces: nothing new. `local_bounds` keeps its name, shape and key order; only its meaning changes.
+
+**Two sub-decisions ruled before dispatch, both recorded with their costs:**
+
+**(a) `diameterM` keeps measuring the village, not the tile.** The private `bounds()` today feeds two callers: the exported `local_bounds`, and `diameterM`, whose own doc comment says it is "the village's overall extent in metres — its own diameter, measured, not predicted". Those are different questions, and the ruling was about the exported field. So the existing helper stays, renamed `inkBounds`, and serves `diameterM` alone. Cost if wrong: `diameter_m` goes on meaning ink extent while `local_bounds` means tile, which a consumer could conflate — mitigated by both carrying doc comments that say which.
+
+**(b) `GEOJSON_SCHEMA_VERSION` is NOT bumped.** Two reasons. It is SHARED with the settlement engine (`src/output/geojson-builder.ts:21`), so bumping it would signal a change to every city consumer for something that happens entirely in the village engine and leaves city output untouched. And the field's name, type and shape are unchanged — `local_bounds` was always "this village's local bounds", and the drawn tile is a more faithful answer to that question now that roads run to it. Cost if wrong, stated plainly: a consumer caching village GeoJSON across this release sees `local_bounds` change meaning with no version signal to warn it. The mitigation is the release note, which must say so explicitly — Task 7 carries it.
+
+- [ ] **Step 1: Write the failing test**
+
+Append to `tests/village/geojson.test.ts`:
+
+```ts
+describe('local_bounds is the drawn tile', () => {
+  it('matches the model frame exactly, not the box around the lanes', () => {
+    const m = generateVillage(input, 1);
+    const meta = metadata(generateVillageGeoJson(m));
+    expect(meta.local_bounds).toEqual({
+      min_x: m.frame.minX, min_y: m.frame.minY,
+      max_x: m.frame.maxX, max_y: m.frame.maxY,
+    });
+  });
+
+  it('contains every lane point, since roads are clipped to the tile', () => {
+    const m = generateVillage(input, 1);
+    const b = metadata(generateVillageGeoJson(m)).local_bounds;
+    for (const lane of m.lanes) {
+      for (const p of lane.points) {
+        expect(p.x).toBeGreaterThanOrEqual(b.min_x - 0.001);
+        expect(p.x).toBeLessThanOrEqual(b.max_x + 0.001);
+        expect(p.y).toBeGreaterThanOrEqual(b.min_y - 0.001);
+        expect(p.y).toBeLessThanOrEqual(b.max_y + 0.001);
+      }
+    }
+  });
+
+  it('leaves diameter_m measuring the village, not the tile', () => {
+    // Two different questions: the tile includes the 40 m pad and whatever
+    // the roads reach; the diameter is the settlement's own extent.
+    const m = generateVillage(input, 1);
+    const meta = metadata(generateVillageGeoJson(m));
+    const tileSpan = Math.max(
+      m.frame.maxX - m.frame.minX, m.frame.maxY - m.frame.minY,
+    );
+    expect(meta.diameter_m).toBeLessThan(tileSpan);
+  });
+});
+```
+
+Reuse the file's existing `input`, `metadata` and imports; add `generateVillage` if it is not already imported. Read the top of the file before writing — do not duplicate an import.
+
+- [ ] **Step 2: Run it and watch it fail**
+
+```
+nix develop --command bash -c "npx vitest run tests/village/geojson.test.ts"
+```
+
+Expected: the first test FAILS — `local_bounds` is currently the padded AABB over ink, not the frame.
+
+- [ ] **Step 3: Split the helper**
+
+In `src/village/geojson.ts`, rename the private `bounds` to `inkBounds`, leaving its body exactly as it is, and give it a doc comment saying it measures INK and feeds `diameterM` only. Then change the metadata to read the frame:
+
+```ts
+      // Spec §10.1 (owner ruling 2026-09-07): `local_bounds` is THE DRAWN
+      // TILE -- the same rectangle the SVG viewBox covers -- not a box drawn
+      // round the lanes. The model owns the frame precisely because the
+      // approach roads are clipped to it, so this is the one honest answer
+      // to "how far does this image extend". `diameterM` still asks the
+      // different question of how big the VILLAGE is, and still uses
+      // `inkBounds` for it.
+      local_bounds: {
+        min_x: model.frame.minX, min_y: model.frame.minY,
+        max_x: model.frame.maxX, max_y: model.frame.maxY,
+      },
+```
+
+- [ ] **Step 4: Run the tests**
+
+```
+nix develop --command bash -c "npx vitest run tests/village/geojson.test.ts"
+nix develop --command bash -c "npx vitest run"
+nix develop --command bash -c "npx tsc --noEmit"
+```
+
+Expected: all green. `output-parity.test.ts` asserts `local_bounds` is among the metadata keys the settlement path also publishes — that still holds, since the key is unchanged. If it fails, the shape changed and it should not have.
+
+- [ ] **Step 5: Commit**
+
+Stage `src/village/geojson.ts` and `tests/village/geojson.test.ts` and commit with this message:
+
+```
+local_bounds is the drawn tile, not the box round the lanes
+
+Owner ruling: bounds should mean the extent of the IMAGE. It was an AABB
+over ink with a 20 m pad, which tracked the lanes -- so this release would
+have moved it anyway, roads now reaching further, and a later release would
+have moved it again by changing its meaning. Once instead of twice.
+
+diameterM asks a different question -- how big is the village -- and keeps
+the old helper, now inkBounds. GEOJSON_SCHEMA_VERSION is deliberately not
+bumped: it is shared with the settlement engine, and nothing about city
+output changes.
+```
+
+---
+
 ## Task 4: The coast bend
 
 **Files:**

@@ -420,9 +420,23 @@ a schema version bump is a consumer-contract decision:
   and then changing meaning in the next — two disturbances to one field, in
   consecutive releases, where one would do.
 
-Until he rules on sequencing, the code ships unchanged: `bounds` keeps
-computing the lane AABB. That is the status quo path and it forecloses
-neither option, since after §7 lands the change is close to a one-liner.
+**SEQUENCING RULED, 2026-09-07: NOW.** It lands in this release, while the
+frame is in hand — one disturbance to the field instead of two. The plan
+carries it as Task 3.5.
+
+Two sub-decisions taken with it, both reversible, both recorded with what they
+cost:
+
+- **`diameterM` keeps measuring the village, not the tile.** The private
+  `bounds()` helper feeds both the exported `local_bounds` and `diameterM`,
+  and those ask different questions — the ruling was about the exported field.
+  The helper stays as `inkBounds`, serving `diameterM` alone.
+- **`GEOJSON_SCHEMA_VERSION` is NOT bumped.** It is shared with the settlement
+  engine, so bumping it would signal a change to every city consumer for
+  something that happens entirely in the village engine. The field's name,
+  type and shape are unchanged. The cost is real and stated: a consumer
+  caching village GeoJSON across this release sees `local_bounds` change
+  meaning with no version signal, so the release note must say so explicitly.
 
 ## 11. Risks, carried openly
 
