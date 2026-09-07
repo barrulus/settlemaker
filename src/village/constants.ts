@@ -1540,3 +1540,9 @@ export const PATTERN_WEIGHTS: Record<string, Record<string, number>> = {
   many: { loop: 0.5, 'y-tree': 0.35, junction: 0.07, 'main-street': 0.08 },
   few: { 'y-tree': 0.6, junction: 0.15, loop: 0.15, 'main-street': 0.1 },
 };
+
+/** The margin between the outermost fabric and the edge of the drawn tile.
+ * MOVED, not chosen: it must equal the literal `pad` `render.ts` has always
+ * used, or every village's frame shifts. Trees still stand back from the
+ * edge; only roads reach it. */
+export const FRAME_PAD_M = 40;

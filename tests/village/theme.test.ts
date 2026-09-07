@@ -52,9 +52,16 @@ describe('village theming', () => {
     // the alignment frame and the fallbacks stripped; erasing only the frame
     // still gives `d0b2f407...` on the pre-change renderer, which is how this
     // value was derived.
+    //
+    // The hash moved a THIRD time, deliberately, in spec 2026-09-07 §7: the
+    // model now owns the frame and clips approach-road aprons to it, so a
+    // road that used to stop 150 m short of the tile edge now reaches it.
+    // Visually confirmed before re-pinning (task 3 report): the apron runs
+    // from the green, past the field ring, to the drawn tile's boundary,
+    // and nothing else in the picture moved. `3299ad25...` is that value.
     const normalised = stripped.replace(/var\((--[a-z0-9-]+)\s*,\s*[^)]*\)/gi, 'var($1)');
     expect(createHash('sha256').update(normalised).digest('hex'))
-      .toBe('29020286752231d733c1f7e6bdd28c5a89238460e62945f16b454579c4907f86');
+      .toBe('3299ad2536451a215b3489e6bb5230a2cd66544432d6935866fedc47eb1753c1');
   });
 
   it('gives every biome the glyph set knows a ground of its own', () => {

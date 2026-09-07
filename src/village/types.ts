@@ -218,6 +218,20 @@ export interface WaterCrossing {
   narrow: boolean;
 }
 
+/**
+ * The drawn tile, in burg-local metres (spec 2026-09-07 §7).
+ *
+ * The MODEL owns this, not the renderer, because apron lanes are clipped to
+ * it: a renderer that re-derived its own bounds from the geometry would move
+ * the very edge the roads were cut to. That inversion is what lets a road
+ * touch the edge at all -- while lanes drove the bounds and the renderer
+ * added a pad, every metre of extension pushed the frame one metre further
+ * ahead of the road.
+ */
+export interface Frame {
+  minX: number; minY: number; maxX: number; maxY: number;
+}
+
 export interface VillageModel {
   site: Site;
   green: Green;
@@ -254,6 +268,9 @@ export interface VillageModel {
    * contract, and the fabric is free to sit well inside it.
    */
   contractRadiusM: number;
+  /** The drawn tile (spec §7.1). `render.ts` reads this and computes no
+   * bounds of its own; aprons are clipped to it. */
+  frame: Frame;
   /**
    * Every junction the trunk network resolved to (spec 5.2).
    *

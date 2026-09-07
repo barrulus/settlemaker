@@ -27,6 +27,7 @@ import {
   cloneLotTrace, resetLotTrace, restoreLotTrace, type LotTrace,
 } from './lot-trace.js';
 import { dressVillage } from './dressing/index.js';
+import { clipApronsToFrame, computeFrame } from './frame.js';
 import { closestPointOnSegment, dist, segmentIntersection } from './geometry.js';
 import {
   ARM_LOT_RADIUS_SHARE, BLOCK_CHASE_ROUND_CAP, BRANCH_SPACING_M, FRONT_ON_LANE_EPS_M,
@@ -413,7 +414,7 @@ export function generateVillage(
     // resolution is deliberately NOT re-run over them.
     for (let pass = 1; pass <= RECUT_MAX_PASSES; pass++) {
       const recut = recutFreedGround({
-        lanes,
+        lanes: lanes.filter((l) => !isApron(l.id)),
         green,
         standing: lots,
         builtRadiusM: lotRadiusM,
@@ -814,19 +815,41 @@ export function generateVillage(
     }
   }
 
+  const frame = computeFrame({
+    lanes: relaxed,
+    buildings: spend.buildings.map((b) => b.position),
+    greenCentre: green.centre,
+    dressing: [
+      ...dressing.fields.flatMap((f) => f.polygon),
+      ...dressing.fieldEdges.map((e) => e.position),
+      ...dressing.vegetation.map((v) => v.position),
+      ...dressing.pois.map((p) => p.position),
+    ],
+  });
+  const framedLanes = clipApronsToFrame(relaxed, frame);
+  const droppedAprons = relaxed.filter((l) => isApron(l.id)).length
+    - framedLanes.filter((l) => isApron(l.id)).length;
+  if (droppedAprons > 0) {
+    diagnostics.push(
+      `apron: ${droppedAprons} approach road${droppedAprons === 1 ? '' : 's'} `
+      + `started outside the drawn tile and was dropped`,
+    );
+  }
+
   return {
-    site, green, lanes: relaxed, lots: survivingLots, buildings: spend.buildings,
+    site, green, lanes: framedLanes, lots: survivingLots, buildings: spend.buildings,
     edgeStyle: dressing.edgeStyle, crofts: dressing.crofts, fields: dressing.fields,
     fieldEdges: dressing.fieldEdges, vegetation: dressing.vegetation, pois: dressing.pois,
     diagnostics,
     // Trunks task 5: carried on the model, unread by the renderer this
     // task (see `types.ts`'s field comments).
     contractRadiusM: network.contractRadiusM,
+    frame,
     trunkJunctions: network.junctions,
     greenRelation,
-    // Phase 3: computed on the FINAL lanes, after trimming and relaxation,
-    // so a crossing describes a road that actually shipped.
-    bridges: findWaterCrossings(relaxed, site.water),
+    // Phase 3: computed on the FINAL lanes -- now after the apron clip, so
+    // no bridge is ever placed outside the picture.
+    bridges: findWaterCrossings(framedLanes, site.water),
   };
 }
 
