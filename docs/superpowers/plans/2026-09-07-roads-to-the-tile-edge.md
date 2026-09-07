@@ -34,6 +34,7 @@
 - `tests/village/roads-reach-the-edge.test.ts` — the whole-model invariants (spec §9).
 
 **Modified:**
+- `tests/village/route-class.test.ts` — Task 0's guard on the city-visible `toLegacyKind`.
 - `src/village/types.ts` — `apronLaneId`, `isApron`, `Frame`, `VillageModel.frame`.
 - `src/village/constants.ts` — the `APRON_*`, `COAST_ROAD_*` and `FRAME_PAD_M` constants.
 - `src/village/skeleton/trunks.ts:1305-1384` — one call to `growAprons` inside `synthesizeTrunks`.
@@ -43,6 +44,98 @@
 - `src/village/render.ts:207-240` — read `model.frame`, compute no bounds.
 - `tests/village/every-class-connects.test.ts` — assert the tile edge, not the circle.
 - `docs/url-api.md` — the handshake fiction (spec §11.5).
+
+---
+
+## Task 0: Pin the city's view of the road classes
+
+**Why this is task zero and not a footnote.** The city pipeline reaches into the village engine through two doors, and one of them is the road-class module this roads work is most likely to want to edit:
+
+```
+src/village/glyphs.ts      <- src/generator/village-rows.ts <- src/generator/model.ts
+src/village/route-class.ts <- src/input/azgaar-input.ts     <- src/generator/model.ts
+```
+
+`src/input/azgaar-input.ts:3` imports `toLegacyKind` and `RouteType`, and line 208 calls `toLegacyKind` on **every road bearing of every burg**, cities included. `ROUTE_CLASS_ORDER`, `classRank`, `laneWidth` and `stepDown` all live in that same file. A roads change that wants a new class, a width tweak or a rank adjustment lands squarely in a file city output depends on — and city SVG byte-identity is the release's only clean regression signal (spec §7, Task 7).
+
+The sharp version of the rule, which is narrower and more useful than "don't touch it": **cities see `toLegacyKind`'s output and nothing else in this file.** `laneWidth` is village-only. `classRank` reaches cities only through `isRoadClass` inside `toLegacyKind`, and that comparison is relative to `'local'` itself, so inserting a class into `ROUTE_CLASS_ORDER` is safe as long as `'local'` does not move relative to `'trail'` and `'footpath'`. Pin that and the exposure stops being something to remember.
+
+**Files:**
+- Test: `tests/village/route-class.test.ts` (extend)
+
+- [ ] **Step 1: Write the characterisation test**
+
+Append to `tests/village/route-class.test.ts`:
+
+```ts
+/**
+ * CITY-VISIBLE BEHAVIOUR. `src/input/azgaar-input.ts` imports `toLegacyKind`
+ * and calls it on every road bearing of every burg, cities included, so this
+ * function's output is part of the settlement engine's input. City SVG
+ * byte-identity is the clean regression signal for a village-side release
+ * (two sessions certified "cities are insulated from src/village/" on
+ * 2026-09-07 and both were wrong -- see the plan for the import walk).
+ *
+ * This pins every input the function can receive. Adding a route class is
+ * fine; changing what an EXISTING one narrows to is a city regression, and
+ * it should fail here rather than in someone's byte diff after a deploy.
+ */
+describe('toLegacyKind is city-visible and must not drift', () => {
+  it.each([
+    ['royal', 'road'], ['main', 'road'], ['market', 'road'],
+    ['town', 'road'], ['local', 'road'],
+    ['trail', 'foot'], ['footpath', 'foot'],
+    ['road', 'road'], ['foot', 'foot'], ['sea', 'sea'],
+    ['searoutes', 'sea'],
+  ] as const)('%s -> %s', (input, expected) => {
+    expect(toLegacyKind(input)).toBe(expected);
+  });
+
+  it.each(['airroutes', 'traderoutes'] as const)('%s -> undefined', (input) => {
+    expect(toLegacyKind(input)).toBeUndefined();
+  });
+
+  it('maps undefined through', () => {
+    expect(toLegacyKind(undefined)).toBeUndefined();
+  });
+
+  it('keeps local the lowest road class — the boundary toLegacyKind reads', () => {
+    // isRoadClass compares against 'local', so a class inserted anywhere is
+    // harmless UNTIL 'local' moves relative to the path classes.
+    expect(classRank('local')).toBeLessThan(classRank('trail'));
+    expect(classRank('local')).toBeLessThan(classRank('footpath'));
+  });
+});
+```
+
+Merge the imports into the file's existing import of `../../src/village/route-class.js` — it needs `toLegacyKind` and `classRank`.
+
+- [ ] **Step 2: Run it — it must pass immediately**
+
+```
+nix develop --command bash -c "npx vitest run tests/village/route-class.test.ts"
+```
+
+Expected: PASS on the first run. This is a characterisation test of behaviour that already exists, not a TDD cycle; if any case fails, the mapping is not what this plan assumed and Task 7's city claim needs revisiting before going further.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add tests/village/route-class.test.ts
+git commit -m "Pin toLegacyKind: the city engine's view of the road classes
+
+azgaar-input.ts calls it on every road bearing of every burg, cities
+included, so this village-side function is part of the settlement engine's
+input -- and city SVG byte-identity is the clean regression signal for a
+village-side release. A roads change is more likely than most to want to
+edit route-class.ts, so pin what cities can see before starting one."
+```
+
+**Standing constraint for every task after this one:** if you find yourself editing `src/village/route-class.ts` or `src/village/glyphs.ts`, stop and check this test still passes, then say so in the task's commit message. Prefer adding over modifying. Run the door check at the end of each task, not only at release:
+
+```bash
+git diff --name-only HEAD~1 -- src/village/route-class.ts src/village/glyphs.ts
+```
 
 ---
 
@@ -1564,7 +1657,7 @@ Message it with the tag and a re-baseline note split by kind of change — the l
 
 - **Villages, on screen:** every village changes, coastal or not — the field-ring corridor is now cut to the frame rather than to the contract circle.
 - **Villages, data:** roads run to the tile edge; `VillageModel` carries a new `frame`; village GeoJSON `bounds` moves by up to 20 m on whichever axes a road exits (see the Self-Review's known gap). `frame` itself is **not** in the GeoJSON — spec §10 — so a consumer diffing GeoJSON will not see it appear; a consumer using the TypeScript API will.
-- **Cities, SVG:** byte-identical, and safe to assert as a regression signal — but **not** because the settlement path is insulated from `src/village/`. It is not. Walking the transitive import graph from `src/generator/model.ts` and `src/output/svg-builder.ts` reaches 57 files, two of which are village files: **`src/village/glyphs.ts`** (via `src/generator/village-rows.ts`, which imports `HOUSE_INK_RATIO` and `HUT_INK_RATIO` from it) and **`src/village/route-class.ts`**. City SVG holds still because this work modifies neither of those two, and because `svg-builder.ts` carries no version stamp.
+- **Cities, SVG:** byte-identical, and safe to assert as a regression signal — but **not** because the settlement path is insulated from `src/village/`. It is not. Walking the transitive import graph from `src/generator/model.ts` and `src/output/svg-builder.ts` reaches 57 files, two of which are village files, through two independent doors: **`src/village/glyphs.ts`** via `src/generator/village-rows.ts` (`HOUSE_INK_RATIO`, `HUT_INK_RATIO`), and **`src/village/route-class.ts`** via `src/input/azgaar-input.ts` (`toLegacyKind`, called on every road bearing of every burg). City SVG holds still because this work modifies neither of those two — pinned by Task 0 — and because `svg-builder.ts` carries no version stamp.
 - **Cities, GeoJSON:** differs by exactly one field, `settlemaker_version`, from the release bump in `src/output/geojson-builder.ts` — the same single-field diff every release produces, and the one their 2.0.3 check caught. Anything beyond that field is a real regression.
 
 **Re-verify the city claim rather than copying it forward, and verify the right thing.** The question is NOT "does the settlement path import `src/village/`" — it does, and a direct-import check answers that wrongly. The question is whether this work touched either of the two village files the city pipeline actually reaches:
