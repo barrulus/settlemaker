@@ -431,12 +431,25 @@ cost:
   `bounds()` helper feeds both the exported `local_bounds` and `diameterM`,
   and those ask different questions — the ruling was about the exported field.
   The helper stays as `inkBounds`, serving `diameterM` alone.
-- **`GEOJSON_SCHEMA_VERSION` is NOT bumped.** It is shared with the settlement
-  engine, so bumping it would signal a change to every city consumer for
-  something that happens entirely in the village engine. The field's name,
-  type and shape are unchanged. The cost is real and stated: a consumer
-  caching village GeoJSON across this release sees `local_bounds` change
-  meaning with no version signal, so the release note must say so explicitly.
+- **`GEOJSON_SCHEMA_VERSION` is NOT bumped, because this is a BUG FIX.**
+  Corrected 2026-09-07 after the settlemaker-web session measured the
+  production artifact: `local_bounds` has always meant the drawn tile, and
+  cities already satisfy `local_bounds == viewBox` to the decimal (asserted at
+  `tests/entrance-output.test.ts:389` and `:399`). **The village engine was
+  violating it** — short by exactly 40 m in each dimension, because
+  `geojson.ts`'s `PAD` is 20 against the renderer's 40. You do not bump a
+  schema version to fix an implementation that was breaking the schema. The
+  shared-constant argument is a second reason, not the main one.
+
+  This has a live victim. questables persists `local_bounds` as a
+  `jsonb NOT NULL` column, configures its projection from it, and calls
+  `view.fit(sidecar.local_bounds)`; its design doc calls
+  `svg_viewbox == local_bounds` within 0.1 "a settlemaker invariant". Villages
+  miss that by 400x. Every village it has ingested is mis-framed until it
+  re-reads, so the release note is a FIX notice telling it to re-ingest — not
+  a breaking-change notice inviting it to audit its assumptions.
+
+  The village engine never had the test cities have. Task 3.5 adds it.
 
 ## 11. Risks, carried openly
 

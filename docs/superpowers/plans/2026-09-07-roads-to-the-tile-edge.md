@@ -1248,7 +1248,50 @@ Runs after Task 3, because it reads the `frame` Task 3 puts on the model.
 
 **(a) `diameterM` keeps measuring the village, not the tile.** The private `bounds()` today feeds two callers: the exported `local_bounds`, and `diameterM`, whose own doc comment says it is "the village's overall extent in metres — its own diameter, measured, not predicted". Those are different questions, and the ruling was about the exported field. So the existing helper stays, renamed `inkBounds`, and serves `diameterM` alone. Cost if wrong: `diameter_m` goes on meaning ink extent while `local_bounds` means tile, which a consumer could conflate — mitigated by both carrying doc comments that say which.
 
-**(b) `GEOJSON_SCHEMA_VERSION` is NOT bumped.** Two reasons. It is SHARED with the settlement engine (`src/output/geojson-builder.ts:21`), so bumping it would signal a change to every city consumer for something that happens entirely in the village engine and leaves city output untouched. And the field's name, type and shape are unchanged — `local_bounds` was always "this village's local bounds", and the drawn tile is a more faithful answer to that question now that roads run to it. Cost if wrong, stated plainly: a consumer caching village GeoJSON across this release sees `local_bounds` change meaning with no version signal to warn it. The mitigation is the release note, which must say so explicitly — Task 7 carries it.
+**(b) `GEOJSON_SCHEMA_VERSION` is NOT bumped — and this is a BUG FIX, not a meaning change.**
+
+The first draft of this task called it a semantic change and worried about consumers caching the old meaning. That was wrong, and the correction matters because it changes what the release note has to say. **`local_bounds` has always meant the drawn tile. The village engine simply implemented it wrongly.** Measured on the production 2.0.5 artifact:
+
+| output | viewBox | `local_bounds` | |
+|---|---|---|---|
+| city 4200 | 233.5 x 229.5 | 233.5 x 229.5 | match |
+| city 1500, port | 118.2 x 141.3 | 118.2 x 141.3 | match |
+| village 500 | 647.8 x 682.0 | 607.8 x 642.0 | **40 m short** |
+| village 500 + roads | 680.3 x 632.6 | 640.3 x 592.6 | **40 m short** |
+
+Villages are short by exactly 40 m in each dimension — 20 m a side — because `geojson.ts`'s `PAD` is 20 while the renderer's frame pad is 40. Cities match to the decimal because `computeLocalBounds` **is** the viewBox there, and `tests/entrance-output.test.ts:389` and `:399` assert exactly that.
+
+**There is a real consumer, which settles the "who would notice" question.** questables persists `local_bounds` as a `jsonb NOT NULL` column, configures its projection from it, and calls `view.fit(sidecar.local_bounds)` to frame the settlement view — and its own design doc states `svg_viewbox` "should match `local_bounds` within 0.1 (settlemaker invariant)". Villages miss that stated tolerance by 400x. That is a latent bug in a downstream consumer, caused by us, which this task fixes.
+
+So: you do not bump a schema version to fix an implementation that was violating the schema. The shared-constant argument stands as a second reason — bumping would signal a change to every city consumer for something confined to the village engine — but the decisive one is that nothing about the contract changed.
+
+- [ ] **Step 0: Add the invariant test the village engine never had**
+
+The city has `viewBox == local_bounds` asserted twice. The village has no such test, and that absence is exactly what let the 40 m gap live. Add the village mirror — the durable guard, the same shape as Task 0's.
+
+A village's viewBox is in PIXELS from the origin (`viewBox="0 0 w h"`, `w = span * pxPerMetre`), unlike a city's, whose viewBox carries local coordinates directly. So the village mirror asserts the SPAN in metres rather than the corners. Append to `tests/village/geojson.test.ts`:
+
+```ts
+describe('local_bounds satisfies the settlemaker viewBox invariant', () => {
+  it('spans exactly what the SVG viewBox spans, as cities already do', () => {
+    // `tests/entrance-output.test.ts:389` asserts this for the settlement
+    // engine and questables' design doc calls it a settlemaker invariant,
+    // persisting local_bounds as a jsonb column and fitting its projection
+    // to it. The village engine violated it by exactly 40 m in each
+    // dimension -- geojson's PAD was 20 against the renderer's 40 -- so a
+    // village mis-fitted that projection by 400x its stated tolerance.
+    const m = generateVillage(input, 1);
+    const svg = renderVillage(m);
+    const vb = /viewBox="0 0 ([0-9.]+) ([0-9.]+)"/.exec(svg)!;
+    const pxPerMetre = Number(/data-px-per-metre="([0-9.]+)"/.exec(svg)![1]);
+    const b = metadata(generateVillageGeoJson(m)).local_bounds;
+    expect(Number(vb[1]) / pxPerMetre).toBeCloseTo(b.max_x - b.min_x, 6);
+    expect(Number(vb[2]) / pxPerMetre).toBeCloseTo(b.max_y - b.min_y, 6);
+  });
+});
+```
+
+Import `renderVillage` from `../../src/village/render.js` if the file does not already have it. Run it BEFORE the change and confirm it fails by ~40 m in each dimension — that failure is the bug, measured in our own suite for the first time.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1789,7 +1832,8 @@ Push `settlemaker` only. **Do not push `settlemaker-web`** — that repo's sessi
 Message it with the tag and a re-baseline note split by kind of change — the lesson from 2.0.5, where a single-sentence note conflated a rasteriser-only change with a browser-visible one and nearly caused a false regression report. It must cover **cities as well as villages**: "every village changes" tells a consumer that village bytes are useless as a regression signal, which leaves cities as their only clean one, and a note silent on cities sends them hunting the wrong thing.
 
 - **Villages, on screen:** every village changes, coastal or not — the field-ring corridor is now cut to the frame rather than to the contract circle.
-- **Villages, data:** roads run to the tile edge; `VillageModel` carries a new `frame`; village GeoJSON `bounds` moves by up to 20 m on whichever axes a road exits (see the Self-Review's known gap). `frame` itself is **not** in the GeoJSON — spec §10 — so a consumer diffing GeoJSON will not see it appear; a consumer using the TypeScript API will.
+- **Villages, data:** roads run to the tile edge; `VillageModel` carries a new `frame`. `frame` itself is **not** in the GeoJSON — spec §10 — so a consumer diffing GeoJSON will not see it appear; a consumer using the TypeScript API will.
+- **Villages, `local_bounds` — write this as a FIX NOTICE, not a breaking change.** Say: *villages now satisfy the documented `local_bounds == viewBox` invariant that cities already satisfied; they were previously 40 m short in each dimension.* Do not write "same shape, different meaning" — that invites a consumer to audit its assumptions and reads as us moving the goalposts, when in fact we were the ones breaking the contract. This sentence is what tells the questables owner to **re-ingest**, not to worry: it persists `local_bounds` as a `jsonb` column and fits its projection to it, so every village it has ingested is mis-framed by 40 m until it re-reads. No schema bump, because the schema never changed.
 - **Cities, SVG:** byte-identical, and safe to assert as a regression signal — but **not** because the settlement path is insulated from `src/village/`. It is not. Walking the transitive import graph from `src/generator/model.ts` and `src/output/svg-builder.ts` reaches 57 files, two of which are village files, through two independent doors: **`src/village/glyphs.ts`** via `src/generator/village-rows.ts` (`HOUSE_INK_RATIO`, `HUT_INK_RATIO`), and **`src/village/route-class.ts`** via `src/input/azgaar-input.ts` (`toLegacyKind`, called on every road bearing of every burg). City SVG holds still because this work modifies neither of those two — pinned by Task 0 — and because `svg-builder.ts` carries no version stamp.
 - **Cities, GeoJSON:** differs by exactly one field, `settlemaker_version`, from the release bump in `src/output/geojson-builder.ts` — the same single-field diff every release produces, and the one their 2.0.3 check caught. Anything beyond that field is a real regression.
 
