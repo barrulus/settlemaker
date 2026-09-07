@@ -1,7 +1,7 @@
 import { Point } from '../../types/point.js';
 import { SeededRandom } from '../../utils/random.js';
 import { closestPointOnPolyline, dist, greenDrawnRadius, inAnyWater, unit } from '../geometry.js';
-import type { Green, GreenShape, Lane, Site, SiteRoute } from '../types.js';
+import { isApron, type Green, type GreenShape, type Lane, type Site, type SiteRoute } from '../types.js';
 import { classRank, isRoadClass, laneWidth } from '../route-class.js';
 import {
   GREEN_BUILT_RADIUS_DIVISOR, GREEN_CONNECTOR_MAX_SHARE, GREEN_DIAMETER_CAP_M,
@@ -242,7 +242,7 @@ function ringPolygon(network: TrunkNetwork): Point[] | null {
 
 /** The network's best-class road, preferring the longest on a tie. */
 function spineOf(network: TrunkNetwork): Lane | null {
-  const drawn = network.trunks.filter((t) => t.points.length >= 2 && !t.id.startsWith('trunk-loop-'));
+  const drawn = network.trunks.filter((t) => t.points.length >= 2 && !t.id.startsWith('trunk-loop-') && !isApron(t.id));
   if (drawn.length === 0) return null;
   const lengthOf = (l: Lane): number =>
     l.points.slice(1).reduce((sum, p, i) => sum + dist(l.points[i], p), 0);
@@ -293,7 +293,7 @@ function anchorOn(spine: Lane, aim: Point, builtRadiusM: number, rng: SeededRand
 function nearestOnNetwork(
   p: Point, network: TrunkNetwork,
 ): { distance: number; point: Point } | null {
-  const drawn = network.trunks.filter((t) => t.points.length >= 2);
+  const drawn = network.trunks.filter((t) => t.points.length >= 2 && !isApron(t.id));
   if (drawn.length === 0) return null;
   return drawn
     .map((t) => closestPointOnPolyline(p, t.points))
@@ -416,7 +416,7 @@ export function siteGreenOnNetwork(
   // through-road gives the lens family exactly as a through arm used to.
   const rim = radius * 0.9;
   const touching = network.trunks.filter(
-    (t) => t.points.length >= 2 && closestPointOnPolyline(centre, t.points).distance <= rim,
+    (t) => t.points.length >= 2 && !isApron(t.id) && closestPointOnPolyline(centre, t.points).distance <= rim,
   ).length;
   const fossil: SiteRoute[] = through && touching > 0
     ? [through, ...arms.filter((a) => a !== through).slice(0, Math.max(0, touching - 1))]
@@ -439,7 +439,7 @@ export function siteGreenOnNetwork(
  */
 function connectGreen(green: Green, network: TrunkNetwork, builtRadiusM: number): Lane[] {
   const rim = greenDrawnRadius(green);
-  const drawn = network.trunks.filter((t) => t.points.length >= 2);
+  const drawn = network.trunks.filter((t) => t.points.length >= 2 && !isApron(t.id));
   if (drawn.length === 0) return [];
   const nearest = drawn
     .map((t) => ({ t, hit: closestPointOnPolyline(green.centre, t.points) }))

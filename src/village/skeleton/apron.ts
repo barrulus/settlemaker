@@ -21,10 +21,13 @@
 import { Point } from '../../types/point.js';
 import {
   APRON_CURVATURE_DAMP, APRON_MAX_TOTAL_TURN_DEG, APRON_MAX_TURN_PER_STEP_DEG,
-  APRON_REACH_FACTOR, APRON_REACH_FLOOR_M, APRON_SAMPLE_STEP_M,
+  APRON_REACH_FACTOR, APRON_REACH_FLOOR_M, APRON_SAMPLE_STEP_M, MERGE_CAPTURE_M,
 } from '../constants.js';
-import { signedTurnDeg } from '../geometry.js';
-import type { Lane } from '../types.js';
+import { closestPointOnPolyline, dist, signedTurnDeg } from '../geometry.js';
+import { apronLaneId, type Lane } from '../types.js';
+// Type-only, so there is no runtime cycle with `trunks.ts`, which imports
+// `growAprons` from here.
+import type { TrunkEntry, TrunkJunction } from './trunks.js';
 
 /** How long an apron is drawn before clipping (spec §5.3.3). */
 export function apronReachM(contractRadiusM: number): number {
@@ -86,4 +89,93 @@ export function growApronPath(lane: Lane, reachM: number): Point[] {
   }
 
   return out;
+}
+
+/** A lane end counts as sitting on an entry within this — one apron sample
+ * step, the same slack `trunks-structural.test.ts` (b) allows. */
+const ON_ENTRY_M = 8;
+
+/** `growAprons`'s result: the apron lanes, any junctions where two aprons
+ * converged, and a diagnostics channel a later task will fill. */
+export interface GrownAprons {
+  lanes: Lane[];
+  junctions: TrunkJunction[];
+  diagnostics: string[];
+}
+
+/**
+ * One apron per lane whose OUTER end sits on a contract entry (spec §5.2).
+ *
+ * Identification is by proximity to an ENTRY POINT, never by radius from the
+ * origin: the fourth failed attempt identified arms by radius and got it
+ * wrong in both directions -- `trimTails` cut arms back inside the circle at
+ * pop 300, and at pop 40 arms ran past the fabric.
+ *
+ * Two FMG routes close in bearing can survive as distinct trunks (they were
+ * far enough apart AT the contract circle) yet run near-parallel once their
+ * aprons continue outward in roughly straight lines -- exactly the
+ * `fan` fixture case `trunks-structure.test.ts`'s near-parallel bar exists
+ * for, just discovered a stage later. So each apron, as it grows, is
+ * checked against every apron ALREADY EMITTED (in id order): the first
+ * point that lands within `MERGE_CAPTURE_M` of an earlier apron's polyline
+ * truncates this one there and records a junction, exactly as `mergeTrunks`
+ * already does for trunks proper. This is not the boundary merge spec 5.1
+ * forbids -- every route still gets its own entry point on the circle, at
+ * its exact bearing, untouched. The convergence happens OUTSIDE, in the
+ * apron, where two routes that close would genuinely meet.
+ *
+ * Returns only the new lanes (plus any junctions among them). The caller
+ * concatenates.
+ */
+export function growAprons(
+  lanes: Lane[], entries: TrunkEntry[], contractRadiusM: number,
+): GrownAprons {
+  const reachM = apronReachM(contractRadiusM);
+  const out: Lane[] = [];
+  const junctions: TrunkJunction[] = [];
+  // Sorted by id so the outcome can never depend on array position -- the
+  // same discipline `rehomeOrphans` and `resolveCrossings` keep.
+  for (const lane of [...lanes].sort((a, b) => a.id.localeCompare(b.id))) {
+    if (lane.points.length < 2) continue;
+    const tip = lane.points[lane.points.length - 1];
+    if (!entries.some((e) => dist(e.point, tip) <= ON_ENTRY_M)) continue;
+    let points = growApronPath(lane, reachM);
+    if (points.length < 2) continue;
+
+    const laneId = apronLaneId(lane.id);
+    const captureM = MERGE_CAPTURE_M[lane.type];
+    // `[0]` is the lane's own outer vertex -- shared with the trunk, and
+    // typically nowhere near another apron -- so the walk starts at [1].
+    for (let i = 1; i < points.length; i++) {
+      let bestOther: Lane | null = null;
+      let bestDistance = Infinity;
+      let bestPoint = points[i];
+      for (const other of out) {
+        const hit = closestPointOnPolyline(points[i], other.points);
+        if (hit.distance <= captureM && hit.distance < bestDistance) {
+          bestOther = other;
+          bestDistance = hit.distance;
+          bestPoint = hit.point;
+        }
+      }
+      if (bestOther) {
+        points = [...points.slice(0, i), bestPoint];
+        const laneIds = [laneId, bestOther.id].sort();
+        junctions.push({ id: `j:${laneIds.join('+')}`, position: bestPoint, laneIds });
+        break;
+      }
+    }
+
+    out.push({
+      id: laneId,
+      type: lane.type,
+      widthM: lane.widthM,
+      points,
+      // Deliberately no parentId: `dressing/fields.ts`'s `exitRoads` skips
+      // any lane that has one, and the apron IS the road that leaves the
+      // village now, so it is the road the field ring must open for.
+      ...(lane.sourceRouteIds ? { sourceRouteIds: lane.sourceRouteIds } : {}),
+    });
+  }
+  return { lanes: out, junctions, diagnostics: [] };
 }

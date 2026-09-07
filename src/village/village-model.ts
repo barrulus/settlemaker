@@ -38,7 +38,7 @@ import {
   DISC_ESCALATION_STEP_RATIO, RING_SETBACK_M, SPACING_RELAX_FLOOR, SPACING_RELAX_STEP,
   PROFILE_SEED_MULTIPLIER, PROFILE_SEED_OFFSET,
 } from './constants.js';
-import type { Lane, Lot, VillageModel } from './types.js';
+import { apronLaneId, isApron, type Lane, type Lot, type VillageModel } from './types.js';
 import { classRank, type RouteType } from './route-class.js';
 
 /** The band this engine serves. Above it, the existing engine runs. */
@@ -360,9 +360,9 @@ export function generateVillage(
     lotFloorM = Math.max(inkFloorM, nominalLotFloorM - tightenM);
     activeDeck = tightenDeck(deck, tightenM);
     targetRadiusM = cappedRadiusM * (1 + extraRings * DISC_ESCALATION_STEP_RATIO);
-    const grown = saturateDisc(lanes, green, measuredMeanFrontage,
+    const grown = saturateDisc(lanes.filter((l) => !isApron(l.id)), green, measuredMeanFrontage,
       discProfile.scaled(targetRadiusM / cappedRadiusM), rng, spacingScale());
-    lanes = grown.lanes;
+    lanes = [...grown.lanes, ...lanes.filter((l) => isApron(l.id))];
     lotRadiusM = grown.radiusM;
     lotProfile = grown.profile;
 
@@ -371,7 +371,7 @@ export function generateVillage(
 
     lots = [
       ...subdivideGreen(green, f0, LOT_DEPTH_M, rng, lanes),
-      ...lanes.flatMap((l) => subdivideLane(
+      ...lanes.filter((l) => !isApron(l.id)).flatMap((l) => subdivideLane(
         l, green, lotRadiusM, f0, LOT_DEPTH_M, rng, lotFloorM, lotCapM,
         lotReachAt(l, green, lotProfile, site.population),
       )),
@@ -504,7 +504,8 @@ export function generateVillage(
     const blockFloor = blockFloorFor(site.population);
     const blocksNow = (spend.unhoused === 0 && blockFloor > 0)
       ? blockAreas(
-        connectDeadEnds(trimTails(lanes, spend.buildings), green, spend.buildings),
+        connectDeadEnds(trimTails(lanes, spend.buildings), green, spend.buildings)
+          .filter((l) => !isApron(l.id)),
         green,
       ).length
       : 0;
@@ -623,10 +624,12 @@ export function generateVillage(
   // toward a form that crossed nothing, so the sweep converges; it is
   // bounded anyway, and walked in id order so it can never depend on array
   // position.
-  const relaxedLanes = relaxLanes(lanes, spend.buildings).map((relaxedLane) => {
-    const intrudes = spend.buildings.some((b) => intrudesOnLane(b, [relaxedLane]));
-    return intrudes ? (lanes.find((l) => l.id === relaxedLane.id) ?? relaxedLane) : relaxedLane;
-  });
+  const relaxedLanes = relaxLanes(lanes.filter((l) => !isApron(l.id)), spend.buildings)
+    .map((relaxedLane) => {
+      const intrudes = spend.buildings.some((b) => intrudesOnLane(b, [relaxedLane]));
+      return intrudes ? (lanes.find((l) => l.id === relaxedLane.id) ?? relaxedLane) : relaxedLane;
+    })
+    .concat(lanes.filter((l) => isApron(l.id)));
   for (let pass = 0; pass < 4; pass++) {
     const order = relaxedLanes.map((l, i) => i)
       .sort((a, b) => relaxedLanes[a].id.localeCompare(relaxedLanes[b].id));
@@ -767,7 +770,7 @@ export function generateVillage(
   // The proxy is a lower bound (see its comment), so this can legitimately
   // read as met even on a round the loop itself exhausted without knowing
   // it would be.
-  const shippedBlocks = blockAreas(relaxed, green).length;
+  const shippedBlocks = blockAreas(relaxed.filter((l) => !isApron(l.id)), green).length;
   const shippedBlockFloor = blockFloorFor(site.population);
   if (spend.unhoused === 0 && shippedBlocks < shippedBlockFloor) {
     diagnostics.push(

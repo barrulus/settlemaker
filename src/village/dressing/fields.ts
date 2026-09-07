@@ -24,9 +24,7 @@ import {
   LANE_SETBACK_M, RING_SETBACK_M,
 } from '../constants.js';
 import { radialExtent, type RadialExtent } from './extent.js';
-import type {
-  Croft, EdgeStamp, FieldBlock, Green, Lane, Lot, Site,
-} from '../types.js';
+import { isApron, type Croft, type EdgeStamp, type FieldBlock, type Green, type Lane, type Lot, type Site } from '../types.js';
 
 /**
  * §7.2, THE FARMED LAND -- rebuilt at GATE 8.3 as a PLANAR SUBDIVISION.
@@ -300,9 +298,13 @@ interface RoadLine {
  * on a dead straight line, so the line is a faithful description of it).
  */
 export function exitRoads(green: Green, lanes: Lane[], belt: Point[]): RoadLine[] {
+  const hasApron = new Set(
+    lanes.filter((l) => isApron(l.id)).map((l) => l.id.replace(/\/a(~.*)?$/, '')),
+  );
   const out: RoadLine[] = [];
   for (const lane of lanes) {
     if (lane.parentId !== undefined) continue;
+    if (hasApron.has(lane.id)) continue; // its apron is the exit road
     if (lane.points.length < 2) continue;
     const tip = lane.points[lane.points.length - 1];
     const prev = lane.points[lane.points.length - 2];

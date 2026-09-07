@@ -21,6 +21,7 @@ import { angularGap, bearingVector, closestPointOnPolyline, segmentIntersection 
 import { pointInPolygon } from '../../geom/point-in-polygon.js';
 import { classRank, isRoadClass, laneWidth, stepDown, type RouteType } from '../route-class.js';
 import { routeProvenanceKey, trunkLaneId, type Lane, type Site, type SiteRoute } from '../types.js';
+import { growAprons } from './apron.js';
 
 /** Wanderer classes (ratio >= 0.12) get a second control jitter and are
  * subdivided into two Béziers sharing tangents at the midpoint. */
@@ -1369,7 +1370,16 @@ export function synthesizeTrunks(
   }
 
   const rehomed = rehomeOrphans(applied.trunks, applied.junctions, contractRadiusM);
-  const resolved = resolveCrossings(rehomed.trunks, rehomed.junctions);
+  // Spec 2026-09-07 §5.2. AFTER merging and pattern application, because a
+  // draft-time extension would let `mergeTrunks` capture two arms out in the
+  // apron and spec 5.1 forbids merging at the boundary. AFTER
+  // `rehomeOrphans`, which skips ends at or beyond the contract radius
+  // anyway. BEFORE `resolveCrossings`, so an apron crossing another road
+  // becomes a junction like any other crossing -- the fifth failed attempt
+  // could not reach this, because it patched after synthesis was over.
+  const grown = growAprons(rehomed.trunks, entries, contractRadiusM);
+  const withAprons = [...rehomed.trunks, ...grown.lanes];
+  const resolved = resolveCrossings(withAprons, [...rehomed.junctions, ...grown.junctions]);
   const junctions = pruneJunctions(resolved.trunks, resolved.junctions);
 
   return {

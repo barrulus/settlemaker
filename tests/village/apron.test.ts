@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { Point } from '../../src/types/point.js';
 import { apronLaneId, isApron, type Lane } from '../../src/village/types.js';
-import { apronReachM, growApronPath } from '../../src/village/skeleton/apron.js';
+import { apronReachM, growApronPath, growAprons } from '../../src/village/skeleton/apron.js';
 import { dist, polylineLength } from '../../src/village/geometry.js';
 import { APRON_REACH_FLOOR_M } from '../../src/village/constants.js';
 
@@ -98,5 +98,63 @@ describe('growApronPath', () => {
   it('returns nothing for a degenerate lane', () => {
     const stub: Lane = { id: 'trunk-main-000', type: 'main', widthM: 5, points: [new Point(0, 0)] };
     expect(growApronPath(stub, 300)).toEqual([]);
+  });
+});
+
+describe('growAprons', () => {
+  const entries = [
+    { point: new Point(0, -100), bearingDeg: 0, route: { bearingDeg: 0, type: 'main' as const, through: false }, farSide: false },
+  ];
+
+  it('gives one apron per lane whose outer end is a contract entry', () => {
+    const { lanes: aprons } = growAprons([straight], entries as never, 100);
+    expect(aprons).toHaveLength(1);
+    expect(aprons[0].id).toBe('trunk-main-000/a');
+  });
+
+  it('inherits the trunk’s class and width so the stroke is continuous', () => {
+    const { lanes: [apron] } = growAprons([straight], entries as never, 100);
+    expect(apron.type).toBe('main');
+    expect(apron.widthM).toBe(straight.widthM);
+  });
+
+  it('carries no parentId — exitRoads skips lanes that have one', () => {
+    const { lanes: [apron] } = growAprons([straight], entries as never, 100);
+    expect(apron.parentId).toBeUndefined();
+  });
+
+  it('ignores a lane whose outer end is not on an entry', () => {
+    const inner: Lane = {
+      id: 'lane-090', type: 'local', widthM: 3,
+      points: [new Point(0, 0), new Point(10, 10)],
+    };
+    expect(growAprons([inner], entries as never, 100).lanes).toHaveLength(0);
+  });
+
+  it('merges an apron into an earlier one it converges on, and records a junction', () => {
+    // Two entries half a degree apart -- the `fan` fixture's own case --
+    // whose aprons run outward nearly parallel and converge within capture
+    // distance well past the shared tip.
+    const a: Lane = {
+      id: 'trunk-main-000', type: 'main', widthM: 5,
+      points: [new Point(0, -20), new Point(0, -60), new Point(0, -100)],
+    };
+    const b: Lane = {
+      id: 'trunk-main-001', type: 'main', widthM: 5,
+      points: [new Point(1, -20), new Point(1, -60), new Point(1, -100)],
+    };
+    const twoEntries = [
+      { point: new Point(0, -100), bearingDeg: 0, route: { bearingDeg: 0, type: 'main' as const, through: false }, farSide: false },
+      { point: new Point(1, -100), bearingDeg: 0.5, route: { bearingDeg: 0.5, type: 'main' as const, through: false }, farSide: false },
+    ];
+    const { lanes: aprons, junctions } = growAprons([a, b], twoEntries as never, 100);
+    expect(aprons).toHaveLength(2);
+    expect(junctions).toHaveLength(1);
+    const merged = aprons.find((l) => l.id === 'trunk-main-001/a')!;
+    // Truncated well short of the full, unmerged reach.
+    expect(polylineLength(merged.points)).toBeLessThan(polylineLength(
+      growApronPath(b, apronReachM(100)),
+    ));
+    expect(junctions[0].laneIds).toEqual(['trunk-main-000/a', 'trunk-main-001/a']);
   });
 });
