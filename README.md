@@ -177,8 +177,9 @@ The `AzgaarBurgInput` interface maps from [Azgaar's Fantasy Map Generator](https
 | `shanty` | `boolean` | Has shanty town areas |
 | `capital` | `boolean` | Is a regional capital |
 | `culture` | `string?` | Culture name (future use) |
+| `biome` | `string?` | Biome name. Azgaar's own vocabulary is accepted and normalised (`hot desert` → desert, `taiga` → tundra, …). In a village this is **data, not styling**: it picks the ground, the dwellings, the field and canopy decks and the plot edges. To change only the look, pass a `VillageTheme` — see [Villages](#villages) |
 | `roadBearings` | `number[]?` | Compass bearings of approaching roads |
-| `oceanBearing` | `number?` | Bearing to nearest ocean (enables coastline) |
+| `oceanBearing` | `number?` | Bearing to nearest ocean. Enables a coastline; in a village it synthesises one with bays and headlands, standing off the settlement |
 | `harbourSize` | `'large' \| 'small'?` | Harbour scale for port cities |
 
 Population determines settlement size. The patch counts below describe the
