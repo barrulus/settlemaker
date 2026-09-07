@@ -530,5 +530,41 @@ export function renderVillage(
   out.push('</g>');
 
   out.push('</svg>');
-  return out.join('\n');
+  return resolveVarFallbacks(out.join('\n'), { ...SM_TOKENS, ...sanitizeVillageTokens(theme.tokens) });
+}
+
+/**
+ * Rewrite every `var(--name, fallback)` so the FALLBACK carries the resolved
+ * value, keeping the variable reference intact.
+ *
+ * WHY: librsvg — sharp, and anything else rasterising server-side — does not
+ * implement CSS custom properties. It paints the fallback, always. Proven:
+ * `var(--c, #0000ff)` under `:root{--c:#ff0000}` renders BLUE. So every glyph
+ * in the refined set, all of which paint as `fill="var(--sm-x, #hex)"`, came
+ * out in the library's default colours whenever a theme was applied and the
+ * result was rasterised rather than shown in a browser. Ground and water are
+ * literal fills and did render, which is why it hid for so long: half of each
+ * theme worked and half silently did not.
+ *
+ * Keeping `var()` and rewriting only the fallback gets both properties at
+ * once — a renderer that ignores custom properties now takes the RIGHT
+ * colour, and a host page can still re-tint by redefining the variable. The
+ * alternative, emitting plain fills, would have fixed rasterisation by
+ * throwing the re-tinting away.
+ *
+ * A temperate village is unaffected to the byte: the library's defaults ARE
+ * the temperate values, so every substitution there replaces a string with
+ * itself.
+ */
+function resolveVarFallbacks(svg: string, tokens: Record<string, string | number>): string {
+  // The separator is captured and replayed verbatim: rewriting `,` as `, `
+  // would change the bytes of every temperate village for no reason, and a
+  // consumer diffing releases would have to prove that churn was cosmetic.
+  return svg.replace(
+    /var\((--[a-z0-9-]+)(\s*,\s*)([^)]*)\)/gi,
+    (whole, name: string, sep: string, _fallback: string) => {
+      const resolved = tokens[name];
+      return resolved === undefined ? whole : `var(${name}${sep}${resolved})`;
+    },
+  );
 }

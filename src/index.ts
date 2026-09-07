@@ -259,5 +259,10 @@ export type {
 // The village's own `Poi` collides with the generator's existing `Poi`
 // (./poi/poi-kinds.js) exported above — aliased so both can be named.
 export type { Poi as VillagePoi } from './village/types.js';
+// ROUTE_CLASS_ORDER is exported as a VALUE, not just a type: it is exactly
+// what `roads=` validates against, and a consumer building a road picker had
+// to hardcode the seven classes without it. Same reason VILLAGE_BIOMES is
+// exported — the builder page reads both rather than keeping its own copy.
+export { ROUTE_CLASS_ORDER } from './village/route-class.js';
 export type { RouteType } from './village/route-class.js';
 export type { DeckEntry } from './village/deck.js';

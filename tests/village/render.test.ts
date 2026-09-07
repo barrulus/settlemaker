@@ -85,8 +85,18 @@ describe('renderVillage', () => {
     const stripped = svg.replace(
       / data-origin-x="[-0-9.]+" data-origin-y="[-0-9.]+" data-px-per-metre="[-0-9.]+"/, '',
     );
-    expect(createHash('sha256').update(stripped).digest('hex'))
-      .toBe('d0b2f4073d031de40f812f222458f39689ae50e0401c7e5b5b08333cefdf8542');
+    // The hash moved AGAIN when resolved fills landed: `var(--sm-x, <fallback>)`
+    // now carries the resolved token value instead of the glyph's own. The
+    // PICTURE still did not move -- a browser resolves the variable in both
+    // cases and paints the identical colour -- so the fallback is normalised
+    // away and the ORIGINAL hash is reproduced under that normalisation
+    // rather than re-pinned. `29020286...` is the pre-change value with both
+    // the alignment frame and the fallbacks stripped; erasing only the frame
+    // still gives `d0b2f407...` on the pre-change renderer, which is how this
+    // value was derived.
+    const normalised = stripped.replace(/var\((--[a-z0-9-]+)\s*,\s*[^)]*\)/gi, 'var($1)');
+    expect(createHash('sha256').update(normalised).digest('hex'))
+      .toBe('29020286752231d733c1f7e6bdd28c5a89238460e62945f16b454579c4907f86');
   });
 
   it('carries the contract circle radius for consumers to align against', () => {

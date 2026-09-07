@@ -71,8 +71,25 @@ const BIOME_THEMES: Record<string, Partial<VillageTheme>> = {
     water: '#7fb3ad',
     waterEdge: '#638e89',
     shadowColor: '#6b5136',
-    tokens: { '--sm-yard': '#e6d8b4', '--sm-common': '#c9bd83' },
+    // FLORA PASS 2026-09-07. The desert deck already draws the right PLANTS
+    // (date palm, olive, scrub — not temperate trees recoloured), but they
+    // drew at the library's default greens, which are a well-watered green.
+    // Olive and scrub go khaki/grey-green and the palm fronds go dusty: a
+    // desert village should read as sparse hardy growth on sand, not as a
+    // temperate village whose lawn was repainted.
+    tokens: {
+      '--sm-yard': '#e6d8b4', '--sm-common': '#c9bd83',
+      '--sm-olive': '#9a9c72', '--sm-olive-b': '#b6b48c',
+      '--sm-dry': '#c2b884', '--sm-dry-b': '#d6cba0',
+      '--sm-frond': '#6f8a4f', '--sm-needle': '#5e7452', '--sm-needle-b': '#7a8f68',
+      '--sm-leaf': '#6b7a4c',
+    },
   },
+  // FLORA PASS 2026-09-07: tundra and coastal were LOOKED AT and deliberately
+  // left alone. Tundra already draws dark snow-capped conifers and bare snags
+  // on ice, which is right; coastal already draws grey-green tamarisk and dune
+  // grass on bleached turf, which is also right. Changing them would have been
+  // motion, not improvement.
   tundra: {
     // Snow. The library ships `--sm-snow` for the roofs; the ground has to
     // agree with them or the houses float on grass.
@@ -88,7 +105,17 @@ const BIOME_THEMES: Record<string, Partial<VillageTheme>> = {
     water: '#6fb5a8',
     waterEdge: '#568e84',
     shadowColor: '#3a4a33',
-    tokens: { '--sm-common': '#9ec96a' },
+    // FLORA PASS 2026-09-07. Tropical read MONOTONE, not wrong: broadleaf and
+    // fan palms in the library's default green, scattered on a ground only a
+    // little lighter than they are, so the canopy barely separated from the
+    // turf. Deepened and saturated so a jungle village reads as dense growth
+    // over ground rather than a green field with green marks on it.
+    tokens: {
+      '--sm-common': '#9ec96a',
+      '--sm-leaf': '#1d4f26', '--sm-frond': '#266b2c',
+      '--sm-canopy-a': '#2f6b32', '--sm-canopy-b': '#4d8a3a',
+      '--sm-tamarisk': '#3d6f3d', '--sm-tamarisk-b': '#5f8a58',
+    },
   },
   coastal: {
     // Temperate, but bleached toward the sea and with more of it about.
