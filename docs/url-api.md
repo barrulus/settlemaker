@@ -286,8 +286,9 @@ network inward from the bearings on its contract circle, so a burg of 1,000
 or under with no approach roads has no main roads at all and nothing reaching
 its own boundary — an island, with no way to join it to the map around it.
 Measured on a pop-500 village: with no bearings the furthest lane point is
-85 m and every lane is local/trail/footpath; with three bearings it is 188 m,
-the contract radius exactly, with three main roads and two market streets.
+85 m and every lane is local/trail/footpath; with three bearings, roads are
+drawn past the 188 m contract radius all the way to the edge of the tile,
+with three main roads and two market streets.
 
 | Param | Type | Default | Notes |
 |---|---|---|---|
@@ -508,6 +509,12 @@ with `viewBox`, every glyph defined inline in a single `<defs>`, no external
 asset references and no `preserveAspectRatio` (set your own). It also
 carries `data-contract-radius`, `data-origin-x`, `data-origin-y` and
 `data-px-per-metre`.
+
+`data-contract-radius` is an **alignment** contract, not a drawing limit:
+every approach road reaches the circle at its exact bearing, so a consumer
+holding `contractRadiusM` can line our tile up against its own route lines.
+It is not where our drawing stops — village roads are drawn past the circle
+all the way to the edge of the tile, where they are cut off.
 
 ### Biome names
 
