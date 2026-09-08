@@ -1456,7 +1456,16 @@ export const APRON_SAMPLE_STEP_M = 25;
 export const APRON_CURVATURE_DAMP = 0.5;
 
 /** Clamps on that continuation, so a footpath cannot spiral: the most an
- * apron may turn per sample step, and the most it may turn in total. */
+ * apron may turn per sample step, and the point past which it stops turning
+ * at all.
+ *
+ * The total is a THRESHOLD, not a ceiling: `growApronPath` tests it before
+ * adding the step's turn, so the last permitted step carries the apron to
+ * `APRON_MAX_TOTAL_TURN_DEG + APRON_MAX_TURN_PER_STEP_DEG` -- ~32 deg as
+ * these two are set. Left as it is deliberately (a threshold reads
+ * straightforwardly in the loop, and 2 deg of slack on a road that has
+ * already bent 30 is not worth a branch); the comment says the true bound
+ * rather than the code being changed to match a rounder number. */
 export const APRON_MAX_TURN_PER_STEP_DEG = 2;
 export const APRON_MAX_TOTAL_TURN_DEG = 30;
 

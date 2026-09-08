@@ -9,7 +9,7 @@
  * and the one thing CLIPPED to it. There is no fixed point to chase, and the
  * frame of a village that gains nothing else is unchanged.
  */
-import { Point } from '../types/point.js';
+import type { Point } from '../types/point.js';
 import { FRAME_PAD_M } from './constants.js';
 import { clipPolylineToRect } from './geometry.js';
 import { isApron, type Frame, type Lane } from './types.js';

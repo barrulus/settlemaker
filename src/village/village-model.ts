@@ -39,7 +39,7 @@ import {
   DISC_ESCALATION_STEP_RATIO, RING_SETBACK_M, SPACING_RELAX_FLOOR, SPACING_RELAX_STEP,
   PROFILE_SEED_MULTIPLIER, PROFILE_SEED_OFFSET,
 } from './constants.js';
-import { apronLaneId, isApron, type Lane, type Lot, type VillageModel } from './types.js';
+import { isApron, type Lane, type Lot, type VillageModel } from './types.js';
 import { classRank, type RouteType } from './route-class.js';
 
 /** The band this engine serves. Above it, the existing engine runs. */
@@ -550,9 +550,14 @@ export function generateVillage(
     if (round === MAX_FEEDBACK_ROUNDS) {
       if (spend.unhoused > 0 && firstHousedSnapshot === null) {
         diagnostics.push(
+          // Aprons excluded, as everywhere else the fabric is measured:
+          // nothing is ever seated on one, so counting them added 1000-3000 m
+          // of frontage that no house could use and overstated the figure by
+          // 25-40% -- in the direction that tells a reader chasing an
+          // overflow there was room when there was not.
           `overflow: ${spend.unhoused} of ${site.population} unhoused after `
           + `${MAX_FEEDBACK_ROUNDS} rounds (available frontage `
-          + `${Math.round(availableFrontage(lanes))} m)`,
+          + `${Math.round(availableFrontage(lanes.filter((l) => !isApron(l.id))))} m)`,
         );
       } else if (spend.unhoused > 0) {
         // A round found earlier DID house the census (`firstHousedSnapshot`
@@ -859,7 +864,19 @@ export function generateVillage(
     // task (see `types.ts`'s field comments).
     contractRadiusM: network.contractRadiusM,
     frame,
-    trunkJunctions: network.junctions,
+    // Computed BEFORE the apron clip, so a junction recorded where two
+    // aprons converged can sit on road the clip has since discarded --
+    // measured 4 of 131 junctions outside the frame, the worst 357 m clear
+    // of the picture. `types.ts` and `geojson.ts` both promise a consumer
+    // never receives a junction in open ground; `bridges` below already
+    // moved onto `framedLanes` for the same reason and this was missed.
+    // Inside the frame is exactly the right test: the clip keeps an apron's
+    // prefix up to its first crossing of the frame, so any junction still
+    // inside the rectangle is still on drawn road.
+    trunkJunctions: network.junctions.filter((j) => (
+      j.position.x >= frame.minX && j.position.x <= frame.maxX
+      && j.position.y >= frame.minY && j.position.y <= frame.maxY
+    )),
     greenRelation,
     // Phase 3: computed on the FINAL lanes -- now after the apron clip, so
     // no bridge is ever placed outside the picture.
