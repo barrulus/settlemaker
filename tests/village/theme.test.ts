@@ -61,7 +61,7 @@ describe('village theming', () => {
     // and nothing else in the picture moved. `3299ad25...` is that value.
     const normalised = stripped.replace(/var\((--[a-z0-9-]+)\s*,\s*[^)]*\)/gi, 'var($1)');
     expect(createHash('sha256').update(normalised).digest('hex'))
-      .toBe('3299ad2536451a215b3489e6bb5230a2cd66544432d6935866fedc47eb1753c1');
+      .toBe('f74c97a18e1d47bb22a46e2f3b3ae8a8e4194cd136d51516a65cb643ba5e7e55');
   });
 
   it('gives every biome the glyph set knows a ground of its own', () => {

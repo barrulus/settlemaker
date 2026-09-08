@@ -97,8 +97,27 @@ export function renderBearingFor(
   return wrapDeg(lotBearingDeg + 180 + (gableOn ? 90 : 0) + jitterDeg);
 }
 
-/** Seat a dwelling at the front of its lot, facing the way the lot faces. */
-export function seat(entry: DeckEntry, lot: Lot, rng: SeededRandom): Building {
+/**
+ * Seat a dwelling at the front of its lot, facing the way the lot faces.
+ *
+ * `allowGable` (landmarks own ground, 2026-09-08): gate 5.3's gable flip
+ * rotates the DRAWN footprint 90 degrees from the lot's cut orientation --
+ * fine for an ordinary dwelling, whose lot carries slack (`fit`, the gap
+ * term) wide enough to absorb it, but a landmark's lot is minted at its
+ * glyph's own footprint with NO slack at all, so a 90-degree flip on a
+ * markedly non-square landmark (the 22x17 temple, the 17x15 inn) walks its
+ * ink straight off its own claim and into whatever lane runs alongside it
+ * -- measured directly: one temple's render bearing landed 82 degrees off
+ * its lot's front-facing bearing, and its ink came within 9 m of the very
+ * road it was sited to front. The roll always happens regardless (so the
+ * draw sequence never depends on which caller asks); only whether it is
+ * APPLIED is gated, matching the existing "rolled for every dwelling,
+ * applied only where the glyph's rotation class honours it" pattern
+ * `renderBearingFor` already carries for invariant/snap-cardinal glyphs.
+ */
+export function seat(
+  entry: DeckEntry, lot: Lot, rng: SeededRandom, allowGable = true,
+): Building {
   const footprint = sizeFor(entry, lot, rng);
   // Set back 0-1.5 m from the frontage, along the lot's facing direction.
   const setback = rng.float() * SEATING_SETBACK_MAX_M;
@@ -121,7 +140,7 @@ export function seat(entry: DeckEntry, lot: Lot, rng: SeededRandom): Building {
   // EVERY dwelling, including glyphs that will ignore them, so the draw
   // count never depends on which glyph the deck handed us.
   const bearingJitterDeg = (rng.float() * 2 - 1) * SEATING_BEARING_JITTER_DEG;
-  const gableOn = rng.bool(SEATING_GABLE_CHANCE);
+  const gableOn = rng.bool(SEATING_GABLE_CHANCE) && allowGable;
   return {
     id: buildingId(lot.id),
     lotId: lot.id,
@@ -287,13 +306,18 @@ const TERRACE_SLIDE_SHARES = [
 
 export function spendCensus(
   lots: Lot[], deck: DeckEntry[], site: Site, rng: SeededRandom, lanes: Lane[] = [],
-  fates?: Map<string, LotFate>, terrace = false,
+  fates?: Map<string, LotFate>, terrace = false, seeded: Building[] = [],
 ): SpendResult {
   const ordered = orderLots(lots);
-  const taken = new Set<string>();
+  // `seeded` -- landmarks own ground (2026-09-08): already-seated buildings
+  // (the inn, the chapel, the manor) handed in by the caller. Their lots are
+  // pre-marked `taken` so neither loop below can draw a second building onto
+  // the same ground, and their occupancy counts toward `housed` immediately
+  // -- a landmark that houses nobody (a chapel) simply adds 0.
+  const taken = new Set<string>(seeded.map((b) => b.lotId));
   const placedGlyphs = new Set<string>();
-  const buildings: Building[] = [];
-  let housed = 0;
+  const buildings: Building[] = [...seeded];
+  let housed = seeded.reduce((s, b) => s + b.occupancy, 0);
 
   // Gate 5.2 ("look at the spaces between the houses"): a failed seating
   // used to leave a silent hole in the row. Before giving a lot up, slide

@@ -1630,3 +1630,19 @@ export const LANDMARK_BAND: Record<'faith' | 'inn' | 'manor', [number, number]> 
  * sampling pitch (`LANE_SAMPLE_STEP_M`) but kept as its own constant since
  * landmark siting is a different pass with its own tuning story. */
 export const LANDMARK_SITE_STEP_M = 12;
+
+/**
+ * How far, in metres, growth's obstacle avoidance (`saturateDisc`,
+ * `withObstacles`) inflates a landmark's claim before treating it as a
+ * no-cross zone. The claim boundary alone is not enough: obstacle avoidance
+ * only refuses a new lane that literally CROSSES the claim's outline, but
+ * `intrudesOnLane` (dwellings.ts, gate 2) judges the BUILT building's ink --
+ * smaller than the claim by `HOUSE_INK_RATIO` -- widened again by the
+ * intruding lane's own half-width. A lane that hugs the claim's edge
+ * without ever crossing it can still land inside that widened ink zone.
+ * Measured directly: a growth branch ran along a temple's claim edge with no
+ * crossing and still intruded on the finished building. This margin (a
+ * generous local-class half-width plus the ink/claim size gap for even the
+ * largest landmark) pushes growth back before that gap can close.
+ */
+export const LANDMARK_OBSTACLE_MARGIN_M = 1;

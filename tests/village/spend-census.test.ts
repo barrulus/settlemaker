@@ -3,6 +3,7 @@ import { Point } from '../../src/types/point.js';
 import { SeededRandom } from '../../src/utils/random.js';
 import { spendCensus, overlaps } from '../../src/village/dwellings.js';
 import { baseDeck } from '../../src/village/deck.js';
+import type { DeckEntry } from '../../src/village/deck.js';
 import type { Lot, Site } from '../../src/village/types.js';
 
 const site = (population: number): Site => ({
@@ -25,6 +26,29 @@ const lots = (n: number): Lot[] => Array.from({ length: n }, (_, i) => ({
 // deck at pop 400 (all landmarks eligible), built once with its own seed so
 // the spend RNG below stays independent of the deck choice.
 const DECK = baseDeck(400, new SeededRandom(99));
+
+// Landmarks own ground (2026-09-08 ruling): sm-inn and sm-house-large-tiled
+// were REMOVED from baseDeck -- they are now minted directly by
+// skeleton/landmarks.ts at their own uncapped footprint, bypassing
+// spendCensus entirely. NO live deck entry carries `cap` any more, so
+// spendCensus's capped-entry-first ordering (deck.filter(e => e.cap ===
+// 'one'), placed before the ordinary draw, with retry-the-next-lot-on-
+// collision per ruling R14) is a mechanism the real village pipeline no
+// longer exercises. It is still live code, worth keeping correct in case a
+// future capped entry returns, so the two tests below construct their own
+// capped fixture entries (matching the real inn/manor specs' footprint,
+// occupancy and minPop) rather than relying on DECK to carry one.
+const CAPPED_DECK: DeckEntry[] = [
+  ...DECK,
+  {
+    glyph: 'sm-house-large-tiled', occupancy: 6, weight: 0, sizeFactor: 1,
+    minFrontage: 15, cap: 'one', requires: { minPop: 250 },
+  },
+  {
+    glyph: 'sm-inn', occupancy: 6, weight: 0, sizeFactor: 1,
+    minFrontage: 20, cap: 'one', requires: { minPop: 180 },
+  },
+];
 
 describe('spendCensus', () => {
   it('houses the census and then stops', () => {
@@ -50,7 +74,7 @@ describe('spendCensus', () => {
   // which — so assert the inn is placed, unique, and among the three
   // best-scoring lots.
   it('places capped landmarks first, among the best lots', () => {
-    const out = spendCensus(lots(60), DECK, site(400), new SeededRandom(1));
+    const out = spendCensus(lots(60), CAPPED_DECK, site(400), new SeededRandom(1));
     const inn = out.buildings.find((b) => b.glyph === 'sm-inn');
     expect(inn).toBeDefined();
     const bestThree = new Set(['arm-090:R0', 'arm-090:R1', 'arm-090:R2']);
@@ -158,7 +182,7 @@ describe('spendCensus', () => {
         bearingDeg: 0, frontageM: 30, depthM: 25, score: 98,
       },
     ];
-    const out = spendCensus(contestedLots, DECK, site(300), new SeededRandom(1));
+    const out = spendCensus(contestedLots, CAPPED_DECK, site(300), new SeededRandom(1));
     const manor = out.buildings.find((b) => b.glyph === 'sm-house-large-tiled');
     const inn = out.buildings.find((b) => b.glyph === 'sm-inn');
     expect(manor).toBeDefined();

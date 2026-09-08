@@ -20,12 +20,17 @@
  */
 import { SeededRandom } from '../../utils/random.js';
 import { Point } from '../../types/point.js';
-import { arcLengths, dist, greenDrawnRadius, inAnyWater, sampleAt } from '../geometry.js';
+import {
+  arcLengths, closestPointOnSegment, dist, greenDrawnRadius, inAnyWater, sampleAt,
+  segmentIntersection,
+} from '../geometry.js';
 import { hasGlyph, nominalFootprint } from '../glyphs.js';
 import { resolveGlyphFor } from '../deck.js';
 import { offsetPolyline } from '../parcels/strip.js';
 import { lotObb, obbOverlap, type Obb } from '../parcels/overlap.js';
-import { LANDMARK_BAND, LANDMARK_SITE_STEP_M, LANE_SETBACK_M } from '../constants.js';
+import {
+  LANDMARK_BAND, LANDMARK_OBSTACLE_MARGIN_M, LANDMARK_SITE_STEP_M, LANE_SETBACK_M,
+} from '../constants.js';
 import type { Green, Lane, Lot, Site } from '../types.js';
 
 export type LandmarkKind = 'faith' | 'inn' | 'manor';
@@ -113,9 +118,65 @@ function obbSamplePoints(obb: Obb): Point[] {
   return [center, corner(1, 1), corner(1, -1), corner(-1, 1), corner(-1, -1)];
 }
 
+/**
+ * Full edge-crossing test, not just the five sample points -- a narrow
+ * stream (AFMG's brook is 4 m) can slice straight through the MIDDLE of a
+ * landmark's large claim (up to 22x17) without ever touching a corner or
+ * the centre, which `obbSamplePoints` alone would miss entirely. Measured
+ * directly: all three landmarks sited into the water on the `brook`
+ * fixture before this fix, corners-and-centre all dry, the water crossing
+ * through the claim's interior. Mirrors `claimTouchesWater`
+ * (parcels/lots.ts), the same test `clipLots` already runs for an ordinary
+ * lot -- kept as its own copy here rather than imported, matching this
+ * module's stated policy of not depending on another pass's internals for
+ * a small, self-contained geometry check.
+ */
 function overlapsWater(obb: Obb, water: Point[][]): boolean {
   if (water.length === 0) return false;
-  return obbSamplePoints(obb).some((p) => inAnyWater(p, water));
+  // obbSamplePoints order: centre, (1,1), (1,-1), (-1,1), (-1,-1) -- reorder
+  // the four corners into ring order ((1,1) -> (1,-1) -> (-1,-1) -> (-1,1))
+  // for the edge walk below.
+  const [center, c1, c2, c4, c3] = obbSamplePoints(obb);
+  if ([center, c1, c2, c3, c4].some((p) => inAnyWater(p, water))) return true;
+  const ring = [c1, c2, c3, c4];
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    for (const w of water) {
+      for (let j = 0; j < w.length; j++) {
+        if (segmentIntersection(a, b, w[j], w[(j + 1) % w.length])) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * True when the claim comes within `LANDMARK_OBSTACLE_MARGIN_M` of ANY
+ * trunk OTHER than the one it fronts -- e.g. a loop's two arms passing
+ * close together, or two trunks converging near the green. The lane it
+ * fronts is exempt: that clearance is already the whole point of
+ * `laneSetback`, and re-testing it here would reject every legitimate
+ * site. Growth's own obstacle avoidance (`village-model.ts`, wired from
+ * this claim) only keeps a NEW lane from crossing the claim outline; this
+ * is the other half, keeping the claim off ground an EXISTING trunk
+ * already runs close to, which growth can never fix by itself (a trunk
+ * lane is never shortened -- it is the FMG route contract). Measured
+ * directly: a loop village sited an inn's claim clear of its own fronting
+ * arm but 6 m from the loop's OTHER arm, close enough for the finished
+ * building to intrude on it.
+ */
+function overlapsOtherTrunk(obb: Obb, trunks: Lane[], ownLaneId: string): boolean {
+  for (const lane of trunks) {
+    if (lane.id === ownLaneId) continue;
+    const r = lane.widthM / 2 + LANDMARK_OBSTACLE_MARGIN_M;
+    for (const p of obbSamplePoints(obb)) {
+      for (let i = 1; i < lane.points.length; i++) {
+        if (dist(p, closestPointOnSegment(p, lane.points[i - 1], lane.points[i])) < r) return true;
+      }
+    }
+  }
+  return false;
 }
 
 let claimCounter = 0;
@@ -179,6 +240,7 @@ function siteOne(
         if (overlapsGreen(obb, green)) continue;
         if (overlapsWater(obb, site.water)) continue;
         if (placed.some((other) => obbOverlap(obb, other))) continue;
+        if (overlapsOtherTrunk(obb, trunksSorted, lane.id)) continue;
 
         claimCounter++;
         return lot;
@@ -187,6 +249,32 @@ function siteOne(
   }
   return null;
 }
+
+/** True for a landmark's own lot id (`landmark:<kind>:<laneId>:<R|L><n>`) --
+ * never mistaken for an ordinary `lotId` (see `claimId` above and `lotId`
+ * in `types.ts`). Exported so `village-model.ts` can exempt a landmark's
+ * ground from the end-of-pipeline filters an ordinary lot is held to (a
+ * landmark's claim is legitimately wider/deeper than any of those checks
+ * were written to expect). */
+export function isLandmarkLot(lotId: string): boolean {
+  return lotId.startsWith('landmark:');
+}
+
+/**
+ * How many landmarks this village's population and biome will earn, with NO
+ * geometry involved -- just `specsFor`'s population floor and manifest
+ * presence. `generateVillage` needs this BEFORE the trunk network (and so
+ * before any candidate site) exists, to size the disc closed-form the same
+ * way it always has: a village whose census needs N ordinary dwellings plus
+ * its landmarks needs room for all of it, not just the houses. Kept here
+ * rather than duplicated in `village-model.ts` because the eligibility rule
+ * (population floor, per-kind glyph resolution) belongs with the rest of
+ * the landmark catalogue, in exactly one place.
+ */
+export function landmarkCandidateCount(site: Site): number {
+  return specsFor(site).filter((s) => site.population >= s.minPop && hasGlyph(s.glyph)).length;
+}
+
 
 /**
  * Site every landmark the village's population and biome earn, in order:

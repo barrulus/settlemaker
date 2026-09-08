@@ -1481,7 +1481,7 @@
       "minScale": 0.45,
       "notes": "flat roof, courtyard with one shade tree, roof stair"
     },
-    "sm-shrine--desert": {
+    "sm-chapel--desert": {
       "cls": "fixed",
       "viewBox": [
         0,
@@ -1552,7 +1552,7 @@
       "minScale": 0.45,
       "notes": "steep pitch, stable wing south; wing overhangs the footprint"
     },
-    "sm-stave-hall--tundra": {
+    "sm-chapel--tundra": {
       "cls": "fixed",
       "viewBox": [
         0,
@@ -1625,7 +1625,7 @@
       "minScale": 0.45,
       "notes": "stilted compound around an inner court; six stilts"
     },
-    "sm-tiered-hall--tropical": {
+    "sm-chapel--tropical": {
       "cls": "fixed",
       "viewBox": [
         0,
@@ -1696,7 +1696,7 @@
       "minScale": 0.45,
       "notes": "shingle courses with the eaves; drying yard south-east"
     },
-    "sm-sea-hall--coastal": {
+    "sm-chapel--coastal": {
       "cls": "fixed",
       "viewBox": [
         0,

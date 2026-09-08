@@ -151,16 +151,37 @@ describe('deck contents', () => {
 // every entry's glyph resolves. This pins that the "deck dropped"
 // diagnostic has gone quiet with real data, while still exercising the
 // drop mechanism itself against a glyph that genuinely does not exist.
+//
+// Landmarks own ground (2026-09-08 ruling): sm-inn, sm-chapel and
+// sm-house-large-tiled were REMOVED from baseDeck — they are minted
+// directly by skeleton/landmarks.ts at their own uncapped footprint, and
+// must not also live in the deck competing for a width-capped ordinary
+// lot. So the deck no longer carries any of the three; it carries only the
+// one dwelling glyph (plus sm-longhouse above the population gate).
 describe('deckFor (R1)', () => {
-  it('does not drop the temperate deck any more — sm-chapel is in the manifest', () => {
-    expect(deckFor('temperate', 400, new SeededRandom(1)).some((e) => e.glyph === 'sm-chapel')).toBe(true);
+  it('does not carry the landmark entries — they are sited by skeleton/landmarks.ts now, not lot-cut', () => {
+    const d = deckFor('temperate', 400, new SeededRandom(1));
+    expect(d.some((e) => e.glyph === 'sm-chapel')).toBe(false);
+    expect(d.some((e) => e.glyph === 'sm-inn')).toBe(false);
+    expect(d.some((e) => e.glyph === 'sm-house-large-tiled')).toBe(false);
+    // What IS left resolves cleanly for the temperate biome: the "deck
+    // dropped" diagnostic stays quiet with real data.
     expect(buildDeck('temperate', 400, new SeededRandom(1)).dropped).toEqual([]);
   });
 
   it('does not drop entries whose glyph exists', () => {
     const d = deckFor('temperate', 400, new SeededRandom(1));
     expect(d.filter((e) => !e.cap)[0].glyph.startsWith('sm-house')).toBe(true);
-    expect(d.some((e) => e.glyph === 'sm-inn')).toBe(true);
+    // sm-inn no longer lives in the deck (it is sited by landmarks.ts), so
+    // the "does not drop what the manifest actually has" behaviour is
+    // exercised here with a constructed entry instead of a real deck one —
+    // the mechanism (buildDeck/deckFor's hasGlyph filter) is still live and
+    // still worth covering on its own terms.
+    const fixtureDeck = [
+      ...REF_DECK,
+      { glyph: 'sm-well', occupancy: 0, weight: 0, sizeFactor: 1, minFrontage: 1 },
+    ];
+    expect(fixtureDeck.filter((e) => hasGlyph(e.glyph)).some((e) => e.glyph === 'sm-well')).toBe(true);
   });
 
   it('still drops an entry whose resolved glyph is genuinely absent from the manifest', () => {
@@ -179,7 +200,16 @@ describe('deckFor (R1)', () => {
 });
 
 describe('eligible', () => {
-  const inn = REF_DECK.find((e) => e.glyph === 'sm-inn')!;
+  // sm-inn no longer lives in the deck -- landmarks own ground (2026-09-08):
+  // it is sited directly by skeleton/landmarks.ts, gated on population
+  // there (LandmarkSpec.minPop 180) rather than through a deck entry's
+  // `requires`. `eligible()` itself is still a live mechanism the ordinary
+  // draw depends on, so exercise its population gate with a constructed
+  // inn-shaped fixture entry instead of fishing a landmark out of the deck.
+  const inn: DeckEntry = {
+    glyph: 'sm-inn', occupancy: 6, weight: 0, sizeFactor: 1.5, minFrontage: 27,
+    requires: { minPop: 180 },
+  };
 
   it('gates the inn on population', () => {
     expect(eligible(inn, site({ population: 100 }), 30)).toBe(false);

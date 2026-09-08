@@ -16,13 +16,16 @@ import { findWaterCrossings } from './skeleton/crossings.js';
 import {
   clipLots, gapForPopulation, orderLots, scoreLots, subdivideGreen, subdivideLane,
 } from './parcels/lots.js';
-import { resolveConvergingLots } from './parcels/overlap.js';
+import {
+  lotObb, obbOverlap, resolveConvergingLots,
+} from './parcels/overlap.js';
 import { recutFreedGround } from './parcels/recut.js';
 import {
-  buildDeck, eligible, meanOccupancy, minDwellingFrontageM, ordinaryOccupancy, tightenDeck,
+  buildDeck, meanOccupancy, minDwellingFrontageM, ordinaryOccupancy, tightenDeck,
   widestDwellingWidthM,
 } from './deck.js';
-import { intrudesOnLane, spendCensus, type SpendResult } from './dwellings.js';
+import { intrudesOnLane, seat, spendCensus, type SpendResult } from './dwellings.js';
+import { isLandmarkLot, landmarkCandidateCount, siteLandmarks } from './skeleton/landmarks.js';
 import {
   cloneLotTrace, resetLotTrace, restoreLotTrace, type LotTrace,
 } from './lot-trace.js';
@@ -33,13 +36,15 @@ import {
   ARM_LOT_RADIUS_SHARE, BLOCK_CHASE_ROUND_CAP, BRANCH_SPACING_M, FRONT_ON_LANE_EPS_M,
   GAP_TIGHTEN_STEP_M,
   GREEN_JOIN_RATIO, HAMLET_RIBBON_POP,
-  AIM_CLEAR_RADIUS_M, INITIAL_MEAN_FRONTAGE_FACTOR, LANE_SETBACK_M, LOT_DEPTH_M,
-  WATER_STRANGLED_FIELD_RATIO,
+  AIM_CLEAR_RADIUS_M, INITIAL_MEAN_FRONTAGE_FACTOR, LANE_SETBACK_M,
+  LOT_DEPTH_M, WATER_STRANGLED_FIELD_RATIO,
   MAX_FEEDBACK_ROUNDS, MAX_LOT_FRONTAGE_RATIO, MEAN_LOT_AREA_M2, RECUT_MAX_PASSES,
   DISC_ESCALATION_STEP_RATIO, RING_SETBACK_M, SPACING_RELAX_FLOOR, SPACING_RELAX_STEP,
   PROFILE_SEED_MULTIPLIER, PROFILE_SEED_OFFSET,
 } from './constants.js';
-import { isApron, type Lane, type Lot, type VillageModel } from './types.js';
+import {
+  isApron, type Building, type Lane, type Lot, type VillageModel,
+} from './types.js';
 import { classRank, type RouteType } from './route-class.js';
 
 /** The band this engine serves. Above it, the existing engine runs. */
@@ -160,7 +165,12 @@ export function generateVillage(
   // Landmarks are counted in: the inn, chapel and large house each take a
   // lot, and the chapel houses nobody at all, so a disc sized for
   // `population / occupancy` alone comes up a few plots short.
-  const landmarkLots = deck.filter((e) => e.cap && eligible(e, site, Infinity)).length;
+  // Landmarks own ground now (siteLandmarks, wired in below) rather than
+  // competing as capped deck entries, so this can no longer read the deck --
+  // `landmarkCandidateCount` mirrors the same population-floor/manifest
+  // eligibility test with no geometry, which is all that is knowable this
+  // early (the trunk network `siteLandmarks` needs does not exist yet).
+  const landmarkLots = landmarkCandidateCount(site);
   const dwellingsNeeded = Math.ceil(site.population / ordinaryOccupancy(deck)) + landmarkLots;
   // Floored so the FIRST branch-slot ring (BRANCH_SPACING_M from the green
   // edge) plus a lot's depth always fits: a hamlet's disc can undercut the
@@ -731,6 +741,89 @@ export function generateVillage(
     // cannot re-open what was just closed.
     relaxed = trimTails(relaxed, spend.buildings);
   }
+
+  // Landmarks own ground (owner's ruling 2026-09-08): sited AFTER growth,
+  // relaxation, trimming and dead-end connection have all settled --
+  // mirroring the `connectDeadEnds` block just above, which adds lanes,
+  // cuts lots for them, and re-spends the census this same way. Siting
+  // BEFORE growth (the original wiring) perturbed the fabric growth aims
+  // at: measured, a 62-degree laneless wedge against a 60-degree bar at
+  // pop 300 seed 1, and every attempted fix moved the perturbation
+  // somewhere else rather than removing it. After growth there is nothing
+  // left to perturb, and `relaxed` offers far more choice of frontage than
+  // the 1-3 trunks siting saw pre-growth -- typically 25-43 lanes.
+  // Aprons excluded, same reasoning as everywhere else in this file: an
+  // apron is FMG's road continuing past the village, not somewhere a
+  // landmark should front. `lotRadiusM` -- the disc growth actually
+  // saturated -- is the band argument now, not the pre-fabric estimate:
+  // gate 6.6's rule that everything downstream of growth keys off the
+  // saturated radius applies here too, now that this runs downstream of it.
+  const { landmarks, diagnostics: landmarkDiagnostics } = siteLandmarks(
+    site, green, relaxed.filter((l) => !isApron(l.id)), lotRadiusM, rng,
+  );
+  diagnostics.push(...landmarkDiagnostics);
+  // Seated once, deterministically, right after siting: a landmark's
+  // ground never moves once sited, so its building's position and size
+  // are fixed here and carried into `spendCensus` as an already-placed
+  // building (the `seeded` parameter) -- so no house is ever drawn onto,
+  // or over, a landmark's own ground.
+  // `allowGable: false` -- a landmark's lot has no slack for the gable
+  // flip's 90-degree rotation (see `seat`'s own comment): the rng.bool
+  // still draws, so the draw sequence is untouched, but the flip is
+  // never applied to a landmark's ink.
+  //
+  // `siteLandmarks`'s own clearance check (`overlapsOtherTrunk`) samples
+  // only a claim's four corners and centre against every OTHER lane at
+  // siting time -- cheap, but not exact: it can pass a claim whose edge
+  // (not a corner) runs closer to a nearby lane than the margin allows,
+  // and the actual drawn footprint (`sizeFor`'s jitter) can come out
+  // larger than the claim it was cut to. Measured directly: on the grid
+  // this file's own invariant test regenerates, several landmark
+  // buildings' painted ink ended up intruding a lane gate 2 forbids.
+  // Checked here, against the true built footprint and every final lane,
+  // because this file owns the invariant and `landmarks.ts` does not
+  // touch lane geometry at all. A landmark that fails is dropped, not
+  // retried -- `siteLandmarks` offers one deterministic candidate per
+  // kind, same fail-soft policy it already uses for a band/water/overlap
+  // refusal.
+  const landmarkSeated = landmarks.map((lm) => ({
+    lm,
+    building: seat(
+      { glyph: lm.glyph, occupancy: lm.occupancy, weight: 0, sizeFactor: 1, minFrontage: 0 },
+      lm.lot, rng, false,
+    ),
+  }));
+  const survivingLandmarks = landmarkSeated.filter(({ lm, building }) => {
+    if (intrudesOnLane(building, relaxed)) {
+      diagnostics.push(
+        `landmark ${lm.kind}: built footprint intruded on a lane after growth, dropped`,
+      );
+      return false;
+    }
+    return true;
+  });
+  const landmarkLotList: Lot[] = survivingLandmarks.map(({ lm }) => lm.lot);
+  if (landmarkLotList.length > 0) {
+    const landmarkBuildings: Building[] = survivingLandmarks.map(({ building }) => building);
+    // An ordinary lot whose claim overlaps a landmark's claim loses
+    // outright -- the landmark's ground simply wins, the same rule the
+    // (now-removed) pre-growth wiring applied every round. An ordinary lot
+    // whose lane was trimmed away by an EARLIER trim/relax/connect pass
+    // (this round's `lots` was never re-filtered against `relaxed` unless
+    // the connector block above ran) is dropped the same way the connector
+    // block already drops one, before it can be handed to `spendCensus`
+    // and possibly re-housed onto geometry the model no longer carries.
+    const liveLaneIds = new Set(relaxed.map((l) => l.id));
+    lots = lots.filter((l) => l.laneId === 'green' || liveLaneIds.has(l.laneId));
+    lots = lots.filter(
+      (l) => !landmarkLotList.some((lm) => obbOverlap(lotObb(l), lotObb(lm))),
+    );
+    lots = [...lots, ...landmarkLotList];
+    spend = spendCensus(
+      lots, activeDeck, site, rng, relaxed, trace?.fates, terrace, landmarkBuildings,
+    );
+  }
+
   // Finding 3: trimTails (R15) may drop an invented lane that earned no
   // dwelling. Its lots are then orphaned — surviving in `lots` but naming
   // a laneId no lane in the model carries any more. Filter them out so
@@ -755,6 +848,11 @@ export function generateVillage(
   const housedLotIds = new Set(spend.buildings.map((b) => b.lotId));
   const survivingLots = lots.filter((l) => {
     if (housedLotIds.has(l.id)) return true;
+    // Landmarks own ground: cut to the glyph's true footprint, uncapped, so
+    // it is never expected to sit at an ordinary lot's setback -- exempt it
+    // by id rather than asking `frontLiesOnLane` to understand a kind of lot
+    // it was never written to.
+    if (isLandmarkLot(l.id)) return true;
     if (l.laneId === 'green') {
       const radius = (green.diameter / 2) * GREEN_JOIN_RATIO + RING_SETBACK_M;
       return Math.abs(dist(l.front, green.centre) - radius) < FRONT_ON_LANE_EPS_M;
