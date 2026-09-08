@@ -21,7 +21,7 @@ import { describe, it, expect } from 'vitest';
 import { buildSite } from '../../src/village/site.js';
 import { generateVillage } from '../../src/village/village-model.js';
 import { isApron } from '../../src/village/types.js';
-import { closestPointOnPolyline, segmentIntersection } from '../../src/village/geometry.js';
+import { segmentIntersection } from '../../src/village/geometry.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 import type { Point } from '../../src/types/point.js';
 
@@ -272,26 +272,71 @@ const excusedByCoast = (laneId: string, diagnostics: string[]): boolean =>
     return laneId === named || laneId.startsWith(`${named}~`);
   });
 
+/**
+ * The pre-split id of a crossing-split lane: `resolveCrossings` APPENDS
+ * `~x<other>` and never rewrites what came before, so the first `~` is the
+ * boundary between the original id and every split suffix stacked on it.
+ * A junction recorded BEFORE the split names the original.
+ */
+const baseLaneId = (id: string): string => id.split('~')[0];
+
+/**
+ * Does this apron end AT A JUNCTION THAT NAMES IT?
+ *
+ * `VillageModel.trunkJunctions` is the model's own record of where roads
+ * meet, and both paths that can legitimately stop an apron short of the
+ * tile write one: the apron-to-apron capture in `growAprons`, and the
+ * crossing split in `resolveCrossings`. So a road that stopped because it
+ * ARRIVED somewhere is named by the junction it arrived at, and a road
+ * that merely gave up is not. That linkage is the whole test: proximity to
+ * a lane is not evidence, because in a village where many lanes route
+ * through the same ground, a road abandoned in open pasture is near one.
+ */
+const endsOnItsOwnJunction = (
+  laneId: string, tip: { x: number; y: number },
+  junctions: Array<{ position: { x: number; y: number }; laneIds: string[] }>,
+  toleranceM: number,
+): boolean => junctions.some((j) => (
+  j.laneIds.some((id) => id === laneId || id === baseLaneId(laneId))
+  && Math.hypot(j.position.x - tip.x, j.position.y - tip.y) <= toleranceM
+));
+
 describe('every coastal approach road reaches the tile edge', () => {
   // The dry bar (`roads-reach-the-edge.test.ts`) asserts this of EVERY
   // apron over 20 villages; the coastal side used to assert only that SOME
   // lane got there, on one fixture and one seed -- far weaker than the case
   // that was broken. Same bar, coastal fixtures, per-lane excuse.
   //
-  // With ONE allowance the dry bar does not need: an apron may also end ON
-  // ANOTHER LANE. A coast road runs laterally, so coastal aprons merge into
-  // each other and `resolveCrossings` splits them, which a radial apron
-  // never does -- measured at four routes pop 40 seed 1, three of six
-  // aprons end at such a junction (`trunk-main-r-sea/a` and
-  // `trunk-town-r-se/a` at their crossing point, exactly 0.00 m from each
-  // other, and `trunk-town-r-se/a~x...` 6 m from the road it merged onto),
-  // while the halves that carry on do reach the edge. Ending at a junction
-  // is a road arriving somewhere; what this bar forbids is a road stopping
-  // in OPEN GROUND short of the tile. The tolerance is one apron sample
-  // step, the same slack `trunks-structural.test.ts` (b) and (d) allow.
-  const ON_ANOTHER_LANE_M = 8;
+  // With ONE allowance the dry bar does not need: an apron may also end AT
+  // A JUNCTION THAT NAMES IT. A coast road runs laterally, so coastal
+  // aprons merge into each other and `resolveCrossings` splits them, which
+  // a radial apron never does -- measured at four routes pop 40 seed 1,
+  // three of six aprons end at such a junction while the halves that carry
+  // on reach the edge. Ending at a junction is a road arriving somewhere;
+  // what this bar forbids is a road stopping in OPEN GROUND short of the
+  // tile.
+  //
+  // The allowance is LINKAGE, not proximity. It was written first as "the
+  // tip is within 8 m of any lane's polyline", and that is the defect this
+  // whole feature exists to prevent, reintroduced by its own test: it never
+  // asked whether the tip was at a junction, nor whether the lane it sat
+  // near had anything to do with this road, so a road that simply gave up
+  // beside an unrelated street would have been excused in silence.
+  //
+  // The tolerance is TIGHT, because a junction position is where the road
+  // actually ends, not roughly where it ends. Measured over 50 coastal
+  // villages (the two- and four-route fixtures x pops 40/120/300/500/1000 x
+  // seeds 1/2/3/7/55337, 170 aprons): 125 reach the tile edge and 45 end on
+  // a junction that names them, every one of the 45 at EXACTLY 0.00 m. The
+  // 1 m here is float slack, not measured need.
+  const ON_ITS_JUNCTION_M = 1;
 
-  it('or ends on another road, or says by name why it could not', () => {
+  it('or ends at a junction that names it, or says by name why it could not', () => {
+    // Counted as well as asserted: if NO apron in the panel ever takes the
+    // junction branch, the allowance has stopped being exercised, this
+    // block has quietly become the dry bar, and the next person to loosen
+    // the allowance would do it with no case to check it against.
+    let onJunction = 0;
     for (const { label, input, seed } of COASTAL_CASES) {
       const m = generateVillage(input, seed);
       const { minX, minY, maxX, maxY } = m.frame;
@@ -300,12 +345,15 @@ describe('every coastal approach road reaches the tile edge', () => {
       for (const a of aprons) {
         const tip = a.points[a.points.length - 1];
         const toEdge = Math.min(tip.x - minX, maxX - tip.x, tip.y - minY, maxY - tip.y);
-        const onAnother = m.lanes.some((l) => l.id !== a.id && l.points.length >= 2
-          && closestPointOnPolyline(tip, l.points).distance <= ON_ANOTHER_LANE_M);
-        expect(toEdge <= 1 || onAnother || excusedByCoast(a.id, m.diagnostics),
+        if (toEdge <= 1) continue;
+        const atJunction = endsOnItsOwnJunction(a.id, tip, m.trunkJunctions, ON_ITS_JUNCTION_M);
+        if (atJunction) onJunction += 1;
+        expect(atJunction || excusedByCoast(a.id, m.diagnostics),
           `${label}: ${a.id} stops ${toEdge.toFixed(0)} m short of the tile `
           + 'in open ground').toBe(true);
       }
     }
+    expect(onJunction, 'no apron ends at a junction on any coastal case -- the '
+      + 'allowance is no longer exercised by anything').toBeGreaterThan(0);
   });
 });
