@@ -23,7 +23,12 @@ export function classRank(t: RouteType): number {
  * after the fact.
  */
 export function isRoadClass(t: RouteType): boolean {
-  return classRank(t) <= classRank('local');
+  // `classRank` returns -1 for a class it does not know, and -1 <= 4, so the
+  // unguarded comparison called EVERY unknown value a road. Measured live:
+  // FMG sent `kind: "trails"` and every footpath it ever sent was drawn with
+  // a road's weight and width. An unknown class is not a road class.
+  const rank = classRank(t);
+  return rank >= 0 && rank <= classRank('local');
 }
 
 const WIDTHS: Record<RouteType, number> = {
@@ -63,7 +68,44 @@ export function toLegacyKind(k: LegacyRouteKind | RouteType | RouteGroup | undef
   if (k === 'airroutes' || k === 'traderoutes') return undefined;
   // Path group: trail, footpath → 'foot'
   if (k === 'trail' || k === 'footpath') return 'foot';
+  // UPSTREAM FMG'S GROUP VOCABULARY, arriving in the `kind` field (owner,
+  // 2026-09-08: "FMG Upstream only has groups, fork has types"). These are
+  // the legal values of `RoadBearingInput.group`, and upstream has no route
+  // types to send at all, so it puts a group name here. Mapped explicitly
+  // rather than left to the fallback below: `trails` -> foot is what the
+  // fallback would give anyway, but `roads` -> foot would demote every
+  // upstream road to a footpath, which is worse than the bug this fixes.
+  // Widened deliberately: these values are OUTSIDE this function's declared
+  // union, which is exactly the bug -- a real caller sent them anyway and
+  // TypeScript could not have stopped it across the JSON boundary.
+  const raw: string = k;
+  if (raw === 'roads') return 'road';
+  if (raw === 'trails') return 'foot';
   // Road group: royal, main, market, town, local → 'road'
   if (isRoadClass(k as RouteType)) return 'road';
-  return undefined;
+  // GENUINELY UNKNOWN. Owner's ruling, 2026-09-08: fall back to foot and LOG
+  // it; never throw. "I would rather the user sees a wrong sized road but
+  // functional village than a failure." Foot rather than road because it is
+  // the narrowest, least damaging guess -- a footpath drawn where a road was
+  // meant is a smaller error than a road drawn where a footpath was meant,
+  // which is precisely the defect that hid here for the life of the FMG
+  // integration.
+  //
+  // The log is the point: it is what makes this findable by monitoring
+  // instead of invisible, so a bad vocabulary gets fixed at the source
+  // rather than silently rendering plausible-looking wrong output. Stable
+  // prefix, one line, greppable. This is deliberately the only console call
+  // in the library.
+  reportUnknownRouteClass(String(k));
+  return 'foot';
+}
+
+/** Emitted once per unrecognised class, for log monitoring to alert on. */
+function reportUnknownRouteClass(kind: string): void {
+  // eslint-disable-next-line no-console
+  console.warn(
+    `settlemaker: unknown route class ${JSON.stringify(kind)} — falling back to "foot". `
+    + `Known classes: ${ROUTE_CLASS_ORDER.join(', ')}. `
+    + `Upstream FMG group names ("roads", "trails") belong in the \`group\` field, not \`kind\`.`,
+  );
 }

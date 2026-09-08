@@ -185,6 +185,18 @@ a river):
 | Field | Values | Effect on growth along that road |
 |---|---|---|
 | `group` | `'roads'` \| `'trails'` | Trails attract almost none (weight ×0.15). Absent = treated as a road. |
+
+> **`kind` and `group` are different fields with different vocabularies, and
+> confusing them fails silently.** `group` takes `'roads'` / `'trails'` —
+> plural. `kind` takes a route *class* (`royal`, `main`, `market`, `town`,
+> `local`, `trail`, `footpath`) or a legacy kind (`road`, `foot`, `sea`).
+> Upstream FMG has only groups; the fork has classes. Sending a group name in
+> `kind` used to make every footpath render with a road's weight and width,
+> undetected for the life of that integration. `kind: 'roads'` and
+> `kind: 'trails'` are now accepted and mapped correctly, and any genuinely
+> unrecognised class falls back to `foot` and logs a warning rather than
+> throwing — a wrong-sized road in a working village beats a failure in a
+> user's face.
 | `through` | boolean | A route that continues past the burg attracts more (×1.5) than one that dead-ends there. |
 | `relief` | `'flat'`/`'valley'`/`'descent'`/`'ascent'`/`'ridge'` | Easy ground is neutral; `ascent` halves growth (×0.5); `ridge` quarters it (×0.25). |
 | `followsRiver` | boolean | A valley road along a river attracts slightly more (×1.2). **No river is rendered** — this is a weighting hint only; river geometry is not part of the contract yet. |
@@ -222,12 +234,30 @@ Rules an adapter can rely on:
   `coastlineGeometry`) is
   genuinely optional and can be omitted (not set to `null`) when unknown.
 
-**Ocean data is gated on `port`.** `oceanBearing`, `coastlineGeometry`, and
-`harbourSize` are honoured only when `port: true`. FMG sends `port` explicitly
-and may attach ocean data to any coastal burg whether or not it has a
-harbour — settlemaker deliberately drops all three at the mapping layer when
-`port` is `false`, so a coastal-but-portless burg renders as a plain inland
-town, never with coastline, water, or shoreline walls.
+**Only `harbourSize` is gated on `port`.** `oceanBearing` and
+`coastlineGeometry` are honoured for any burg that sends them, port or not: a
+burg on a harbour cell with no docks is a beach settlement, and it genuinely
+has a coastline and an ocean direction. What it lacks is harbour
+*infrastructure*, so `harbourSize` is the only field that requires
+`port: true`. No docks is not no sea.
+
+> **Changed 2026-09-08, and this reverses the previous rule.** All three
+> fields used to be dropped when `port` was `false`, so a coastal-but-portless
+> burg rendered as a plain inland town. Villages sit on harbour cells
+> constantly, so that suppressed the sea for a large fraction of a typical
+> map.
+>
+> Note the shape this creates: FMG never omits `harbourSize` for a coastal
+> burg — its `readHydrology` sets it from `isPort || cellsHarbor[center] > 0`,
+> so a portless harbour-adjacent burg already arrives carrying `"small"`.
+> "Coastline present, `harbourSize` absent" is therefore produced by this gate
+> rather than by FMG, and it is now the normal shape for every coastal
+> non-port burg. **Nothing downstream may infer that a burg is coastal from
+> `harbourSize` being present.**
+>
+> A boathouse and its jetty are dock infrastructure and follow `port`, not
+> water: a portless coastal village gets a shoreline and nothing built out
+> over it.
 
 **Fields accepted but not yet consumed.** `culture`, `elevation` and
 `temperature` are part of the interface and decode fine, but nothing in the
@@ -583,9 +613,9 @@ decks). To change only the look, use `villageTheme=`.
   than Voronoi patch shapes — open sea/rivers reach the frame edge, matching
   the world map's orientation, and nothing is built or routed over water.
   `oceanBearing` remains a fallback heuristic when vector coastlines aren't
-  available. Both are honoured only for `port: true` burgs — a coastal
-  burg with `port: false` renders as an inland town regardless of what
-  ocean data arrived; see §3.
+  available. Both are honoured for any burg that sends them, whether or not
+  it is a port; only `harbourSize` requires `port: true`, and a boathouse or
+  jetty requires it too. See §3.
 - **Population budget.** Ordinary building count is derived from
   `population` divided by `urbanDensity` (people per household), then
   capped — so a population of 13 renders a handful of buildings, not a

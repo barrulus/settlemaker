@@ -267,6 +267,24 @@ export function placeBoathouse(
   site: Site, green: Green, shorefrontReachM: number,
   lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldBlock[],
 ): Poi | null {
+  // KEYED ON `port`, NOT ON WATER (owner's ruling 2026-09-08, and the other
+  // half of ungating ocean data in `azgaar-input.ts`). Water alone now
+  // reaches far more villages: every coastal-but-portless burg gains a
+  // shoreline, where before the gate hid the sea from it entirely. A
+  // boathouse with a jetty running out over the water is DOCK
+  // infrastructure, and `port` is FMG's authoritative "has docks" flag --
+  // set by its burg generator and what drives the harbour icon on its own
+  // map. A burg with `port: false` on a harbour cell is a beach settlement:
+  // it has earned a shoreline and nothing built out on the water.
+  //
+  // Keyed on water alone, the ungating would have handed jetties to villages
+  // with no docks -- the same category of error the ruling just fixed,
+  // pointing the other way.
+  //
+  // Note for whoever reads `village-flags-unwired`: this is the FIRST burg
+  // flag the village engine actually reads. The other seven are still
+  // no-ops.
+  if (!site.flags.port) return null;
   if (site.water.length === 0) return null;
   const nearest = nearestShorePoint(green.centre, site.water);
   if (!nearest) return null;
