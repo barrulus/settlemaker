@@ -67,15 +67,49 @@ const COAST_STANDOFF_K = 4.6;
  * replace — the owner's "coastlines are still lacking, they are very
  * straight". Amplitude was never the problem; resolution was.
  */
-const COAST_SAMPLE_PER_WAVE = 6;
+// Raised from 6 with the wavelengths above: the shortest wave is now 3.4x
+// the standoff rather than 0.55x, so 6 samples per wave would space points
+// ~60 m apart and chord a gentle curve back into straight segments -- the
+// exact aliasing the comment above this describes.
+const COAST_SAMPLE_PER_WAVE = 14;
 /** Bay depth as a share of the standoff. */
-const COAST_AMPLITUDE_SHARE = 0.85;
+const COAST_AMPLITUDE_SHARE = 1.15;
 /**
- * Wavelengths as multiples of the standoff. Deliberately incommensurate so
- * the three waves never line up into a repeating scallop.
+ * Wavelengths as multiples of the standoff, longest first, and deliberately
+ * incommensurate so they never line up into a repeating scallop.
+ *
+ * OWNER, 2026-09-08: "the shoreline will need work, it is too wavy. I asked
+ * for bays and meant more a single bay per village (or two if the village is
+ * in the abutment)."
+ *
+ * The old set was [2.2, 1.15, 0.55]. Measured against the frames those
+ * villages actually draw, the LONGEST of those fitted three to four whole
+ * cycles across the picture, so every village got a row of scallops rather
+ * than a bay:
+ *
+ *   pop 300  standoff  80 m  longest wave 175 m  across a 519 m tile
+ *   pop 500  standoff 103 m  longest wave 226 m  across a 687 m tile
+ *   pop 900  standoff 138 m  longest wave 304 m  across a 778 m tile
+ *
+ * One bay across the frame wants a dominant wavelength of roughly 1.6x the
+ * tile width, which works out at 9-11x the standoff at every population --
+ * the ratio is stable because both scale with sqrt(population).
+ *
+ * Tuned twice. At 10x the coast came out SMOOTH but flat -- amplitude over
+ * wavelength was 0.085, a gentle diagonal with no bay in it. 6x puts a
+ * little over one cycle across the frame and, with the amplitude share
+ * raised to 1.15, gives a curvature of ~0.19 that actually reads as an
+ * inlet the village sits on.
+ * The second, much weaker wave keeps the bay from being a plain sine; the
+ * old third (0.55x, a ~50 m ripple) is gone entirely, because it was the
+ * waviness.
+ *
+ * Phase is drawn per village, so where the bay's mouth falls varies: most
+ * villages show one bay, and one sitting on a crest shows two partial bays
+ * either side of a headland — which is the "or two" case.
  */
-const COAST_WAVELENGTHS = [2.2, 1.15, 0.55];
-const COAST_WAVE_WEIGHTS = [0.55, 0.30, 0.15];
+const COAST_WAVELENGTHS = [6.0, 2.4];
+const COAST_WAVE_WEIGHTS = [0.85, 0.15];
 /** Its own stream, so adding the coastline displaced no other draw. */
 const COAST_SEED_MULTIPLIER = 7919;
 const COAST_SEED_OFFSET = 104729;
@@ -90,7 +124,28 @@ function oceanBearingFallback(input: AzgaarBurgInput, seed: number): Point[][] {
   const amplitude = standoff * COAST_AMPLITUDE_SHARE;
 
   const rng = new SeededRandom(seed * COAST_SEED_MULTIPLIER + COAST_SEED_OFFSET);
-  const phases = COAST_WAVELENGTHS.map(() => rng.float() * Math.PI * 2);
+  // THE DOMINANT WAVE'S PHASE IS NOT RANDOM (owner: "a single bay per
+  // village, or two if the village is in the abutment").
+  //
+  // `along` is the shore's distance from the burg, so a BAY -- water
+  // indenting into the land -- is the shore at its NEAREST off the village,
+  // receding to the headlands either side. That is wobble = -1 at t = 0,
+  // i.e. phase = -PI/2, which also lands the bay's head at exactly
+  // `standoff`: the minimum the wobble can ever produce, and the distance
+  // the standoff was tuned to keep the sea clear of the fabric.
+  //
+  // Getting this backwards is instructive and was measured: phase = +PI/2
+  // puts the shore at its FURTHEST off the village, which is a headland
+  // bulging at the viewer, and at 2x amplitude it pushed the sea clean out
+  // of the frame -- a coastal village with no visible water at all.
+  //
+  // A quarter of the time the phase IS inverted, putting a headland off the
+  // village with a half-bay to either side. That is the "or two" case.
+  // Drawn from the coast's own stream, so it displaces no other draw.
+  const bayCentred = rng.float() >= 0.25;
+  const phases = COAST_WAVELENGTHS.map((_, i) => (
+    i === 0 ? (bayCentred ? -Math.PI / 2 : Math.PI / 2) : rng.float() * Math.PI * 2
+  ));
 
   // Sampled across the full width so the coast keeps its character all the
   // way to the corners; a straight run either side would read as a seam.

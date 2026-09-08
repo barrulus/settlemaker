@@ -232,17 +232,31 @@ export function mapToGenerationParams(
     capitalNeeded: burg.capital,
     seed,
     ...(roadEntryPoints != null ? { roadEntryPoints } : {}),
-    // Ocean data (oceanBearing/coastlineGeometry/harbourSize) is honoured
-    // only for burgs the source data marks as ports. FMG always sends
-    // `port` explicitly and may attach ocean data to any coastal burg
-    // whether or not it has a harbour — a coastal-but-portless burg must
-    // render as a plain inland town, never with coastline/water/shoreline
-    // walls. See docs/url-api.md §3/§6.
-    ...(burg.port === true && burg.oceanBearing != null ? { oceanBearing: burg.oceanBearing } : {}),
+    // OWNER'S RULING, 2026-09-08 — THIS REVERSES WHAT THIS BLOCK USED TO DO.
+    // It previously gated ocean data on `port`, so a coastal-but-portless
+    // burg rendered as a plain inland town. That was wrong: a burg on a
+    // harbour cell with no docks is a common thing on an FMG map — a beach
+    // settlement — and it genuinely has a coastline and an ocean direction.
+    // What it lacks is harbour INFRASTRUCTURE. "No docks" is not "no sea".
+    //
+    // So `oceanBearing` and `coastlineGeometry` are ungated, and only
+    // `harbourSize` still requires `port`.
+    //
+    // Note what that combination now means downstream: FMG NEVER omits
+    // `harbourSize` for a coastal burg — its `readHydrology` sets it from
+    // `isPort || cellsHarbor[center] > 0`, so a portless harbour-adjacent
+    // burg already arrives carrying `"small"`. The shape "coastline present,
+    // harbourSize absent" is therefore created ENTIRELY BY THIS GATE, and
+    // after this change it is the normal shape for every coastal non-port
+    // burg rather than a rarity. Nothing downstream may infer "this burg is
+    // coastal" from `harbourSize` being present. The raw value is still on
+    // `burg.harbourSize` if a future consumer would rather have FMG's floor
+    // value than nothing — it is deliberately dropped here, not missing.
+    ...(burg.oceanBearing != null ? { oceanBearing: burg.oceanBearing } : {}),
     ...(burg.port === true && burg.harbourSize != null ? { harbourSize: burg.harbourSize } : {}),
     ...(burg.urbanDensity != null ? { urbanDensity: burg.urbanDensity } : {}),
     ...(burg.biome != null ? { biome: burg.biome } : {}),
-    ...(burg.port === true && burg.coastlineGeometry != null
+    ...(burg.coastlineGeometry != null
       ? { coastlineGeometry: burg.coastlineGeometry.map(ring => ring.map(p => new Point(p.x, p.y))) }
       : {}),
   };

@@ -23,12 +23,18 @@ describe('route character fields', () => {
   });
 });
 
-describe('coast gated on port', () => {
+describe('coast gated on port — only harbourSize is', () => {
   const coastlineGeometry = [[
     { x: -2000, y: 60 }, { x: 2000, y: 60 }, { x: 2000, y: 2500 }, { x: -2000, y: 2500 },
   ]];
 
-  test('port: false drops oceanBearing/coastlineGeometry/harbourSize at the mapping layer', () => {
+  // OWNER'S RULING 2026-09-08, REVERSING WHAT THIS FILE USED TO ASSERT.
+  // Ocean data used to be gated on `port`, so a coastal-but-portless burg
+  // rendered as a plain inland town. A burg on a harbour cell with no docks
+  // is a beach settlement: it genuinely has a coastline and an ocean
+  // direction, and only the harbour INFRASTRUCTURE should need `port`.
+  // "No docks" is not "no sea".
+  test('port: false KEEPS oceanBearing/coastlineGeometry and drops only harbourSize', () => {
     const params = mapToGenerationParams({
       name: 'Portless', population: 1200, port: false, citadel: false, walls: true,
       plaza: false, temple: false, shanty: false, capital: false,
@@ -37,12 +43,14 @@ describe('coast gated on port', () => {
       harbourSize: 'small',
     }, 1);
 
-    expect(params.oceanBearing).toBeUndefined();
-    expect(params.coastlineGeometry).toBeUndefined();
+    expect(params.oceanBearing).toBe(90);
+    expect(params.coastlineGeometry).toBeDefined();
+    // The one field that still requires docks.
     expect(params.harbourSize).toBeUndefined();
 
+    // And the sea is actually rendered now, where before it was suppressed.
     const model = new Model(params).generate();
-    expect(model.waterbody).toEqual([]);
+    expect(model.waterbody.length).toBeGreaterThan(0);
   });
 
   test('port: true keeps oceanBearing/coastlineGeometry/harbourSize (guards against over-dropping)', () => {

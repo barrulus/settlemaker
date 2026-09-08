@@ -182,12 +182,25 @@ describe('placeBoathouse', () => {
   const water = [[
     { x: 15, y: -200 }, { x: 200, y: -200 }, { x: 200, y: 200 }, { x: 15, y: 200 },
   ].map((p) => new Point(p.x, p.y))];
-  const coastalSite = site({ water, biome: 'coastal' });
+  // `port: true` — owner's ruling 2026-09-08: a boathouse and its jetty are
+  // DOCK infrastructure, so they key off `port`, not off water. Ungating
+  // ocean data means every coastal-but-portless burg now has a shoreline;
+  // keyed on water alone this pass would hand jetties to villages with no
+  // docks. There is a dedicated test for that below.
+  const coastalSite = site({ water, biome: 'coastal', flags: { port: true, temple: false, trade: false, walls: false } });
   const builtRadiusM = 30;
 
   it('is absent for a landlocked site (no water)', () => {
     const boathouse = placeBoathouse(site(), green, builtRadiusM, [], emptyLots, emptyCrofts, emptyFields);
     expect(boathouse).toBeNull();
+  });
+
+  it('is absent for a coastal site with no docks (port: false)', () => {
+    // The case ungating ocean data created: a beach settlement has a
+    // shoreline and must NOT get a building standing out over the water.
+    const beach = site({ water, biome: 'coastal' }); // flags.port defaults false
+    expect(placeBoathouse(beach, green, builtRadiusM, [], emptyLots, emptyCrofts, emptyFields))
+      .toBeNull();
   });
 
   it('is absent when water lies beyond builtRadius x SHOREFRONT_REACH_FACTOR', () => {
@@ -273,7 +286,11 @@ describe('buildPois', () => {
       { x: 15, y: -200 }, { x: 200, y: -200 }, { x: 200, y: 200 }, { x: 15, y: 200 },
     ].map((p) => new Point(p.x, p.y))];
     const pois = buildPois(
-      site({ population: 400, water, biome: 'coastal' }), green, [], emptyLots, emptyCrofts, emptyFields,
+      // port: true — the boathouse keys off docks now, not off water.
+      site({
+        population: 400, water, biome: 'coastal',
+        flags: { port: true, temple: false, trade: false, walls: false },
+      }), green, [], emptyLots, emptyCrofts, emptyFields,
       [], 40, SHOREFRONT_REACH, new SeededRandom(1),
     );
     for (const poi of pois) {

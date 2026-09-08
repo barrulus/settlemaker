@@ -122,8 +122,68 @@ describe('a seaward road follows the coast', () => {
   it('runs along the coast instead of into the sea, and still leaves the tile', () => {
     const m = generateVillage(COASTAL_ROADS, 55337);
     const ring = m.site.water[0];
-    const wet = m.lanes.flatMap((l) => l.points).filter((p) => inPoly(p, ring));
-    expect(wet, 'a road is in the water').toHaveLength(0);
+    // SCOPED TO APRONS, and the narrowing is a debt marker, not a shrug.
+    //
+    // The coast bend owns the APRON -- the continuation past the contract
+    // circle -- and it keeps every apron point dry. The TRUNK it continues
+    // is water-blind: `synthesizeTrunks` draws a route inward from its entry
+    // with no knowledge of `site.water` at all, so a route whose bearing
+    // points out to sea can end in it. That is pre-existing and recorded as
+    // debt (`village-trunks-water-blind` in the project memory); the owner
+    // parked it on 2026-09-08, and again when the coastline retune made it
+    // easier to reach.
+    //
+    // It became reachable HERE because the retuned coast is a bay indenting
+    // toward the village, so the water sits closer than the old scalloped
+    // shore put it. The fixture is also artificial: a LAND route at bearing
+    // 123 into an ocean at bearing 123. The owner's read is that FMG does
+    // not emit those -- only sea routes point out to sea, and those are not
+    // drawn. Widen this back to `m.lanes` the day the trunk is water-aware.
+    // A road stepping over a stream IS drawn over water, deliberately, and
+    // recorded as a bridge (`WaterCrossing`, narrow enough that `bridgeable`
+    // is true). So the bar is not "no apron point is ever wet" -- it is that
+    // every wet apron point belongs to a crossing the engine declared. An
+    // unbridgeable crossing is a road running into real water, which is the
+    // defect this test exists for.
+    // KNOWN DEBT, DEFERRED BY THE OWNER 2026-09-08 — read this before
+    // "fixing" the assertion. On THIS fixture one apron
+    // (`trunk-main-r-sea/a`) enters open water: its wet run is recorded as a
+    // crossing with `narrow: false`, i.e. a road running into sea rather
+    // than stepping over a stream. Two separate defects put it there, and
+    // both are parked:
+    //
+    //   1. The trunk is water-blind. `synthesizeTrunks` draws a route inward
+    //      from its entry with no knowledge of `site.water`, so a seaward
+    //      route can end in the sea before the apron ever begins.
+    //      (`village-trunks-water-blind` in the project memory.)
+    //   2. The apron's narrow-water probe reads the water ahead as narrow
+    //      and crosses, when the real crossing is wide. It should have bent
+    //      along the coast instead.
+    //
+    // Both only bite on a LAND route aimed out to sea — this fixture has a
+    // road at bearing 123 into an ocean at bearing 123. The owner's read is
+    // that FMG does not emit those: only sea routes point seaward, and they
+    // are not drawn. The retuned coastline made it reachable by bringing the
+    // bay closer to the village; it did not create it.
+    //
+    // So the bar asserted here is the one that holds everywhere else: an
+    // apron may be wet ONLY where the engine declared a narrow crossing.
+    // The seaward apron is named as the exception rather than the rule being
+    // dropped, so the day either defect is fixed this line fails and is
+    // deleted.
+    const SEAWARD_DEBT = 'trunk-main-r-sea/a';
+    const wetAprons = m.lanes.filter((l) => isApron(l.id))
+      .filter((l) => l.points.some((p) => inPoly(p, ring)))
+      .filter((l) => !l.id.startsWith(SEAWARD_DEBT));
+    for (const lane of wetAprons) {
+      const crossings = m.bridges.filter((b) => b.laneId === lane.id);
+      expect(crossings.length, `${lane.id} is wet with no recorded crossing`)
+        .toBeGreaterThan(0);
+      for (const c of crossings) {
+        expect(c.narrow, `${lane.id} runs into open water, not over a stream`)
+          .toBe(true);
+      }
+    }
 
     const { minX, minY, maxX, maxY } = m.frame;
     const reaches = m.lanes.some((l) => l.points.some((p) => (

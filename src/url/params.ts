@@ -112,6 +112,19 @@ const FLAT_DATA_PARAMS = [
  * `main`, for the same reason `villageTheme=` is: a typo that quietly works
  * is indistinguishable from the feature not working.
  */
+/**
+ * Wrap a bearing into 0..359.999, WITHOUT disturbing a value already there.
+ *
+ * The obvious `((v % 360) + 360) % 360` is not the identity it appears to be
+ * for an in-range value: each operation rounds, so 214.4 comes back as
+ * 214.39999999999998. It alters 2368 of the 3600 one-decimal bearings in
+ * 0..359.9. The guard costs one comparison and keeps the arithmetic for the
+ * only inputs that need it.
+ */
+function normaliseBearing(v: number): number {
+  return (v < 0 || v >= 360) ? ((v % 360) + 360) % 360 : v;
+}
+
 function parseRoads(raw: string): AzgaarBurgInput['roadBearings'] {
   const out: { bearing_deg: number; kind: RouteType; through: boolean }[] = [];
   for (const entry of raw.split(',')) {
@@ -133,7 +146,19 @@ function parseRoads(raw: string): AzgaarBurgInput['roadBearings'] {
         `roads="${piece}" — third field may only be "through"`);
     }
     out.push({
-      bearing_deg: ((bearing % 360) + 360) % 360,
+      // Guarded, because `((b % 360) + 360) % 360` is NOT the identity it
+      // looks like for a value already in range: `%` and `+` each round, so
+      // 214.4 comes back as 214.39999999999998. Swept, 2368 of the 3600
+      // one-decimal bearings in 0..359.9 are altered by it.
+      //
+      // That matters beyond tidiness. FMG sends the same burg through the
+      // packed tier (`i=`, full float, unnormalised) or the flat tier
+      // (`roads=`, normalised) depending on whether CompressionStream
+      // exists, and the two are meant to be interchangeable. Measured, one
+      // burg rendered 90,397 bytes packed against 90,457 flat, differing
+      // solely because a bearing lost an ULP here. FMG chased that as their
+      // bug; it was ours.
+      bearing_deg: normaliseBearing(bearing),
       kind: kind as RouteType,
       through: throughRaw === 'through',
     });
