@@ -11,19 +11,83 @@ import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 const POPS = [40, 120, 300, 500, 1000];
 const SEEDS = [1, 2, 7, 55337];
 
-const burg = (population: number): AzgaarBurgInput => ({
+const burg = (population: number, through: boolean): AzgaarBurgInput => ({
   name: 'Aldford', population, port: false, citadel: false, walls: true,
   plaza: true, temple: true, shanty: false, capital: false,
   roadBearings: [
-    { bearing_deg: 45, kind: 'main' }, { bearing_deg: 170, kind: 'local' },
+    { bearing_deg: 45, kind: 'main', through },
+    { bearing_deg: 170, kind: 'local' },
     { bearing_deg: 280, kind: 'trail' },
   ],
 } as unknown as AzgaarBurgInput);
 
+/**
+ * Both fixtures, and the THROUGH one is the point of it.
+ *
+ * A through route gets a SECOND contract entry at `bearing + 180`
+ * (`contractEntries`), and `applyMainStreet` then redraws the pair as one
+ * spine running entry -> entry -- so one of that lane's entries is
+ * `points[0]`, not its last point. Nothing in this branch used a through
+ * route, and that is how a road that still stopped dead on the contract
+ * circle, 134-221 m short of the tile edge, shipped past a file called
+ * `roads-reach-the-edge`.
+ */
 const each = (fn: (m: ReturnType<typeof generateVillage>, label: string) => void): void => {
-  for (const pop of POPS) {
-    for (const seed of SEEDS) fn(generateVillage(burg(pop), seed), `pop ${pop} seed ${seed}`);
+  for (const through of [false, true]) {
+    for (const pop of POPS) {
+      for (const seed of SEEDS) {
+        fn(generateVillage(burg(pop, through), seed),
+          `pop ${pop} seed ${seed}${through ? ' through' : ''}`);
+      }
+    }
   }
+};
+
+/** One apron sample step, the same slack `growAprons` uses to decide a lane
+ * end is sitting on an entry. */
+const ON_ENTRY_M = 8;
+
+/** Every point on the contract circle a road is contracted to arrive at:
+ * one per route bearing, plus the far side of a through route. Mirrors
+ * `contractEntries`, which is the thing under test's own input. */
+const contractEntryPoints = (
+  m: ReturnType<typeof generateVillage>,
+): { label: string; x: number; y: number }[] => {
+  const out: { label: string; x: number; y: number }[] = [];
+  const at = (bearingDeg: number, label: string): void => {
+    const rad = (bearingDeg * Math.PI) / 180;
+    out.push({
+      label, x: Math.sin(rad) * m.contractRadiusM, y: -Math.cos(rad) * m.contractRadiusM,
+    });
+  };
+  for (const r of m.site.routes) {
+    at(r.bearingDeg, `entry ${r.bearingDeg.toFixed(0)}`);
+    if (r.through) at((r.bearingDeg + 180) % 360, `entry ${((r.bearingDeg + 180) % 360).toFixed(0)} (far side)`);
+  }
+  return out;
+};
+
+const distance = (ax: number, ay: number, bx: number, by: number): number =>
+  Math.hypot(ax - bx, ay - by);
+
+/** Shortest distance from (`x`, `y`) to a polyline. */
+const toPolyline = (x: number, y: number, points: { x: number; y: number }[]): number => {
+  let best = Infinity;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / len2));
+    best = Math.min(best, distance(x, y, a.x + dx * t, a.y + dy * t));
+  }
+  return best;
+};
+
+const onFrame = (m: ReturnType<typeof generateVillage>, p: { x: number; y: number }): boolean => {
+  const { minX, minY, maxX, maxY } = m.frame;
+  return Math.min(p.x - minX, maxX - p.x, p.y - minY, maxY - p.y) <= 1;
 };
 
 /**
@@ -48,16 +112,45 @@ const excusedByCoast = (laneId: string, diagnostics: string[]): boolean =>
   });
 
 describe('roads reach the edge of the tile', () => {
-  it('every contract entry ends on the frame boundary', () => {
+  /**
+   * Spec §9, invariant 1, asked from the ENTRY end.
+   *
+   * Fix round 4: this iterated `m.lanes.filter(isApron)` -- the aprons that
+   * exist, not the entries that are owed one -- so an entry with NO apron
+   * was invisible to it and a `main-street` spine's near end went on
+   * stopping on the contract circle behind a green test. The subject of the
+   * invariant is the entry; iterate that.
+   *
+   * "Reaches" is allowed to be TRANSITIVE, per §5.4.4 as generalised: an
+   * apron that runs within `MERGE_CAPTURE_M` of one already drawn lands on
+   * it and records a junction, so its entry reaches the tile edge via the
+   * road it merged into. The walk below follows exactly those landings (a
+   * merged apron's last point sits ON the survivor's polyline), and the
+   * same hop covers a crossing split, whose outer half starts where the
+   * inner half was cut.
+   */
+  it('every contract entry has a road that reaches the frame boundary', () => {
     each((m, label) => {
-      const { minX, minY, maxX, maxY } = m.frame;
       const aprons = m.lanes.filter((l) => isApron(l.id));
-      expect(aprons.length, `${label}: no aprons at all`).toBeGreaterThan(0);
-      for (const a of aprons) {
-        const tip = a.points[a.points.length - 1];
-        const toEdge = Math.min(tip.x - minX, maxX - tip.x, tip.y - minY, maxY - tip.y);
-        const excused = excusedByCoast(a.id, m.diagnostics);
-        expect(toEdge <= 1 || excused, `${label}: ${a.id} stops ${toEdge.toFixed(0)} m short`).toBe(true);
+      const reaches = (lane: typeof aprons[number], seen: Set<string>): boolean => {
+        if (excusedByCoast(lane.id, m.diagnostics)) return true;
+        if (onFrame(m, lane.points[lane.points.length - 1])) return true;
+        seen.add(lane.id);
+        const tip = lane.points[lane.points.length - 1];
+        return aprons.some((other) => !seen.has(other.id)
+          && toPolyline(tip.x, tip.y, other.points) <= 2
+          && reaches(other, seen));
+      };
+
+      for (const entry of contractEntryPoints(m)) {
+        const serving = aprons.filter(
+          (a) => distance(a.points[0].x, a.points[0].y, entry.x, entry.y) <= ON_ENTRY_M,
+        );
+        expect(serving.length, `${label}: ${entry.label} has no apron at all — `
+          + `its road still stops on the contract circle`).toBeGreaterThan(0);
+        expect(serving.some((a) => reaches(a, new Set())),
+          `${label}: ${entry.label} is served by ${serving.map((a) => a.id).join(', ')}, `
+          + 'none of which gets to the frame').toBe(true);
       }
     });
   });

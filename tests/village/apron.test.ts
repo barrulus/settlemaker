@@ -22,8 +22,17 @@ describe('apron ids', () => {
     expect(apronLaneId('trunk-main-045')).toBe('trunk-main-045/a');
   });
 
+  it('numbers the second apron on a lane that carries two entries', () => {
+    // A `main-street` spine runs entry -> entry, so `points[0]` is a
+    // contract entry too and the lane owes TWO aprons. Distinct, stable ids.
+    expect(apronLaneId('trunk-main-045', 'outer')).toBe('trunk-main-045/a');
+    expect(apronLaneId('trunk-main-045', 'inner')).toBe('trunk-main-045/a0');
+  });
+
   it('recognises an apron, a crossing-split apron, and nothing else', () => {
     expect(isApron('trunk-main-045/a')).toBe(true);
+    expect(isApron('trunk-main-045/a0')).toBe(true);
+    expect(isApron('trunk-main-045/a0~xtrunk-local-120')).toBe(true);
     expect(isApron('trunk-main-045/a~xtrunk-local-120')).toBe(true);
     expect(isApron('trunk-main-045')).toBe(false);
     expect(isApron('trunk-main-045/b45')).toBe(false);

@@ -599,13 +599,38 @@ export interface GrownAprons {
   diagnostics: string[];
 }
 
+/** One apron to draw: which lane it continues, under what id, and the
+ * lane geometry to grow it FROM (point-reversed for an inner-end apron, so
+ * `growApronPath` always leaves from the last point of what it is handed). */
+interface ApronCandidate {
+  id: string;
+  lane: Lane;
+  from: Lane;
+}
+
 /**
- * One apron per lane whose OUTER end sits on a contract entry (spec §5.2).
+ * One apron per lane END that sits on a contract entry (spec §5.2).
  *
  * Identification is by proximity to an ENTRY POINT, never by radius from the
  * origin: the fourth failed attempt identified arms by radius and got it
  * wrong in both directions -- `trimTails` cut arms back inside the circle at
  * pop 300, and at pop 40 arms ran past the fabric.
+ *
+ * BOTH ENDS, because one lane can carry two entries. `applyMainStreet`
+ * redraws the best through pair as a SINGLE spine running entry -> entry, so
+ * the near entry is `points[0]` and the far entry is the last point. Testing
+ * only the last point left the near entry stopping dead on the contract
+ * circle -- measured 134-221 m short of the tile edge on every `main-street`
+ * village, which is precisely the defect this spec exists to remove. Spec §9
+ * says so in as many words: "for each route bearing (and each far side of a
+ * through route)".
+ *
+ * A lane may therefore yield TWO aprons, `/a` off its last point and `/a0`
+ * off `points[0]` (see `apronLaneId`). The inner-end candidate is only taken
+ * for an entry NO lane's outer end already serves, which keeps a captured
+ * trunk's inner junction -- which can land within `ON_ENTRY_M` of a
+ * neighbour's entry when two bearings are close -- from growing a second
+ * road out of a point that is a junction, not an arrival.
  *
  * Two FMG routes close in bearing can survive as distinct trunks (they were
  * far enough apart AT the contract circle) yet run near-parallel once their
@@ -634,14 +659,45 @@ export function growAprons(
   const diagnostics: string[] = [];
   // Sorted by id so the outcome can never depend on array position -- the
   // same discipline `rehomeOrphans` and `resolveCrossings` keep.
-  for (const lane of [...lanes].sort((a, b) => a.id.localeCompare(b.id))) {
-    if (lane.points.length < 2) continue;
+  const ordered = [...lanes].filter((l) => l.points.length >= 2)
+    .sort((a, b) => a.id.localeCompare(b.id));
+
+  // SELECTION, in two passes. Outer ends first, so that the entries they
+  // serve are known before an inner end is allowed to claim one.
+  const candidates: ApronCandidate[] = [];
+  const served = new Set<TrunkEntry>();
+  for (const lane of ordered) {
     const tip = lane.points[lane.points.length - 1];
-    if (!entries.some((e) => dist(e.point, tip) <= ON_ENTRY_M)) continue;
-    let points = growApronPath(lane, reachM);
+    const at = entries.filter((e) => dist(e.point, tip) <= ON_ENTRY_M);
+    if (at.length === 0) continue;
+    for (const e of at) served.add(e);
+    candidates.push({ id: apronLaneId(lane.id, 'outer'), lane, from: lane });
+  }
+  for (const lane of ordered) {
+    const head = lane.points[0];
+    if (!entries.some((e) => !served.has(e) && dist(e.point, head) <= ON_ENTRY_M)) continue;
+    // Reversed, so `growApronPath` reads its tangent and terminal curvature
+    // off the road as it ARRIVES at this end -- and returns a path that,
+    // like every other apron, starts on the shared contract vertex and runs
+    // outward, matching `Lane.points`' inner-first order.
+    candidates.push({
+      id: apronLaneId(lane.id, 'inner'),
+      lane,
+      from: { ...lane, points: [...lane.points].reverse() },
+    });
+  }
+  // Emission order: lane id, then outer (`/a`) before inner (`/a0`). It
+  // decides which of two converging aprons is the survivor below, so it is
+  // fixed rather than incidental -- and it leaves the pre-through-route
+  // ordering of the outer aprons byte-for-byte unchanged.
+  candidates.sort((a, b) => a.lane.id.localeCompare(b.lane.id) || a.id.localeCompare(b.id));
+
+  for (const candidate of candidates) {
+    const lane = candidate.lane;
+    let points = growApronPath(candidate.from, reachM);
     if (points.length < 2) continue;
 
-    const laneId = apronLaneId(lane.id);
+    const laneId = candidate.id;
 
     // The coast bend comes FIRST, so a road that turned along the shore is
     // merge-eligible below exactly like any other apron: a second seaward
