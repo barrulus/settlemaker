@@ -27,6 +27,7 @@ import {
   cloneLotTrace, resetLotTrace, restoreLotTrace, type LotTrace,
 } from './lot-trace.js';
 import { dressVillage } from './dressing/index.js';
+import { clipApronsToFrame, computeFrame } from './frame.js';
 import { closestPointOnSegment, dist, segmentIntersection } from './geometry.js';
 import {
   ARM_LOT_RADIUS_SHARE, BLOCK_CHASE_ROUND_CAP, BRANCH_SPACING_M, FRONT_ON_LANE_EPS_M,
@@ -38,7 +39,7 @@ import {
   DISC_ESCALATION_STEP_RATIO, RING_SETBACK_M, SPACING_RELAX_FLOOR, SPACING_RELAX_STEP,
   PROFILE_SEED_MULTIPLIER, PROFILE_SEED_OFFSET,
 } from './constants.js';
-import type { Lane, Lot, VillageModel } from './types.js';
+import { isApron, type Lane, type Lot, type VillageModel } from './types.js';
 import { classRank, type RouteType } from './route-class.js';
 
 /** The band this engine serves. Above it, the existing engine runs. */
@@ -194,6 +195,11 @@ export function generateVillage(
   const network = synthesizeTrunks(
     site, contractRadiusFor(closedFormRadius), closedFormRadius, rng, aim,
   );
+  // The network's own honesty channel, folded in before the lot chase's
+  // first snapshot so a restored round cannot rewind these away: they
+  // describe the skeleton, which the chase never touches. Today that is
+  // the coast bend giving up short of the tile (spec §5.4.5).
+  diagnostics.push(...network.diagnostics);
   // Task 7 (spec 5.3): the inversion this plan is named for. The green is
   // no longer placed at the origin with roads aimed at it -- the roads are
   // drawn first and the green is sited as a RESIDENT of them: beside one,
@@ -360,9 +366,18 @@ export function generateVillage(
     lotFloorM = Math.max(inkFloorM, nominalLotFloorM - tightenM);
     activeDeck = tightenDeck(deck, tightenM);
     targetRadiusM = cappedRadiusM * (1 + extraRings * DISC_ESCALATION_STEP_RATIO);
-    const grown = saturateDisc(lanes, green, measuredMeanFrontage,
-      discProfile.scaled(targetRadiusM / cappedRadiusM), rng, spacingScale());
-    lanes = grown.lanes;
+    // Aprons are OUT of growth's own reckoning -- no budget, no coverage,
+    // no branch slots -- and IN its crossing checks, as the last argument.
+    // Owner ruling 2026-09-07: those are two questions, and taking aprons
+    // out of growth wholesale answered both with the same "no". A coast
+    // apron runs LATERALLY past the fabric, so unlike a radial one it is
+    // somewhere growth genuinely reaches, and a growth branch crossed one
+    // with no junction at pop 40 on the coastal fixture. See
+    // `withObstacles` for what the obstacle list may and may not touch.
+    const grown = saturateDisc(lanes.filter((l) => !isApron(l.id)), green, measuredMeanFrontage,
+      discProfile.scaled(targetRadiusM / cappedRadiusM), rng, spacingScale(),
+      lanes.filter((l) => isApron(l.id)));
+    lanes = [...grown.lanes, ...lanes.filter((l) => isApron(l.id))];
     lotRadiusM = grown.radiusM;
     lotProfile = grown.profile;
 
@@ -371,7 +386,7 @@ export function generateVillage(
 
     lots = [
       ...subdivideGreen(green, f0, LOT_DEPTH_M, rng, lanes),
-      ...lanes.flatMap((l) => subdivideLane(
+      ...lanes.filter((l) => !isApron(l.id)).flatMap((l) => subdivideLane(
         l, green, lotRadiusM, f0, LOT_DEPTH_M, rng, lotFloorM, lotCapM,
         lotReachAt(l, green, lotProfile, site.population),
       )),
@@ -413,7 +428,7 @@ export function generateVillage(
     // resolution is deliberately NOT re-run over them.
     for (let pass = 1; pass <= RECUT_MAX_PASSES; pass++) {
       const recut = recutFreedGround({
-        lanes,
+        lanes: lanes.filter((l) => !isApron(l.id)),
         green,
         standing: lots,
         builtRadiusM: lotRadiusM,
@@ -504,7 +519,8 @@ export function generateVillage(
     const blockFloor = blockFloorFor(site.population);
     const blocksNow = (spend.unhoused === 0 && blockFloor > 0)
       ? blockAreas(
-        connectDeadEnds(trimTails(lanes, spend.buildings), green, spend.buildings),
+        connectDeadEnds(trimTails(lanes, spend.buildings), green, spend.buildings)
+          .filter((l) => !isApron(l.id)),
         green,
       ).length
       : 0;
@@ -534,9 +550,14 @@ export function generateVillage(
     if (round === MAX_FEEDBACK_ROUNDS) {
       if (spend.unhoused > 0 && firstHousedSnapshot === null) {
         diagnostics.push(
+          // Aprons excluded, as everywhere else the fabric is measured:
+          // nothing is ever seated on one, so counting them added 1000-3000 m
+          // of frontage that no house could use and overstated the figure by
+          // 25-40% -- in the direction that tells a reader chasing an
+          // overflow there was room when there was not.
           `overflow: ${spend.unhoused} of ${site.population} unhoused after `
           + `${MAX_FEEDBACK_ROUNDS} rounds (available frontage `
-          + `${Math.round(availableFrontage(lanes))} m)`,
+          + `${Math.round(availableFrontage(lanes.filter((l) => !isApron(l.id))))} m)`,
         );
       } else if (spend.unhoused > 0) {
         // A round found earlier DID house the census (`firstHousedSnapshot`
@@ -623,10 +644,12 @@ export function generateVillage(
   // toward a form that crossed nothing, so the sweep converges; it is
   // bounded anyway, and walked in id order so it can never depend on array
   // position.
-  const relaxedLanes = relaxLanes(lanes, spend.buildings).map((relaxedLane) => {
-    const intrudes = spend.buildings.some((b) => intrudesOnLane(b, [relaxedLane]));
-    return intrudes ? (lanes.find((l) => l.id === relaxedLane.id) ?? relaxedLane) : relaxedLane;
-  });
+  const relaxedLanes = relaxLanes(lanes.filter((l) => !isApron(l.id)), spend.buildings)
+    .map((relaxedLane) => {
+      const intrudes = spend.buildings.some((b) => intrudesOnLane(b, [relaxedLane]));
+      return intrudes ? (lanes.find((l) => l.id === relaxedLane.id) ?? relaxedLane) : relaxedLane;
+    })
+    .concat(lanes.filter((l) => isApron(l.id)));
   for (let pass = 0; pass < 4; pass++) {
     const order = relaxedLanes.map((l, i) => i)
       .sort((a, b) => relaxedLanes[a].id.localeCompare(relaxedLanes[b].id));
@@ -767,7 +790,7 @@ export function generateVillage(
   // The proxy is a lower bound (see its comment), so this can legitimately
   // read as met even on a round the loop itself exhausted without knowing
   // it would be.
-  const shippedBlocks = blockAreas(relaxed, green).length;
+  const shippedBlocks = blockAreas(relaxed.filter((l) => !isApron(l.id)), green).length;
   const shippedBlockFloor = blockFloorFor(site.population);
   if (spend.unhoused === 0 && shippedBlocks < shippedBlockFloor) {
     diagnostics.push(
@@ -811,19 +834,53 @@ export function generateVillage(
     }
   }
 
+  const frame = computeFrame({
+    lanes: relaxed,
+    buildings: spend.buildings.map((b) => b.position),
+    greenCentre: green.centre,
+    dressing: [
+      ...dressing.fields.flatMap((f) => f.polygon),
+      ...dressing.fieldEdges.map((e) => e.position),
+      ...dressing.vegetation.map((v) => v.position),
+      ...dressing.pois.map((p) => p.position),
+    ],
+  });
+  const framedLanes = clipApronsToFrame(relaxed, frame);
+  const droppedAprons = relaxed.filter((l) => isApron(l.id)).length
+    - framedLanes.filter((l) => isApron(l.id)).length;
+  if (droppedAprons > 0) {
+    diagnostics.push(
+      `apron: ${droppedAprons} approach road${droppedAprons === 1 ? '' : 's'} `
+      + `started outside the drawn tile and was dropped`,
+    );
+  }
+
   return {
-    site, green, lanes: relaxed, lots: survivingLots, buildings: spend.buildings,
+    site, green, lanes: framedLanes, lots: survivingLots, buildings: spend.buildings,
     edgeStyle: dressing.edgeStyle, crofts: dressing.crofts, fields: dressing.fields,
     fieldEdges: dressing.fieldEdges, vegetation: dressing.vegetation, pois: dressing.pois,
     diagnostics,
     // Trunks task 5: carried on the model, unread by the renderer this
     // task (see `types.ts`'s field comments).
     contractRadiusM: network.contractRadiusM,
-    trunkJunctions: network.junctions,
+    frame,
+    // Computed BEFORE the apron clip, so a junction recorded where two
+    // aprons converged can sit on road the clip has since discarded --
+    // measured 4 of 131 junctions outside the frame, the worst 357 m clear
+    // of the picture. `types.ts` and `geojson.ts` both promise a consumer
+    // never receives a junction in open ground; `bridges` below already
+    // moved onto `framedLanes` for the same reason and this was missed.
+    // Inside the frame is exactly the right test: the clip keeps an apron's
+    // prefix up to its first crossing of the frame, so any junction still
+    // inside the rectangle is still on drawn road.
+    trunkJunctions: network.junctions.filter((j) => (
+      j.position.x >= frame.minX && j.position.x <= frame.maxX
+      && j.position.y >= frame.minY && j.position.y <= frame.maxY
+    )),
     greenRelation,
-    // Phase 3: computed on the FINAL lanes, after trimming and relaxation,
-    // so a crossing describes a road that actually shipped.
-    bridges: findWaterCrossings(relaxed, site.water),
+    // Phase 3: computed on the FINAL lanes -- now after the apron clip, so
+    // no bridge is ever placed outside the picture.
+    bridges: findWaterCrossings(framedLanes, site.water),
   };
 }
 

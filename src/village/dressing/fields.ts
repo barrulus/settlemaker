@@ -24,9 +24,7 @@ import {
   LANE_SETBACK_M, RING_SETBACK_M,
 } from '../constants.js';
 import { radialExtent, type RadialExtent } from './extent.js';
-import type {
-  Croft, EdgeStamp, FieldBlock, Green, Lane, Lot, Site,
-} from '../types.js';
+import { isApron, type Croft, type EdgeStamp, type FieldBlock, type Green, type Lane, type Lot, type Site } from '../types.js';
 
 /**
  * §7.2, THE FARMED LAND -- rebuilt at GATE 8.3 as a PLANAR SUBDIVISION.
@@ -300,9 +298,27 @@ interface RoadLine {
  * on a dead straight line, so the line is a faithful description of it).
  */
 export function exitRoads(green: Green, lanes: Lane[], belt: Point[]): RoadLine[] {
+  const aprons = lanes.filter((l) => isApron(l.id) && l.points.length >= 1);
+  // Matched by GEOMETRY, not by stripping the apron id back to its trunk's
+  // base id. `growAprons` computes an apron's id from `rehomed.trunks`,
+  // BEFORE the combined `resolveCrossings(withAprons, ...)` call -- so if
+  // crossing resolution later splits the trunk that owns an apron, the
+  // outer half (the one carrying the tip and the contract entry) is
+  // renamed `T~xB`, and an id-strip match on the apron's `T/a` id would
+  // miss it, cutting a second field corridor from the tip the apron
+  // already leaves from -- the exact double corridor this exclusion
+  // exists to prevent, arriving from the other direction. The apron's
+  // first vertex is a `clone()` of its trunk's own tip (spec §5.3), so a
+  // coincidence test survives any renaming a crossing split does.
+  const hasApron = (lane: Lane): boolean => {
+    if (lane.points.length === 0) return false;
+    const tip = lane.points[lane.points.length - 1];
+    return aprons.some((a) => dist(a.points[0], tip) <= 1e-6);
+  };
   const out: RoadLine[] = [];
   for (const lane of lanes) {
     if (lane.parentId !== undefined) continue;
+    if (hasApron(lane)) continue; // its apron is the exit road
     if (lane.points.length < 2) continue;
     const tip = lane.points[lane.points.length - 1];
     const prev = lane.points[lane.points.length - 2];

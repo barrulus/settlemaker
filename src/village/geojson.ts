@@ -20,7 +20,7 @@ import { GEOJSON_SCHEMA_VERSION, SETTLEMAKER_VERSION } from '../output/geojson-b
 import { regimeFor } from '../poi/poi-selector.js';
 import { inkExtent } from './glyphs.js';
 import { Point } from '../types/point.js';
-import type { Building, VillageModel } from './types.js';
+import { isApron, type Building, type VillageModel } from './types.js';
 
 type Pos = [number, number];
 
@@ -47,16 +47,27 @@ function footprintRing(b: Building): Pos[] {
   return ring([at(-hw, -hd), at(hw, -hd), at(hw, hd), at(-hw, hd)]);
 }
 
-/** AABB of everything that paints ink, plus the same 20 m padding the
- * settlement path's `computeLocalBounds` applies. */
-function bounds(model: VillageModel): {
+/** AABB of everything that paints ink, plus a 20 m pad. This measures the
+ * VILLAGE -- its own extent, for `diameterM` alone -- and is deliberately
+ * NOT what `local_bounds` publishes: that is `model.frame`, the drawn tile
+ * (spec §10.1, owner ruling 2026-09-07). The two are different questions:
+ * this one asks how big the settlement is, `local_bounds` asks how far the
+ * image extends. */
+function inkBounds(model: VillageModel): {
   min_x: number; min_y: number; max_x: number; max_y: number;
 } {
   const xs: number[] = [];
   const ys: number[] = [];
   const take = (p: { x: number; y: number }): void => { xs.push(p.x); ys.push(p.y); };
   for (const b of model.buildings) take(b.position);
-  for (const l of model.lanes) for (const p of l.points) take(p);
+  // An apron is CLIPPED to the tile edge (`clipApronsToFrame`), so counting
+  // its points would make "the village's own extent" measure the tile
+  // instead -- the seventh `isApron` exclusion site alongside the six
+  // fabric-measurement ones in `village-model.ts`/`frame.ts`.
+  for (const l of model.lanes) {
+    if (isApron(l.id)) continue;
+    for (const p of l.points) take(p);
+  }
   for (const f of model.fields) for (const p of f.polygon) take(p);
   for (const v of model.vegetation) take(v.position);
   take(model.green.centre);
@@ -71,7 +82,7 @@ function bounds(model: VillageModel): {
 /** The village's overall extent in metres — its own diameter, measured, not
  * predicted from population. */
 function diameterM(model: VillageModel): number {
-  const b = bounds(model);
+  const b = inkBounds(model);
   return Math.max(b.max_x - b.min_x, b.max_y - b.min_y);
 }
 
@@ -197,7 +208,18 @@ export function generateVillageGeoJson(model: VillageModel): FeatureCollection {
       // Phase 5 parity: every key the SETTLEMENT path publishes also appears
       // here, or a consumer that reads one engine's output crashes on the
       // other's. Values are the village's own honest answers, not stubs.
-      local_bounds: bounds(model),
+      //
+      // Spec §10.1 (owner ruling 2026-09-07): `local_bounds` is THE DRAWN
+      // TILE -- the same rectangle the SVG viewBox covers -- not a box drawn
+      // round the lanes. The model owns the frame precisely because the
+      // approach roads are clipped to it, so this is the one honest answer
+      // to "how far does this image extend". `diameterM` still asks the
+      // different question of how big the VILLAGE is, and still uses
+      // `inkBounds` for it.
+      local_bounds: {
+        min_x: model.frame.minX, min_y: model.frame.minY,
+        max_x: model.frame.maxX, max_y: model.frame.maxY,
+      },
       scale: {
         // The village engine works in metres throughout, so there is no unit
         // conversion to describe -- unlike the settlement path, whose local

@@ -94,9 +94,16 @@ describe('renderVillage', () => {
     // the alignment frame and the fallbacks stripped; erasing only the frame
     // still gives `d0b2f407...` on the pre-change renderer, which is how this
     // value was derived.
+    //
+    // The hash moved a THIRD time, deliberately, in spec 2026-09-07 §7: the
+    // model now owns the frame and clips approach-road aprons to it, so a
+    // road that used to stop 150 m short of the tile edge now reaches it.
+    // Visually confirmed before re-pinning (task 3 report): the apron runs
+    // from the green, past the field ring, to the drawn tile's boundary,
+    // and nothing else in the picture moved. `3299ad25...` is that value.
     const normalised = stripped.replace(/var\((--[a-z0-9-]+)\s*,\s*[^)]*\)/gi, 'var($1)');
     expect(createHash('sha256').update(normalised).digest('hex'))
-      .toBe('29020286752231d733c1f7e6bdd28c5a89238460e62945f16b454579c4907f86');
+      .toBe('3299ad2536451a215b3489e6bb5230a2cd66544432d6935866fedc47eb1753c1');
   });
 
   it('carries the contract circle radius for consumers to align against', () => {
@@ -427,21 +434,25 @@ describe('renderVillage', () => {
         const lanePoints = m.lanes.flatMap((lane) => lane.points);
         const allPoints = m.buildings.map((b) => b.position).concat(m.green.centre, lanePoints);
 
-        // Reproduce the renderer's own coordinate mapping to check every
-        // world point actually lands inside the declared viewBox.
-        const pad = 40;
-        const xs = allPoints.map((p) => p.x);
-        const ys = allPoints.map((p) => p.y);
-        const minX = Math.min(...xs) - pad;
-        const minY = Math.min(...ys) - pad;
+        // Spec 2026-09-07 §7.3: the model owns the frame now, and aprons are
+        // clipped TO it -- so the coordinate mapping to check is the model's
+        // own frame, not a bound independently recomputed from lane points
+        // (which would double-count the pad an apron was already clipped
+        // against).
+        const { minX, minY } = m.frame;
 
+        // A clipped apron point sits EXACTLY on the frame boundary, so its
+        // mapped pixel can round a hundredth of a pixel past the SVG's own
+        // (fixed-precision) declared width/height. An epsilon, not a
+        // tolerance for a real overflow: `n()`'s rounding is the only gap.
+        const EPS = 0.02;
         for (const p of allPoints) {
           const px = (p.x - minX) * pxPerMetre;
           const py = (p.y - minY) * pxPerMetre;
-          expect(px).toBeGreaterThanOrEqual(0);
-          expect(px).toBeLessThanOrEqual(width);
-          expect(py).toBeGreaterThanOrEqual(0);
-          expect(py).toBeLessThanOrEqual(height);
+          expect(px).toBeGreaterThanOrEqual(-EPS);
+          expect(px).toBeLessThanOrEqual(width + EPS);
+          expect(py).toBeGreaterThanOrEqual(-EPS);
+          expect(py).toBeLessThanOrEqual(height + EPS);
         }
       });
     }

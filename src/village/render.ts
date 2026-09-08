@@ -206,35 +206,18 @@ function fieldPatternId(glyph: string, furrowBearingDeg: number): string {
 export function renderVillage(
   model: VillageModel, pxPerMetre = 4, theme: VillageTheme = villageThemeFor(model.site.biome),
 ): string {
-  // Bounds must cover every lane point, not just buildings and the green:
-  // ruling R15 leaves arm- lanes (FMG's incoming roads) untrimmed out to
-  // roughly builtRadius * 2 past the green whether or not anything is
-  // built along them, so a lane can run well outside the built footprint.
-  // All points, not just endpoints — a lane can wander outside the box
-  // between them. Pass 5 extends this the same way: the field ring,
-  // vegetation and POIs can all sit further out than the buildings/green.
-  const lanePoints = model.lanes.flatMap((lane) => lane.points);
-  const fieldPoints = model.fields.flatMap((f) => f.polygon);
   // Gate 5: crofts are claims only -- never painted, so they neither
   // contribute stamps nor drive the bounds. `model.fieldEdges` is the sole
   // edge-stamp source and is empty in the current design (the ring's blocks
   // carry no outline); the paint path below is kept live for future use.
   const edgeStamps: EdgeStamp[] = [...model.fieldEdges];
-  const dressingPoints = [
-    ...fieldPoints,
-    ...edgeStamps.map((e) => e.position),
-    ...model.vegetation.map((v) => v.position),
-    ...model.pois.map((p) => p.position),
-  ];
-  const xs = model.buildings.map((b) => b.position.x)
-    .concat(model.green.centre.x, lanePoints.map((p) => p.x), dressingPoints.map((p) => p.x));
-  const ys = model.buildings.map((b) => b.position.y)
-    .concat(model.green.centre.y, lanePoints.map((p) => p.y), dressingPoints.map((p) => p.y));
-  const pad = 40;
-  const minX = Math.min(...xs) - pad;
-  const minY = Math.min(...ys) - pad;
-  const w = (Math.max(...xs) + pad - minX) * pxPerMetre;
-  const h = (Math.max(...ys) + pad - minY) * pxPerMetre;
+
+  // Spec 2026-09-07 §7.3: the MODEL owns the frame. The renderer computing
+  // its own bounds is what made "run the roads to the edge" impossible --
+  // lanes drove the box and the pad ran ahead of every extension.
+  const { minX, minY } = model.frame;
+  const w = (model.frame.maxX - minX) * pxPerMetre;
+  const h = (model.frame.maxY - minY) * pxPerMetre;
   const X = (x: number): number => (x - minX) * pxPerMetre;
   const Y = (y: number): number => (y - minY) * pxPerMetre;
 

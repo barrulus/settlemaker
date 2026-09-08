@@ -161,3 +161,42 @@ export function segmentIntersection(
   if (t <= EPS || t >= 1 - EPS || u <= EPS || u >= 1 - EPS) return null;
   return new Point(a1.x + d1x * t, a1.y + d1y * t);
 }
+
+/**
+ * The prefix of `points` that lies inside `rect`, ending exactly on the
+ * boundary where it first leaves (spec 2026-09-07 §7.2).
+ *
+ * First crossing, not last: a road that leaves the tile is gone, whatever it
+ * does afterwards. Returns `[]` when the first point is already outside.
+ */
+export function clipPolylineToRect(
+  points: Point[],
+  rect: { minX: number; minY: number; maxX: number; maxY: number },
+): Point[] {
+  const inside = (p: Point): boolean => (
+    p.x >= rect.minX && p.x <= rect.maxX && p.y >= rect.minY && p.y <= rect.maxY
+  );
+  if (points.length === 0 || !inside(points[0])) return [];
+
+  const out: Point[] = [points[0]];
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    if (inside(b)) { out.push(b); continue; }
+    // Largest t in [0, 1] with a + t*(b - a) still inside: clip against each
+    // of the four half-planes in turn.
+    let t = 1;
+    const limit = (num: number, den: number): void => {
+      if (den === 0) return;
+      const candidate = num / den;
+      if (candidate >= 0 && candidate < t) t = candidate;
+    };
+    limit(rect.minX - a.x, b.x - a.x);
+    limit(rect.maxX - a.x, b.x - a.x);
+    limit(rect.minY - a.y, b.y - a.y);
+    limit(rect.maxY - a.y, b.y - a.y);
+    out.push(new Point(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t));
+    return out;
+  }
+  return out;
+}

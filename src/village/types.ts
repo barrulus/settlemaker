@@ -218,6 +218,20 @@ export interface WaterCrossing {
   narrow: boolean;
 }
 
+/**
+ * The drawn tile, in burg-local metres (spec 2026-09-07 §7).
+ *
+ * The MODEL owns this, not the renderer, because apron lanes are clipped to
+ * it: a renderer that re-derived its own bounds from the geometry would move
+ * the very edge the roads were cut to. That inversion is what lets a road
+ * touch the edge at all -- while lanes drove the bounds and the renderer
+ * added a pad, every metre of extension pushed the frame one metre further
+ * ahead of the road.
+ */
+export interface Frame {
+  minX: number; minY: number; maxX: number; maxY: number;
+}
+
 export interface VillageModel {
   site: Site;
   green: Green;
@@ -254,6 +268,9 @@ export interface VillageModel {
    * contract, and the fabric is free to sit well inside it.
    */
   contractRadiusM: number;
+  /** The drawn tile (spec §7.1). `render.ts` reads this and computes no
+   * bounds of its own; aprons are clipped to it. */
+  frame: Frame;
   /**
    * Every junction the trunk network resolved to (spec 5.2).
    *
@@ -297,6 +314,43 @@ export function inventedLaneId(bearingDeg: number): string {
 export function branchLaneId(parentId: string, atFraction: number): string {
   const pct = String(Math.round(atFraction * 100)).padStart(2, '0');
   return `${parentId}/b${pct}`;
+}
+
+/**
+ * A trunk's APRON: its continuation past a contract entry, out to the edge
+ * of the drawn tile (spec 2026-09-07 §5.1). `/a` joins the `/b` branch and
+ * `/c` connector id vocabulary.
+ *
+ * TWO APRONS PER LANE, because ONE LANE CAN CARRY TWO ENTRIES. `main-street`
+ * redraws the best through pair as a single spine running entry -> entry
+ * (`applyMainStreet`), so its FIRST point is a contract entry as much as its
+ * last is. Keying the id on the trunk alone gave that spine one apron and
+ * left the near entry stopping dead on the circle -- the exact defect this
+ * spec exists to remove, surviving on one road per `main-street` village.
+ *
+ * The scheme, and why it is asymmetric:
+ *  - `outer` -> `` `${id}/a` ``, the apron off the lane's LAST point. Every
+ *    apron the engine drew before through routes were handled is this one,
+ *    and it keeps its id byte-for-byte so ids stay stable across the fix.
+ *  - `inner` -> `` `${id}/a0` ``, the apron off the lane's point `[0]` --
+ *    "the apron at index 0", numbered the way `/b<pct>` numbers branches.
+ *
+ * `isApron` therefore has to accept a digit suffix, and `resolveCrossings`
+ * may still append its own `~x...` to either form.
+ *
+ * `isTrunk` deliberately still returns true for an apron id. Every one of
+ * its call sites asks "is this structural road rather than village-grown
+ * frontage?", and an apron is. `isApron` is the narrower question, asked
+ * only where an apron must be held back from something a trunk is fed to.
+ */
+export function apronLaneId(trunkLaneId: string, end: 'outer' | 'inner' = 'outer'): string {
+  return `${trunkLaneId}/a${end === 'inner' ? '0' : ''}`;
+}
+
+/** True for an apron lane, either end's (`/a`, `/a0`), including one
+ * `resolveCrossings` has split (it appends its own `~x...` suffix). */
+export function isApron(laneId: string): boolean {
+  return /\/a\d*(~|$)/.test(laneId);
 }
 
 export function lotId(laneId: string, side: 1 | -1, ordinal: number): string {

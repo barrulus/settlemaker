@@ -21,6 +21,7 @@ import { angularGap, bearingVector, closestPointOnPolyline, segmentIntersection 
 import { pointInPolygon } from '../../geom/point-in-polygon.js';
 import { classRank, isRoadClass, laneWidth, stepDown, type RouteType } from '../route-class.js';
 import { routeProvenanceKey, trunkLaneId, type Lane, type Site, type SiteRoute } from '../types.js';
+import { growAprons } from './apron.js';
 
 /** Wanderer classes (ratio >= 0.12) get a second control jitter and are
  * subdivided into two Béziers sharing tangents at the midpoint. */
@@ -556,6 +557,14 @@ export interface TrunkNetwork {
    * centroid, and two structural bars are evaluated against it.
    */
   ring: Point[];
+  /**
+   * Anything the network had to give up on, in the model's own honesty
+   * vocabulary. Currently only the coast bend (spec §5.4.5): a `coast:`
+   * line when an apron met the sea and the shore never left the tile, so
+   * the road ends at the water. `generateVillage` folds these into the
+   * model's `diagnostics` -- nothing is ever silent.
+   */
+  diagnostics: string[];
 }
 
 const PATTERN_DRAW_ORDER: ConvergencePattern[] = ['main-street', 'loop', 'y-tree', 'junction'];
@@ -1324,7 +1333,7 @@ export function synthesizeTrunks(
     const bare = resolveCrossings(merged.trunks, merged.junctions);
     return {
       trunks: bare.trunks, junctions: bare.junctions, pattern: 'junction',
-      contractRadiusM, entries, aim, ring: [],
+      contractRadiusM, entries, aim, ring: [], diagnostics: [],
     };
   }
 
@@ -1369,7 +1378,20 @@ export function synthesizeTrunks(
   }
 
   const rehomed = rehomeOrphans(applied.trunks, applied.junctions, contractRadiusM);
-  const resolved = resolveCrossings(rehomed.trunks, rehomed.junctions);
+  // Spec 2026-09-07 §5.2. AFTER merging and pattern application, because a
+  // draft-time extension would let `mergeTrunks` capture two arms out in the
+  // apron and spec 5.1 forbids merging at the boundary. AFTER
+  // `rehomeOrphans`, which skips ends at or beyond the contract radius
+  // anyway. BEFORE `resolveCrossings`, so an apron crossing another road
+  // becomes a junction like any other crossing -- the fifth failed attempt
+  // could not reach this, because it patched after synthesis was over.
+  // `site.water` goes in with them: an apron whose bearing points out to
+  // sea bends and follows the coast (spec §5.4), and a coast road runs
+  // LATERALLY, so it can cross another road -- which is the second reason
+  // this happens before `resolveCrossings` rather than after synthesis.
+  const grown = growAprons(rehomed.trunks, entries, contractRadiusM, site.water);
+  const withAprons = [...rehomed.trunks, ...grown.lanes];
+  const resolved = resolveCrossings(withAprons, [...rehomed.junctions, ...grown.junctions]);
   const junctions = pruneJunctions(resolved.trunks, resolved.junctions);
 
   return {
@@ -1380,5 +1402,6 @@ export function synthesizeTrunks(
     entries,
     aim,
     ring: applied.ring ?? [],
+    diagnostics: grown.diagnostics,
   };
 }

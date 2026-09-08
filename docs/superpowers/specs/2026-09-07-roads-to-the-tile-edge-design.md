@@ -190,6 +190,23 @@ per segment with the existing `segmentIntersection`, not by marching — it:
 4. **A second seaward arm does not lay a parallel coast road.** It runs into
    the first within `MERGE_CAPTURE_M` for its class, lands on it, and records
    a junction — the same capture vocabulary `mergeTrunks` already uses.
+
+   **Generalised 2026-09-07 during implementation: this applies to EVERY
+   apron, not only coast roads.** Two FMG routes half a degree apart sit
+   ~1.6 m apart on the contract circle, so their aprons run within 4 m of each
+   other for hundreds of metres and draw as one road with a doubled stroke.
+   `trunks-structure.test.ts`'s near-parallel bar catches it, and its `joined`
+   exemption is exactly how the same case is already handled for trunks, which
+   merge via `mergeTrunks`. So an apron that comes within
+   `MERGE_CAPTURE_M[its class]` of an already-emitted apron lands on it and
+   records a junction.
+
+   **This does not violate spec 5.1.** That rule forbids merging ENTRIES: every
+   route still gets its own point on the circle at its exact bearing, and none
+   of them move. The merge happens outside the circle, in the apron, where two
+   converging routes genuinely would converge. §9's first invariant is
+   therefore satisfied TRANSITIVELY — an entry whose apron merged reaches the
+   tile edge via the road it merged into, traceable through the junction.
 5. **Fallback**: if the shore curves such that following it never leaves the
    frame within `COAST_ROAD_MAX_RUN_M`, the road ends at the shore and the
    model records a diagnostic naming the lane. A documented, counted
@@ -237,6 +254,8 @@ collection, and `TrunkNetwork` gains no field.
 | `connectDeadEnds` | **No** | Already excluded via `isTrunk`. An apron end at the tile edge is not a dead end to be closed. |
 | `blockAreas` / the block floor | **No** | Two aprons and a coast road must not enclose "a block" in open field and satisfy the block floor with it. |
 | `relaxLanes` | **No** | It nudges lanes off buildings; there are none out here. |
+| Growth (`saturateDisc`) | **No** | Added 2026-09-07 during implementation — the most consequential omission in the original table. Growth uses its lane list for the frontage budget, coverage seeding and branching, so three long radial aprons made whole angular sectors look already covered and `seedCoverageLane` declined to seed them: measured as a 64 deg laneless sector against a 60 deg ceiling, and a miss on the anisotropy floor. Growth is the village's own fabric; an apron is road outside it. `grown.lanes` REPLACES the lane list each round, so the aprons must be concatenated back after every growth round. |
+| Green siting (`green-siting.ts`) | **No** | Added 2026-09-07 during implementation — this row was missing and the omission was caught by `green-on-network.test.ts`. `spineOf`/`nearestOnNetwork` read `network.trunks` directly and picked the longer, same-class apron as the spine the green is sited against. An apron is road OUTSIDE the village; the green is sited relative to the village's own network. |
 | The frame (§7) | **No** | The whole point. This is the "lanes stop driving the bounds" half of the constraint in §2. |
 | `resolveCrossings` | **Yes** | A crossing without a junction is a defect wherever it happens. |
 | `exitRoads` (field-ring corridor) | **Yes** | It is now the road that leaves the village. A trunk that has an apron continuation is skipped there, so the corridor is cut once, from the road that actually exits. |
@@ -321,8 +340,29 @@ both wanted:
 - The shared `rng` stream that `synthesizeTrunks` and everything downstream
   draws from is untouched, so the fabric of an existing village does not
   re-roll. A 2.0.5 → this-release diff is attributable: new apron lanes, a
-  changed field ring, vegetation cleared along the new corridor. Anything else
-  is a regression.
+  changed field ring, vegetation cleared along the new corridor.
+
+  **One measured exception, found during implementation 2026-09-08.** I claimed
+  repeatedly that landlocked villages would be geometrically unchanged. That is
+  false for **4 of 90 dry villages measured**, all pop-40 `panel-cross`, and the
+  reason is worth stating because it corrects a premise I had been reasoning
+  from: **growth reaches PAST the contract circle at pop 40**, because the block
+  chase escalates the disc. `apron.ts` already recorded the same observation in
+  its own words — "at pop 40 arms ran past the fabric" — which is why aprons are
+  identified by entry proximity rather than by radius. So a radial apron is in
+  growth's way at that size, not only a coast road.
+
+  Those four villages change because growth now refuses to cross an apron it
+  previously crossed. Two real crossing violations on dry ground —
+  `lane-269 × trunk-local-r-local/a` and
+  `trunk-main-r-main/b31/b75 × trunk-trail-r-trail/a` — were being shipped
+  before this work and are removed by it. The change is a strict improvement,
+  and byte-identity was the wrong bar to have set.
+
+  That the difference comes ONLY from crossing decisions was proved, not
+  asserted: with the obstacle list forced to a plain copy — plumbing live,
+  obstacles ignored — the same 90-village dump is byte-identical to the
+  pre-change one.
 - Same seed, same village, still byte-identical — the existing determinism
   test covers it unchanged.
 
@@ -391,6 +431,87 @@ it, the images are always iframed, and adding it is a schema change with a
 version bump attached. Reversible in a later release if the tiler ever wants
 it; the viewBox already carries the same information for anyone reading the
 SVG.
+
+### 10.1 `bounds` — owner ruling 2026-09-07, target recorded, work not yet scheduled
+
+`src/village/geojson.ts:50`'s `bounds` helper computes its own AABB over
+buildings, **all lanes**, fields, vegetation and the green centre, padded by
+20 m. It therefore tracks the LANES, and this release moves it: roads now
+reach further, so the box grows on whichever axes a road exits.
+
+**Barry has ruled that `bounds` should mean THE DRAWN TILE** — the same
+rectangle the SVG viewBox covers — **not the lane box.** Both options were put
+to him explicitly (keep the lane AABB, no schema decision; or make it the
+rendered frame) and he chose the drawn tile.
+
+That target is recorded here even though the work is not scheduled in this
+plan, because the failure mode to avoid is a future reader finding "bounds:
+no change needed" and treating the lane box as settled intent. It is not. The
+lane box is the status quo, not the goal.
+
+**What is still open is the SEQUENCING, and it is the owner's call**, because
+a schema version bump is a consumer-contract decision:
+
+- **Now**, in this release: the model gains a `frame` in §7 anyway, so
+  `bounds` becomes close to reading it off. One disturbance to the field
+  instead of two.
+- **Later**, as its own release: keeps §10's no-schema-change rule intact, at
+  the cost of `bounds` moving in this release (because roads reach further)
+  and then changing meaning in the next — two disturbances to one field, in
+  consecutive releases, where one would do.
+
+**SEQUENCING RULED, 2026-09-07: NOW.** It lands in this release, while the
+frame is in hand — one disturbance to the field instead of two. The plan
+carries it as Task 3.5.
+
+Two sub-decisions taken with it, both reversible, both recorded with what they
+cost:
+
+- **`diameterM` keeps measuring the village, not the tile.** The private
+  `bounds()` helper feeds both the exported `local_bounds` and `diameterM`,
+  and those ask different questions — the ruling was about the exported field.
+  The helper stays as `inkBounds`, serving `diameterM` alone.
+
+  **And `inkBounds` must itself exclude aprons — a seventh exclusion site,
+  corrected during implementation.** Keeping the helper unchanged carried the
+  right intent to the wrong input: aprons are clipped to the tile edge, so
+  counting them made "the village's extent" the TILE's extent. Measured before
+  the correction, `diameter_meters` came out LARGER than the whole tile — 727.0
+  against a 711.5 tile at pop 500, 402.4 against 371.6 at pop 40, 884.4 against
+  844.3 at pop 1000 — for a field whose doc comment calls it "the village's
+  overall extent … its own diameter, measured". With aprons excluded it sits
+  consistently ~40 m inside the tile span, which makes
+  `diameter_meters < tileSpan` a real invariant (the tile is the fabric plus a
+  40 m pad, so the village cannot exceed the tile that frames it) rather than
+  the coincidence it would otherwise be.
+- **`GEOJSON_SCHEMA_VERSION` is NOT bumped, because this is a BUG FIX.**
+  Corrected 2026-09-07 after the settlemaker-web session measured the
+  production artifact: `local_bounds` has always meant the drawn tile, and
+  cities already satisfy `local_bounds == viewBox` to the decimal (asserted at
+  `tests/entrance-output.test.ts:389` and `:399`). **The village engine was
+  violating it** — short by exactly 40 m in each dimension, because
+  `geojson.ts`'s `PAD` is 20 against the renderer's 40. You do not bump a
+  schema version to fix an implementation that was breaking the schema. The
+  shared-constant argument is a second reason, not the main one.
+
+  **The case rests on the invariant, not on any consumer.** Villages violate
+  something cities honour and the codebase already asserts; that was true
+  before anyone went looking for a consumer and stays true regardless of
+  whether one exists.
+
+  Context for whoever rebuilds questables, recorded because it is worth
+  inheriting rather than because anything is pending: it persisted
+  `local_bounds` as a `jsonb NOT NULL` column, configured its projection from
+  it, called `view.fit(sidecar.local_bounds)`, and its design doc called
+  `svg_viewbox == local_bounds` within 0.1 "a settlemaker invariant" — which
+  villages missed by 400x. It is **parked, and due a major overhaul after this
+  work** (owner, 2026-09-07), so its stored 40 m-short values die with the old
+  system; there is no migration to write and no warning anyone must act on.
+  Explicitly: this must not constrain design here. Where a correct change to
+  settlemaker would be awkward for questables' stored data, make the correct
+  change.
+
+  The village engine never had the test cities have. Task 3.5 adds it.
 
 ## 11. Risks, carried openly
 

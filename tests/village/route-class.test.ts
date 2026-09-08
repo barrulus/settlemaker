@@ -58,3 +58,45 @@ describe('route class vocabulary', () => {
     expect(toLegacyKind(undefined)).toBe(undefined);
   });
 });
+
+/**
+ * CITY-VISIBLE BEHAVIOUR. `src/input/azgaar-input.ts` imports `toLegacyKind`
+ * and calls it on every road bearing of every burg, cities included, so this
+ * function's output is part of the settlement engine's input. City SVG
+ * byte-identity is the clean regression signal for a village-side release
+ * (two sessions certified "cities are insulated from src/village/" on
+ * 2026-09-07 and both were wrong -- see the plan for the import walk).
+ *
+ * This pins every input the function can receive. Adding a route class is
+ * fine; changing what an EXISTING one narrows to is a city regression, and
+ * it should fail here rather than in someone's byte diff after a deploy.
+ */
+describe('toLegacyKind is city-visible and must not drift', () => {
+  it.each([
+    ['royal', 'road'], ['main', 'road'], ['market', 'road'],
+    ['town', 'road'], ['local', 'road'],
+    ['trail', 'foot'], ['footpath', 'foot'],
+    ['road', 'road'], ['foot', 'foot'], ['sea', 'sea'],
+    ['searoutes', 'sea'],
+  ] as const)('%s -> %s', (input, expected) => {
+    expect(toLegacyKind(input)).toBe(expected);
+  });
+
+  it.each(['airroutes', 'traderoutes'] as const)('%s -> undefined', (input) => {
+    expect(toLegacyKind(input)).toBeUndefined();
+  });
+
+  it('maps undefined through', () => {
+    expect(toLegacyKind(undefined)).toBeUndefined();
+  });
+
+  it.each(['royal', 'main', 'market', 'town'] as const)(
+    'keeps %s ranked below local, the boundary isRoadClass reads', (kind) => {
+      // `trail` and `footpath` are caught by a literal check BEFORE
+      // isRoadClass, so their position is irrelevant here -- these four are
+      // the ones that reach classRank. Move 'local' ahead of 'town' and
+      // toLegacyKind('town') silently becomes undefined for every city burg.
+      expect(classRank(kind)).toBeLessThan(classRank('local'));
+    },
+  );
+});

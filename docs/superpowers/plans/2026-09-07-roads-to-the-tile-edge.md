@@ -1230,6 +1230,168 @@ the tile edge."
 
 ---
 
+## Task 3.5: `bounds` becomes the drawn tile
+
+**Owner ruling, 2026-09-07: `local_bounds` in the village GeoJSON should mean THE DRAWN TILE, not the box around the lanes — and it happens in THIS release**, while the frame is in hand, rather than letting the field move once now (because roads reach further) and change meaning again next release. Spec §10.1 records the ruling; this task is the work.
+
+Runs after Task 3, because it reads the `frame` Task 3 puts on the model.
+
+**Files:**
+- Modify: `src/village/geojson.ts:50-75`, `:200`
+- Test: `tests/village/geojson.test.ts`
+
+**Interfaces:**
+- Consumes: `VillageModel.frame` (Task 3).
+- Produces: nothing new. `local_bounds` keeps its name, shape and key order; only its meaning changes.
+
+**Two sub-decisions ruled before dispatch, both recorded with their costs:**
+
+**(a) `diameterM` keeps measuring the village, not the tile.** The private `bounds()` today feeds two callers: the exported `local_bounds`, and `diameterM`, whose own doc comment says it is "the village's overall extent in metres — its own diameter, measured, not predicted". Those are different questions, and the ruling was about the exported field. So the existing helper stays, renamed `inkBounds`, and serves `diameterM` alone. Cost if wrong: `diameter_m` goes on meaning ink extent while `local_bounds` means tile, which a consumer could conflate — mitigated by both carrying doc comments that say which.
+
+**(b) `GEOJSON_SCHEMA_VERSION` is NOT bumped — and this is a BUG FIX, not a meaning change.**
+
+The first draft of this task called it a semantic change and worried about consumers caching the old meaning. That was wrong, and the correction matters because it changes what the release note has to say. **`local_bounds` has always meant the drawn tile. The village engine simply implemented it wrongly.** Measured on the production 2.0.5 artifact:
+
+| output | viewBox | `local_bounds` | |
+|---|---|---|---|
+| city 4200 | 233.5 x 229.5 | 233.5 x 229.5 | match |
+| city 1500, port | 118.2 x 141.3 | 118.2 x 141.3 | match |
+| village 500 | 647.8 x 682.0 | 607.8 x 642.0 | **40 m short** |
+| village 500 + roads | 680.3 x 632.6 | 640.3 x 592.6 | **40 m short** |
+
+Villages are short by exactly 40 m in each dimension — 20 m a side — because `geojson.ts`'s `PAD` is 20 while the renderer's frame pad is 40. Cities match to the decimal because `computeLocalBounds` **is** the viewBox there, and `tests/entrance-output.test.ts:389` and `:399` assert exactly that.
+
+**There is a real consumer, which settles the "who would notice" question.** questables persists `local_bounds` as a `jsonb NOT NULL` column, configures its projection from it, and calls `view.fit(sidecar.local_bounds)` to frame the settlement view — and its own design doc states `svg_viewbox` "should match `local_bounds` within 0.1 (settlemaker invariant)". Villages miss that stated tolerance by 400x. That is a latent bug in a downstream consumer, caused by us, which this task fixes.
+
+So: you do not bump a schema version to fix an implementation that was violating the schema. The shared-constant argument stands as a second reason — bumping would signal a change to every city consumer for something confined to the village engine — but the decisive one is that nothing about the contract changed.
+
+- [ ] **Step 0: Add the invariant test the village engine never had**
+
+The city has `viewBox == local_bounds` asserted twice. The village has no such test, and that absence is exactly what let the 40 m gap live. Add the village mirror — the durable guard, the same shape as Task 0's.
+
+A village's viewBox is in PIXELS from the origin (`viewBox="0 0 w h"`, `w = span * pxPerMetre`), unlike a city's, whose viewBox carries local coordinates directly. So the village mirror asserts the SPAN in metres rather than the corners. Append to `tests/village/geojson.test.ts`:
+
+```ts
+describe('local_bounds satisfies the settlemaker viewBox invariant', () => {
+  it('spans exactly what the SVG viewBox spans, as cities already do', () => {
+    // `tests/entrance-output.test.ts:389` asserts this for the settlement
+    // engine and questables' design doc calls it a settlemaker invariant,
+    // persisting local_bounds as a jsonb column and fitting its projection
+    // to it. The village engine violated it by exactly 40 m in each
+    // dimension -- geojson's PAD was 20 against the renderer's 40 -- so a
+    // village mis-fitted that projection by 400x its stated tolerance.
+    const m = generateVillage(input, 1);
+    const svg = renderVillage(m);
+    const vb = /viewBox="0 0 ([0-9.]+) ([0-9.]+)"/.exec(svg)!;
+    const pxPerMetre = Number(/data-px-per-metre="([0-9.]+)"/.exec(svg)![1]);
+    const b = metadata(generateVillageGeoJson(m)).local_bounds;
+    expect(Number(vb[1]) / pxPerMetre).toBeCloseTo(b.max_x - b.min_x, 6);
+    expect(Number(vb[2]) / pxPerMetre).toBeCloseTo(b.max_y - b.min_y, 6);
+  });
+});
+```
+
+Import `renderVillage` from `../../src/village/render.js` if the file does not already have it. Run it BEFORE the change and confirm it fails by ~40 m in each dimension — that failure is the bug, measured in our own suite for the first time.
+
+- [ ] **Step 1: Write the failing test**
+
+Append to `tests/village/geojson.test.ts`:
+
+```ts
+describe('local_bounds is the drawn tile', () => {
+  it('matches the model frame exactly, not the box around the lanes', () => {
+    const m = generateVillage(input, 1);
+    const meta = metadata(generateVillageGeoJson(m));
+    expect(meta.local_bounds).toEqual({
+      min_x: m.frame.minX, min_y: m.frame.minY,
+      max_x: m.frame.maxX, max_y: m.frame.maxY,
+    });
+  });
+
+  it('contains every lane point, since roads are clipped to the tile', () => {
+    const m = generateVillage(input, 1);
+    const b = metadata(generateVillageGeoJson(m)).local_bounds;
+    for (const lane of m.lanes) {
+      for (const p of lane.points) {
+        expect(p.x).toBeGreaterThanOrEqual(b.min_x - 0.001);
+        expect(p.x).toBeLessThanOrEqual(b.max_x + 0.001);
+        expect(p.y).toBeGreaterThanOrEqual(b.min_y - 0.001);
+        expect(p.y).toBeLessThanOrEqual(b.max_y + 0.001);
+      }
+    }
+  });
+
+  it('leaves diameter_m measuring the village, not the tile', () => {
+    // Two different questions: the tile includes the 40 m pad and whatever
+    // the roads reach; the diameter is the settlement's own extent.
+    const m = generateVillage(input, 1);
+    const meta = metadata(generateVillageGeoJson(m));
+    const tileSpan = Math.max(
+      m.frame.maxX - m.frame.minX, m.frame.maxY - m.frame.minY,
+    );
+    expect(meta.diameter_m).toBeLessThan(tileSpan);
+  });
+});
+```
+
+Reuse the file's existing `input`, `metadata` and imports; add `generateVillage` if it is not already imported. Read the top of the file before writing — do not duplicate an import.
+
+- [ ] **Step 2: Run it and watch it fail**
+
+```
+nix develop --command bash -c "npx vitest run tests/village/geojson.test.ts"
+```
+
+Expected: the first test FAILS — `local_bounds` is currently the padded AABB over ink, not the frame.
+
+- [ ] **Step 3: Split the helper**
+
+In `src/village/geojson.ts`, rename the private `bounds` to `inkBounds`, leaving its body exactly as it is, and give it a doc comment saying it measures INK and feeds `diameterM` only. Then change the metadata to read the frame:
+
+```ts
+      // Spec §10.1 (owner ruling 2026-09-07): `local_bounds` is THE DRAWN
+      // TILE -- the same rectangle the SVG viewBox covers -- not a box drawn
+      // round the lanes. The model owns the frame precisely because the
+      // approach roads are clipped to it, so this is the one honest answer
+      // to "how far does this image extend". `diameterM` still asks the
+      // different question of how big the VILLAGE is, and still uses
+      // `inkBounds` for it.
+      local_bounds: {
+        min_x: model.frame.minX, min_y: model.frame.minY,
+        max_x: model.frame.maxX, max_y: model.frame.maxY,
+      },
+```
+
+- [ ] **Step 4: Run the tests**
+
+```
+nix develop --command bash -c "npx vitest run tests/village/geojson.test.ts"
+nix develop --command bash -c "npx vitest run"
+nix develop --command bash -c "npx tsc --noEmit"
+```
+
+Expected: all green. `output-parity.test.ts` asserts `local_bounds` is among the metadata keys the settlement path also publishes — that still holds, since the key is unchanged. If it fails, the shape changed and it should not have.
+
+- [ ] **Step 5: Commit**
+
+Stage `src/village/geojson.ts` and `tests/village/geojson.test.ts` and commit with this message:
+
+```
+local_bounds is the drawn tile, not the box round the lanes
+
+Owner ruling: bounds should mean the extent of the IMAGE. It was an AABB
+over ink with a 20 m pad, which tracked the lanes -- so this release would
+have moved it anyway, roads now reaching further, and a later release would
+have moved it again by changing its meaning. Once instead of twice.
+
+diameterM asks a different question -- how big is the village -- and keeps
+the old helper, now inkBounds. GEOJSON_SCHEMA_VERSION is deliberately not
+bumped: it is shared with the settlement engine, and nothing about city
+output changes.
+```
+
+---
+
 ## Task 4: The coast bend
 
 **Files:**
@@ -1670,7 +1832,8 @@ Push `settlemaker` only. **Do not push `settlemaker-web`** — that repo's sessi
 Message it with the tag and a re-baseline note split by kind of change — the lesson from 2.0.5, where a single-sentence note conflated a rasteriser-only change with a browser-visible one and nearly caused a false regression report. It must cover **cities as well as villages**: "every village changes" tells a consumer that village bytes are useless as a regression signal, which leaves cities as their only clean one, and a note silent on cities sends them hunting the wrong thing.
 
 - **Villages, on screen:** every village changes, coastal or not — the field-ring corridor is now cut to the frame rather than to the contract circle.
-- **Villages, data:** roads run to the tile edge; `VillageModel` carries a new `frame`; village GeoJSON `bounds` moves by up to 20 m on whichever axes a road exits (see the Self-Review's known gap). `frame` itself is **not** in the GeoJSON — spec §10 — so a consumer diffing GeoJSON will not see it appear; a consumer using the TypeScript API will.
+- **Villages, data:** roads run to the tile edge; `VillageModel` carries a new `frame`. `frame` itself is **not** in the GeoJSON — spec §10 — so a consumer diffing GeoJSON will not see it appear; a consumer using the TypeScript API will.
+- **Villages, `local_bounds` — write this as a FIX NOTICE, not a breaking change.** Say: *villages now satisfy the documented `local_bounds == viewBox` invariant that cities already satisfied; they were previously 40 m short in each dimension.* Do not write "same shape, different meaning" — that invites a consumer to audit its assumptions and reads as us moving the goalposts, when in fact we were the ones breaking the contract. No schema bump, because the schema never changed. (questables is parked and due a major overhaul after this work, so its stored 40 m-short values die with the old system — nothing to migrate, nobody to warn.)
 - **Cities, SVG:** byte-identical, and safe to assert as a regression signal — but **not** because the settlement path is insulated from `src/village/`. It is not. Walking the transitive import graph from `src/generator/model.ts` and `src/output/svg-builder.ts` reaches 57 files, two of which are village files, through two independent doors: **`src/village/glyphs.ts`** via `src/generator/village-rows.ts` (`HOUSE_INK_RATIO`, `HUT_INK_RATIO`), and **`src/village/route-class.ts`** via `src/input/azgaar-input.ts` (`toLegacyKind`, called on every road bearing of every burg). City SVG holds still because this work modifies neither of those two — pinned by Task 0 — and because `svg-builder.ts` carries no version stamp.
 - **Cities, GeoJSON:** differs by exactly one field, `settlemaker_version`, from the release bump in `src/output/geojson-builder.ts` — the same single-field diff every release produces, and the one their 2.0.3 check caught. Anything beyond that field is a real regression.
 
@@ -1698,6 +1861,8 @@ Rucio/questables is dormant by ruling: no deploy, no cache wipe.
 
 **Spec coverage:** §5.1 apron id and predicate → Task 1 steps 2-3. §5.2 ordering inside `synthesizeTrunks` → Task 2 step 5. §5.3 straight geometry → Task 1. §5.4 coast bend, all five sub-rules → Task 4. §5.5 constants → Tasks 1 and 4 step 1. §5.6 signature → Task 2 step 3, revised in Task 4 step 5. §6 exclusion table → Task 2 steps 7-9 (the three free ones via `isTrunk` are verified by the suite staying green rather than by new code). §7 frame → Task 3. §8 no RNG → enforced by the signatures, which take no `SeededRandom`, and stated as a global constraint. §9 invariants → Task 3 steps 9-10 and Task 4 step 6. §10 GeoJSON unchanged → no task, deliberately: aprons flow through `geojson.ts`'s existing generic lane loop and `frame` is not exported. §11.5 url-api.md → Task 5. §12 render gate → Task 6.
 
-**Known gap, stated rather than hidden:** the GeoJSON `bounds` helper (`src/village/geojson.ts:50`) computes its own AABB with `PAD = 20` over all lanes, so it will now extend 20 m past the frame on the axes a road exits. That is a real, small output change with no consumer asking either way. It is left alone because §10 rules the schema does not change this round; if Barry wants `bounds` to mean the drawn tile, it is a one-line change plus a schema-version decision.
+**Known gap, and the owner has now ruled on the target (2026-09-07):** the GeoJSON `bounds` helper (`src/village/geojson.ts:50`) computes its own AABB with `PAD = 20` over all lanes, so it will now extend 20 m past the frame on the axes a road exits. **Barry has ruled that `bounds` should mean THE DRAWN TILE, not the lane box** — see spec §10.1, which records it. The lane box is the status quo, NOT settled intent; do not read this gap as "no change needed".
+
+What remains open is only the sequencing — bump the schema now while the frame is in hand, or later as its own release — and that is his call, because a schema version bump is a consumer-contract decision. Until he rules, the code ships unchanged, which forecloses neither option: once Task 3 puts `frame` on the model, `bounds`-as-tile is close to reading it off. If he rules "now", it slots in as a task after Task 3 and before Task 6's render gate, and Task 7 gains a `GEOJSON_SCHEMA_VERSION` bump alongside the five version pins.
 
 **Type consistency:** `growAprons` changes shape between Task 2 (`Lane[]`) and Task 4 (`GrownAprons`). That is deliberate and called out in both tasks' Interfaces blocks — Task 4's step 5 updates the single caller. `Frame` is used identically in `types.ts`, `frame.ts`, `geometry.ts` (structurally, as an inline type) and every test. `isApron` and `apronLaneId` are imported from `./types.js` everywhere.

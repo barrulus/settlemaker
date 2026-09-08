@@ -1432,6 +1432,93 @@ export const MERGE_CAPTURE_M: Record<RouteType, number> = {
   footpath: 8,
 };
 
+// --- APRON (spec 2026-09-07 §5) -----------------------------------------
+// The continuation of a trunk past its contract entry, out to the edge of
+// the drawn tile. All initial, all expected to move at the render gate.
+
+/** Apron length as a multiple of the contract radius. An OVERSHOOT, not a
+ * target: `frame.ts` clips it to the tile exactly, so it only has to be
+ * long enough. Measured worst case for tile-corner over contract radius is
+ * 5.47 (pop 40 seed 1) against 2.26 at pop 1000; 8 clears both. */
+export const APRON_REACH_FACTOR = 8;
+
+/** Floor on that overshoot, for villages whose contract circle is tiny. */
+export const APRON_REACH_FLOOR_M = 500;
+
+/** Vertex spacing along an apron. Coarser than `LANE_SAMPLE_STEP_M` (12):
+ * an apron is nearly straight and can be long, and every vertex is tested
+ * against by the field and vegetation rejection passes. */
+export const APRON_SAMPLE_STEP_M = 25;
+
+/** How much of the arm's own terminal curvature the apron continues. A road
+ * that was bending as it entered goes on bending, gently; 0 would draw a
+ * ruled line off the end of a curve, which reads as a kink. */
+export const APRON_CURVATURE_DAMP = 0.5;
+
+/** Clamps on that continuation, so a footpath cannot spiral: the most an
+ * apron may turn per sample step, and the point past which it stops turning
+ * at all.
+ *
+ * The total is a THRESHOLD, not a ceiling: `growApronPath` tests it before
+ * adding the step's turn, so the last permitted step carries the apron to
+ * `APRON_MAX_TOTAL_TURN_DEG + APRON_MAX_TURN_PER_STEP_DEG` -- ~32 deg as
+ * these two are set. Left as it is deliberately (a threshold reads
+ * straightforwardly in the loop, and 2 deg of slack on a road that has
+ * already bent 30 is not worth a branch); the comment says the true bound
+ * rather than the code being changed to match a rounder number. */
+export const APRON_MAX_TURN_PER_STEP_DEG = 2;
+export const APRON_MAX_TOTAL_TURN_DEG = 30;
+
+// --- THE COAST BEND (spec 2026-09-07 §5.4) ------------------------------
+// An apron whose bearing points out to sea is neither truncated at the
+// shore nor left short: it turns and follows the coast until it leaves the
+// tile. Measured on the coastal fixture (oceanBearing 123, pop 500, seed
+// 55337, a main road at bearing 123): the apron met water 60 m past the
+// contract circle with the frame a further 90 m out, and two of its points
+// were in the sea.
+
+/** How far inland of the waterline a coast road runs. Enough that no lane
+ * point is ever wet -- `coastline.test.ts` asserts exactly that. */
+export const COAST_ROAD_STANDOFF_M = 10;
+
+/**
+ * How far from the origin a coast road must get before it is CERTAINLY
+ * outside the drawn tile: past this radius no point of the frame rectangle
+ * can reach it, so `clipApronsToFrame` is guaranteed something to cut.
+ *
+ * Not `apronReachM` -- that is an 8x overshoot a straight road covers for
+ * free, but a shore-following road has to travel nearly all of it
+ * TANGENTIALLY, which on the coastal fixture is 1.5 km of wiggling shore
+ * for a tile 300 m wide. Measured tile-corner distances across pops
+ * 40..1000 x seeds 1/2/7/55337, wet and dry: 209 m (pop 40) to 643 m (pop
+ * 1000), i.e. 2.27x-6.03x the contract radius. `max(3x, 700 m)` clears
+ * every one of those rows -- the floor carries the small villages, whose
+ * tile is set by their fields rather than by their radius, and the factor
+ * carries the large ones, whose ratio is already down at 2.3x and falling.
+ */
+export const COAST_ROAD_ESCAPE_FACTOR = 3;
+export const COAST_ROAD_ESCAPE_FLOOR_M = 700;
+
+/**
+ * Cap on a coast-following run before the road simply ends at the shore
+ * (spec §5.4.5). Where a bay curls back on itself the shore never leaves
+ * the tile, and without a cap the road would walk the whole ring.
+ *
+ * It bounds the ROAD, not the waterline under it (`followShore` counts it
+ * there; see `RAW_WALK_ALLOWANCE`). Spending it on raw shore was the
+ * defect: a wiggly coastline is longer than the road that follows it, so
+ * short-wave wiggle burned the budget before the road had made any ground.
+ *
+ * 2400 m, measured over 500 shore walks on the coastal fixture (pops
+ * 40..1000, 5 seeds, every route bent in turn, both directions): the
+ * longest run that actually got clear of the tile was 1590 m and the
+ * longest road SHIPPED after clipping was 1296 m, so the cap sits 51% above
+ * the first and 85% above the second. At the old 1600 it sat 0.6% above the
+ * first, which would have cut a road that was one sample from escaping and
+ * reported it as a give-up.
+ */
+export const COAST_ROAD_MAX_RUN_M = 2400;
+
 /** Relative weight given to a candidate merge point depending which band
  * of the village it falls in -- fields pull hardest, the inner body least,
  * so trunks merge with the existing fabric before they cut through it. */
@@ -1512,3 +1599,9 @@ export const PATTERN_WEIGHTS: Record<string, Record<string, number>> = {
   many: { loop: 0.5, 'y-tree': 0.35, junction: 0.07, 'main-street': 0.08 },
   few: { 'y-tree': 0.6, junction: 0.15, loop: 0.15, 'main-street': 0.1 },
 };
+
+/** The margin between the outermost fabric and the edge of the drawn tile.
+ * MOVED, not chosen: it must equal the literal `pad` `render.ts` has always
+ * used, or every village's frame shifts. Trees still stand back from the
+ * edge; only roads reach it. */
+export const FRAME_PAD_M = 40;
