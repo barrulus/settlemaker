@@ -1605,3 +1605,28 @@ export const PATTERN_WEIGHTS: Record<string, Record<string, number>> = {
  * used, or every village's frame shifts. Trees still stand back from the
  * edge; only roads reach it. */
 export const FRAME_PAD_M = 40;
+
+// --- Landmarks (own-ground siting) --------------------------------------
+/**
+ * "Landmarks should get their own ground, like the green does" (owner's
+ * ruling): a landmark's claim is a `Lot` minted directly at its glyph's own
+ * footprint, never fitted into the ordinary lot cap
+ * (`MAX_LOT_FRONTAGE_RATIO` x widest dwelling, `LOT_DEPTH_M`). See
+ * `skeleton/landmarks.ts`.
+ *
+ * Radial bands, as a fraction of `builtRadiusM`, banding each kind by type
+ * per the owner's ruling: faith stays near the green, the inn sits further
+ * out on a busier through road, the large house sits furthest out. Bands
+ * deliberately overlap -- they are a preference, not a partition.
+ */
+export const LANDMARK_BAND: Record<'faith' | 'inn' | 'manor', [number, number]> = {
+  faith: [0.4, 1.2],
+  inn: [0.6, 1.6],
+  manor: [0.9, 2.0],
+};
+
+/** Step, in metres, at which `siteLandmarks` samples candidate positions
+ * along a trunk lane's offset frontage edge. Matches the general lane
+ * sampling pitch (`LANE_SAMPLE_STEP_M`) but kept as its own constant since
+ * landmark siting is a different pass with its own tuning story. */
+export const LANDMARK_SITE_STEP_M = 12;
