@@ -100,16 +100,12 @@ export function baseDeck(population: number, rng: SeededRandom): DeckEntry[] {
   if (!hutFamily && population >= LONGHOUSE_MIN_POP) {
     entries.push(entry('sm-longhouse', 12, LONGHOUSE_WEIGHT, { hall: true }));
   }
-  entries.push(
-    // No sizeFactor on the landmarks: the batch001 era scaled a 7 m inn up
-    // by 1.5 because the art was house-sized; the refined glyphs bake their
-    // semantic size into the footprint itself (inn 17x15, chapel 14x16).
-    // Keeping the old multiplier double-scaled the inn to a 27 m frontage
-    // demand no village lot could meet — it silently never placed.
-    entry('sm-house-large-tiled', 6, 0, { cap: 'one', requires: { minPop: 250 } }),
-    entry('sm-inn', 6, 0, { cap: 'one', requires: { minPop: 180 } }),
-    entry('sm-chapel', 0, 0, { cap: 'one', requires: { minPop: 300 } }),
-  );
+  // sm-house-large-tiled, sm-inn and sm-chapel used to live here as capped
+  // one-off entries, lot-cut like any dwelling. Owner's ruling 2026-09-08:
+  // "landmarks get their own ground, like the green does" -- they are now
+  // sited directly by `skeleton/landmarks.ts` (siteLandmarks), on ground
+  // minted at their own uncapped footprint, and must not also compete for a
+  // width-capped ordinary lot here.
   return entries;
 }
 

@@ -43,6 +43,7 @@ vi.mock('../../src/village/skeleton/blocks.js', async (importOriginal) => {
 import { spendCensus } from '../../src/village/dwellings.js';
 import { blockAreas } from '../../src/village/skeleton/blocks.js';
 import { generateVillage } from '../../src/village/village-model.js';
+import { isLandmarkLot } from '../../src/village/skeleton/landmarks.js';
 
 const mockedSpendCensus = vi.mocked(spendCensus);
 const mockedBlockAreas = vi.mocked(blockAreas);
@@ -188,6 +189,13 @@ describe('cloneLotTrace / restoreLotTrace (F3: a faithful trace snapshot for the
     expect(trace.cut.size).toBeGreaterThan(0);
     const shippedIds = new Set(m.lots.map((l) => l.id));
     for (const id of shippedIds) {
+      // Landmarks own ground (2026-09-08 ruling): a landmark's lot is
+      // MINTED directly by skeleton/landmarks.ts (siteLandmarks), not cut
+      // by the lane-walking pass this trace audits, so it never enters
+      // `trace.cut` -- that would be true of an honest trace even with no
+      // bug at all. Exempt landmark lots rather than asserting a cut trace
+      // must record ground it never cut.
+      if (isLandmarkLot(id)) continue;
       expect(trace.cut.has(id)).toBe(true);
     }
 

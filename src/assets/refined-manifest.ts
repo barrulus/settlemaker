@@ -1139,7 +1139,7 @@ export const REFINED_MANIFEST: Record<string, RefinedSymbolMeta> = {
       "lodging"
     ]
   },
-  "sm-shrine--desert": {
+  "sm-chapel--desert": {
     "cls": "fixed",
     "viewBox": [
       0,
@@ -1187,7 +1187,7 @@ export const REFINED_MANIFEST: Record<string, RefinedSymbolMeta> = {
       "lodging"
     ]
   },
-  "sm-stave-hall--tundra": {
+  "sm-chapel--tundra": {
     "cls": "fixed",
     "viewBox": [
       0,
@@ -1234,7 +1234,7 @@ export const REFINED_MANIFEST: Record<string, RefinedSymbolMeta> = {
       "lodging"
     ]
   },
-  "sm-tiered-hall--tropical": {
+  "sm-chapel--tropical": {
     "cls": "fixed",
     "viewBox": [
       0,
@@ -1282,7 +1282,7 @@ export const REFINED_MANIFEST: Record<string, RefinedSymbolMeta> = {
       "lodging"
     ]
   },
-  "sm-sea-hall--coastal": {
+  "sm-chapel--coastal": {
     "cls": "fixed",
     "viewBox": [
       0,

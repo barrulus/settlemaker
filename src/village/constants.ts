@@ -1605,3 +1605,44 @@ export const PATTERN_WEIGHTS: Record<string, Record<string, number>> = {
  * used, or every village's frame shifts. Trees still stand back from the
  * edge; only roads reach it. */
 export const FRAME_PAD_M = 40;
+
+// --- Landmarks (own-ground siting) --------------------------------------
+/**
+ * "Landmarks should get their own ground, like the green does" (owner's
+ * ruling): a landmark's claim is a `Lot` minted directly at its glyph's own
+ * footprint, never fitted into the ordinary lot cap
+ * (`MAX_LOT_FRONTAGE_RATIO` x widest dwelling, `LOT_DEPTH_M`). See
+ * `skeleton/landmarks.ts`.
+ *
+ * Radial bands, as a fraction of `builtRadiusM`, banding each kind by type
+ * per the owner's ruling: faith stays near the green, the inn sits further
+ * out on a busier through road, the large house sits furthest out. Bands
+ * deliberately overlap -- they are a preference, not a partition.
+ */
+export const LANDMARK_BAND: Record<'faith' | 'inn' | 'manor', [number, number]> = {
+  faith: [0.4, 1.2],
+  inn: [0.6, 1.6],
+  manor: [0.9, 2.0],
+};
+
+/** Step, in metres, at which `siteLandmarks` samples candidate positions
+ * along a trunk lane's offset frontage edge. Matches the general lane
+ * sampling pitch (`LANE_SAMPLE_STEP_M`) but kept as its own constant since
+ * landmark siting is a different pass with its own tuning story. */
+export const LANDMARK_SITE_STEP_M = 12;
+
+/**
+ * How far, in metres, growth's obstacle avoidance (`saturateDisc`,
+ * `withObstacles`) inflates a landmark's claim before treating it as a
+ * no-cross zone. The claim boundary alone is not enough: obstacle avoidance
+ * only refuses a new lane that literally CROSSES the claim's outline, but
+ * `intrudesOnLane` (dwellings.ts, gate 2) judges the BUILT building's ink --
+ * smaller than the claim by `HOUSE_INK_RATIO` -- widened again by the
+ * intruding lane's own half-width. A lane that hugs the claim's edge
+ * without ever crossing it can still land inside that widened ink zone.
+ * Measured directly: a growth branch ran along a temple's claim edge with no
+ * crossing and still intruded on the finished building. This margin (a
+ * generous local-class half-width plus the ink/claim size gap for even the
+ * largest landmark) pushes growth back before that gap can close.
+ */
+export const LANDMARK_OBSTACLE_MARGIN_M = 1;

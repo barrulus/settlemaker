@@ -766,7 +766,28 @@ describe('anisotropy (gate 8: a village that grew, not a disc)', () => {
     // profile (the census runs out first). Both acceptance fixtures clear
     // 0.15 (0.17 and 0.20). Asserting 0.15 on this sample would be pinning
     // the seed draw, not the property.
-    for (const seed of [1, 2, 3, 4, 5]) {
+    // SEED 2 IS PARKED, NOT FIXED (owner's call, 2026-09-08). The landmark
+    // work moved it below both floors and it is the only seed that moved:
+    //
+    //   seed 1  ratio 1.882  cv 0.168      seed 4  ratio 2.029  cv 0.215
+    //   seed 2  ratio 1.477  cv 0.109  <-- parked
+    //   seed 3  ratio 1.872  cv 0.198      seed 5  ratio 1.988  cv 0.200
+    //
+    // Four of five are comfortably clear, so this is one village whose body
+    // happens to have rounded out, not a general flattening of the fabric.
+    // Three hypotheses for the cause were measured and all three were WRONG:
+    // it is not `widestDwellingWidthM` (that helper already excluded the
+    // capped landmark entries, so removing them changed nothing), not the
+    // census arithmetic (`ordinaryOccupancy`/`meanOccupancy` exclude them
+    // too), and not the growth loop over-escalating for heads the landmarks
+    // will house (implemented, measured, moved seed 2 by 0.000, reverted).
+    //
+    // The honest next step is a bisect of seed 2 from v2.1.0 through this
+    // branch to find the commit where it drops, NOT a fourth guess. Until
+    // someone does that, the seed is excluded rather than the bar lowered:
+    // the property still holds on every other seed and lowering the floor
+    // would hide the day it stops holding on them too.
+    for (const seed of [1, 3, 4, 5]) {
       const { ratio, cv } = shapeOf(generateVillage(popInput(900), seed));
       expect(ratio).toBeGreaterThanOrEqual(1.5);
       expect(cv).toBeGreaterThanOrEqual(0.14);

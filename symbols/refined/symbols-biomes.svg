@@ -215,7 +215,7 @@
   <symbol id="sm-inn--desert-sil" viewBox="0 0 64 64" overflow="visible">
     <g class="sm-sil"><path d="M6.58,11.98 L56.71,11.53 L57.33,51.94 L6.67,52.57 Z" fill="currentColor" stroke="currentColor" stroke-width="2.2"></path></g>
   </symbol>
-  <symbol id="sm-shrine--desert" viewBox="0 0 64 64" overflow="visible">
+  <symbol id="sm-chapel--desert" viewBox="0 0 64 64" overflow="visible">
     <path d="M11.37,11.34 L52.62,11.69 L52.46,52.43 L10.41,52.95 Z" class="sm-mud" fill="var(--sm-mud, #c99a63)" stroke-width="2.2"></path>
     <path class="sm-hatch" d="M13.56,14.15 L49.72,13.45 L49.76,50.09 L13.41,50.47 Z" fill="none" stroke-width="0.85"></path>
     <circle cx="32" cy="32" r="12.6" class="sm-stone" fill="var(--sm-stone, #e8dcc0)" stroke-width="2.2"></circle>
@@ -223,7 +223,7 @@
     <g class="sm-mud-dark" fill="var(--sm-mud-dark, #b3854f)" stroke-width="1.5"><circle cx="16.4" cy="16.4" r="4"></circle><circle cx="47.6" cy="16.2" r="4"></circle><circle cx="16.2" cy="47.6" r="4"></circle><circle cx="47.4" cy="47.4" r="4"></circle></g>
     <path class="sm-ridge" d="M28.6,53 L35.4,53.2" fill="none" stroke-width="1.6"></path>
   </symbol>
-  <symbol id="sm-shrine--desert-sil" viewBox="0 0 64 64" overflow="visible">
+  <symbol id="sm-chapel--desert-sil" viewBox="0 0 64 64" overflow="visible">
     <g class="sm-sil"><path d="M10.47,10.71 L53.2,11 L53.62,52.62 L10.68,53.06 Z" fill="currentColor" stroke="currentColor" stroke-width="2.2"></path></g>
   </symbol>
   <symbol id="sm-kit-wall--desert" viewBox="0 0 64 64" overflow="visible">
@@ -268,7 +268,7 @@
   <symbol id="sm-inn--tundra-sil" viewBox="0 0 64 64" overflow="visible">
     <g class="sm-sil"><path d="M8,14 L56,14 L56,50 L53,50 L53,58 L41,58 L41,50 L8,50 Z" fill="currentColor" stroke="currentColor" stroke-width="2.2"></path></g>
   </symbol>
-  <symbol id="sm-stave-hall--tundra" viewBox="0 0 64 64" overflow="visible">
+  <symbol id="sm-chapel--tundra" viewBox="0 0 64 64" overflow="visible">
     <path d="M20.75,10.3 L42.65,10.1 L42.85,54.18 L20.63,54.2 Z" class="sm-timber" fill="var(--sm-timber, #d9c39a)" stroke-width="2.2"></path>
     <path class="sm-hatch" d="M23.96,12.3 L40.07,12.14 L40.36,51.2 L24.04,51.69 Z" fill="none" stroke-width="0.85"></path>
     <path class="sm-hatch" d="M24.26,14.52 L31.44,14.1 M33.02,14.89 L39.33,14.69 M24.53,16.85 L31.24,17.14 M32.95,16.46 L39.53,17.21 M24.34,19.48 L30.86,19.22 M32.64,19.21 L39.97,19.81 M24.61,21.71 L31.07,22.21 M32.89,21.63 L39.98,21.25 M24.14,23.99 L31.51,24.03 M32.73,23.86 L39.4,23.73 M24.47,26.7 L31.45,26.19 M32.62,26.7 L39.94,27.15 M24.68,29.02 L31.59,28.47 M33.12,29.14 L39.66,28.72 M24.62,32.02 L30.82,32.57 M32.87,32.34 L39.41,32.36 M24.04,34.83 L31.2,34.56 M32.89,34.5 L39.54,34.57 M24.12,37.78 L31.15,37.92 M32.97,38.13 L39.29,37.57 M24.3,40.31 L31.1,40.41 M33.17,40.55 L39.67,39.93 M24.51,42.78 L31.56,43.09 M32.57,43.15 L39.23,42.93 M24.65,44.96 L30.85,44.48 M32.83,45.08 L39.53,44.81 M24.4,47.49 L31.51,46.93 M32.57,47.87 L39.85,47.64 M24.54,50.07 L31.1,50.05 M32.98,50.2 L39.95,50.25" fill="none" stroke-width="0.55"></path>
@@ -279,7 +279,7 @@
     <path d="M23.4,12.6 Q28.4,15.4 32,13 Q30.6,18.6 26.6,19.2 Q23.4,17.4 23.4,12.6 Z" class="sm-snow" fill="var(--sm-snow, #f2f6f8)" stroke-width="1"></path>
     <path d="M40.6,51.4 Q35.6,48.6 32,51 Q33.4,45.4 37.4,44.8 Q40.6,46.6 40.6,51.4 Z" class="sm-snow" fill="var(--sm-snow, #f2f6f8)" stroke-width="1"></path>
   </symbol>
-  <symbol id="sm-stave-hall--tundra-sil" viewBox="0 0 64 64" overflow="visible">
+  <symbol id="sm-chapel--tundra-sil" viewBox="0 0 64 64" overflow="visible">
     <g class="sm-sil"><path d="M20.84,10.39 L42.96,9.43 L43.12,53.41 L21.07,54.5 Z" fill="currentColor" stroke="currentColor" stroke-width="2.2"></path></g>
   </symbol>
   <symbol id="sm-kit-wall--tundra" viewBox="0 0 64 64" overflow="visible">
@@ -321,7 +321,7 @@
   <symbol id="sm-inn--tropical-sil" viewBox="0 0 64 64" overflow="visible">
     <g class="sm-sil"><path d="M5.57,10.52 L58.61,11.49 L58.32,52.42 L6.68,52.83 Z" fill="currentColor" stroke="currentColor" stroke-width="2.2"></path></g>
   </symbol>
-  <symbol id="sm-tiered-hall--tropical" viewBox="0 0 64 64" overflow="visible">
+  <symbol id="sm-chapel--tropical" viewBox="0 0 64 64" overflow="visible">
     <path d="M7.68,14.69 L56.66,14.33 L56.66,50.34 L8.28,49.76 Z" class="sm-thatch" fill="var(--sm-thatch, #d8bd7e)" stroke-width="2.2"></path>
     <path class="sm-hatch" d="M11.21,17.85 L52.22,17.44 L52.26,46.56 L11.35,46.39 Z" fill="none" stroke-width="0.85"></path>
     <path class="sm-hatch" d="M13.07,17.89 L13.3,31.34 M13.14,32.73 L12.58,45.69 M15.45,18.26 L15.32,31.51 M15.38,32.63 L15.6,45.43 M17.64,17.92 L17.85,31.21 M18.04,32.68 L17.19,45.53 M19.75,17.95 L20.29,31.46 M19.68,33.11 L20.03,46.15 M22.48,17.86 L22.02,31.11 M22.64,32.7 L22.4,46.05 M25.36,17.93 L25.72,31.05 M25.65,32.69 L25.35,46.2 M28.01,17.99 L28.35,31.57 M28.17,32.93 L28.44,45.88 M30.46,18.27 L30.86,30.89 M30.63,33 L30.31,45.81 M33.09,17.81 L32.65,31.04 M33.3,32.9 L33.3,45.67 M35.55,18.17 L35.36,30.87 M35.77,33.02 L35.88,45.96 M38.25,18.4 L38.64,31.25 M38.05,32.58 L38.74,46.04 M41.13,18.25 L41.42,31.58 M41.25,33.06 L40.97,45.51 M43.23,18.04 L43.76,31.02 M43.11,33.01 L43.21,45.99 M45.28,18.05 L44.79,31.25 M45.09,32.6 L45.54,45.55 M48,18.42 L47.53,31.19 M48.39,32.66 L47.96,46.14 M50.62,18.32 L50.74,31.32 M50.88,33.12 L51.21,45.55" fill="none" stroke-width="0.55"></path>
@@ -332,7 +332,7 @@
     <circle cx="32" cy="32" r="3.4" class="sm-void" fill="var(--sm-void, #6b5460)" stroke-width="1.3"></circle>
     <g class="sm-void" fill="var(--sm-void, #6b5460)" stroke-width="1"><circle cx="11.4" cy="17.4" r="1.6"></circle><circle cx="52.6" cy="17.2" r="1.6"></circle><circle cx="11.2" cy="47" r="1.6"></circle><circle cx="52.4" cy="46.8" r="1.6"></circle></g>
   </symbol>
-  <symbol id="sm-tiered-hall--tropical-sil" viewBox="0 0 64 64" overflow="visible">
+  <symbol id="sm-chapel--tropical-sil" viewBox="0 0 64 64" overflow="visible">
     <g class="sm-sil"><path d="M8.41,14.3 L55.77,13.31 L55.32,49.55 L7.7,49.7 Z" fill="currentColor" stroke="currentColor" stroke-width="2.2"></path></g>
   </symbol>
   <symbol id="sm-kit-wall--tropical" viewBox="0 0 64 64" overflow="visible">
@@ -374,7 +374,7 @@
   <symbol id="sm-inn--coastal-sil" viewBox="0 0 64 64" overflow="visible">
     <g class="sm-sil"><path d="M8,13 L56,13 L56,51 L52,53 L37,53 L37,51 L8,51 Z" fill="currentColor" stroke="currentColor" stroke-width="2.2"></path></g>
   </symbol>
-  <symbol id="sm-sea-hall--coastal" viewBox="0 0 64 64" overflow="visible">
+  <symbol id="sm-chapel--coastal" viewBox="0 0 64 64" overflow="visible">
     <path d="M14.78,15.52 L49.44,16.68 L48.68,48.67 L14.61,48.12 Z" class="sm-shingle" fill="var(--sm-shingle, #a89a86)" stroke-width="2.2"></path>
     <path class="sm-hatch" d="M17.27,18.55 L46.9,18.99 L46.55,45.19 L17.36,45.11 Z" fill="none" stroke-width="0.85"></path>
     <path class="sm-hatch" d="M18.95,19.6 L19.04,22.42 M18.76,23.8 L19.08,26.6 M19.06,28 L18.73,30.33 M18.78,32.2 L18.97,34.96 M19.1,36.4 L18.78,39.1 M18.92,40.6 L19.03,42.95 M23.02,21.7 L22.58,24.46 M23.07,25.9 L22.58,28.16 M23.01,30.1 L22.63,32.48 M22.59,34.3 L22.93,36.93 M22.8,38.5 L22.73,41.11 M22.66,42.7 L22.82,45.34 M26.61,19.6 L26.89,22.27 M26.47,23.8 L26.83,26.55 M26.89,28 L26.36,30.3 M26.62,32.2 L26.78,34.81 M26.85,36.4 L26.89,39.04 M26.62,40.6 L26.77,43.16 M30.48,21.7 L30.66,24.14 M30.6,25.9 L30.53,28.57 M30.35,30.1 L30.68,32.88 M30.33,34.3 L30.51,36.87 M30.55,38.5 L30.41,41.11 M30.3,42.7 L30.54,44.92 M34.38,19.6 L34.48,22.07 M34.44,23.8 L34.21,26.2 M34.11,28 L34.34,30.33 M34.33,32.2 L34.15,34.58 M34.11,36.4 L34.56,38.69 M34.16,40.6 L34.08,42.97 M38.19,21.7 L37.91,24.26 M38.31,25.9 L38.15,28.18 M37.95,30.1 L37.99,32.47 M38.33,34.3 L37.9,37.02 M38.12,38.5 L38.29,40.73 M37.97,42.7 L38.21,45.17 M41.96,19.6 L41.89,22.31 M42.21,23.8 L42.17,26.32 M41.9,28 L42.11,30.27 M41.78,32.2 L42.19,34.7 M42.13,36.4 L41.73,39.16 M41.9,40.6 L41.86,43.43" fill="none" stroke-width="0.55"></path>
@@ -384,7 +384,7 @@
     <circle cx="50" cy="32" r="2.4" class="sm-void" fill="var(--sm-void, #6b5460)" stroke-width="1"></circle>
     <path class="sm-ridge" d="M12.6,28.4 L15.2,28.5 M12.6,35.6 L15.2,35.7" fill="none" stroke-width="1.4"></path>
   </symbol>
-  <symbol id="sm-sea-hall--coastal-sil" viewBox="0 0 64 64" overflow="visible">
+  <symbol id="sm-chapel--coastal-sil" viewBox="0 0 64 64" overflow="visible">
     <g class="sm-sil"><path d="M15,16 L49,16 L43,23 L57,23 L57,41 L43,41 L49,48 L15,48 Z" fill="currentColor" stroke="currentColor" stroke-width="2.2"></path></g>
   </symbol>
   <symbol id="sm-kit-wall--coastal" viewBox="0 0 64 64" overflow="visible">

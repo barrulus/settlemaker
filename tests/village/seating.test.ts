@@ -21,7 +21,18 @@ import type { Building } from '../../src/village/types.js';
 // Family deck at pop 400, seed 1 — the seeded choice picks sm-house.
 const REF_DECK = baseDeck(400, new SeededRandom(1));
 const house = REF_DECK.find((e) => e.glyph.startsWith('sm-house') && !e.cap)!;
-const inn = REF_DECK.find((e) => e.glyph === 'sm-inn')!;
+// Landmarks own ground (2026-09-08 ruling): sm-inn no longer lives in
+// baseDeck -- it is minted directly by skeleton/landmarks.ts at its own
+// uncapped footprint, so it can no longer be fished out of REF_DECK.
+// `sizeFor`/`seat` are still live, general-purpose mechanisms that the
+// landmark path itself calls (see dwellings.ts's `seat`/`sizeFor` and the
+// landmark siting code), so exercise them here with a constructed
+// inn-shaped DeckEntry instead -- sizeFactor 1, because a landmark's
+// footprint is the refined art's OWN size (see the "carries no sizeFactor"
+// test below), not a multiplier applied on top of a nominal dwelling.
+const inn: DeckEntry = {
+  glyph: 'sm-inn', occupancy: 6, weight: 0, sizeFactor: 1, minFrontage: 27,
+};
 // Read dynamically rather than hardcoded so these bounds stay honest
 // against whichever manifest is actually loaded — sm-house's footprint has
 // already changed once across manifest generations (batch001 gave it
