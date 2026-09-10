@@ -48,7 +48,7 @@ export interface AzgaarBurgInput {
    * `route_id` echoed back on the gate output feature.
    */
   roadBearings?: RoadBearingInput[];
-  /** Compass bearing (degrees, 0=N clockwise) to nearest ocean — enables coastline clipping for port cities */
+  /** Compass bearing (degrees, 0=N clockwise) to nearest ocean — fallback shoreline, independent of port */
   oceanBearing?: number;
   /** Harbour size for port cities — 'large' for major sea routes + big pop, 'small' otherwise */
   harbourSize?: 'large' | 'small';
@@ -66,9 +66,9 @@ export interface AzgaarBurgInput {
   trade?: boolean;
   /**
    * Water polygons surrounding the burg, in burg-local coordinates (origin at
-   * burg centre, same scale as the generated mesh — roughly the wall radius).
-   * Each entry is a closed polygon of water (ocean, lake, cove, etc.); a patch
-   * whose centroid lies inside any polygon is classified as water.
+   * burg centre; x east, y south). Villages use metres; cities use local mesh
+   * units. Each entry describes a filled water polygon (ocean, lake, river,
+   * cove, etc.), not a shoreline or river centreline. Rings close implicitly.
    *
    * When set, this replaces the `oceanBearing` half-plane heuristic with
    * fidelity-preserving classification against the actual world geometry.

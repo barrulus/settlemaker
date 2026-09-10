@@ -1,6 +1,9 @@
 # GeoJSON schema v3 — delta from v2
 
-Bumped in release `0.4.0`. `metadata.schema_version: 3`.
+Historical delta introduced in release `0.4.0` with `metadata.schema_version: 3`.
+The current generator emits schema **4**. The village additions documented
+below are additive fields carried by that current schema; do not downgrade
+`metadata.schema_version` when consuming them.
 
 ## What changed
 

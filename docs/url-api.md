@@ -6,6 +6,9 @@ settlemaker-rendered settlement without touching this repository. It is
 self-contained: everything you need to build a working link is either quoted
 verbatim below or copy-paste runnable.
 
+**Release:** 2.4.0 (2026-09-10). URL payload version stays `1`; GeoJSON schema
+version stays `4`. See [release and FMG handoff notes](releases/2.4.0.md).
+
 ## 1. Overview
 
 settlemaker's web renderer is a single iframe-embeddable page: point an
@@ -48,7 +51,7 @@ https://settlemaker.com/fmg?name=Salt+Harbour&pop=4200&seed=7&port=1&walls=1&oce
 ```
 
 **Real integrations use `i=`.** The flat tier only covers a handful of
-boolean/number fields; it cannot express road bearings or coastline geometry.
+scalar fields and simple road bearings; it cannot express route IDs or water polygons.
 Production AFMG links should use the compressed `i=` payload described next
 — the flat tier exists for humans, not for the adapter.
 
@@ -139,7 +142,7 @@ export interface AzgaarBurgInput {
    * `route_id` echoed back on the gate output feature.
    */
   roadBearings?: RoadBearingInput[];
-  /** Compass bearing (degrees, 0=N clockwise) to nearest ocean — enables coastline clipping for port cities */
+  /** Compass bearing (degrees, 0=N clockwise) to nearest ocean — fallback shoreline, independent of port */
   oceanBearing?: number;
   /** Harbour size for port cities — 'large' for major sea routes + big pop, 'small' otherwise */
   harbourSize?: 'large' | 'small';
@@ -157,9 +160,9 @@ export interface AzgaarBurgInput {
   trade?: boolean;
   /**
    * Water polygons surrounding the burg, in burg-local coordinates (origin at
-   * burg centre, same scale as the generated mesh — roughly the wall radius).
-   * Each entry is a closed polygon of water (ocean, lake, cove, etc.); a patch
-   * whose centroid lies inside any polygon is classified as water.
+   * burg centre; x east, y south). Villages use metres; cities use local mesh
+   * units. Each entry describes a filled water polygon (ocean, lake, river,
+   * cove, etc.), not a shoreline or river centreline. Rings close implicitly.
    *
    * When set, this replaces the `oceanBearing` half-plane heuristic with
    * fidelity-preserving classification against the actual world geometry.
@@ -200,7 +203,7 @@ relied on that behaviour must now supply the measured other side. Payload
 version remains `v: 1`: the envelope and encoding are unchanged, and this
 corrects the existing no-invented-external-connections guarantee.
 
-Upstream FMG, which has groups but no classes, should send `kind: "road"`
+Adapters that only know route groups should send `kind: "road"`
 with `group: "roads"`, or `kind: "foot"` with `group: "trails"`. The aliases
 `kind: "roads"` and `kind: "trails"` are also accepted. A group-only trail
 record defaults to `trail`; a bare bearing defaults to `main`. Unknown class
@@ -218,14 +221,43 @@ sites; water-constrained sites use the routed street network.
 Village GeoJSON street features expose `route_role` (`approach`, `street`,
 or `through`) alongside `streetType`, widths and route provenance. Classification
 may change at the village edge while connectivity and supplied bearings remain
-preserved. See [schema v3](./schema-v3.md) for the output fields.
+preserved. See the [village output fields](./schema-v3.md#village-road-cross-sections),
+which are additive fields under the current GeoJSON schema version 4.
 
-### Route character — how the optional road fields shape growth
+### Water geometry for FMG adapters
+
+Despite its name, `coastlineGeometry` carries **all filled water polygons**:
+sea, lake and river. A river needs both banks joined into a polygon, with its
+width and bends preserved; a centreline or a single bank is not sufficient.
+Use simple, non-self-intersecting rings with at least three distinct vertices.
+The last vertex is implicitly joined to the first; repeating the first is
+also accepted. Rings are combined as water, not interpreted as holes.
+
+For villages, coordinates are burg-local **metres**, with `(0, 0)` at the
+burg, positive x east and positive y south. Convert map coordinates and widths
+with the same scale; do not send world coordinates or longitude/latitude.
+For cities, use the existing burg-local mesh coordinate scale. Extend sea and
+river polygons beyond the intended tile bounds so their ends do not appear as
+artificial shorelines. Include every relevant water body: a non-empty polygon
+array replaces the `oceanBearing` fallback rather than adding to it.
+
+`oceanBearing` alone supplies a generated shore in the given direction; it
+cannot describe a river, real headland or estuary. `port` controls docks, not
+whether supplied water appears. `followsRiver` is a route hint only.
+
+Village ordinary road paint is clipped out of water; short bank-to-bank
+crossings are drawn as timber bridges. Custom GeoJSON renderers should apply
+the same water clipping and use crossing `deck_m`/`centreline_m` geometry
+([output fields](./schema-v3.md#village-road-cross-sections)). Continuous street
+LineStrings describe connectivity and are not themselves a bridge surface.
+
+### Route character — how the optional road fields shape city growth
 
 Settlement growth outside the walls (faubourgs, roadside development,
 outlying hamlets) is **asymmetric by design**: it concentrates on the one or
 two most attractive approaches instead of ringing the walls evenly. The four
-optional per-road fields below decide which approaches win. They map
+optional per-road fields below decide which approaches win in the city engine.
+Village routing retains these hints but uses its own housing-driven street network. They map
 directly onto data FMG already extracts per approach (route group, whether
 the route continues past the burg, corridor relief, whether the road follows
 a river):
@@ -235,7 +267,7 @@ a river):
 | `group` | `'roads'` \| `'trails'` | Trails attract almost none (weight ×0.15). Absent = treated as a road. |
 | `through` | boolean | A route that continues past the burg attracts more (×1.5) than one that dead-ends there. |
 | `relief` | `'flat'`/`'valley'`/`'descent'`/`'ascent'`/`'ridge'` | Easy ground is neutral; `ascent` halves growth (×0.5); `ridge` quarters it (×0.25). |
-| `followsRiver` | boolean | A valley road along a river attracts slightly more (×1.2). **No river is rendered** — this is a weighting hint only; river geometry is not part of the contract yet. |
+| `followsRiver` | boolean | A valley road along a river attracts slightly more (×1.2). This hint does not create a river; send its filled water polygon in `coastlineGeometry` to render one. |
 
 Rules an adapter can rely on:
 
@@ -351,10 +383,8 @@ below — it has no equivalent for `coastlineGeometry`.
 network inward from the bearings on its contract circle, so a burg of 1,000
 or under with no approach roads has no main roads at all and nothing reaching
 its own boundary — an island, with no way to join it to the map around it.
-Measured on a pop-500 village: with no bearings the furthest lane point is
-85 m and every lane is town/local/footpath; with three bearings, roads are
-drawn past the 188 m contract radius all the way to the edge of the tile,
-with three main roads and two market streets.
+Supply every actual approach explicitly. Approaches retain their incoming
+classes outside the village; internal streets normally use town/local/footpath.
 
 | Param | Type | Default | Notes |
 |---|---|---|---|
@@ -466,10 +496,11 @@ consumer so that a caller which has not migrated still cannot miss it. This
 is checked whichever engine ends up running, so the same URL behaves the same
 way either side of the population boundary.
 
-**Status:** only `temperate` has been through a render gate. The other four
-shipped as knowingly provisional first drafts (owner ruling, 2026-09-07) —
-in particular no theme yet restyles the tree canopy, so vegetation stays
-temperate-green on every ground. Expect them to change.
+Biome artwork continues to evolve. The 2.4.0 gallery includes desert and
+tundra examples; tundra dwellings now resolve to native snowy house, hut and
+longhouse families. A presentation-only `villageTheme=tundra` does not select
+snowy building artwork: send `burg.biome: "tundra"` (or a supported FMG biome
+name) to select the tundra asset set.
 
 ### `style=<compressed JSON>`
 
@@ -537,25 +568,10 @@ contract (`docs/scene-schema.md` §3), not an internal implementation detail,
 so this rule is safe to depend on. It applies to any consumer that gets hold
 of the SVG markup directly — e.g. a library caller reading `svg` off
 `generateFromBurg`'s result and post-processing or wrapping it before
-display. **Note:** in villages (population ≤ 1,000 — see §Villages), dwellings along roads
-arrive as glyphs backed by building rects (`BuildingFeature.glyphBacked`).
-When glyphs render, the assembler never emits the backing rects as SVG
-paths at all — CSS hiding of `#symbols`/`#marks` on an already-rendered
-document therefore leaves those dwellings with nothing to fall back to:
-a village rendered with glyphs on and then CSS-hidden has no visible
-dwellings, not footprints. Restoring the rects requires choosing the
-rect rendering path at assemble time, before the SVG is generated: the
-`symbols` option (`SvgOptions.symbols` at the library boundary, threaded
-through to the assembler's `AssembleOptions.symbols`) set to `false`
-makes the assembler paint the footprint rects instead of the glyphs.
-Glyph *placement* still happens either way (the scene always carries the
-placed symbols and glyph-backed rects) — `symbols: false` only changes
-which of the two the assembler renders. This has no scope in pre-rendered
-SVG; CSS hiding is a post-render, appearance-only operation and cannot
-retroactively swap in geometry the assembler chose not to draw. No
-`i=`/flat/presentation param exists or is planned for this; the off-switch
-is deliberately a plain-CSS consumer concern, consistent with every other
-appearance override in this document (§5), rather than a new query-string knob.
+display. The `#symbols`/`#marks` and `SvgOptions.symbols` contract belongs to the city
+renderer. Native villages use their own SVG bands and inline dwelling glyphs;
+they do not provide the city renderer's rectangle-fallback switch. No URL
+parameter controls individual symbol visibility.
 
 ## 5b. Villages
 
@@ -613,7 +629,9 @@ decks). To change only the look, use `villageTheme=`.
 
 - **Determinism.** This guarantee applies to any URL carrying at least one
   data param (`i=` or any flat data param from §4, with or without
-  `theme=`/`style=`): the same URL always renders byte-identical SVG.
+  `theme=`/`style=`): the same URL renders byte-identical SVG within the same generator version.
+  Layouts and generated IDs can change between releases; include the generator
+  version or pinned revision in downstream cache keys.
   Nothing in the pipeline consults wall-clock time or unseeded randomness
   once a seed is resolved. The bare no-param URL is the deliberate
   exception — it seeds itself from the page load (see §2 "Bare URL") and is
@@ -627,28 +645,27 @@ decks). To change only the look, use `villageTheme=`.
   machine-readable reason: `base64 | inflate | json | version | shape` for
   `i=`/`style=` decode failures (`UrlCodecError.reason` in
   `src/url/codec.ts`), or a generic generation-failure message otherwise.
-- **Route fidelity.** External roads rendered match the supplied
-  `roadBearings` exactly: same count, bearings, and kinds, with any
-  `route_id` you attached echoed back on the matching gate output feature.
-  The generator invents no additional external connections beyond what's
-  supplied. The two "no data" cases are distinct and matter:
-  - `roadBearings: []` (present, empty) is authoritative — "this burg
-    genuinely has no roads" — and yields zero external roads.
-  - Omitting `roadBearings` entirely means "route data unknown", and
-    settlemaker falls back to legacy behavior: it invents plausible random
-    gates and roads rather than assuming routelessness.
+- **Route fidelity.** Supply every measured land approach independently. Village
+  approaches retain the supplied bearing and class at the contract circle;
+  closely spaced approaches can join outside the built area and share internal
+  streets. Street counts therefore need not equal input-record counts. Village
+  street features carry `route_ids`; city gate features carry
+  `matched_route_id`/`matched_route_ids`. City kinds use the legacy road/foot/sea
+  mapping. Sea routes do not become village land streets.
 
-  Send `[]` when you know the burg has no roads; omit the field only when
-  you have no route data at all. (Internal lanes within the settlement are
-  a separate, unrelated concern and are not counted here.) The optional
-  route-character fields (`group`/`through`/`relief`/`followsRiver`, §3)
-  never add external approaches. They influence route character and where
-  buildings cluster; the interior network is generated independently. All approach roads join the internal street
-  network; none stop short of the settlement.
+  `roadBearings: []` explicitly means no external roads. In villages, an
+  omitted `roadBearings` also produces no external approaches; the city engine
+  retains its legacy random-gate fallback when the field is omitted. Send `[]`
+  when the absence of routes is known. `through` never invents an opposite
+  approach. Water constrains the path between arrivals and the internal network;
+  supply land arrivals, not bearings that lead into open sea.
 - **Water fidelity.** When `coastlineGeometry` is supplied, the rendered
   water outline follows that geometry (clipped to the local frame) rather
   than Voronoi patch shapes — open sea/rivers reach the frame edge, matching
-  the world map's orientation, and nothing is built or routed over water.
+  the world map's orientation. Village buildings and ordinary road surfaces
+  stay off water; short crossings receive separate bridge decks. Port jetties
+  are a separate infrastructure exception. Wide-river bridge design is not
+  provided by this release.
   `oceanBearing` remains a fallback heuristic when vector coastlines aren't
   available. Both are honoured for any burg that sends them, whether or not
   it is a port; only `harbourSize` requires `port: true`, and a boathouse or
