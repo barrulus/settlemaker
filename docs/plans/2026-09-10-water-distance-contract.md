@@ -13,7 +13,9 @@ Measured shortest point-to-curve distance against the coastline feature paths,
 subdividing cubic/quadratic curve segments into 16 chords. These numbers describe
 the saved, displayed shoreline, not a reconstruction of packed cell vertices.
 The saved path coordinates are rounded, so the reported physical distances are
-approximate; use the unrounded source geometry for a future adapter survey.
+approximate; the future adapter must use the same displayed/saved boundary for distance
+and polygon export, with adaptive metric error bounds. Raw unrounded packed
+vertices are not an interchangeable source.
 
 | Measurement | Value |
 | --- | --- |
@@ -115,9 +117,12 @@ feature; FMG can obtain that ID from its feature topology.
 - For nearby lakes or complex coasts, supply their filled polygons in
   `coastlineGeometry`, in local metres. Send only geometry relevant to the local
   map, clipped with enough surrounding coverage to avoid false closing shores.
-- Reuse the unit conversion for river widths and other measured inputs. Avoid a
-  second village-specific coordinate scale. City adapters must explicitly convert
-  to their engine's footprint scale until city geometry is expressed in metres.
+- Reuse the coordinate conversion for lengths measured in map units. FMG's
+  kilometre-valued `River.width` is mouth width: convert it with `* 1000`, not the
+  coordinate factor, and do not assume it is the local upstream width. Avoid a
+  second village-specific coordinate scale. The finalized contract defers measured
+  city support until Settlemaker defines its physical engine scale; FMG must not
+  guess that conversion.
 
 ## Acceptance cases for the implementation
 

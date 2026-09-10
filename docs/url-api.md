@@ -12,7 +12,9 @@ version stays `4`. See [release and FMG handoff notes](releases/2.4.0.md).
 **Upcoming water-distance contract:** [Water context v1](water-context-v1.md)
 is specified for coordinated implementation, **not supported by the deployed
 2.4.0 renderer**. It defines village survey coverage, water-input precedence,
-physical units and rollout requirements. Do not send `waterContext` until a
+shared shoreline geometry, exposed water-union boundaries, physical units and
+visible iframe diagnostics. V1 does not provide automatic FMG resurvey.
+Do not send `waterContext` until a
 supporting release is explicitly deployed; the current contract below remains
 in force until then.
 
