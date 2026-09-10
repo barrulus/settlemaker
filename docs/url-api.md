@@ -9,6 +9,13 @@ verbatim below or copy-paste runnable.
 **Release:** 2.4.0 (2026-09-10). URL payload version stays `1`; GeoJSON schema
 version stays `4`. See [release and FMG handoff notes](releases/2.4.0.md).
 
+**Upcoming water-distance contract:** [Water context v1](water-context-v1.md)
+is specified for coordinated implementation, **not supported by the deployed
+2.4.0 renderer**. It defines village survey coverage, water-input precedence,
+physical units and rollout requirements. Do not send `waterContext` until a
+supporting release is explicitly deployed; the current contract below remains
+in force until then.
+
 ## 1. Overview
 
 settlemaker's web renderer is a single iframe-embeddable page: point an
