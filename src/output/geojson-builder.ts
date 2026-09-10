@@ -1,15 +1,16 @@
 import type { Feature, FeatureCollection, Polygon as GeoPolygon } from 'geojson';
 import type { Polygon } from '../geom/polygon.js';
-import type { Model } from '../generator/model.js';
+import type { Model, BuildingCapacity } from '../generator/model.js';
 import type { CurtainWall, GateMeta } from '../generator/curtain-wall.js';
 import type { GenerationParams } from '../generator/generation-params.js';
 import { computeLocalBounds, computeDiameterLocal } from '../generator/bounds.js';
 import type { LocalBounds } from '../generator/bounds.js';
 import { computeSettlementScale } from './settlement-tiler.js';
 import { Castle } from '../wards/castle.js';
+import { Park } from '../wards/park.js';
 import { Harbour } from '../wards/harbour.js';
 import { Point } from '../types/point.js';
-import { IdAllocator } from './id-allocator.js';
+import { IdAllocator, buildingIds } from './id-allocator.js';
 import { selectPois, regimeFor } from '../poi/poi-selector.js';
 import { FLOATING_POI_KINDS } from '../poi/poi-kinds.js';
 import { NO_SHIFT, applyOutputShift, type OriginShift } from '../generator/origin-shift.js';
@@ -61,7 +62,7 @@ function sc(p: { x: number; y: number }, shift: OriginShift): [number, number] {
 export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = {}): FeatureCollection {
   const features: Feature[] = [];
   const allocator = new IdAllocator();
-  const buildingIdMap = new Map<Polygon, string>();
+  const buildingIdMap = buildingIds(model);
   const shift = options.shift ?? NO_SHIFT;
 
   // 1. Wards + buildings (buildings get building_id; populate map for POI linking).
@@ -81,8 +82,7 @@ export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = 
     });
 
     for (const building of patch.ward.geometry) {
-      const buildingId = allocator.alloc('b');
-      buildingIdMap.set(building, buildingId);
+      const buildingId = buildingIdMap.get(building)!;
       features.push({
         type: 'Feature',
         properties: {
@@ -122,6 +122,19 @@ export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = 
       properties: { layer: 'street', streetType: 'road', street_id: allocator.alloc('s') },
       geometry: { type: 'LineString', coordinates: road.vertices.map(v => sc(v, shift)) },
     });
+  }
+
+  // Positive-width subdivision cuts and park walks, from the same accepted
+  // ward state rendered by buildScene. Existing arterial IDs stay unchanged.
+  for (const patch of model.patches) {
+    for (const lane of patch.ward?.lanes ?? []) {
+      features.push({ type: 'Feature', properties: { layer: 'street', streetType: 'alley', width: lane.width,
+        street_id: allocator.alloc('s') }, geometry: { type: 'LineString', coordinates: [sc(lane.a, shift), sc(lane.b, shift)] } });
+    }
+    if (patch.ward instanceof Park && patch.ward.geometry.length) for (const path of patch.ward.paths) {
+      features.push({ type: 'Feature', properties: { layer: 'street', streetType: 'park', width: patch.ward.pathWidth,
+        street_id: allocator.alloc('s') }, geometry: { type: 'LineString', coordinates: path.map(p => sc(p, shift)) } });
+    }
   }
 
   // 3. Walls + entrances.
@@ -165,6 +178,7 @@ export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = 
 }
 
 interface OutputMetadata {
+  building_capacity?: BuildingCapacity;
   schema_version: number;
   settlemaker_version: string;
   settlement_generation_version: string;
@@ -193,6 +207,7 @@ function buildMetadata(
   const diameterMeters = computeSettlementScale(params.population).diameterMeters;
   const diameterLocal = computeDiameterLocal(model);
   return {
+    ...(params.population > 1000 ? { building_capacity: model.getBuildingCapacity() } : {}),
     schema_version: GEOJSON_SCHEMA_VERSION,
     settlemaker_version: options.settlemakerVersion ?? SETTLEMAKER_VERSION,
     settlement_generation_version: computeGenerationVersion(params, shift),

@@ -1,11 +1,19 @@
 import { Point } from '../types/point.js';
 import type { Polygon } from '../geom/polygon.js';
 import type { WardType } from '../types/interfaces.js';
+import type { CityFrontage } from './city-frontage.js';
 
 export interface PlacedSymbol {
   id: string;
   at: Point;
   scale: number;        // world units, glyph box size
+  /** Optional art-box height in the same units; omitted means square. */
+  scaleY?: number;
+  /** Exact surviving footprint replaced by this placement. Never inferred by proximity. */
+  building?: Polygon;
+  /** Estimated painted area in local units squared, for review diagnostics. */
+  paintedArea?: number;
+  frontage?: CityFrontage;
   rotationDeg: number;
   zBand: 'structure' | 'overlay';
   /**

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { assembleSvg } from '../src/output/assemble-svg.js';
+import { REFINED_SET } from '../src/assets/asset-sets.js';
 import { buildScene } from '../src/scene/build-scene.js';
 import { SCENE_VERSION, type Scene } from '../src/scene/scene.js';
 import { Point } from '../src/types/point.js';
@@ -44,7 +45,17 @@ describe('assembler symbol path', () => {
   });
 
   it('marks land in #marks after #symbols and after #canopy, and drop unknown ids', () => {
-    const svg = assembleSvg(sceneWith([WELL, MARK, { ...WELL, id: 'sm-nonexistent' }], [TREE]));
+    // Overlay support remains available to asset sets; the retired church
+    // mark is deliberately not part of the default village artwork.
+    const svg = assembleSvg(sceneWith([WELL, MARK, { ...WELL, id: 'sm-nonexistent' }], [TREE]), {
+      assetSet: {
+        ...REFINED_SET,
+        manifest: { ...REFINED_SET.manifest, [MARK.id]: { footprint: null, minScale: 0 } },
+        glyphs: { ...REFINED_SET.glyphs, [MARK.id]: {
+          viewBox: [0, 0, 32, 32], anchor: [16, 16], body: '<circle cx="16" cy="16" r="4"/>', sil: '',
+        } },
+      },
+    });
     const marks = svg.indexOf('<g id="marks">');
     const canopy = svg.indexOf('<g id="canopy">');
     expect(canopy).toBeGreaterThan(-1);
@@ -83,28 +94,12 @@ describe('assembler symbol path', () => {
     expect(svg).not.toContain('<g id="symbols">');
   });
 
-  it('every glyph symbol def carries width/height equal to its own viewBox dimensions', () => {
-    // Root cause: use->symbol with auto width/height on both renders the
-    // symbol at 100% of the nearest viewport (the whole map), not its
-    // viewBox size, before glyphTransform's scale shrinks it. Explicit
-    // width/height on the <symbol> fixes sizing for every <use> of it
-    // (shadows, #symbols, #marks, #canopy) in one place.
-    const svg = assembleSvg(sceneWith([WELL, MARK], [TREE]));
-    const defRe = /<symbol id="glyph-[^"]*"([^>]*)>/g;
-    const matches = [...svg.matchAll(defRe)];
-    expect(matches.length).toBeGreaterThan(0);
-    for (const m of matches) {
-      const attrs = m[1];
-      const vbMatch = attrs.match(/viewBox="([\d.\-]+) ([\d.\-]+) ([\d.\-]+) ([\d.\-]+)"/);
-      expect(vbMatch).not.toBeNull();
-      const [, , , vbW, vbH] = vbMatch!;
-      const wMatch = attrs.match(/width="([\d.\-]+)"/);
-      const hMatch = attrs.match(/height="([\d.\-]+)"/);
-      expect(wMatch, `missing width in: ${m[0]}`).not.toBeNull();
-      expect(hMatch, `missing height in: ${m[0]}`).not.toBeNull();
-      expect(wMatch![1]).toBe(vbW);
-      expect(hMatch![1]).toBe(vbH);
-    }
+  it('glyph definitions have no viewport that can rescale instances', () => {
+    const svg = assembleSvg(sceneWith([WELL], [TREE]));
+    expect(svg).toContain('<g id="glyph-sm-well">');
+    expect(svg).toContain('<g id="glyph-sm-well-sil">');
+    expect(svg).toContain('<g id="glyph-sm-tree-deciduous">');
+    expect(svg).not.toContain('<symbol id="glyph-');
   });
 
   it('buildScene applies the origin shift to model.symbols instances, unchanged otherwise', () => {
@@ -134,8 +129,8 @@ describe('assembler symbol path', () => {
 });
 
 describe('glyph-backed buildings', () => {
-  const HOUSE_RECT = { ring: [{x:0,y:0},{x:6,y:0},{x:6,y:6},{x:0,y:6}], kind: 'craftsmen', landmark: false, glyphBacked: true as const };
-  const HOUSE_SYM = { id: 'sm-house', at: { x: 3, y: 3 }, scale: 6, rotationDeg: 0, zBand: 'structure' as const };
+  const HOUSE_RECT = { id: 'b0', ring: [{x:0,y:0},{x:6,y:0},{x:6,y:6},{x:0,y:6}], kind: 'craftsmen', landmark: false, glyphBacked: true as const };
+  const HOUSE_SYM = { id: 'sm-house', buildingId: 'b0', at: { x: 3, y: 3 }, scale: 6, rotationDeg: 0, zBand: 'structure' as const };
 
   it('suppresses path and rect shadow when symbols render', () => {
     const scene = sceneWith([HOUSE_SYM]);
@@ -173,5 +168,35 @@ describe('glyph-backed buildings', () => {
     const svg = assembleSvg(scene, { assetSet: SCHEMATIC_SET });
     expect(svg).toMatch(/<g id="buildings">[\s\S]*M0\.00,0\.00/);
     expect(svg).not.toContain('glyph-sm-house');
+  });
+
+  it.each(['missing', 'small', 'unlinked', 'wrong-building', 'overlay'])(
+    '%s replacement keeps the footprint and its shadow', failure => {
+      const symbol = { ...HOUSE_SYM };
+      if (failure === 'missing') symbol.id = 'sm-nonexistent';
+      if (failure === 'small') symbol.scale = 0.01;
+      if (failure === 'unlinked') symbol.buildingId = '';
+      if (failure === 'wrong-building') symbol.buildingId = 'b1';
+      const scene = sceneWith([{ ...symbol, zBand: failure === 'overlay' ? 'overlay' : 'structure' }]);
+      scene.layers.buildings.push(HOUSE_RECT);
+      const svg = assembleSvg(scene);
+      expect(svg).toMatch(/<g id="buildings">[\s\S]*M0\.00,0\.00/);
+      expect(svg).toMatch(/<g id="shadows"[^>]*>[\s\S]*M0\.00,0\.00/);
+    },
+  );
+
+  it('an empty glyph collection keeps linked footprints', () => {
+    const scene = sceneWith([HOUSE_SYM]);
+    scene.layers.buildings.push(HOUSE_RECT);
+    const svg = assembleSvg(scene, { assetSet: { name: 'empty', symbols: {}, glyphs: {} } });
+    expect(svg).toContain('<g id="buildings">');
+    expect(svg).toContain('<g id="shadows"');
+    expect(svg).not.toContain('glyph-sm-house');
+  });
+
+  it('a legacy scene without explicit identity conservatively retains its footprint', () => {
+    const scene = sceneWith([HOUSE_SYM]);
+    scene.layers.buildings.push({ ...HOUSE_RECT, id: undefined });
+    expect(assembleSvg(scene)).toContain('<g id="buildings">');
   });
 });

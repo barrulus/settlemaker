@@ -569,6 +569,7 @@ function materialiseSlot(
   const scale = Math.max(fp.width, fp.depth);
   model.symbols.push({
     id,
+    building: rect,
     at: centre,
     scale,
     rotationDeg: slot.rotationDeg,

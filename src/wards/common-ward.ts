@@ -1,6 +1,8 @@
 import { WardType } from '../types/interfaces.js';
 import { Ward, createAlleys, ALLEY } from './ward.js';
-import { rowHousing, maxLotArea } from '../generator/generation-params.js';
+import { rowHousing, maxLotArea, meanBuildingArea } from '../generator/generation-params.js';
+import { planCityBlock, coalesceCityRuns } from '../generator/city-blocks.js';
+import { wardFrontages } from '../generator/city-frontage.js';
 import { SYMBOL_MANIFEST } from '../assets/symbol-manifest.js';
 import type { PlacedSymbol, ClaimedSite } from '../generator/symbols.js';
 import type { Model } from '../generator/model.js';
@@ -11,6 +13,7 @@ export class CommonWard extends Ward {
   protected gridChaos: number;
   protected sizeChaos: number;
   protected emptyProb: number;
+  cityBuildingTarget: number | null = null;
 
   constructor(
     model: Model, patch: Patch,
@@ -25,6 +28,9 @@ export class CommonWard extends Ward {
   }
 
   override createGeometry(): void {
+    this.lanes = [];
+    this.buildingFrontages.clear();
+    this.streetRuns = [];
     // Village regime: dwellings are stamped along road frontages by
     // stampVillageRows (see village-rows.ts) — this ward contributes no
     // subdivided lots, draws nothing from the stream, and places no well
@@ -36,11 +42,46 @@ export class CommonWard extends Ward {
 
     const block = this.getCityBlock();
     const alleyWidth = ALLEY * this.insetScale;
+    if (this.model.params.population > 1000 && this.cityBuildingTarget !== null) {
+      // Demand chooses the grain, with a fixed lower bound: extra population
+      // cannot make arbitrarily small buildings or erase access/courtyards.
+      const meanArea = meanBuildingArea(this.model.params.population) * this.model.minSqScale / 0.6;
+      const minimum = meanArea * 0.45;
+      let area = Math.max(minimum, Math.min(meanArea * 2,
+        Math.abs(block.square) * 0.85 / Math.max(1, this.cityBuildingTarget)));
+      const streets = wardFrontages(this);
+      let plan = planCityBlock(block, streets, area, alleyWidth);
+      const target = Math.ceil(this.cityBuildingTarget) + 1; // allow the ward's well courtyard
+      let best = plan;
+      const error = (count: number) => count >= target ? count - target : 1e6 + target - count;
+      // Bounded local feedback changes the block grain before acceptance;
+      // rejected candidates never touch geometry, wells, or the RNG stream.
+      for (let trial = 0; trial < 5 && plan && this.cityBuildingTarget > 0; trial++) {
+        const ratio = plan.buildings.length / target;
+        if (ratio >= 1 && ratio <= 1.04) break;
+        const next = Math.max(minimum, Math.min(meanArea * 2, area * ratio));
+        if (Math.abs(next - area) < 0.001) break;
+        area = next;
+        plan = planCityBlock(block, streets, area, alleyWidth);
+        if (plan && (!best || error(plan.buildings.length) < error(best.buildings.length))) best = plan;
+      }
+      plan = best;
+      if (plan?.buildings.length) {
+        coalesceCityRuns(plan, target);
+        this.geometry = plan.buildings;
+        this.lanes = plan.lanes;
+        this.buildingFrontages = plan.frontages;
+        this.streetRuns = plan.runs;
+        this.tryPlaceWell();
+        return;
+      }
+    }
     this.geometry = createAlleys(
       block, this.rng, this.minSq * this.model.minSqScale, this.gridChaos, this.sizeChaos,
       this.emptyProb, true, alleyWidth,
       rowHousing(this.model.params.population),
       maxLotArea(this.model.params.population),
+      this.model.params.population > 1000 ? this.lanes : undefined,
     );
 
     if (!this.model.isEnclosed(this.patch)) {

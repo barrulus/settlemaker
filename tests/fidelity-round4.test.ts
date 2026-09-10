@@ -72,7 +72,7 @@ describe('fidelity round 4: probe path', () => {
     expect(fullRadius).toBeCloseTo(27.627579, 3);
   });
 
-  it('generateFromBurg output is unchanged for an inland burg (probe swap is invisible)', () => {
+  it('pins current city output for the inland probe fixture', () => {
     // Pinned before the swap in Task 1's Step 2; probe swap is byte-invisible.
     // Re-pinned in Task 2 because pop 1400 > 1000, so perPatchDensity's
     // curve legitimately changes this burg's footprint/texture (only
@@ -170,12 +170,22 @@ describe('fidelity round 4: probe path', () => {
     // multiplicative LCG made the k-th draw an affine function of the seed
     // and neighbouring seeds moved in lockstep. Every seeded artefact in the
     // project moves exactly once as a result, this snapshot included.
+    // City starter kit: refined artwork and explicit building links replace
+    // phase 1 rendering. Verified deterministic and byte-identical GeoJSON
+    // against 0dd7363 with a fixed generatedAt; only SVG presentation changes.
+    // Zoom correction: glyph defs are plain groups, matching villages, so
+    // an enclosing viewport cannot rescale the artwork independently.
+    // Neighbourhood pass: one temple, consistent homes, recorded alleys
+    // and planned parks. Geometry/GeoJSON intentionally gain those features.
+    // Farm glyphs require actual roads; field boundaries are not frontage.
+    // Street-led blocks now reserve rows/courtyards before fitting houses;
+    // geometry and alley paths intentionally change. Village hash stays pinned.
     const { svg } = generateFromBurg(aldford(1400), { seed: 9 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('be7a2f719a0de9e33571010ff0f169f99243565d2651ba0ba8df5cab703fac22');
+    expect(sha256(svg)).toBe('e7bb4dbeeb5dab5458821e7d725c047516ab06819d96bf4de881d6c892c8d3a1');
   });
 
-  it('pins current village output at pop 800 (not a base-equality guarantee)', () => {
+  it('pins direct legacy generateFromBurg output at pop 800 (not the village engine)', () => {
     // Final review: the earlier claim that pop ≤ 1000 output is
     // unconditionally "byte-stable" was false. `buildWalls`'s enclosure
     // check (added earlier in this task) legitimately changes output for
@@ -268,9 +278,16 @@ describe('fidelity round 4: probe path', () => {
     // multiplicative LCG made the k-th draw an affine function of the seed
     // and neighbouring seeds moved in lockstep. Every seeded artefact in the
     // project moves exactly once as a result, this snapshot included.
+    // City starter kit: refined artwork and explicit building links replace
+    // phase 1 rendering. Verified deterministic and byte-identical GeoJSON
+    // against 0dd7363 with a fixed generatedAt; only SVG presentation changes.
+    // Zoom correction: glyph defs are plain groups, matching villages, so
+    // an enclosing viewport cannot rescale the artwork independently.
+    // Neighbourhood pass: the shared city stylesheet gains the park path
+    // rule; this direct legacy API fixture does not use the village renderer.
     const { svg } = generateFromBurg(aldford(800), { seed: 1 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('a5ab4c9c63fb8d62cdea3643e8fdbd81f90d12a4f3f4e40e9b50ee2ac516aa3a');
+    expect(sha256(svg)).toBe('45bc3118772b18586d79ed760281d25c9b2f91a07e968dcba9924ecd0e4a96a9');
   });
 });
 

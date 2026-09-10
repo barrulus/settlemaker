@@ -15,6 +15,7 @@ export function bisect(
   ratio: number = 0.5,
   angle: number = 0,
   gap: number = 0,
+  onCut?: (a: Point, b: Point) => void,
 ): Polygon[] {
   const next = poly.next(vertex);
   const p1 = interpolate(vertex, next, ratio);
@@ -26,7 +27,7 @@ export function bisect(
   const vy = d.y * cosB + d.x * sinB;
   const p2 = new Point(p1.x - vy, p1.y + vx);
 
-  return poly.cut(p1, p2, gap);
+  return poly.cut(p1, p2, gap, onCut);
 }
 
 /** Split polygon into radial sectors from center */

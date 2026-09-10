@@ -11,6 +11,8 @@ export class Cathedral extends Ward {
   }
 
   override createGeometry(): void {
+    this.principalBuilding = null;
+    this.principalSymbol = null;
     const block = this.getCityBlock();
     this.geometry = this.rng.bool(0.4)
       ? ring(block, 2 + this.rng.float() * 4)

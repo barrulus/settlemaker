@@ -39,14 +39,18 @@ describe('Phase 5: one entry point, routed by population', () => {
     }
   });
 
-  it('emits the same metadata keys from either engine', () => {
+  it('preserves shared metadata and documents optional city capacity separately', () => {
     const small = generateSettlement(burg(400), { seed: 1 });
     const large = generateSettlement(burg(4000), { seed: 1 });
     const meta = (r: typeof small) =>
       (r.geojson as unknown as { metadata: Record<string, unknown> }).metadata;
-    // Every key the settlement path publishes must exist on the village path
-    // too, or a consumer that reads one crashes on the other.
+    // Shared metadata remains available from both engines. The additive city
+    // building-budget report is optional: villages have their own census and
+    // must not acquire the city budget's different occupancy semantics.
+    expect(meta(large).building_capacity).toMatchObject({ basis: 'ordinary-building-budget' });
+    expect(meta(small).building_capacity).toBeUndefined();
     for (const k of Object.keys(meta(large))) {
+      if (k === 'building_capacity') continue;
       expect(meta(small)[k], `village metadata is missing '${k}'`).toBeDefined();
     }
   });

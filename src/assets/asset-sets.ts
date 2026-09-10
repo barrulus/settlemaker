@@ -4,8 +4,8 @@
  * authored in a unit box (viewBox -1 -1 2 2), unstyled: color comes from
  * the theme via CSS on the consuming group.
  */
-import { BATCH001_GLYPHS } from './batch001.js';
-import { SYMBOL_MANIFEST } from './symbol-manifest.js';
+import { REFINED_GLYPHS } from './refined-glyphs.js';
+import { REFINED_MANIFEST } from './refined-manifest.js';
 
 export interface AssetSet {
   name: string;
@@ -13,8 +13,11 @@ export interface AssetSet {
   symbols: Record<string, string>;
   /** semantic kind → tileable <pattern> content, unrotated (assembler applies patternTransform). */
   patterns?: Record<string, { width: number; height: number; content: string }>;
-  /** batch001 glyph id → viewBox + body/silhouette markup. */
+  /** Glyph id → viewBox + body/silhouette markup. */
   glyphs?: Record<string, GlyphAsset>;
+  /** Placement metadata belongs to the selected artwork, not a global legacy manifest. */
+  manifest?: Record<string, { footprint: [number, number] | null; minScale: number }>;
+  refined?: boolean;
 }
 
 export interface GlyphAsset {
@@ -25,7 +28,17 @@ export interface GlyphAsset {
   anchor: [number, number];
 }
 
-export const CANOPY_KINDS = ['sm-tree-deciduous', 'sm-tree-deciduous-round', 'sm-tree-conifer'] as const;
+export const CANOPY_KINDS = ['sm-tree-deciduous', 'sm-tree-deciduous-small', 'sm-tree-conifer'] as const;
+
+export function canopyKindsFor(biome?: string): readonly string[] {
+  switch (biome) {
+    case 'desert': return ['sm-palm-date--desert', 'sm-olive--desert', 'sm-scrub--desert'];
+    case 'tundra': return ['sm-conifer--tundra', 'sm-snag--tundra'];
+    case 'tropical': return ['sm-palm-fan--tropical', 'sm-broadleaf--tropical'];
+    case 'coastal': return ['sm-dune-grass--coastal', 'sm-tamarisk--coastal'];
+    default: return CANOPY_KINDS;
+  }
+}
 
 /** Starter set: deliberately simple, proves symbol resolution end-to-end. */
 export const SCHEMATIC_SET: AssetSet = {
@@ -38,29 +51,22 @@ export const SCHEMATIC_SET: AssetSet = {
   },
 };
 
-function batchGlyphs(): Record<string, GlyphAsset> {
-  const out: Record<string, GlyphAsset> = {};
-  for (const [id, g] of Object.entries(BATCH001_GLYPHS)) {
-    out[id] = {
-      viewBox: SYMBOL_MANIFEST[id].viewBox, body: g.body, sil: g.sil,
-      anchor: SYMBOL_MANIFEST[id].anchor,
-    };
-  }
-  return out;
-}
-
-export const BATCH001_SET: AssetSet = {
-  name: 'batch001',
+/** The village artwork is also the city starter kit. No batch001 fallback. */
+export const REFINED_SET: AssetSet = {
+  name: 'refined',
   symbols: SCHEMATIC_SET.symbols,
   patterns: SCHEMATIC_SET.patterns,
-  glyphs: batchGlyphs(),
+  manifest: REFINED_MANIFEST,
+  refined: true,
+  glyphs: Object.fromEntries(Object.entries(REFINED_GLYPHS).map(([id, g]) => [id, {
+    viewBox: REFINED_MANIFEST[id].viewBox,
+    anchor: REFINED_MANIFEST[id].anchor,
+    body: g.body,
+    sil: g.sil ?? '',
+  }])),
 };
 
-/**
- * Biome → asset set. One set exists today; the lookup is the contract —
- * per-biome sets (desert dunes/palms, temperate oaks) plug in here without
- * code changes elsewhere.
- */
+/** Placers resolve biome variants; all five live in the same refined set. */
 export function assetSetFor(_biome?: string): AssetSet {
-  return BATCH001_SET;
+  return REFINED_SET;
 }

@@ -36,7 +36,7 @@ describe('vegetation visual output', () => {
     // Task 3 (canopy glyphs): trees now render as batch001 canopy glyphs in
     // #canopy, not the schematic <use href="#asset-tree"> symbol in #greens.
     // Verify a canopy glyph symbol is defined in defs
-    expect(svg).toMatch(/<symbol id="glyph-sm-tree-[a-z-]+" viewBox="0 0 64 64"/);
+    expect(svg).toMatch(/<g id="glyph-sm-tree-[a-z-]+">/);
 
     // Verify tree instances are rendered as use elements
     const useMatches = svg.match(/<use href="#glyph-sm-tree-/g);

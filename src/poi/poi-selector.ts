@@ -91,6 +91,7 @@ interface EmitCtx {
   buildingIdMap: Map<Polygon, string>;
   usedBuildings: Set<Polygon>;
   pois: Poi[];
+  orderedBuildings?: Array<{ building: Polygon; patch: Patch }>;
 }
 
 function allBuildings(model: Model): Array<{ building: Polygon; patch: Patch }> {
@@ -100,13 +101,6 @@ function allBuildings(model: Model): Array<{ building: Polygon; patch: Patch }> 
     for (const b of patch.ward.geometry) out.push({ building: b, patch });
   }
   return out;
-}
-
-function buildingsInWards(
-  model: Model,
-  wardTypes: ReadonlySet<WardType>,
-): Array<{ building: Polygon; patch: Patch }> {
-  return allBuildings(model).filter(({ patch }) => wardTypes.has(patch.ward!.type));
 }
 
 function adoptBest(
@@ -128,13 +122,25 @@ function emitAdopted(
   count: number,
   opts: { allowFallback: boolean },
 ): void {
-  const ref = scoringReference(ctx.model);
+  // Score once per selection call. Every adoption uses this same ordering;
+  // removing already-used buildings cannot change the remaining ranking.
+  // Re-sorting the entire city for every tavern dominated 250k generation.
+  if (!ctx.orderedBuildings) {
+    const pool = allBuildings(ctx.model);
+    const entries = new Map(pool.map(e => [e.building, e]));
+    ctx.orderedBuildings = scoreBuildings(pool.map(e => e.building), scoringReference(ctx.model))
+      .map(b => entries.get(b)!);
+  }
+  const preferred = ctx.orderedBuildings.filter(e => preferredWards.has(e.patch.ward!.type));
+  let preferredIndex = 0, fallbackIndex = 0;
   for (let i = 0; i < count; i++) {
-    let target = adoptBest(ctx, buildingsInWards(ctx.model, preferredWards), ref);
-    if (target === null && opts.allowFallback) {
-      target = adoptBest(ctx, allBuildings(ctx.model), ref);
+    while (preferredIndex < preferred.length && ctx.usedBuildings.has(preferred[preferredIndex].building)) preferredIndex++;
+    let target = preferred[preferredIndex++];
+    if (!target && opts.allowFallback) {
+      while (fallbackIndex < ctx.orderedBuildings.length && ctx.usedBuildings.has(ctx.orderedBuildings[fallbackIndex].building)) fallbackIndex++;
+      target = ctx.orderedBuildings[fallbackIndex++];
     }
-    if (target === null) return; // skip remaining counts of this kind
+    if (!target) return; // skip remaining counts of this kind
     ctx.usedBuildings.add(target.building);
     ctx.pois.push({
       kind,
@@ -156,7 +162,14 @@ function emitTown(ctx: EmitCtx): void {
   //   cathedral, chapel, inn, market, mill, smithy, tavern
   // (`chapel` is hamlet-only; `market` and `cathedral` are 1-per-ward.)
 
-  for (const _ of patchesWithWard(ctx.model, WardType.Cathedral)) {
+  for (const patch of patchesWithWard(ctx.model, WardType.Cathedral)) {
+    const principal = patch.ward!.principalBuilding;
+    if (principal && patch.ward!.geometry.includes(principal)) {
+      ctx.usedBuildings.add(principal);
+      ctx.pois.push({ kind: 'cathedral', point: principal.centroid, wardType: WardType.Cathedral,
+        buildingId: ctx.buildingIdMap.get(principal) ?? null });
+      continue;
+    }
     emitAdopted(ctx, 'cathedral', new Set([WardType.Cathedral]), 1, { allowFallback: false });
   }
 
@@ -191,11 +204,8 @@ function emitTown(ctx: EmitCtx): void {
     Math.max(1, Math.round(P / 800)), { allowFallback: true });
   emitAdopted(ctx, 'stable', new Set([WardType.Craftsmen, WardType.GateWard]),
     Math.max(1, Math.round(P / 3000)), { allowFallback: false });
-  if (P >= 8000) {
-    for (const _ of patchesWithWard(ctx.model, WardType.Patriciate)) {
-      emitAdopted(ctx, 'temple', new Set([WardType.Patriciate]), 1, { allowFallback: false });
-    }
-  }
+  // Cities have one designated temple, represented by the cathedral POI
+  // above. Wealthy neighbourhoods no longer invent additional temples.
 }
 
 function emitHamlet(ctx: EmitCtx): void {

@@ -29,6 +29,19 @@ Consumers should accept both casings and not assume a uniform style across field
 
 ## Stable-ID contract
 
+### City building-capacity accounting (additive in schema 4)
+
+For cities above population 1,000, `metadata.building_capacity` reports the final
+ordinary-building budget: `basis: 'ordinary-building-budget'`, `target`, `placed`,
+`shortfall`, `corePlaced`, `outerPlaced`, and `status: 'met' | 'shortfall'`.
+The same camelCase object is available as `Scene.buildingCapacity` and from
+`Model.getBuildingCapacity()`. `shortfall = max(0, target - placed)`; core and
+outer counts sum to `placed`. These are building counts, not a certified housed
+population or a change to `urbanDensity` occupancy semantics. Consumers should
+retain explicit shortfalls, including those caused by limited land or routes.
+
+### Identity
+
 All feature IDs (`entrance_id`, `poi_id`, `street_id`, `building_id`) are stable across re-runs with the same seed and same inputs. Form: `<prefix><sequentialIdx>` where the index reflects generation order and the prefix disambiguates feature type.
 
 Consumers should treat IDs as **opaque** but may rely on them as primary keys for persistence.

@@ -6,7 +6,20 @@
  * iterates deterministically. This class owns the counter state so every caller
  * (GeoJSON builder, POI selector, future SVG renderer) shares the same scheme.
  */
+import type { Model } from '../generator/model.js';
+import type { Polygon } from '../geom/polygon.js';
+
 export type IdPrefix = 'p' | 's' | 'b';
+
+/** Shared scene/GeoJSON ordering, including park geometry skipped by the scene. */
+export function buildingIds(model: Model): Map<Polygon, string> {
+  const ids = new Map<Polygon, string>();
+  const allocator = new IdAllocator();
+  for (const patch of model.patches) {
+    for (const building of patch.ward?.geometry ?? []) ids.set(building, allocator.alloc('b'));
+  }
+  return ids;
+}
 
 export class IdAllocator {
   private counters = new Map<IdPrefix, number>();

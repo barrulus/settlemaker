@@ -32,6 +32,8 @@ import { CommonWard } from '../wards/common-ward.js';
 import { CraftsmenWard } from '../wards/craftsmen-ward.js';
 import { buildWardDistribution, type WardConstructor } from '../wards/ward-distribution.js';
 import type { PlacedSymbol, ClaimedSite } from './symbols.js';
+import { placeCityGlyphs } from './city-glyphs.js';
+import { overlapsWater } from './city-frontage.js';
 import { stampVillageRows } from './village-rows.js';
 
 const MAX_ATTEMPTS = 20;
@@ -73,6 +75,17 @@ const HAMLET_TRIM_MAX_BUDGET = 40;
 export function buildingBudget(population: number, urbanDensity?: number): number {
   const d = urbanDensity ?? densityCurve(population);
   return Math.max(2, Math.round(population / d));
+}
+
+/** Building-budget accounting, not a certified housed-population census. */
+export interface BuildingCapacity {
+  basis: 'ordinary-building-budget';
+  target: number;
+  placed: number;
+  shortfall: number;
+  corePlaced: number;
+  outerPlaced: number;
+  status: 'met' | 'shortfall';
 }
 
 /**
@@ -139,7 +152,7 @@ export class Model {
   prevailingWindDeg = 0;
   wellBudget = 0;
   millBudget = 0;
-  /** Rect identity → glyph-rendered, for the village row-housing regime. */
+  /** Surviving footprint identities with a linked glyph replacement. */
   glyphBackedBuildings: Set<Polygon> = new Set();
 
   border: CurtainWall | null = null;
@@ -199,6 +212,7 @@ export class Model {
    * without a second code path. 0 before geometry has been built.
    */
   pretrimOrdinaryCount = 0;
+  private cityCoreBuildingTarget = Infinity;
 
   /**
    * `pretrimOrdinaryCount`'s walled-core-only counterpart: for a sprawling
@@ -1484,10 +1498,16 @@ export class Model {
 
   // Phase 6: Build geometry
   private buildGeometry(): void {
+    const city = this.params.population > 1000;
     for (const patch of this.patches) {
       if (patch.ward && !this.waterbody.includes(patch)) {
+        if (city && patch.ward instanceof CommonWard) continue;
         patch.ward.createGeometry();
       }
+    }
+    if (city) {
+      this.assignCityBuildingTargets();
+      for (const patch of this.patches) if (patch.ward instanceof CommonWard && !this.waterbody.includes(patch)) patch.ward.createGeometry();
     }
     this.refineDensity();
     this.removeDrownedGeometry();
@@ -1502,11 +1522,44 @@ export class Model {
     // runtime import would close a cycle. village-rows.ts subtracts the
     // survivor count itself via `countOrdinaryBuildingsPublic()`.
     stampVillageRows(this, buildingBudget(this.params.population, this.params.urbanDensity));
+    placeCityGlyphs(this);
+  }
+
+  /** Allocate demand to the available urban land before drawing rows. The
+   * capped core keeps its calibrated share; excess demand belongs outside.
+   * Allocation is a request, not a claim that constrained sites can fulfil it. */
+  private assignCityBuildingTargets(): void {
+    const target = buildingBudget(this.params.population, this.params.urbanDensity);
+    const core = this.patches.filter(p => p.zone === 'core');
+    const fixed = (inside: boolean) => this.patches.filter(p => (p.zone === 'core') === inside
+      && p.ward && !(p.ward instanceof CommonWard) && isBudgetedWard(p.ward))
+      .reduce((n, p) => n + p.ward!.geometry.length, 0);
+    const hasOuter = this.patches.some(p => p.zone !== 'core' && p.ward instanceof CommonWard);
+    const maximumCore = this.params.population <= 10000 ? Infinity
+      : core.filter(p => p.ward instanceof CommonWard).length * perPatchDensity(this.params.population) * 1.05 + fixed(true);
+    const coreTarget = hasOuter ? Math.min(target * core.length / this.nPatches,
+      maximumCore) : target;
+    this.cityCoreBuildingTarget = Math.ceil(coreTarget);
+    for (const [inside, budget] of [[true, coreTarget], [false, target - coreTarget]] as const) {
+      const wards = this.patches.filter(p => (p.zone === 'core') === inside && p.ward instanceof CommonWard
+        && !this.waterbody.includes(p)).map(p => p.ward as CommonWard);
+      const areas = wards.map(w => Math.abs(w.getCityBlock().square));
+      const total = areas.reduce((a, b) => a + b, 0);
+      wards.forEach((w, i) => { w.cityBuildingTarget = total > 0 ? Math.max(0, budget - fixed(inside)) * areas[i] / total : 0; });
+    }
   }
 
   /** Public wrapper so village-rows.ts can read the census without duplicating it. */
   countOrdinaryBuildingsPublic(): number {
     return this.countOrdinaryBuildings();
+  }
+
+  getBuildingCapacity(): BuildingCapacity {
+    const target = buildingBudget(this.params.population, this.params.urbanDensity);
+    const placed = this.countOrdinaryBuildings(), corePlaced = this.countCoreOrdinaryBuildings();
+    const shortfall = Math.max(0, target - placed);
+    return { basis: 'ordinary-building-budget', target, placed, shortfall, corePlaced,
+      outerPlaced: placed - corePlaced, status: shortfall ? 'shortfall' : 'met' };
   }
 
   private countOrdinaryBuildings(): number {
@@ -1535,6 +1588,7 @@ export class Model {
    * approximate on coasts).
    */
   private refineDensity(): void {
+    if (this.params.population > 1000) return; // city rows already use explicit ward demand and a legibility floor
     if (!rowHousing(this.params.population)) return; // village dwellings are stamped, not subdivided — see village-rows.ts
     const target = buildingBudget(this.params.population, this.params.urbanDensity);
     // The pass exists to make a settlement house its people, and
@@ -1713,8 +1767,9 @@ export class Model {
     if (this.getWaterRings().length === 0) return;
 
     const inWater = (p: Point): boolean => this.isWaterAt(p);
-    const drowned = (poly: Polygon): boolean =>
-      inWater(poly.center) || poly.vertices.some(v => inWater(v));
+    const drowned = (poly: Polygon): boolean => this.params.population > 1000
+      ? overlapsWater(poly, this.getWaterRings())
+      : inWater(poly.center) || poly.vertices.some(v => inWater(v));
 
     for (const patch of this.patches) {
       const ward = patch.ward;
@@ -1800,6 +1855,7 @@ export class Model {
     // byte-identical at pop 4200/50000/250000).
     const coreShareBudget = Math.min(
       Math.round(budget * (corePatches.length / this.nPatches)),
+      this.cityCoreBuildingTarget,
       this.countBudgetedBuildings(corePatches),
     );
     // The share is a SPLIT of a cap, not an allocation of buildings that
@@ -1820,7 +1876,7 @@ export class Model {
       Math.max(0, budget - coreShareBudget),
       this.countBudgetedBuildings(otherPatches),
     );
-    this.applyBuildingBudgetToGroup(corePatches, budget - otherBudget);
+    this.applyBuildingBudgetToGroup(corePatches, Math.min(budget - otherBudget, this.cityCoreBuildingTarget));
     this.applyBuildingBudgetToGroup(otherPatches, otherBudget);
   }
 
@@ -1895,6 +1951,23 @@ export class Model {
     for (let i = 0; i < perPatch.length; i++) {
       const { ward } = perPatch[i];
       if (quotas[i] >= ward.geometry.length) continue;
+      if (ward.streetRuns.length) {
+        // Preserve contiguous street fronts. The old centre-distance trim
+        // preferentially removed the outside rows of a planned block.
+        const surviving = new Set(ward.geometry);
+        const runs = ward.streetRuns.map(run => run.filter(b => surviving.has(b))).filter(run => run.length);
+        const inRuns = new Set(runs.flat());
+        for (const b of ward.geometry) if (!inRuns.has(b)) runs.push([b]);
+        const ratio = quotas[i] / ward.geometry.length;
+        const counts = runs.map(run => Math.floor(run.length * ratio));
+        let left = quotas[i] - counts.reduce((a, b) => a + b, 0);
+        const order = runs.map((run, index) => ({ index, fraction: run.length * ratio - counts[index] }))
+          .sort((a, b) => b.fraction - a.fraction || a.index - b.index);
+        for (const { index } of order) if (left-- > 0) counts[index]++;
+        const keep = new Set(runs.flatMap((run, index) => run.slice(0, counts[index])));
+        ward.geometry = ward.geometry.filter(b => keep.has(b));
+        continue;
+      }
       const centre = ward.patch.shape.center;
       const keep = new Set(
         ward.geometry

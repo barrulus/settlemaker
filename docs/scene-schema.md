@@ -1,4 +1,4 @@
-# Scene & asset contract (v1)
+# Scene & asset contract (v2)
 
 This document is for two audiences: **Azgaar/FMG-side integrators** — FMG is
 Azgaar's Fantasy Map Generator — who consume settlemaker's output, and
@@ -49,11 +49,15 @@ export interface FieldPlot {
 }
 /** @deprecated Always empty since settlemaker 0.8.0 — fields carry angleDeg instead of furrow segments. */
 export interface Furrow { start: ScenePoint; end: ScenePoint }
-export interface GreenFeature { ring: ScenePoint[] }
+export interface GreenFeature {
+  ring: ScenePoint[];
+  paths?: ScenePoint[][]; // planned park walks
+  pathWidth?: number; // local units
+}
 
 export interface VegetationInstance {
   at: ScenePoint;
-  /** Glyph id (batch001 canopy) or legacy unit-box kind ('tree'). */
+  /** Glyph id (refined canopy) or legacy unit-box kind ('tree'). */
   kind: string;
   /** World-unit size of the whole glyph box. */
   scale: number;
@@ -61,7 +65,11 @@ export interface VegetationInstance {
 }
 
 export interface SymbolInstance {
-  /** batch001 id, e.g. 'sm-well'. */
+  /** Links a structure replacement to BuildingFeature.id / GeoJSON building_id. */
+  buildingId?: string;
+  /** Art-box height; omitted means the same as scale. */
+  scaleY?: number;
+  /** Glyph id, e.g. 'sm-well'. */
   id: string;
   at: ScenePoint;
   /** World-unit size of the glyph box (fixed: max footprint axis). */
@@ -73,10 +81,12 @@ export interface SymbolInstance {
 export interface RoadFeature {
   path: ScenePoint[];
   /** artery = through-town trunk; road = external approach stub. */
-  kind: 'artery' | 'road';
+  kind: 'artery' | 'road' | 'alley';
+  width?: number; // explicit width for traced alleys, in local units
 }
 
 export interface BuildingFeature {
+  id?: string; // same identity as GeoJSON building_id
   ring: ScenePoint[];
   /** Ward type string (WardType value) — semantic, drives styling/symbols. */
   kind: string;
@@ -108,6 +118,16 @@ export interface Scene {
   seed: number;
   population: number;
   biome?: string;
+  metersPerUnit?: number; // estimated city scale for glyph minimum sizes
+  buildingCapacity?: {
+    basis: 'ordinary-building-budget';
+    target: number;
+    placed: number;
+    shortfall: number;
+    corePlaced: number;
+    outerPlaced: number;
+    status: 'met' | 'shortfall';
+  };
   bounds: LocalBounds;
   layers: {
     water: WaterLayer;
@@ -132,18 +152,19 @@ now places generator-native POI symbols (wells, mills, market crosses,
 church marks, etc.) as first-class scene data instead of leaving them to a
 downstream consumer.
 
-- **`layers.symbols: SymbolInstance[]`** — new layer. Each entry is a
-  placement of one `batch001` glyph (see `symbols/batch001/symbols.json` for
-  the raw manifest): `id` is the batch001 symbol id (e.g. `'sm-well'`,
-  `'sm-mill-wind'`, `'sm-mark-church'`),
-  `at`/`scale`/`rotationDeg` place it in output coordinates the same way a
-  `VegetationInstance` does, and `zBand` says which SVG paint pass it belongs
-  to: `'structure'` symbols (wells, mills, market crosses, ...) render in the
-  same pass as buildings; `'overlay'` symbols (church marks, ...) render on
-  top of their host building, in their own pass. See §3 for the corresponding
-  `#symbols`/`#marks` SVG groups.
+- **`layers.symbols: SymbolInstance[]`** — glyph placements in output coordinates.
+  The default city renderer now uses the same refined artwork as villages.
+  `scale` is the art-box width; `scaleY` optionally supplies its height.
+  Transform order is translate, rotate, scale, then translate by the art anchor.
+  `buildingId` links a replacement to its exact surviving footprint. Structure
+  replacements cast their silhouette shadows; overlays do not.
+  Glyph definitions use plain `<g>` elements, not viewport-bearing `<symbol>`
+  elements, so changing the outer viewBox cannot rescale glyphs independently
+  of roads or building footprints.
+  Retired phase 1 semantic POI placements can remain in the scene for identity,
+  but unavailable artwork is omitted, without falling back to batch001.
 - **`VegetationInstance.kind` is now a string, not the literal `'tree'`.**
-  It's a lookup key that may be either a `batch001` canopy glyph id (e.g.
+  It's a lookup key that may be either a refined canopy glyph id (e.g.
   `'sm-tree-conifer'`, `'sm-tree-deciduous'`) or the legacy schematic
   `'tree'` kind, depending on which `AssetSet` is in effect. This is a
   breaking narrowing removal (the type was a literal union of one), which is
@@ -153,11 +174,19 @@ downstream consumer.
   ground still fills and outlines normally but the furrow pattern is
   suppressed — used for the subplot converted to a windmill's sail clearing,
   which shouldn't show plow lines under the mill.
-- **`BuildingFeature.glyphBacked?: true`** — new optional field, additive.
-  When present in villages (population ≤ 600), this building rect is rendered
-  as a house glyph along a road frontage (village rows) rather than as a filled
-  footprint. The rect remains in the scene as a fallback for renderers that
-  omit symbols or lack the glyph asset.
+- **`BuildingFeature.glyphBacked?: true`** — a replacement has been placed for
+  this footprint. The renderer suppresses the footprint and its polygon shadow
+  only when a visible **structure** placement has a matching `buildingId` and
+  passes the selected asset set's availability and minimum-size checks.
+  Missing art, filtered placements, `symbols: false`, and old scenes without
+  explicit identity retain the polygon fallback.
+- **`Scene.metersPerUnit?: number`** — the city's population-based tiling scale
+  estimate, using the canonical default frame padding. Converts refined
+  manifest metre floors to local mesh units. It does not declare a surveyed
+  physical scale, and does not change the tiling or GeoJSON coordinate contract.
+
+These city fields are additive; scene version 2 and GeoJSON version 4 remain.
+The separate village engine at population ≤1,000 is unchanged.
 
 `LocalBounds` (from `src/generator/bounds.ts`) is a plain AABB:
 
@@ -370,6 +399,9 @@ export interface AssetSet {
   symbols: Record<string, string>;
   /** semantic kind → tileable <pattern> content, unrotated (assembler applies patternTransform). */
   patterns?: Record<string, { width: number; height: number; content: string }>;
+  glyphs?: Record<string, GlyphAsset>; // viewBox, body, sil, anchor
+  manifest?: Record<string, { footprint: [number, number] | null; minScale: number }>;
+  refined?: boolean; // use the shared village material/stroke CSS
 }
 
 export const SCHEMATIC_SET: AssetSet = {
@@ -434,12 +466,13 @@ a `<use>` referencing it:
 
 ### Registering a new set
 
-`SCHEMATIC_SET` today is the only set, and `assetSetFor` is a stub that
-always returns it:
+`assetSetFor` returns the refined village library. Placers resolve biome IDs;
+all five biome families live in this set. `SCHEMATIC_SET` remains available
+for explicit schematic rendering:
 
 ```ts
 export function assetSetFor(_biome?: string): AssetSet {
-  return SCHEMATIC_SET;
+  return REFINED_SET;
 }
 ```
 

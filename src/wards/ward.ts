@@ -7,6 +7,8 @@ import { interpolate, scalar, distance2line } from '../geom/geom-utils.js';
 import { minBy } from '../utils/array-utils.js';
 import type { Model } from '../generator/model.js';
 import type { Patch } from '../generator/patch.js';
+import type { PlacedSymbol } from '../generator/symbols.js';
+import type { CityFrontage } from '../generator/city-frontage.js';
 import { edgeInsetScale, rowHousing, ROW_OUTSKIRTS_BITE } from '../generator/generation-params.js';
 
 /**
@@ -37,10 +39,18 @@ export const MAIN_STREET = 2.0;
 export const REGULAR_STREET = 1.0;
 export const ALLEY = 0.6;
 
+export interface WardLane { a: Point; b: Point; width: number }
+
 export class Ward {
   model: Model;
   patch: Patch;
   geometry: Polygon[] = [];
+  /** Actual positive-width cuts, rebuilt together with the ward's lots. */
+  lanes: WardLane[] = [];
+  buildingFrontages = new Map<Polygon, CityFrontage>();
+  streetRuns: Polygon[][] = [];
+  principalBuilding: Polygon | null = null;
+  principalSymbol: PlacedSymbol | null = null;
   type: WardType = WardType.Empty;
 
   constructor(model: Model, patch: Patch) {
@@ -386,6 +396,7 @@ export function createAlleys(
   alleyWidth: number = ALLEY,
   fillLots: boolean = false,
   maxLotSq: number = Infinity,
+  lanes?: WardLane[],
 ): Polygon[] {
   // Find longest edge
   let v: Point | null = null;
@@ -404,7 +415,8 @@ export function createAlleys(
   const angleSpread = (Math.PI / 6) * gridChaos * (p.square < minSq * 4 ? 0 : 1);
   const b = (rng.float() - 0.5) * angleSpread;
 
-  const halves = bisect(p, v!, ratio, b, split ? alleyWidth : 0);
+  const halves = bisect(p, v!, ratio, b, split ? alleyWidth : 0,
+    split && alleyWidth > 0 && lanes ? (a, b) => lanes.push({ a, b, width: alleyWidth }) : undefined);
   const buildings: Polygon[] = [];
 
   // Bisect returns a single polygon when it couldn't find two edge intersections —
@@ -428,7 +440,7 @@ export function createAlleys(
         ...createAlleys(
           half, rng, minSq, gridChaos, sizeChaos, emptyProb,
           half.square > minSq / (rng.float() * rng.float()),
-          alleyWidth, fillLots, maxLotSq,
+          alleyWidth, fillLots, maxLotSq, lanes,
         ),
       );
     }

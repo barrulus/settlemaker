@@ -32,13 +32,10 @@ const parky: AzgaarBurgInput = {
 };
 
 describe('asset sets', () => {
-  it('starter set has a tree symbol and is the default for any biome', () => {
+  it('schematic set remains available and refined artwork is the default', () => {
     expect(SCHEMATIC_SET.symbols.tree).toContain('circle');
-    // Task 3 (canopy glyphs): assetSetFor() now returns BATCH001_SET (the
-    // schematic tree symbol lives on but park groves render batch001 glyphs
-    // instead — see tests/canopy-glyphs.test.ts).
-    expect(assetSetFor(undefined).name).toBe('batch001');
-    expect(assetSetFor('desert').name).toBe('batch001');
+    expect(assetSetFor(undefined).name).toBe('refined');
+    expect(assetSetFor('desert').name).toBe('refined');
   });
 
   it('park groves gain deterministic canopy glyph instances rendered as <use>', () => {
@@ -53,7 +50,7 @@ describe('asset sets', () => {
     }
     // Task 3 (canopy glyphs): trees now render as batch001 canopy glyphs in
     // #canopy, not schematic <use href="#asset-tree"> in #greens.
-    expect(svg).toContain('<symbol id="glyph-sm-tree-');
+    expect(svg).toContain('<g id="glyph-sm-tree-');
     expect(svg.match(/<use href="#glyph-sm-tree-/g)!.length).toBeGreaterThan(0);
     expect(svg).toContain('#greens use{fill:');
   });

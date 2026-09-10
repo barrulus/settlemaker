@@ -108,7 +108,7 @@ describe('svg render: shadows, buildings, landmarks', () => {
   it('shadow count matches building count', () => {
     const { model, svg } = generateFromBurg(makeBurg({ population: 12000 }), { seed: 42 });
     const shadowGroup = svg.match(/<g id="shadows"[^>]*>([\s\S]*?)<\/g>/)![1];
-    const shadowPaths = (shadowGroup.match(/<path /g) ?? []).length;
+    const buildingShadows = (shadowGroup.match(/data-building-id=/g) ?? []).length;
     let buildings = 0;
     for (const patch of model.patches) {
       if (!patch.ward) continue;
@@ -116,7 +116,7 @@ describe('svg render: shadows, buildings, landmarks', () => {
       if (patch.ward.type === WardType.Park) continue;
       buildings += patch.ward.geometry.length;
     }
-    expect(shadowPaths).toBe(buildings);
+    expect(buildingShadows).toBe(buildings);
   });
 
   it('does not shadow or repaint Park ward geometry (park overpaint regression)', () => {

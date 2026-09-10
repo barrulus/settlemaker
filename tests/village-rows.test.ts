@@ -249,10 +249,10 @@ describe('stampVillageRows integration', () => {
     expect(found).toBeGreaterThan(0);
   });
 
-  it('towns are untouched: rowHousing model has zero glyph-backed buildings', () => {
+  it('towns use fitted city glyphs, with no village frontage-row stamps', () => {
     const m = mk(1200, 3);
-    expect(m.glyphBackedBuildings.size).toBe(0);
-    expect(m.symbols.filter(s => RESIDENTIAL.includes(s.id))).toHaveLength(0);
+    expect(m.glyphBackedBuildings.size).toBeGreaterThan(0);
+    expect(m.symbols.filter(s => s.row !== undefined)).toHaveLength(0);
   });
 
   it('deterministic', () => {
