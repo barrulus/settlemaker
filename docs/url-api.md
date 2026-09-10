@@ -209,6 +209,26 @@ with `group: "roads"`, or `kind: "foot"` with `group: "trails"`. The aliases
 record defaults to `trail`; a bare bearing defaults to `main`. Unknown class
 values fall back to a path and log a warning. Sea routes are not land entries.
 
+The live FMG style menu displays group/class pairs. Translate those into
+separate payload fields; do not send the display label (such as
+`"roads / royal"`) as `kind`:
+
+| FMG group / class | `group` | `kind` |
+|---|---|---|
+| roads / royal, main, market, town, local | `roads` | the class name |
+| trails / trail, footpath | `trails` | the class name |
+| roads, without a class | `roads` | `road` (legacy fallback to main) |
+| trails, without a class | `trails` | `foot` (legacy fallback to trail) |
+| searoutes / feeder, coastal | — | exclude from land approaches |
+| airroutes, traderoutes | — | exclude from land approaches |
+
+`local` is accepted when FMG has that class, and is used for generated village
+streets. Its absence from a particular map's menu does not require FMG to
+invent local inbound routes. Sea feeder/coastal classes are not land classes;
+do not convert them to `local`. Route styling (stroke widths, dash patterns,
+colours) stays in FMG: this payload carries route meaning, while settlemaker
+chooses physical road widths for the settlement scale.
+
 Inside villages, streets use **`town`, `local`, or `footpath`**. The incoming
 class describes the approach outside the built area; it does not require a
 royal road to become the village's backbone. Streets follow shared irregular
