@@ -10,15 +10,15 @@ const site = (routes: Site['routes']): Site => ({
 });
 
 describe('contract entries', () => {
-  it('one entry per route at its exact bearing on the circle; through routes get a far side', () => {
+  it('one entry per supplied bearing; through is a hint and never invents an opposite exit', () => {
     const s = site([
       { bearingDeg: 90, type: 'main', through: true, routeId: 'r1' },
       { bearingDeg: 210, type: 'trail', through: false, routeId: 'r2' },
     ]);
     const e = contractEntries(s, 100);
-    expect(e).toHaveLength(3); // r1 near, r1 far (270), r2
+    expect(e).toHaveLength(2);
     const far = e.find((x) => x.farSide);
-    expect(far?.bearingDeg).toBeCloseTo(270);
+    expect(far).toBeUndefined();
     for (const x of e) expect(Math.hypot(x.point.x, x.point.y)).toBeCloseTo(100, 6);
   });
   it('NEVER merges near-duplicate bearings at the boundary (spec 5.1)', () => {

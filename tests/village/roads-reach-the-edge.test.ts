@@ -16,22 +16,14 @@ const burg = (population: number, through: boolean): AzgaarBurgInput => ({
   plaza: true, temple: true, shanty: false, capital: false,
   roadBearings: [
     { bearing_deg: 45, kind: 'main', through },
+    ...(through ? [{ bearing_deg: 217, kind: 'main' as const, through }] : []),
     { bearing_deg: 170, kind: 'local' },
     { bearing_deg: 280, kind: 'trail' },
   ],
 } as unknown as AzgaarBurgInput);
 
-/**
- * Both fixtures, and the THROUGH one is the point of it.
- *
- * A through route gets a SECOND contract entry at `bearing + 180`
- * (`contractEntries`), and `applyMainStreet` then redraws the pair as one
- * spine running entry -> entry -- so one of that lane's entries is
- * `points[0]`, not its last point. Nothing in this branch used a through
- * route, and that is how a road that still stopped dead on the contract
- * circle, 134-221 m short of the tile edge, shipped past a file called
- * `roads-reach-the-edge`.
- */
+/** Exercise one terminating approach and a continuing connection with two
+ * independently measured sides. Both must reach the rendered frame. */
 const each = (fn: (m: ReturnType<typeof generateVillage>, label: string) => void): void => {
   for (const through of [false, true]) {
     for (const pop of POPS) {
@@ -48,7 +40,7 @@ const each = (fn: (m: ReturnType<typeof generateVillage>, label: string) => void
 const ON_ENTRY_M = 8;
 
 /** Every point on the contract circle a road is contracted to arrive at:
- * one per route bearing, plus the far side of a through route. Mirrors
+ * one per supplied approach. Mirrors
  * `contractEntries`, which is the thing under test's own input. */
 const contractEntryPoints = (
   m: ReturnType<typeof generateVillage>,
@@ -62,7 +54,6 @@ const contractEntryPoints = (
   };
   for (const r of m.site.routes) {
     at(r.bearingDeg, `entry ${r.bearingDeg.toFixed(0)}`);
-    if (r.through) at((r.bearingDeg + 180) % 360, `entry ${((r.bearingDeg + 180) % 360).toFixed(0)} (far side)`);
   }
   return out;
 };

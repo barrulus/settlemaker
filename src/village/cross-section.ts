@@ -21,7 +21,9 @@ export function frontageOffsetM(lane: Lane): number {
  * an abrupt width change at a population boundary. Explicit regional roads keep
  * their existing class/corridor contract. */
 export function villageCrossSection(lane: Lane, dwellings: number): Lane {
-  if (isTrunk(lane.id) || lane.surfaceWidthM !== undefined) return lane;
+  if (isTrunk(lane.id)) return lane;
+  lane = { ...lane, routeRole: 'street', type: classRank(lane.type) <= classRank('town') ? 'town' : lane.type === 'local' ? 'local' : 'footpath' };
+  if (lane.surfaceWidthM !== undefined) return lane;
   const demand = Math.min(1, Math.max(0, (dwellings - 8) / 80));
   const surface = lane.type === 'footpath' ? 1 : lane.type === 'trail' ? 1.4 : 1.2 + 1.2 * demand;
   return { ...lane, widthM: surface + 0.4, surfaceWidthM: surface, setbackM: 0.5 + 0.2 * demand };

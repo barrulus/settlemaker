@@ -18,8 +18,9 @@ export type RoadBearingInput =
        * seven-type vocabulary. Widened, never replaced — `road`, `foot` and
        * `sea` remain valid input forever (see src/village/route-class.ts).
        */
-      kind?: RouteKind | RouteType;
+      kind?: RouteKind | RouteType | 'roads' | 'trails';
       group?: 'roads' | 'trails';
+      /** Continuation/growth hint only. Supply every actual approach separately. */
       through?: boolean;
       relief?: RouteRelief;
       followsRiver?: boolean;

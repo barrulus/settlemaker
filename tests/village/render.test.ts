@@ -323,7 +323,7 @@ describe('renderVillage', () => {
       const paintedM = Number(m2![1]) / PX_PER_M;
       if (classRank(lane.type) < classRank('local')) {
         checkedWagon += 1;
-        expect(paintedM).toBeCloseTo(lane.widthM, 2);
+        expect(paintedM).toBeCloseTo(lane.surfaceWidthM ?? lane.widthM, 2);
       } else {
         checkedMinor += 1;
         expect(paintedM).toBeCloseTo(lane.surfaceWidthM ?? lane.widthM * RENDER_MINOR_LANE_WIDTH_SHARE, 2);

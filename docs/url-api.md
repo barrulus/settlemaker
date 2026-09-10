@@ -104,8 +104,14 @@ export type RoadBearingInput =
   | {
       bearing_deg: number;
       route_id?: string;
-      kind?: RouteKind;
+      /**
+       * Either the legacy three-kind form or a real route class from the
+       * seven-type vocabulary. Widened, never replaced — `road`, `foot` and
+       * `sea` remain valid input forever (see src/village/route-class.ts).
+       */
+      kind?: RouteKind | RouteType | 'roads' | 'trails';
       group?: 'roads' | 'trails';
+      /** Continuation/growth hint only. Supply every actual approach separately. */
       through?: boolean;
       relief?: RouteRelief;
       followsRiver?: boolean;
@@ -164,13 +170,55 @@ export interface AzgaarBurgInput {
 }
 ```
 
-`RouteKind` (`'road' | 'foot' | 'sea'`) and `RouteRelief`
-(`'descent' | 'ascent' | 'valley' | 'ridge' | 'flat'`) are both exported from
-the package root. `route_id` is still round-tripped untouched onto the
-matching gate output feature. `kind` is echoed back the same way, but it is
-no longer purely opaque: `kind: 'foot'` marks the approach as a footpath,
-which (like `group: 'trails'`) strongly suppresses settlement growth along
-it — see the next section.
+`RouteKind` is the legacy vocabulary (`road`, `foot`, `sea`). `RouteType`
+is the seven land classes: `royal`, `main`, `market`, `town`, `local`,
+`trail`, `footpath`. `RouteRelief` is `descent`, `ascent`, `valley`, `ridge`,
+or `flat`. These types are exported from the package root.
+
+### Required approach data for FMG adapters
+
+Send **one `roadBearings` record per actual land approach**, with its measured
+`bearing_deg` (0° north, clockwise), `kind`, and stable `route_id`. Measure each
+side independently: a road entering at 36° might leave at 209°, not 216°.
+A continuing route uses the same `route_id` on both records. Distinct routes
+may arrive at very similar bearings; retain both records. Shared streets
+inside the settlement do not erase their provenance.
+
+```json
+"roadBearings": [
+  { "bearing_deg": 36, "kind": "royal", "route_id": "r17", "through": true },
+  { "bearing_deg": 209, "kind": "royal", "route_id": "r17", "through": true },
+  { "bearing_deg": 117, "kind": "town", "route_id": "r23" },
+  { "bearing_deg": 281, "kind": "footpath", "route_id": "p4" }
+]
+```
+
+**`through` never creates an exit.** It is a route-character hint; both
+approaches must be supplied to draw a continuing connection. Older village
+builds incorrectly invented a bearing +180° exit for this hint. Adapters that
+relied on that behaviour must now supply the measured other side. Payload
+version remains `v: 1`: the envelope and encoding are unchanged, and this
+corrects the existing no-invented-external-connections guarantee.
+
+Upstream FMG, which has groups but no classes, should send `kind: "road"`
+with `group: "roads"`, or `kind: "foot"` with `group: "trails"`. The aliases
+`kind: "roads"` and `kind: "trails"` are also accepted. A group-only trail
+record defaults to `trail`; a bare bearing defaults to `main`. Unknown class
+values fall back to a path and log a warning. Sea routes are not land entries.
+
+Inside villages, streets use **`town`, `local`, or `footpath`**. The incoming
+class describes the approach outside the built area; it does not require a
+royal road to become the village's backbone. Streets follow shared irregular
+parcel boundaries, and extra residential lanes require housing demand.
+For a small hamlet (up to 120 people) with two broadly opposing approaches
+of the same royal, main or market class, the major road can continue through
+and organise the houses along it. This exception currently applies on dry
+sites; water-constrained sites use the routed street network.
+
+Village GeoJSON street features expose `route_role` (`approach`, `street`,
+or `through`) alongside `streetType`, widths and route provenance. Classification
+may change at the village edge while connectivity and supplied bearings remain
+preserved. See [schema v3](./schema-v3.md) for the output fields.
 
 ### Route character — how the optional road fields shape growth
 
@@ -185,18 +233,6 @@ a river):
 | Field | Values | Effect on growth along that road |
 |---|---|---|
 | `group` | `'roads'` \| `'trails'` | Trails attract almost none (weight ×0.15). Absent = treated as a road. |
-
-> **`kind` and `group` are different fields with different vocabularies, and
-> confusing them fails silently.** `group` takes `'roads'` / `'trails'` —
-> plural. `kind` takes a route *class* (`royal`, `main`, `market`, `town`,
-> `local`, `trail`, `footpath`) or a legacy kind (`road`, `foot`, `sea`).
-> Upstream FMG has only groups; the fork has classes. Sending a group name in
-> `kind` used to make every footpath render with a road's weight and width,
-> undetected for the life of that integration. `kind: 'roads'` and
-> `kind: 'trails'` are now accepted and mapped correctly, and any genuinely
-> unrecognised class falls back to `foot` and logs a warning rather than
-> throwing — a wrong-sized road in a working village beats a failure in a
-> user's face.
 | `through` | boolean | A route that continues past the burg attracts more (×1.5) than one that dead-ends there. |
 | `relief` | `'flat'`/`'valley'`/`'descent'`/`'ascent'`/`'ridge'` | Easy ground is neutral; `ascent` halves growth (×0.5); `ridge` quarters it (×0.25). |
 | `followsRiver` | boolean | A valley road along a river attracts slightly more (×1.2). **No river is rendered** — this is a weighting hint only; river geometry is not part of the contract yet. |
@@ -316,7 +352,7 @@ network inward from the bearings on its contract circle, so a burg of 1,000
 or under with no approach roads has no main roads at all and nothing reaching
 its own boundary — an island, with no way to join it to the map around it.
 Measured on a pop-500 village: with no bearings the furthest lane point is
-85 m and every lane is local/trail/footpath; with three bearings, roads are
+85 m and every lane is town/local/footpath; with three bearings, roads are
 drawn past the 188 m contract radius all the way to the edge of the tile,
 with three main roads and two market streets.
 
@@ -358,13 +394,14 @@ The flat-tier equivalent of `roadBearings`. Each entry is a compass bearing
 ```
 roads=45,170,290                  three terminating main roads
 roads=45:trail,170:royal          explicit classes
-roads=20:main:through,140:main    a road that passes through, and one that ends
+roads=20:main:through,207:main:through,140:trail   two measured sides plus a trail
 ```
 
 Classes, highest to lowest: `royal`, `main`, `market`, `town`, `local`,
 `trail`, `footpath`. Omitting the class gives `main`; omitting the third
-field gives a road that terminates in the settlement rather than passing
-through.
+field omits the continuation hint. Every actual approach must still be
+listed explicitly; `through` never adds a bearing. Use `i=` to attach shared
+route IDs, which the flat tier cannot express.
 
 Bearings are normalised into 0–359, so `-90` and `450` are both legal. An
 unrecognised class, a non-numeric bearing, or a third field that isn't
@@ -605,8 +642,8 @@ decks). To change only the look, use `villageTheme=`.
   you have no route data at all. (Internal lanes within the settlement are
   a separate, unrelated concern and are not counted here.) The optional
   route-character fields (`group`/`through`/`relief`/`followsRiver`, §3)
-  never change the rendered roads themselves — only where extramural
-  buildings cluster along them. All approach roads join the internal street
+  never add external approaches. They influence route character and where
+  buildings cluster; the interior network is generated independently. All approach roads join the internal street
   network; none stop short of the settlement.
 - **Water fidelity.** When `coastlineGeometry` is supplied, the rendered
   water outline follows that geometry (clipped to the local frame) rather

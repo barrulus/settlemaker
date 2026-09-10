@@ -108,15 +108,19 @@ generateSettlement(burg, { village: { theme: villageThemeFor('desert') } });
 
 Village roads use existing frontage before adding streets. Small settlements can
 stay as a green and a short access lane; larger ones add streets only when they
-provide useful housing capacity. Explicit regional roads retain their class and
-connections. Local surfaces, reserved corridors and parcel setbacks are distinct
+provide useful housing capacity. Regional approaches retain their bearings and inbound classes, then join
+town, local or footpath streets inside villages. Small roadside hamlets can
+retain a major through road. FMG supplies each measured approach explicitly;
+`through` does not invent an exit. Local surfaces, reserved corridors and parcel setbacks are distinct
 ([width semantics](docs/schema-v3.md#village-road-cross-sections)).
 
 Run `npm run review:roads` to generate the local road gallery. The
 [road design report](docs/plans/2026-09-10-village-road-results.md) includes commands
 for matched historical comparisons, held-out seeds and validation results. The
 [follow-up review](docs/plans/2026-09-10-village-followup.md) covers road-shaped greens,
-landmark locations, junction transitions and the expanded landscape panel.
+landmark locations, junction transitions and the expanded landscape panel. The
+[route layout review](docs/plans/2026-09-10-village-route-layout.md) covers the
+shared street network, updated FMG contract and varied multi-approach gallery.
 
 Villages are themed by biome — `villageThemeFor(biome)` selects the ground,
 vegetation and dwelling glyphs. Only the temperate theme has been through a

@@ -6,7 +6,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 
 const args = process.argv.slice(2);
 const refIndex = args.indexOf('--source-ref');
-let sourceRoot, sourceRevision;
+let sourceRoot, sourceRevision, runnerRoot;
 try {
   if (refIndex >= 0) {
     const ref = args[refIndex + 1];
@@ -17,9 +17,11 @@ try {
     execFileSync('tar', ['-x', '-C', sourceRoot], { input: archive });
   }
   await mkdir('output/road-review', { recursive: true });
+  runnerRoot = await mkdtemp('output/road-review/runner-');
+  const runner = join(runnerRoot, 'runner.cjs');
   await build({
     entryPoints: ['scripts/review-village-roads.ts'], bundle: true, platform: 'node', format: 'cjs',
-    outfile: 'output/road-review/runner.cjs',
+    outfile: runner,
     plugins: sourceRoot ? [{ name: 'historical-generator', setup(builder) {
       builder.onResolve({ filter: /^\.\.\/src\/(index|village\/render)\.js$/ }, args => {
         if (args.importer !== resolve('scripts/review-village-roads.ts')) return;
@@ -27,11 +29,12 @@ try {
       });
     } }] : [],
   });
-  const result = spawnSync(process.execPath, ['output/road-review/runner.cjs', ...args], {
+  const result = spawnSync(process.execPath, [runner, ...args], {
     stdio: 'inherit', env: { ...process.env, ROAD_REVIEW_SOURCE_REVISION: sourceRevision ?? '' },
   });
   if (result.error) throw result.error;
   process.exitCode = result.status ?? 1;
 } finally {
+  if (runnerRoot) await rm(runnerRoot, { recursive: true, force: true });
   if (sourceRoot) await rm(sourceRoot, { recursive: true, force: true });
 }

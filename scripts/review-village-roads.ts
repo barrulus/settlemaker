@@ -26,7 +26,7 @@ const dirty = !process.env.ROAD_REVIEW_SOURCE_REVISION && execFileSync('git', ['
 const baselineRows = existsSync(join(baseline, 'metrics.json'))
   ? JSON.parse(readFileSync(join(baseline, 'metrics.json'), 'utf8')).rows as Array<{ id: string; seed: number; input: unknown; }> : [];
 function metrics(m: VillageModel) {
-  const internal = m.lanes.filter(l => !isTrunk(l.id));
+  const internal = m.lanes.filter(l => l.routeRole === 'street' || !isTrunk(l.id));
   const dwellings = m.buildings.filter(b => !isLandmarkLot(b.lotId)).length;
   const assigned = new Set(m.buildings.map(b => m.lots.find(l => l.id === b.lotId)?.laneId));
   const graph = roadNetwork(m.lanes, m.green, m.buildings, m.lots);
@@ -52,6 +52,9 @@ function metrics(m: VillageModel) {
   }
   return {
     waterPolygons: m.site.water.length, greenShape: m.green.shape,
+    approachBearings: m.site.routes.map(r => ({ bearing: r.bearingDeg, type: r.type, routeId: r.routeId })),
+    internalClasses: [...new Set(internal.map(l => l.type))].sort(),
+    requiredStreetMetres: internal.filter(l => isTrunk(l.id)).reduce((sum, l) => sum + polylineLength(l.points), 0),
     landmarkFrontage: m.buildings.filter(b => isLandmarkLot(b.lotId)).map(b => ({ id: b.lotId, distanceToGreenM: dist(b.position, m.green.centre) })),
     buildings: m.buildings.length, ordinaryDwellings: dwellings,
     metresPerDwelling: length / Math.max(1, dwellings),
@@ -80,6 +83,13 @@ for (const f of roadReviewFixtures) {
     const m = result.model;
     measures = metrics(m);
     writeFileSync(join(out, `${f.id}.model.json`), JSON.stringify(m));
+    const markers = m.site.routes.map((route, i) => {
+      const angle = route.bearingDeg * Math.PI / 180;
+      const x = (Math.sin(angle) * m.contractRadiusM - m.frame.minX) * 4;
+      const y = (-Math.cos(angle) * m.contractRadiusM - m.frame.minY) * 4;
+      return `<g><circle cx="${x}" cy="${y}" r="8" fill="white" stroke="#183d64" stroke-width="3"/><text x="${x + 12}" y="${y - 10 - (i % 3) * 15}" font-size="22" font-family="sans-serif" fill="#183d64" stroke="white" stroke-width="4" paint-order="stroke">${route.bearingDeg}° ${escape(route.type)}</text></g>`;
+    }).join('');
+    writeFileSync(join(out, `${f.id}.routes.svg`), result.svg.replace('</svg>', `${markers}</svg>`));
     const points = [m.green.centre, ...m.buildings.map(b => b.position), ...m.lanes.filter(l => !isTrunk(l.id)).flatMap(l => l.points)];
     const ownFrame = {
       minX: Math.min(...points.map(p => p.x)) - 15, maxX: Math.max(...points.map(p => p.x)) + 15,
@@ -117,8 +127,9 @@ for (const f of roadReviewFixtures) {
   writeFileSync(join(out, `${f.id}.detail.svg`), detail);
   rows.push({ id: f.id, seed, input: f.input, kind: result.kind, runtimeMs, ...measures });
   const hasBefore = matchedBaseline && existsSync(join(out, `${f.id}.before.svg`));
-  cards.push(`<article><h2>${escape(f.id)} · pop ${f.input.population} · seed ${seed}</h2><p>${escape(JSON.stringify(measures))}</p><div class="pair">${hasBefore ? `<object data="${f.id}.before.svg"></object>` : ''}<object data="${f.id}.detail.svg"></object></div><a href="${f.id}.svg">Whole settlement</a>${measures.waterPolygons ? `<h3>Landscape overview — coastline and water</h3><object class="landscape" data="${f.id}.svg"></object>` : ''}</article>`);
+  const approaches = f.input.roadBearings?.map(r => typeof r === 'number' ? `${r}° main` : `${r.bearing_deg}° ${r.kind ?? r.group ?? 'main'}${r.route_id ? ` [${r.route_id}]` : ''}`).join(' · ') ?? 'unspecified';
+  cards.push(`<article><h2>${escape(f.id)} · pop ${f.input.population} · seed ${seed}</h2><div class="approaches">Supplied approaches: ${escape(approaches) || 'none'}</div><p>${escape(JSON.stringify(measures))}</p><div class="pair">${hasBefore ? `<object data="${f.id}.before.svg"></object>` : ''}<object data="${f.id}.detail.svg"></object></div><a href="${f.id}.svg">Whole settlement</a>${result.kind === 'village' ? ` · <a href="${f.id}.routes.svg">Labelled approach bearings</a>` : ''}${measures.waterPolygons ? `<h3>Landscape overview — coastline and water</h3><object class="landscape" data="${f.id}.svg"></object>` : ''}</article>`);
   console.log(`${f.id}: ${Math.round(runtimeMs)} ms ${measures.internalMetres === undefined ? 'city' : `${Math.round(measures.internalMetres as number)} m internal`}`);
 }
-writeFileSync(join(out, 'metrics.json'), JSON.stringify({ revision, dirty, heldOut, metricVersion: 1, turnWindowM: 4, rows }, null, 2));
-writeFileSync(join(out, 'index.html'), `<!doctype html><meta charset="utf-8"><title>Village road comparison</title><style>body{font:15px system-ui;margin:24px;background:#eee}article{background:white;padding:16px;margin:16px 0}h2{font-size:18px}p{max-height:70px;overflow:auto;font:12px monospace}.landscape{width:100%;height:450px}.pair{display:flex}.pair object{width:50%;height:550px;flex:1}</style><h1>Village road review</h1><p>${escape(revision)}${dirty ? ' + source changes' : ''}. Matched pairs show previous/current at the same scale. Unpaired cases show current only. Click current drawing to isolate roads.</p>${cards.join('\n')}`);
+writeFileSync(join(out, 'metrics.json'), JSON.stringify({ revision, dirty, heldOut, metricVersion: 2, turnWindowM: 4, rows }, null, 2));
+writeFileSync(join(out, 'index.html'), `<!doctype html><meta charset="utf-8"><title>Village road comparison</title><style>body{font:15px system-ui;margin:24px;background:#eee}article{background:white;padding:16px;margin:16px 0}h2{font-size:18px}p{max-height:70px;overflow:auto;font:12px monospace}.landscape{width:100%;height:450px}.pair{display:flex}.pair object{width:50%;height:550px;flex:1}</style><h1>Village road review</h1><p>${escape(revision)}${dirty ? ' + source changes' : ''}. Matched pairs show previous/current at the same scale. Unpaired cases show current only. Click current drawing to isolate roads. Internal metrics now include required village streets as well as added residential lanes; historical metrics excluded all required routes. All review inputs are synthetic contract cases, not captured FMG payloads.</p>${cards.join('\n')}`);

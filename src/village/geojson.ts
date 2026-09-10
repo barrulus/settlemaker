@@ -119,6 +119,7 @@ export function generateVillageGeoJson(model: VillageModel): FeatureCollection {
         layer: 'street', street_id: lane.id, streetType: lane.type,
         width_m: lane.widthM,
         surface_width_m: roadCrossSection(lane).surfaceM,
+        ...(lane.routeRole ? { route_role: lane.routeRole } : {}),
         ...(surfaceClips.has(lane.id) ? { surface_clip_m: surfaceClips.get(lane.id)!.map(pt) } : {}),
         setback_m: roadCrossSection(lane).setbackM,
         ...(routeIds.length > 0 ? { route_ids: routeIds } : {}),

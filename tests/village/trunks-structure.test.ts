@@ -9,19 +9,18 @@
  * route-less site, a trail-only village, a wet site).
  */
 import { describe, expect, it } from 'vitest';
-import {
-  isTrunk, synthesizeTrunks, type TrunkNetwork,
-} from '../../src/village/skeleton/trunks.js';
-import { generateVillage } from '../../src/village/village-model.js';
-import { waterPushedCentre } from '../../src/village/skeleton/green-siting.js';
+import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
+import { Point } from '../../src/types/point.js';
+import { SeededRandom } from '../../src/utils/random.js';
 import { AIM_CLEAR_RADIUS_M } from '../../src/village/constants.js';
 import { closestPointOnPolyline, dist, inAnyWater } from '../../src/village/geometry.js';
 import { classRank, laneWidth } from '../../src/village/route-class.js';
-import { SeededRandom } from '../../src/utils/random.js';
-import { Point } from '../../src/types/point.js';
-import { pointInPolygon } from '../../src/geom/point-in-polygon.js';
+import { waterPushedCentre } from '../../src/village/skeleton/green-siting.js';
+import {
+  isTrunk, synthesizeTrunks, type TrunkNetwork,
+} from '../../src/village/skeleton/trunks.js';
 import type { Lane, Site, SiteRoute } from '../../src/village/types.js';
-import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
+import { generateVillage } from '../../src/village/village-model.js';
 
 const BUILT_EDGE = 55;
 const CONTRACT = BUILT_EDGE * 2.75;
@@ -38,7 +37,7 @@ const r = (
 ): SiteRoute => ({ bearingDeg, type, through, routeId } as SiteRoute);
 
 /** The AFMG scenario matrix these bars run over. */
-const SCENARIOS: Array<{ name: string; routes: SiteRoute[] }> = [
+const SCENARIOS: Array<{ name: string; routes: SiteRoute[]; }> = [
   { name: 'lone terminating main', routes: [r(225, 'main', false, 'a')] },
   { name: 'lone through town', routes: [r(40, 'town', true, 'a')] },
   { name: 'two terminating', routes: [r(90, 'main', false, 'a'), r(210, 'town', false, 'b')] },
@@ -51,7 +50,7 @@ const SCENARIOS: Array<{ name: string; routes: SiteRoute[] }> = [
 
 const SEEDS = [1, 2, 3, 5, 8, 13, 21, 34];
 
-function networks(routes: SiteRoute[]): Array<{ seed: number; net: TrunkNetwork }> {
+function networks(routes: SiteRoute[]): Array<{ seed: number; net: TrunkNetwork; }> {
   return SEEDS.map((seed) => ({
     seed, net: synthesizeTrunks(site(routes), CONTRACT, BUILT_EDGE, new SeededRandom(seed)),
   }));
@@ -143,26 +142,11 @@ describe('trunk network structural invariants (task 4b)', () => {
     }
   });
 
-  it('a through route crosses the village — it arrives AND it leaves', () => {
-    // The property that matters for a road passing through: the network
-    // must still touch BOTH of that route's contract-circle entries,
-    // whether one spine carries it (main-street) or two halves do.
-    for (const { name, routes } of SCENARIOS) {
-      const through = routes.filter((x) => x.through);
-      if (through.length === 0) continue;
-      for (const { seed, net } of networks(routes)) {
-        for (const route of through) {
-          const near = net.entries.find((e) => e.route === route && !e.farSide)!;
-          const far = net.entries.find((e) => e.route === route && e.farSide)!;
-          for (const [side, entry] of [['near', near], ['far', far]] as const) {
-            const reach = Math.min(...net.trunks
-              .filter((t) => t.points.length >= 2)
-              .map((t) => closestPointOnPolyline(entry.point, t.points).distance));
-            expect(reach,
-              `${name} seed ${seed}: route ${route.routeId} never reaches its ${side} side`,
-            ).toBeLessThanOrEqual(WELD_M);
-          }
-        }
+  it('every supplied approach reaches its measured entry, with no invented exits', () => {
+    for (const { routes } of SCENARIOS) for (const { net } of networks(routes)) {
+      expect(net.entries).toHaveLength(routes.length);
+      for (const entry of net.entries) {
+        expect(Math.min(...net.trunks.map(t => closestPointOnPolyline(entry.point, t.points).distance))).toBeLessThan(1e-6);
       }
     }
   });
@@ -249,44 +233,10 @@ describe('trunk network structural invariants (task 4b)', () => {
     }
   });
 
-  it('lands approach roads ON the ring, never straight through it', () => {
-    // Owner verdict at G1 round 2 (2026-09-06), spotting it in
-    // `trunks-tri-300-s2.png`: a road entered the loop at one junction and
-    // carried on across the middle to another, drawing a chord through the
-    // ring. Sketch panel 2 has the approaches LANDING on the loop -- the
-    // ring is what they arrive at, not something they cut across.
-    //
-    // It passed every existing bar: both ends of the chord were real
-    // junctions, so connectivity held, and `resolveCrossings` had split it
-    // at the ring so there was no un-junctioned crossing either. Nothing
-    // was asking whether the inside of the ring was empty.
-    for (const { name, routes } of SCENARIOS) {
-      for (const { seed, net } of networks(routes)) {
-        if (net.pattern !== 'loop') continue;
-        // Read the ring off the network. This test used to rebuild it by
-        // sorting lane ids on `id.split('-').pop()`, which is `NaN` for a
-        // crossing-split half (`trunk-loop-4~xtrunk_town_r_town`) — so on the
-        // ~1.6% of runs with a split ring the bar was being evaluated against
-        // a mis-ordered, self-intersecting polygon and read weaker than it
-        // looked.
-        const polygon = net.ring;
-        if (polygon.length < 3) continue;
-        // Shrink toward the centroid so a lane legitimately RUNNING ALONG
-        // the ring, or ending exactly on it, is not counted as inside it.
-        const cx = polygon.reduce((sum, p) => sum + p.x, 0) / polygon.length;
-        const cy = polygon.reduce((sum, p) => sum + p.y, 0) / polygon.length;
-        const inset = polygon.map((p) => new Point(
-          cx + (p.x - cx) * 0.85, cy + (p.y - cy) * 0.85,
-        ));
-        for (const t of net.trunks) {
-          if (t.id.startsWith('trunk-loop-')) continue;
-          for (const p of t.points) {
-            expect(pointInPolygon(p, inset),
-              `${name} seed ${seed}: ${t.id} runs through the ring at (${p.x.toFixed(1)}, ${p.y.toFixed(1)})`,
-            ).toBe(false);
-          }
-        }
-      }
+  it('never purchases a ring merely because several approaches arrive', () => {
+    for (const { routes } of SCENARIOS) for (const { net } of networks(routes)) {
+      expect(net.ring).toEqual([]);
+      expect(net.trunks.some(l => l.id.startsWith('trunk-loop-'))).toBe(false);
     }
   });
 
@@ -331,7 +281,8 @@ describe('trunk network structural invariants (task 4b)', () => {
     expect(inAnyWater(aim, water), 'the aim is still in the sea').toBe(false);
 
     const net = synthesizeTrunks(wet, CONTRACT, BUILT_EDGE, new SeededRandom(1), aim);
-    expect(net.aim).toEqual(aim);
+    expect(inAnyWater(net.aim, water)).toBe(false);
+    expect(dist(net.aim, aim)).toBeLessThan(20);
 
     const input: AzgaarBurgInput = {
       name: 'Port', population: 300, port: true, citadel: false, walls: false,

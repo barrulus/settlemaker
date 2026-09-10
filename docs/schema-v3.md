@@ -34,6 +34,19 @@ Consumers should treat IDs as **opaque** but may rely on them as primary keys fo
 
 Each `layer: 'street'` feature has exactly one `street_id`. IDs are **never shared** across features. Branches produce separate features with separate IDs. Crossings are geometric intersections only — no shared identity, no junction object. Streets stay flat LineStrings; no graph/node/edge model at the contract level.
 
+### Village route roles
+
+Village street features optionally include `route_role`: `approach` for the
+external FMG road, `street` for its village continuation or a residential lane,
+and `through` for a major road retained through a small roadside hamlet.
+`streetType` is the class of the **drawn segment**: an incoming royal road may
+continue as town streets inside the village. Internal streets use `town`,
+`local`, or `footpath`; the hamlet exception retains royal/main/market.
+`route_ids` preserves the supplied route provenance on required continuations
+and shared segments. A route ID can occur on both independently measured
+approaches and on several shared streets; it is not a street's unique ID.
+These optional properties do not change the schema version or city output.
+
 ### Village road cross-sections
 
 Village street features retain `width_m` as the reserved road corridor in metres.

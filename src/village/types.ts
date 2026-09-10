@@ -42,6 +42,8 @@ export interface Green {
 }
 
 export interface Lane {
+  /** Classification changes at the village edge; required connectivity is separate. */
+  routeRole?: 'approach' | 'street' | 'through';
   id: string;
   type: RouteType;
   /** Metres. Ordered from the green outward. */
@@ -53,19 +55,9 @@ export interface Lane {
   /** Ground between corridor edge and lot frontage. */
   setbackM?: number;
   parentId?: string;
-  /**
-   * Trunks task 5: `INCOMING_ARM_MERGE_DEG`/`mergeIncomingRoutes` (Task 3's
-   * boundary-level near-duplicate merge) retired with `buildArms` — the
-   * trunk network never merges at the boundary at all (spec 5.1: every
-   * route always gets its own contract-circle entry), so this field is now
-   * set only when `mergeTrunks`/`applyMainStreet` (spec 5.2) folds a lesser
-   * trunk into a greater one deeper in, or joins a through pair into one
-   * spine: the `routeId` (or, absent that, the bearing) of every FMG route
-   * that ended up represented by this one lane, sorted lexically for a
-   * deterministic read. Cheap provenance for a future GeoJSON `route_id`
-   * echo; absent on every lane that never merged, including an unmerged
-   * single-route trunk.
-   */
+  /** Supplied route IDs carried by this segment, sorted and deduplicated.
+   * Several approaches may share a street; a route can span several streets
+   * with different internal classes. Missing IDs use a stable bearing key. */
   sourceRouteIds?: string[];
 }
 

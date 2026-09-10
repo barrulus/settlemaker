@@ -111,9 +111,7 @@ describe('spec 5.6 structural invariants, on the shipped model', () => {
     each((m, label, roads) => {
       const trunks = m.lanes.filter((l) => isTrunk(l.id) && l.points.length >= 2);
       for (const road of roads as Array<{ bearing_deg: number; route_id?: string; through?: boolean }>) {
-        const wanted = road.through
-          ? [road.bearing_deg, (road.bearing_deg + 180) % 360]
-          : [road.bearing_deg];
+        const wanted = [road.bearing_deg];
         for (const bearingDeg of wanted) {
           const rad = (bearingDeg * Math.PI) / 180;
           const at = new Point(

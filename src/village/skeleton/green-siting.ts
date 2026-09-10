@@ -260,10 +260,11 @@ export function siteGreenOnNetwork(
   const junction = network.junctions.filter(j => j.laneIds.length >= 3
     && dist(j.position, network.aim) <= builtRadiusM)
     .sort((a, b) => dist(a.position, network.aim) - dist(b.position, network.aim))[0];
-  let relation: GreenRelation = through ? 'astride' : 'terminal';
-  let centre = through && spine ? anchorOn(spine, network.aim, builtRadiusM, rng)
+  const actualThrough = network.pattern === 'main-street';
+  let relation: GreenRelation = actualThrough ? 'astride' : 'terminal';
+  let centre = actualThrough && spine ? anchorOn(spine, network.aim, builtRadiusM, rng)
     : junction ? junction.position : network.aim;
-  if (!through && junction) relation = 'astride';
+  if (!actualThrough && junction) relation = 'astride';
 
   const pushed = waterPushedCentre(centre, clearRadius, site.water);
   centre = pushed.centre;

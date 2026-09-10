@@ -60,7 +60,7 @@ export function fromLegacyKind(k: LegacyRouteKind): RouteType | RouteGroup {
  * type must not leak new classes into consumers that compare against the
  * old three, or a trail silently gets a road's weight.
  */
-export function toLegacyKind(k: LegacyRouteKind | RouteType | RouteGroup | undefined): LegacyRouteKind | undefined {
+export function toLegacyKind(k: LegacyRouteKind | RouteType | RouteGroup | 'roads' | 'trails' | undefined): LegacyRouteKind | undefined {
   if (k === undefined) return undefined;
   if (k === 'road' || k === 'foot' || k === 'sea') return k;
   // Special groups: searoutes → 'sea', airroutes and traderoutes → undefined

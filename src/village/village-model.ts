@@ -138,7 +138,7 @@ export function generateVillage(
   const profileRng = new SeededRandom(seed * PROFILE_SEED_MULTIPLIER + PROFILE_SEED_OFFSET);
   const discProfile = buildRadiusProfile({
     centre: green.centre, radiusM: cappedRadiusM,
-    trunkBearingsDeg: site.routes.flatMap(r => r.through ? [r.bearingDeg, (r.bearingDeg + 180) % 360] : [r.bearingDeg]),
+    trunkBearingsDeg: site.routes.map(r => r.bearingDeg),
     water: site.water, rng: profileRng,
   });
   let lotProfile = discProfile;

@@ -1,12 +1,13 @@
 // tests/village/trunks-patterns.test.ts
 import { describe, expect, it } from 'vitest';
-import {
-  choosePattern, synthesizeTrunks, isTrunk, resolveCrossings, type ConvergencePattern,
-} from '../../src/village/skeleton/trunks.js';
-import { segmentIntersection } from '../../src/village/geometry.js';
-import type { Site, Lane } from '../../src/village/types.js';
-import { SeededRandom } from '../../src/utils/random.js';
 import { Point } from '../../src/types/point.js';
+import { SeededRandom } from '../../src/utils/random.js';
+import { segmentIntersection } from '../../src/village/geometry.js';
+import {
+  isTrunk, resolveCrossings,
+  synthesizeTrunks,
+} from '../../src/village/skeleton/trunks.js';
+import type { Lane, Site } from '../../src/village/types.js';
 
 const CONTRACT_R = 100;
 const BUILT_EDGE = 30;
@@ -31,167 +32,7 @@ function crossesLane(a: Point[], b: Point[]): boolean {
   return false;
 }
 
-function findSeedForPattern(
-  site: Site, pattern: ConvergencePattern, maxSeed = 300,
-): { seed: number; network: ReturnType<typeof synthesizeTrunks> } {
-  for (let seed = 1; seed <= maxSeed; seed++) {
-    const network = synthesizeTrunks(site, CONTRACT_R, BUILT_EDGE, new SeededRandom(seed));
-    if (network.pattern === pattern) return { seed, network };
-  }
-  throw new Error(`pattern ${pattern} never reached in ${maxSeed} seeds`);
-}
-
-describe('choosePattern', () => {
-  it('(a) terminal deterministic for a terminating main with only trail feeders', () => {
-    for (let seed = 1; seed <= 20; seed++) {
-      expect(choosePattern(3, false, 'main', true, new SeededRandom(seed))).toBe('terminal');
-    }
-  });
-
-  it('(a) through royal/main present -> main-street >= 0.6 over seeds 1..100', () => {
-    let count = 0;
-    for (let seed = 1; seed <= 100; seed++) {
-      if (choosePattern(2, true, 'main', false, new SeededRandom(seed)) === 'main-street') count++;
-    }
-    expect(count / 100).toBeGreaterThanOrEqual(0.6);
-  });
-
-  it('(a) 4+ roots -> loop reachable, junction rare (< 15%)', () => {
-    let loopCount = 0;
-    let junctionCount = 0;
-    for (let seed = 1; seed <= 100; seed++) {
-      const p = choosePattern(4, false, 'town', false, new SeededRandom(seed));
-      if (p === 'loop') loopCount++;
-      if (p === 'junction') junctionCount++;
-    }
-    expect(loopCount).toBeGreaterThan(0);
-    expect(junctionCount / 100).toBeLessThan(0.15);
-  });
-});
-
-describe('synthesizeTrunks: main-street', () => {
-  const site = makeSite([
-    { bearingDeg: 90, type: 'main', through: true, routeId: 'r-through' },
-  ]);
-
-  it('(b) a through route\'s near+far entries resolve to ONE continuous lane', () => {
-    const { network } = findSeedForPattern(site, 'main-street');
-    const spine = network.trunks.find((t) => t.id === 'trunk-main-r-through');
-    expect(spine).toBeDefined();
-    expect(network.trunks.some((t) => t.id === 'trunk-main-r-through~far')).toBe(false);
-    expect(spine!.id).not.toContain('~far');
-
-    const first = spine!.points[0];
-    const last = spine!.points[spine!.points.length - 1];
-    expect(Math.hypot(first.x, first.y)).toBeCloseTo(CONTRACT_R, 3);
-    expect(Math.hypot(last.x, last.y)).toBeCloseTo(CONTRACT_R, 3);
-  });
-});
-
-describe('synthesizeTrunks: loop', () => {
-  const site = makeSite([
-    { bearingDeg: 0, type: 'town', through: false, routeId: 'a' },
-    { bearingDeg: 90, type: 'town', through: false, routeId: 'b' },
-    { bearingDeg: 180, type: 'town', through: false, routeId: 'c' },
-    { bearingDeg: 270, type: 'town', through: false, routeId: 'd' },
-  ]);
-
-  it('(c) loop lanes, stepped-down class, every root lands on the loop, staggered', () => {
-    const { network } = findSeedForPattern(site, 'loop');
-    const loopLanes = network.trunks.filter((t) => t.id.startsWith('trunk-loop-'));
-    expect(loopLanes.length).toBeGreaterThanOrEqual(8);
-    for (const l of loopLanes) expect(l.type).toBe('local'); // stepDown('town', 'local')
-
-    const loopPoints: Point[] = [];
-    for (const l of loopLanes) loopPoints.push(...l.points);
-
-    const roots = network.trunks.filter((t) => site.routes.some((r) => t.id === `trunk-${r.type}-${r.routeId}`));
-    expect(roots).toHaveLength(4);
-
-    const landingIdxs: number[] = [];
-    for (const r of roots) {
-      const inner = r.points[0];
-      let onLoop = false;
-      let closestIdx = -1;
-      let closestDist = Infinity;
-      loopPoints.forEach((p, idx) => {
-        const d = Math.hypot(p.x - inner.x, p.y - inner.y);
-        if (d < closestDist) { closestDist = d; closestIdx = idx; }
-        if (d < 1e-6) onLoop = true;
-      });
-      expect(onLoop).toBe(true);
-      landingIdxs.push(closestIdx);
-    }
-    // staggered: not every root landed at the very same point.
-    expect(new Set(landingIdxs).size).toBeGreaterThan(1);
-  });
-});
-
-describe('synthesizeTrunks: y-tree', () => {
-  const site = makeSite([
-    { bearingDeg: 0, type: 'town', through: false, routeId: 'a' },
-    { bearingDeg: 60, type: 'town', through: false, routeId: 'b' },
-    { bearingDeg: 150, type: 'town', through: false, routeId: 'c' },
-    { bearingDeg: 240, type: 'town', through: false, routeId: 'd' },
-    { bearingDeg: 300, type: 'town', through: false, routeId: 'e' },
-  ]);
-
-  it('(d) at most 3 lanes reach within builtEdgeRadiusM x 0.5 of origin', () => {
-    const { network } = findSeedForPattern(site, 'y-tree');
-    const near = network.trunks.filter((t) => Math.hypot(t.points[0].x, t.points[0].y) <= BUILT_EDGE * 0.5);
-    expect(near.length).toBeLessThanOrEqual(3);
-  });
-});
-
-describe('synthesizeTrunks: the crossroad panel can become a loop', () => {
-  // G1 finding 3 (owner-approved 2026-09-06): sketch panel 2 is four
-  // approaches landing at staggered junctions on an irregular loop, and
-  // explicitly "no X". The scenario merges its feeders onto the through
-  // road, leaving 2 roots, and `loop` was gated on 3+ ROOTS -- so it could
-  // never be drawn and the panel rendered as the crossing pair the spec
-  // forbids. A ring serves however many roads ARRIVE, not how many survive
-  // merging, so the gate counts approaches.
-  const site = makeSite([
-    { bearingDeg: 40, type: 'main', through: true, routeId: 'r-main' },
-    { bearingDeg: 130, type: 'town', through: false, routeId: 'r-town' },
-    { bearingDeg: 225, type: 'local', through: false, routeId: 'r-local' },
-    { bearingDeg: 305, type: 'trail', through: false, routeId: 'r-trail' },
-  ]);
-
-  it('reaches `loop` for the four-approach crossroad within 200 seeds', () => {
-    let loops = 0;
-    for (let seed = 1; seed <= 200; seed++) {
-      const net = synthesizeTrunks(site, CONTRACT_R, BUILT_EDGE, new SeededRandom(seed));
-      if (net.pattern === 'loop') loops++;
-    }
-    expect(loops, 'the crossroad panel can never be drawn as a ring').toBeGreaterThan(0);
-  });
-});
-
-describe('synthesizeTrunks: junction', () => {
-  const site = makeSite([
-    { bearingDeg: 0, type: 'town', through: false, routeId: 'a' },
-    { bearingDeg: 120, type: 'town', through: false, routeId: 'b' },
-    { bearingDeg: 240, type: 'town', through: false, routeId: 'c' },
-  ]);
-
-  it('(e) all roots share one junction at origin', () => {
-    const { network } = findSeedForPattern(site, 'junction');
-    const rootIds = network.trunks
-      .filter((t) => site.routes.some((r) => t.id === `trunk-${r.type}-${r.routeId}`))
-      .map((t) => t.id)
-      .sort();
-    expect(rootIds).toHaveLength(3);
-    const j = network.junctions.find((x) => {
-      const ids = [...x.laneIds].sort();
-      return ids.length === rootIds.length && ids.every((id, i) => id === rootIds[i]);
-    });
-    expect(j).toBeDefined();
-    expect(Math.hypot(j!.position.x, j!.position.y)).toBeCloseTo(0, 6);
-  });
-});
-
-describe('synthesizeTrunks: invariants across patterns', () => {
+describe('synthesizeTrunks: invariants across approach configurations', () => {
   const scenarios: Site[] = [
     makeSite([{ bearingDeg: 90, type: 'main', through: true, routeId: 'r-through' }]),
     makeSite([

@@ -1,3 +1,4 @@
+import type { RouteType } from '../../src/village/route-class.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 
 export interface RoadFixture { id: string; input: AzgaarBurgInput; seed: number; }
@@ -9,10 +10,34 @@ export function roadFixture(population: number, overrides: Partial<AzgaarBurgInp
   };
 }
 export const roadReviewFixtures: RoadFixture[] = [
+  ...[
+    ['offset-three', 80, [18, 142, 267]],
+    ['offset-four', 150, [12, 102, 207, 288]],
+    ['offset-five', 300, [23, 81, 167, 236, 310]],
+    ['offset-six', 600, [4, 73, 139, 196, 248, 327]],
+    ['same-side', 150, [22, 57, 104]],
+    ['close-fan', 300, [90, 90.5, 91.2, 145, 233, 312]],
+    ['bent-through', 300, [46, 193]],
+    ['hamlet-royal', 40, [36, 209]],
+    ['hamlet-market', 80, [83, 244]],
+    ['village-royal', 300, [36, 209]],
+    ['seven-classes', 300, [13, 66, 124, 171, 227, 281, 337]],
+  ].map(([id, population, bearings]) => ({
+    id: String(id), seed: 7,
+    input: roadFixture(Number(population), {
+      roadBearings: (bearings as number[]).map((bearing_deg, i) => ({
+        bearing_deg, route_id: String(id).includes('hamlet') || id === 'village-royal' || id === 'bent-through' ? 'continuing' : `r-${i}`,
+        kind: (id === 'hamlet-market' ? 'market' : String(id).includes('royal') ? 'royal'
+          : id === 'seven-classes' ? ['royal', 'main', 'market', 'town', 'local', 'trail', 'footpath'][i]
+            : ['main', 'town', 'local', 'footpath', 'town', 'local'][i]) as RouteType,
+      })),
+    }),
+  })),
+
   ...[40, 80, 119, 120, 150, 300, 600, 900].flatMap(population =>
     [1, 2, 3].map(seed => ({ id: `p${population}-s${seed}`, input: roadFixture(population), seed }))),
   ...[
-    ['class-joins', { roadBearings: [{ bearing_deg: 45, kind: 'royal', through: true }, { bearing_deg: 190, kind: 'town' }, { bearing_deg: 270, kind: 'footpath' }] }],
+    ['class-joins', { roadBearings: [{ bearing_deg: 45, kind: 'royal', through: true, route_id: 'royal' }, { bearing_deg: 218, kind: 'royal', through: true, route_id: 'royal' }, { bearing_deg: 190, kind: 'town' }, { bearing_deg: 270, kind: 'footpath' }] }],
     ['headland', {
       port: true, coastlineGeometry: [[
         { x: 38, y: -500 }, { x: 32, y: -120 }, { x: 70, y: -55 }, { x: 120, y: -10 },
@@ -27,7 +52,7 @@ export const roadReviewFixtures: RoadFixture[] = [
       ]]
     }],
     ['meander', {
-      roadBearings: [{ bearing_deg: 90, kind: 'main', through: true }],
+      roadBearings: [{ bearing_deg: 90, kind: 'main', through: true, route_id: 'cross' }, { bearing_deg: 256, kind: 'main', through: true, route_id: 'cross' }],
       coastlineGeometry: [[
         ...Array.from({ length: 61 }, (_, i) => ({ x: 35 + 26 * Math.sin((i - 30) / 5) - 4, y: (i - 30) * 12 })),
         ...Array.from({ length: 61 }, (_, i) => ({ x: 35 + 26 * Math.sin((30 - i) / 5) + 4, y: (30 - i) * 12 })),
@@ -38,7 +63,7 @@ export const roadReviewFixtures: RoadFixture[] = [
     id: wet ? 'brook' : 'brook-dry', seed: 3,
     input: roadFixture(300, {
       name: 'Brook',
-      roadBearings: [{ bearing_deg: 135, kind: 'main', through: true, route_id: 'r-cross' }],
+      roadBearings: [{ bearing_deg: 135, kind: 'main', through: true, route_id: 'r-cross' }, { bearing_deg: 305, kind: 'main', through: true, route_id: 'r-cross' }],
       ...(wet ? {
         coastlineGeometry: [[
           { x: -900, y: -898 }, { x: 900, y: 902 }, { x: 900, y: 906 }, { x: -900, y: -894 },
@@ -52,7 +77,7 @@ export const roadReviewFixtures: RoadFixture[] = [
     ['trail', 40, { roadBearings: [{ bearing_deg: 225, kind: 'trail' }] }],
     ['local', 80, { roadBearings: [{ bearing_deg: 225, kind: 'local' }] }],
     ['royal', 40, { roadBearings: [{ bearing_deg: 225, kind: 'royal' }] }],
-    ['through', 300, { roadBearings: [{ bearing_deg: 30, kind: 'main', through: true }] }],
+    ['through', 300, { roadBearings: [{ bearing_deg: 30, kind: 'main', through: true, route_id: 'through' }, { bearing_deg: 222, kind: 'main', through: true, route_id: 'through' }] }],
     ['tri', 900, { roadBearings: [0, 120, 240] }],
     ['close', 150, { roadBearings: [0, 15, 180] }],
     ['coast', 300, { port: true, oceanBearing: 90 }],

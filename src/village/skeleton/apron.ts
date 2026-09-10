@@ -742,6 +742,7 @@ export function growAprons(
       // any lane that has one, and the apron IS the road that leaves the
       // village now, so it is the road the field ring must open for.
       ...(lane.sourceRouteIds ? { sourceRouteIds: lane.sourceRouteIds } : {}),
+      ...(lane.routeRole ? { routeRole: 'approach' as const } : {}),
     });
   }
   return { lanes: out, junctions, diagnostics };

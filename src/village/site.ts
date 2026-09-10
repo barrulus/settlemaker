@@ -1,7 +1,7 @@
 import { Point } from '../types/point.js';
 import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import type { Site, SiteRoute } from './types.js';
-import { ROUTE_CLASS_ORDER, fromLegacyKind, type RouteType } from './route-class.js';
+import { fromLegacyKind, toLegacyKind, type RouteType, ROUTE_CLASS_ORDER } from './route-class.js';
 import { bearingVector } from './geometry.js';
 import { normaliseVillageBiome } from './theme.js';
 import { SeededRandom } from '../utils/random.js';
@@ -196,15 +196,17 @@ export function buildSite(input: AzgaarBurgInput, seed = 0): Site {
   const routes: SiteRoute[] = (input.roadBearings ?? [])
     .map((b): SiteRoute | null => {
       if (typeof b === 'number') {
-        return { bearingDeg: b, type: 'main' as RouteType, through: false,
-          routeId: undefined, followsRiver: undefined, relief: undefined };
+        return {
+          bearingDeg: b, type: 'main' as RouteType, through: false,
+          routeId: undefined, followsRiver: undefined, relief: undefined
+        };
       }
       // A caller on the widened contract sends a real class; a legacy caller
       // sends road|foot|sea, which is widened, never rejected.
       const raw = b.kind as string | undefined;
       const typeOrGroup = (raw && LAND_CLASSES.has(raw))
         ? (raw as RouteType)
-        : fromLegacyKind((raw as 'road' | 'foot' | 'sea') ?? 'road');
+        : fromLegacyKind(toLegacyKind(b.kind ?? (b.group === 'trails' ? 'foot' : 'road')) ?? 'foot');
 
       // R6: Drop sea routes entirely. fromLegacyKind('sea') returns 'searoutes',
       // which is a route group, not a land class. Sea routes must not appear in
