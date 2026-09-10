@@ -6,8 +6,8 @@ settlemaker-rendered settlement without touching this repository. It is
 self-contained: everything you need to build a working link is either quoted
 verbatim below or copy-paste runnable.
 
-**Release:** 2.4.0 (2026-09-10). URL payload version stays `1`; GeoJSON schema
-version stays `4`. See [release and FMG handoff notes](releases/2.4.0.md).
+**Release:** 2.5.0 (2026-09-10). URL payload version stays `1`; GeoJSON schema
+version stays `4`. See [release and integration notes](releases/2.5.0.md).
 
 ## 1. Overview
 

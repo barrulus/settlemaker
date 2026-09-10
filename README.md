@@ -128,8 +128,8 @@ Villages are themed by biome — `villageThemeFor(biome)` selects the ground,
 vegetation and dwelling glyphs. The review gallery includes desert and tundra
 examples, with native snowy dwelling artwork for tundra villages.
 
-See the [2.4.0 release notes](docs/releases/2.4.0.md) for the FMG adapter
-handoff and settlemaker-web submodule update.
+See the [2.5.0 release notes](docs/releases/2.5.0.md) for city layouts, capacity
+accounting and the settlemaker-web submodule update.
 
 ### Port cities
 
