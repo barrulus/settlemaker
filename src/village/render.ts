@@ -1,3 +1,4 @@
+import { waterFillRings, waterBoundaryPaths } from './water-boundary.js';
 import { REFINED_GLYPHS } from '../assets/refined-glyphs.js';
 import type { Point } from '../types/point.js';
 import { FURROW_PATTERN_STEP_DEG } from './constants.js';
@@ -324,7 +325,12 @@ export function renderVillage(
     out.push(`<defs><clipPath id="v-water-clip">`
       + `<rect width="${n(w)}" height="${n(h)}"/></clipPath></defs>`);
     out.push('<g data-band="water" clip-path="url(#v-water-clip)">');
-    waterPolys.forEach((poly, i) => {
+    const union = waterFillRings(model.site.water);
+    if (union) {
+      out.push(`<path data-water="union" d="${union.map(r => polygonPath(r, X, Y)).join(' ')}" fill="${theme.water}" fill-rule="evenodd" stroke="none"/>`);
+      const shore = waterBoundaryPaths(model.site.water).map(r => r.map((p, i) => `${i ? 'L' : 'M'}${n(X(p.x))},${n(Y(p.y))}`).join(' ')).join(' ');
+      out.push(`<path data-shore="union" d="${shore}" fill="none" stroke="${theme.waterEdge}" stroke-width="${n(SHORE_WIDTH_M * pxPerMetre)}" stroke-linejoin="round"/>`);
+    } else waterPolys.forEach((poly, i) => {
       out.push(
         `<path data-water="w${i}" d="${polygonPath(poly, X, Y)}" fill="${theme.water}" `
         + `stroke="${theme.waterEdge}" stroke-width="${n(SHORE_WIDTH_M * pxPerMetre)}" `

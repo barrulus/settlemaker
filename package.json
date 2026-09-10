@@ -32,5 +32,8 @@
   "files": [
     "dist",
     "NOTICE"
-  ]
+  ],
+  "dependencies": {
+    "polygon-clipping": "^0.15.7"
+  }
 }

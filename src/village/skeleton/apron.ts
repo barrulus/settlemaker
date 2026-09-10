@@ -1,3 +1,4 @@
+import { waterBoundaryPaths, assertWaterQuery } from '../water-boundary.js';
 /**
  * The APRON (spec 2026-09-07 §5): a trunk's continuation past its contract
  * entry, out to the edge of the drawn tile.
@@ -187,8 +188,8 @@ function firstShoreHit(points: Point[], water: Point[][]): ShoreHit | null {
     // Every ring edge this segment crosses, in order along the segment, so
     // the outcome cannot depend on the order the rings arrived in.
     const hits: Array<{ point: Point; ring: Point[]; edge: number; d: number }> = [];
-    for (const ring of water) {
-      for (let j = 0; j < ring.length; j++) {
+    for (const ring of waterBoundaryPaths(water)) {
+      for (let j = 0; j < ring.length - 1; j++) {
         const p = segmentIntersection(a, b, ring[j], ring[(j + 1) % ring.length]);
         if (p) hits.push({ point: p, ring, edge: j, d: dist(a, p) });
       }
@@ -222,10 +223,11 @@ function firstShoreHit(points: Point[], water: Point[][]): ShoreHit | null {
  * follows the coast from there.
  */
 function nearestShore(p: Point, water: Point[][]): ShoreHit | null {
+  assertWaterQuery(water, p);
   let best: ShoreHit | null = null;
   let bestD = Infinity;
-  for (const ring of water) {
-    for (let j = 0; j < ring.length; j++) {
+  for (const ring of waterBoundaryPaths(water)) {
+    for (let j = 0; j < ring.length - 1; j++) {
       const q = closestPointOnSegment(p, ring[j], ring[(j + 1) % ring.length]);
       const d = dist(p, q);
       if (d < bestD) {
@@ -258,7 +260,8 @@ const RAW_WALK_ALLOWANCE = 4;
 function shoreWalk(
   from: Point, ring: Point[], edge: number, direction: 1 | -1, maxRunM: number,
 ): Point[] {
-  const n = ring.length;
+  const closed = dist(ring[0], ring.at(-1)!) < 1e-7;
+  const n = closed ? ring.length - 1 : ring.length;
   const at = (i: number): number => ((i % n) + n) % n;
   // Forward from edge j the next waterline vertex is ring[j + 1]; backward
   // it is ring[j] itself, the edge's own near end.
@@ -266,7 +269,9 @@ function shoreWalk(
   const walk: Point[] = [from];
   let runM = 0;
   for (let k = 0; k < n && runM < maxRunM; k++) {
-    const v = ring[at(first + direction * k)];
+    const index = first + direction * k;
+    if (!closed && (index < 0 || index >= n)) break;
+    const v = ring[at(index)];
     const step = dist(walk[walk.length - 1], v);
     if (step === 0) continue;
     runM += step;

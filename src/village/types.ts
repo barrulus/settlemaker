@@ -1,3 +1,4 @@
+import type { WaterContextResult } from '../input/water-context.js';
 import { Point } from '../types/point.js';
 import type { RouteType } from './route-class.js';
 // Type-only: erased at compile time, so this does not create a runtime
@@ -21,6 +22,8 @@ export interface SiteRoute {
 
 /** Pass 1 output. Everything in metres, origin at the burg centre. */
 export interface Site {
+  waterContextResult?: WaterContextResult;
+  surveyRadiusM?: number;
   population: number;
   biome: string;
   routes: SiteRoute[];

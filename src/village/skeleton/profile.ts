@@ -1,3 +1,4 @@
+import { assertWaterQuery } from '../water-boundary.js';
 import { Point } from '../../types/point.js';
 import { SeededRandom } from '../../utils/random.js';
 import { bearingVector, inAnyWater, wrapDeg } from '../geometry.js';
@@ -156,6 +157,7 @@ export interface ProfileInput {
  * solved because `water` is an arbitrary set of rings.
  */
 function waterDistanceM(input: ProfileInput, bearingDeg: number): number {
+  assertWaterQuery(input.water, input.centre, input.radiusM * PROFILE_WATER_REACH_RATIO + NARROW_WATER_PROBE_M);
   if (input.water.length === 0) return Infinity;
   const dir = bearingVector(bearingDeg);
   const reach = input.radiusM * PROFILE_WATER_REACH_RATIO;

@@ -1,3 +1,4 @@
+import { waterBoundaryPaths, assertWaterQuery, assertWaterRingQuery } from '../water-boundary.js';
 import { Point } from '../../types/point.js';
 import { pointInPolygon } from '../../geom/point-in-polygon.js';
 import { SeededRandom } from '../../utils/random.js';
@@ -124,6 +125,7 @@ function closestPointOnObb(p: Point, obb: Obb): Point {
 /** True when the disc of `radius` around `centre` intersects the (closed)
  * polygon -- containment OR an edge closer than `radius`. */
 export function circleIntersectsPolygon(centre: Point, radius: number, polygon: Point[]): boolean {
+  assertWaterRingQuery(polygon, centre, radius);
   if (polygon.length < 2) return false;
   if (pointInPolygon(centre, polygon)) return true;
   for (let i = 0; i < polygon.length; i++) {
@@ -208,11 +210,12 @@ interface ShorePoint { ring: Point[]; acc: number[]; s: number; point: Point; di
  * position along that ring (ring closed by re-appending its first point). */
 function nearestShorePoint(centre: Point, water: Point[][]): ShorePoint | null {
   let best: ShorePoint | null = null;
-  for (const ring of water) {
+  assertWaterQuery(water, centre);
+  for (const ring of waterBoundaryPaths(water)) {
     if (ring.length < 2) continue;
-    const closed = [...ring, ring[0]];
+    const closed = ring;
     const acc = arcLengths(closed);
-    for (let i = 0; i < ring.length; i++) {
+    for (let i = 0; i < ring.length - 1; i++) {
       const a = closed[i];
       const b = closed[i + 1];
       const q = closestPointOnSegment(centre, a, b);
@@ -300,7 +303,7 @@ export function placeBoathouse(
   const inlandOffset = d / 2 - d * BOATHOUSE_OVERHANG_SHARE;
 
   const total = nearest.acc[nearest.acc.length - 1];
-  const closedRing = [...nearest.ring, nearest.ring[0]];
+  const closedRing = nearest.ring;
 
   for (const off of slideOffsets(BOATHOUSE_SLIDE_RANGE_M, BOATHOUSE_SLIDE_STEP_M)) {
     const s = nearest.s + off;

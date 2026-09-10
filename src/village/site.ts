@@ -1,3 +1,4 @@
+import { prepareMeasuredInput, checkMeasuredWater } from './water-context.js';
 import { Point } from '../types/point.js';
 import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import type { Site, SiteRoute } from './types.js';
@@ -198,6 +199,9 @@ function oceanBearingFallback(input: AzgaarBurgInput, seed: number): Point[][] {
  * before roads and housing use the resulting water geometry.
  */
 export function buildSite(input: AzgaarBurgInput, seed = 0): Site {
+  const original = input;
+  const prepared = prepareMeasuredInput(input);
+  input = prepared.input;
   const routes: SiteRoute[] = (input.roadBearings ?? [])
     .map((b): SiteRoute | null => {
       if (typeof b === 'number') {
@@ -236,7 +240,10 @@ export function buildSite(input: AzgaarBurgInput, seed = 0): Site {
     .map((ring) => ring.map((p) => new Point(p.x, p.y)))
     .concat(oceanBearingFallback(input, seed), riverPolygons(input, seed));
 
+  checkMeasuredWater(original, water, prepared.result);
   return {
+    ...(prepared.result ? { waterContextResult: prepared.result } : {}),
+    ...(original.waterContext?.status === 'measured' ? { surveyRadiusM: original.waterContext.surveyRadiusM } : {}),
     population: input.population,
     // Normalised once, here, because every per-biome table downstream (theme,
     // dwelling deck, field deck, canopy deck, plot edges) is an exact-match

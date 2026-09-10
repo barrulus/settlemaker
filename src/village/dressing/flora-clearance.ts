@@ -1,3 +1,4 @@
+import { assertWaterQuery, waterBoundarySegments } from '../water-boundary.js';
 import { Point } from '../../types/point.js';
 import { pointInPolygon } from '../../geom/point-in-polygon.js';
 import { closestPointOnSegment, dist, greenDrawnRadius } from '../geometry.js';
@@ -46,13 +47,15 @@ export function floraClearance(
   for (const clearing of reservations) polygon(clearing, 3);
   // Water polygons can cover a huge off-map area. Keep them out of the grid.
   return p => {
+    assertWaterQuery(water, p);
     if (dist(p, green.centre) < greenDrawnRadius(green) + 1.5) return true;
     if (cells.get(`${Math.floor(p.x / size)},${Math.floor(p.y / size)}`)?.some(test => test(p))) return true;
     for (const poly of water) {
       if (pointInPolygon(p, poly)) return true;
-      if (dist(p, green.centre) <= shorefrontReachM && poly.some((a, i) =>
-        dist(p, closestPointOnSegment(p, a, poly[(i + 1) % poly.length])) <= SHOREFRONT_BAND_M)) return true;
+
     }
+    if (dist(p, green.centre) <= shorefrontReachM && waterBoundarySegments(water).some(([a, b]) =>
+      dist(p, closestPointOnSegment(p, a, b)) <= SHOREFRONT_BAND_M)) return true;
     return false;
   };
 }

@@ -1,3 +1,4 @@
+import { validateWaterContext } from '../input/water-context.js';
 import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 
 /**
@@ -84,5 +85,6 @@ export async function decodeBurgParam(value: string): Promise<{ burg: AzgaarBurg
       typeof burg.name !== 'string' || typeof burg.population !== 'number') {
     throw new UrlCodecError('shape', 'payload has no plausible burg (name + population required)');
   }
+  validateWaterContext(burg);
   return { burg, ...(typeof env.seed === 'number' ? { seed: env.seed } : {}) };
 }

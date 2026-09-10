@@ -1,3 +1,4 @@
+import { waterBoundarySegments, assertWaterQuery } from '../water-boundary.js';
 import { Point } from '../../types/point.js';
 import { arcLengths, closestPointOnSegment, dist, inAnyWater, sampleAt } from '../geometry.js';
 import { smoothLane } from './curves.js';
@@ -7,6 +8,7 @@ export interface WetRun { points: Point[]; startM: number; endM: number; }
 /** Exact bank intersections, including a river narrower than a sample step.
  * Consecutive wet pieces are joined across polyline vertices. */
 export function wetRuns(points: Point[], water: Point[][]): WetRun[] {
+  for (const p of points) assertWaterQuery(water, p);
   if (!water.length) return [];
   const result: WetRun[] = [];
   let run: WetRun | undefined, travelled = 0;
@@ -50,10 +52,10 @@ export function shortenWaterCrossings(points: Point[], water: Point[][]): Point[
   let best: { points: Point[]; length: number; } | undefined;
   for (const run of runs) {
     const acc = arcLengths(run.points), middle = sampleAt(run.points, acc, acc.at(-1)! / 2).p;
-    const edges = water.flatMap(polygon => polygon.map((a, i) => {
-      const b = polygon[(i + 1) % polygon.length], p = closestPointOnSegment(middle, a, b);
+    const edges = waterBoundarySegments(water).map(([a, b]) => {
+      const p = closestPointOnSegment(middle, a, b);
       return { a, b, p, distance: dist(middle, p) };
-    })).sort((a, b) => a.distance - b.distance).slice(0, 4);
+    }).sort((a, b) => a.distance - b.distance).slice(0, 4);
     for (const { a, b, p } of edges) {
       const length = dist(a, b); if (length < 0.1) continue;
       const tx = (b.x - a.x) / length, ty = (b.y - a.y) / length;
@@ -83,6 +85,7 @@ export function shortenWaterCrossings(points: Point[], water: Point[][]): Point[
 
 /** New residential streets must start and end on land and cross briefly. */
 export function validWaterRoute(points: Point[], water: Point[][], bankClearance = 0): boolean {
+  for (const p of points) assertWaterQuery(water, p, bankClearance);
   if (!water.length) return true;
   if (points.length < 2 || inAnyWater(points[0], water) || inAnyWater(points.at(-1)!, water)) return false;
   const runs = wetRuns(points, water);
@@ -92,8 +95,7 @@ export function validWaterRoute(points: Point[], water: Point[][], bankClearance
   for (let s = 0; s <= total; s += 2) {
     if (runs.some(r => s >= r.startM - bankClearance - 5 && s <= r.endM + bankClearance + 5)) continue;
     const p = sampleAt(points, acc, s).p;
-    for (const poly of water) for (let i = 0; i < poly.length; i++) {
-      const a = poly[i], b = poly[(i + 1) % poly.length];
+    for (const [a, b] of waterBoundarySegments(water)) {
       if (p.x < Math.min(a.x, b.x) - bankClearance || p.x > Math.max(a.x, b.x) + bankClearance
         || p.y < Math.min(a.y, b.y) - bankClearance || p.y > Math.max(a.y, b.y) + bankClearance) continue;
       if (dist(p, closestPointOnSegment(p, a, b)) < bankClearance) return false;

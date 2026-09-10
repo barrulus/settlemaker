@@ -1,3 +1,4 @@
+import { waterBoundarySegments, assertWaterQuery } from '../water-boundary.js';
 import { Point } from '../../types/point.js';
 import { arcLengths, closestPointOnSegment, dist, inAnyWater, sampleAt } from '../geometry.js';
 import { shortenWaterCrossings, wetRuns } from './water-routing.js';
@@ -7,9 +8,9 @@ export const ROAD_BANK_GAP_M = 3;
 /** Project a dry junction away from its nearest bank before its incident
  * streets are dressed. Moving all incident endpoints together keeps joins intact. */
 export function clearBankPoint(p: Point, water: Point[][], clearance: number): Point {
+  assertWaterQuery(water, p, clearance);
   let nearest: Point | undefined, gap = clearance + 1;
-  for (const poly of water) for (let i = 0; i < poly.length; i++) {
-    const a = poly[i], b = poly[(i + 1) % poly.length];
+  for (const [a, b] of waterBoundarySegments(water)) {
     if (p.x < Math.min(a.x, b.x) - clearance || p.x > Math.max(a.x, b.x) + clearance
       || p.y < Math.min(a.y, b.y) - clearance || p.y > Math.max(a.y, b.y) + clearance) continue;
     const q = closestPointOnSegment(p, a, b), d = dist(p, q);

@@ -1,3 +1,4 @@
+import { assertWaterQuery } from '../water-boundary.js';
 import { Point } from '../../types/point.js';
 import { SeededRandom } from '../../utils/random.js';
 import {
@@ -91,6 +92,7 @@ function probeRing(centre: Point, radiusM: number): Point[] {
 
 /** True when any point on the green's rim, or its centre, is in water. */
 export function waterClips(centre: Point, radiusM: number, water: Point[][]): boolean {
+  assertWaterQuery(water, centre, radiusM);
   if (water.length === 0) return false;
   const probes: Point[] = [centre, ...probeRing(centre, radiusM)];
   return probes.some((p) => inAnyWater(p, water));

@@ -1,3 +1,4 @@
+import { coverageExceeded } from '../input/water-context.js';
 import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import { Point } from '../types/point.js';
 import { SeededRandom } from '../utils/random.js';
@@ -366,6 +367,15 @@ export function generateVillage(
       ...dressing.pois.map((p) => p.position),
     ],
   });
+  if (site.surveyRadiusM !== undefined) {
+    const radius = Math.max(...[frame.minX, frame.maxX].flatMap(x =>
+      [frame.minY, frame.maxY].map(y => Math.hypot(x, y))));
+    if (radius + 1000 > site.surveyRadiusM) coverageExceeded(radius + 1000);
+    if (site.flags.port && !dressing.pois.some(p => p.kind === 'boathouse')
+      && !site.waterContextResult!.issues.some(i => i.code === 'water-context-conflict')) {
+      site.waterContextResult!.issues.push({ code: 'water-context-conflict' });
+    }
+  }
   const framedLanes = clipApronsToFrame(dressedLanes, frame);
   const droppedAprons = relaxed.filter((l) => isApron(l.id)).length
     - framedLanes.filter((l) => isApron(l.id)).length;

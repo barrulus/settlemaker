@@ -1,3 +1,4 @@
+import { assertWaterQuery } from './water-boundary.js';
 import { Point } from '../types/point.js';
 import { pointInPolygon } from '../geom/point-in-polygon.js';
 import { GREEN_JOIN_RATIO, RING_SETBACK_M } from './constants.js';
@@ -78,6 +79,7 @@ export function sampleAt(
 }
 
 export function inAnyWater(p: Point, water: Point[][]): boolean {
+  assertWaterQuery(water, p);
   return water.some((ring) => pointInPolygon(p, ring));
 }
 
