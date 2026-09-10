@@ -30,6 +30,8 @@ import {
   signedTurnDeg,
 } from '../geometry.js';
 import { apronLaneId, type Lane } from '../types.js';
+import { clearRiverbanks } from './riverbanks.js';
+import { roadCrossSection } from '../cross-section.js';
 import { wetRuns } from './water-routing.js';
 // Type-only, so there is no runtime cycle with `trunks.ts`, which imports
 // `growAprons` from here.
@@ -54,8 +56,8 @@ function segBearingDeg(a: Point, b: Point): number {
  * point is untouched.
  *
  * The heading continues the lane's terminal curvature, damped and clamped:
- * a road that was bending goes on bending gently, a straight one stays
- * straight, and nothing spirals.
+ * a road that was bending goes on bending gently. A derived, broad wander
+ * also bends straight approaches without moving the entry or its tangent.
  */
 export function growApronPath(lane: Lane, reachM: number): Point[] {
   const pts = lane.points;
@@ -63,6 +65,10 @@ export function growApronPath(lane: Lane, reachM: number): Point[] {
 
   const tip = pts[pts.length - 1];
   let headingDeg = segBearingDeg(pts[pts.length - 2], tip);
+  const initialHeading = headingDeg;
+  let hash = 0;
+  for (const c of lane.id) hash = (Math.imul(hash, 31) + c.charCodeAt(0)) | 0;
+  const phase = (hash >>> 0) / 4294967296 * Math.PI * 2;
 
   // The turn the road was already making, per step, damped and clamped.
   let turnPerStepDeg = 0;
@@ -85,7 +91,10 @@ export function growApronPath(lane: Lane, reachM: number): Point[] {
       headingDeg += turnPerStepDeg;
       turnedDeg += turnPerStepDeg;
     }
-    const rad = (headingDeg * Math.PI) / 180;
+    const fade = Math.min(1, travelled / 70);
+    const wander = 13 * Math.sin(travelled * Math.PI * 2 / 420 + phase) * fade * fade;
+    const heading = initialHeading + Math.max(-30, Math.min(30, headingDeg - initialHeading + wander));
+    const rad = (heading * Math.PI) / 180;
     cursor = new Point(
       cursor.x + Math.sin(rad) * step,
       cursor.y - Math.cos(rad) * step,
@@ -709,7 +718,7 @@ export function growAprons(
     // it.
     if (water.length > 0) {
       const bent = bendAlongCoast(laneId, points, water, escapeRadiusM);
-      points = bent.points;
+      points = clearRiverbanks(bent.points, water, roadCrossSection(lane).surfaceM / 2);
       diagnostics.push(...bent.diagnostics);
       if (points.length < 2) continue;
     }

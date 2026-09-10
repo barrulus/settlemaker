@@ -6,9 +6,11 @@ import {
   CONTRACT_RADIUS_FACTOR, MERGE_BAND_WEIGHTS, MERGE_CAPTURE_M,
   TRUNK_SAGITTA_RATIO,
 } from '../constants.js';
-import { angularGap, bearingVector, closestPointOnPolyline, segmentIntersection } from '../geometry.js';
+import { angularGap, bearingVector, closestPointOnPolyline, dist, segmentIntersection } from '../geometry.js';
 import { classRank, laneWidth, type RouteType } from '../route-class.js';
 import { routeProvenanceKey, trunkLaneId, type Lane, type Site, type SiteRoute } from '../types.js';
+import { clearBankPoint, clearRiverbanks, ROAD_BANK_GAP_M } from './riverbanks.js';
+import { roadCrossSection } from '../cross-section.js';
 import { growAprons } from './apron.js';
 import { routeVillageStreets } from './routed-streets.js';
 
@@ -656,6 +658,24 @@ export function synthesizeTrunks(
 ): TrunkNetwork {
   const entries = contractEntries(site, contractRadiusM);
   const routed = routeVillageStreets(site, entries, builtEdgeRadiusM, rng, aim);
+  // Shift a bank-side junction once for all its incident roads. FMG contract
+  // entries stay fixed; only the generated interior junctions may move.
+  const key = (p: Point) => `${p.x.toFixed(6)},${p.y.toFixed(6)}`;
+  const shifts = new Map<string, { p: Point; clearance: number }>();
+  for (const lane of routed.trunks) for (const p of [lane.points[0], lane.points.at(-1)!]) {
+    if (entries.some(e => dist(e.point, p) < .001)) continue;
+    const clearance = roadCrossSection(lane).surfaceM / 2 + ROAD_BANK_GAP_M;
+    if (clearance > (shifts.get(key(p))?.clearance ?? 0)) shifts.set(key(p), { p, clearance });
+  }
+  for (const value of shifts.values()) value.p = clearBankPoint(value.p, site.water, value.clearance);
+  const shifted = (p: Point) => shifts.get(key(p))?.p ?? p;
+  routed.junctions = routed.junctions.map(j => ({ ...j, position: shifted(j.position) }));
+  routed.aim = shifted(routed.aim);
+  routed.trunks = routed.trunks.map(lane => ({ ...lane, points: lane.points.map((p, i) =>
+    i === 0 || i === lane.points.length - 1 ? shifted(p) : p) }));
+  routed.trunks = routed.trunks.map(lane => ({ ...lane,
+    points: clearRiverbanks(lane.points, site.water, roadCrossSection(lane).surfaceM / 2),
+  }));
   const grown = growAprons(routed.trunks, entries, contractRadiusM, site.water);
   const resolved = resolveCrossings([...routed.trunks, ...grown.lanes], [...routed.junctions, ...grown.junctions]);
   return {

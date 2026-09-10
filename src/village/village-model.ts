@@ -13,7 +13,7 @@ import {
   RING_SETBACK_M, SPACING_RELAX_FLOOR, SPACING_RELAX_STEP,
   WATER_STRANGLED_FIELD_RATIO
 } from './constants.js';
-import { frontageOffsetM, villageCrossSection } from './cross-section.js';
+import { frontageOffsetM, roadCrossSection, villageCrossSection } from './cross-section.js';
 import {
   buildDeck, meanOccupancy, minDwellingFrontageM, ordinaryOccupancy, tightenDeck,
   widestDwellingWidthM,
@@ -179,7 +179,7 @@ export function generateVillage(
       const raw = proposals[option];
       const candidate = raw.map(l => villageCrossSection(l, dwellingsNeeded));
       if (site.water.length && candidate.some(l => !lanes.some(old => old.id === l.id && old.points === l.points)
-        && !validWaterRoute(l.points, site.water))) { rejected++; continue; }
+        && !validWaterRoute(l.points, site.water, roadCrossSection(l).surfaceM / 2 + 1.5))) { rejected++; continue; }
       if (reservedBuildings.some(b => intrudesOnLane(b, candidate))) { rejected++; continue; }
       const result = placement(candidate);
       const gained = result.spend.housed - evaluated.spend.housed;
@@ -215,7 +215,7 @@ export function generateVillage(
         for (const raw of next) {
           const candidate = raw.map(l => villageCrossSection(l, dwellingsNeeded));
           if (site.water.length && candidate.some(l => !lanes.some(old => old.id === l.id && old.points === l.points)
-            && !validWaterRoute(l.points, site.water))) { rejected++; continue; }
+            && !validWaterRoute(l.points, site.water, roadCrossSection(l).surfaceM / 2 + 1.5))) { rejected++; continue; }
           if (reservedBuildings.some(b => intrudesOnLane(b, candidate))) { rejected++; continue; }
           const result = placement(candidate);
           const gained = result.spend.housed - evaluated.spend.housed;
@@ -263,7 +263,7 @@ export function generateVillage(
   const relaxedLanes = relaxLanes(lanes.filter((l) => !isApron(l.id)), spend.buildings)
     .map((relaxedLane) => {
       const intrudes = spend.buildings.some((b) => intrudesOnLane(b, [relaxedLane]));
-      return (intrudes || !validWaterRoute(relaxedLane.points, site.water)) ? (lanes.find((l) => l.id === relaxedLane.id) ?? relaxedLane) : relaxedLane;
+      return (intrudes || !validWaterRoute(relaxedLane.points, site.water, roadCrossSection(relaxedLane).surfaceM / 2 + 1.5)) ? (lanes.find((l) => l.id === relaxedLane.id) ?? relaxedLane) : relaxedLane;
     })
     .concat(lanes.filter((l) => isApron(l.id)));
   for (let pass = 0; pass < 4; pass++) {
@@ -282,7 +282,7 @@ export function generateVillage(
   // Trim only after occupied access has been protected. Optional shortcuts
   // preserve the accepted houses and cannot trigger another seating pass.
   const trimmed = trimTails(pruneRedundantLanes(relaxedLanes, green, spend.buildings, lots), spend.buildings, { lots });
-  const bankSafe = trimmed.map(l => validWaterRoute(l.points, site.water) ? l : relaxedLanes.find(old => old.id === l.id) ?? l);
+  const bankSafe = trimmed.map(l => validWaterRoute(l.points, site.water, roadCrossSection(l).surfaceM / 2 + 1.5) ? l : relaxedLanes.find(old => old.id === l.id) ?? l);
   const relaxed = connectDeadEnds(bankSafe, green, spend.buildings, lots, site.water);
 
   diagnostics.push(...evaluated.diagnostics);

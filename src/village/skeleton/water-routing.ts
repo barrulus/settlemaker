@@ -82,7 +82,22 @@ export function shortenWaterCrossings(points: Point[], water: Point[][]): Point[
 }
 
 /** New residential streets must start and end on land and cross briefly. */
-export function validWaterRoute(points: Point[], water: Point[][]): boolean {
-  return !water.length || (points.length >= 2 && !inAnyWater(points[0], water)
-    && !inAnyWater(points.at(-1)!, water) && wetRuns(points, water).every(r => r.endM - r.startM <= 10));
+export function validWaterRoute(points: Point[], water: Point[][], bankClearance = 0): boolean {
+  if (!water.length) return true;
+  if (points.length < 2 || inAnyWater(points[0], water) || inAnyWater(points.at(-1)!, water)) return false;
+  const runs = wetRuns(points, water);
+  if (runs.some(r => r.endM - r.startM > 10)) return false;
+  if (!(bankClearance > 0)) return true;
+  const acc = arcLengths(points), total = acc.at(-1)!;
+  for (let s = 0; s <= total; s += 2) {
+    if (runs.some(r => s >= r.startM - bankClearance - 5 && s <= r.endM + bankClearance + 5)) continue;
+    const p = sampleAt(points, acc, s).p;
+    for (const poly of water) for (let i = 0; i < poly.length; i++) {
+      const a = poly[i], b = poly[(i + 1) % poly.length];
+      if (p.x < Math.min(a.x, b.x) - bankClearance || p.x > Math.max(a.x, b.x) + bankClearance
+        || p.y < Math.min(a.y, b.y) - bankClearance || p.y > Math.max(a.y, b.y) + bankClearance) continue;
+      if (dist(p, closestPointOnSegment(p, a, b)) < bankClearance) return false;
+    }
+  }
+  return true;
 }

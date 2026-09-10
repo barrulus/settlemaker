@@ -170,6 +170,12 @@ export interface AzgaarBurgInput {
    * not available.
    */
   coastlineGeometry?: Array<Array<{ x: number; y: number }>>;
+  /** Village-only river surveys, burg-local metres; added to other water. */
+  rivers?: Array<{
+    centreline: Array<{ x: number; y: number }>;
+    widthM: number;
+    meander?: boolean; // defaults true; false retains the surveyed centreline
+  }>;
 }
 ```
 
@@ -261,6 +267,35 @@ river polygons beyond the intended tile bounds so their ends do not appear as
 artificial shorelines. Include every relevant water body: a non-empty polygon
 array replaces the `oceanBearing` fallback rather than adding to it.
 
+For villages, FMG may instead supply **coarse river surveys** in the additive
+`rivers` field of the compressed `i=` payload:
+
+```json
+"rivers": [{
+  "centreline": [{"x": -900, "y": -896}, {"x": 900, "y": 904}],
+  "widthM": 2.83
+}]
+```
+
+Use at least two distinct centreline points and a positive width in metres.
+Settlemaker generates smooth seeded bends and both banks before planning roads,
+houses or fields. Survey endpoints and the nearest station to the burg anchor
+the channel. `meander: false` suppresses the generated displacement when the
+centreline already describes the intended bends. Exact bank geometry still
+belongs in `coastlineGeometry`; those polygons are never moved or stylized.
+Do not send the same river through both fields. `rivers` adds to explicit water
+polygons and any `oceanBearing` fallback, so a river can meet a generated coast.
+This field applies to settlements of 1–1000 people; city adapters should continue
+sending filled water polygons. There is no flat-query equivalent or payload
+version bump: this is an optional addition to payload version 1.
+
+Approach roads now wander gently beyond their fixed FMG contract entries.
+Road placement targets a 3 m bank verge outside bridge approaches, taking the
+visible road width into account. New and adjusted residential streets must
+retain at least 1.5 m of bank clearance. Generated bank-side junctions move with
+all connected roads; supplied entry positions remain fixed. Short bridge
+approaches are exempt so a road can meet its bridge on dry land.
+
 `oceanBearing` alone supplies a generated shore in the given direction; it
 cannot describe a river, real headland or estuary. `port` controls docks, not
 whether supplied water appears. `followsRiver` is a route hint only.
@@ -287,7 +322,7 @@ a river):
 | `group` | `'roads'` \| `'trails'` | Trails attract almost none (weight ×0.15). Absent = treated as a road. |
 | `through` | boolean | A route that continues past the burg attracts more (×1.5) than one that dead-ends there. |
 | `relief` | `'flat'`/`'valley'`/`'descent'`/`'ascent'`/`'ridge'` | Easy ground is neutral; `ascent` halves growth (×0.5); `ridge` quarters it (×0.25). |
-| `followsRiver` | boolean | A valley road along a river attracts slightly more (×1.2). This hint does not create a river; send its filled water polygon in `coastlineGeometry` to render one. |
+| `followsRiver` | boolean | A valley road along a river attracts slightly more (×1.2). This hint does not create a river; send `rivers` (villages) or a filled water polygon in `coastlineGeometry`. |
 
 Rules an adapter can rely on:
 

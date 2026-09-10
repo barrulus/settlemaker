@@ -4,6 +4,7 @@ import type { Site, SiteRoute } from './types.js';
 import { fromLegacyKind, toLegacyKind, type RouteType, ROUTE_CLASS_ORDER } from './route-class.js';
 import { bearingVector } from './geometry.js';
 import { normaliseVillageBiome } from './theme.js';
+import { riverPolygons } from './rivers.js';
 import { SeededRandom } from '../utils/random.js';
 
 /** The seven land classes, from route-class.ts's single source of truth. */
@@ -193,8 +194,8 @@ function oceanBearingFallback(input: AzgaarBurgInput, seed: number): Point[][] {
 }
 
 /**
- * Pass 1. Resolves FMG's input into burg-local metres. No geometry is
- * invented here — this pass only reads.
+ * Pass 1. Resolve explicit water polygons and generate hinted coasts/rivers
+ * before roads and housing use the resulting water geometry.
  */
 export function buildSite(input: AzgaarBurgInput, seed = 0): Site {
   const routes: SiteRoute[] = (input.roadBearings ?? [])
@@ -233,7 +234,7 @@ export function buildSite(input: AzgaarBurgInput, seed = 0): Site {
 
   const water: Point[][] = (input.coastlineGeometry ?? [])
     .map((ring) => ring.map((p) => new Point(p.x, p.y)))
-    .concat(oceanBearingFallback(input, seed));
+    .concat(oceanBearingFallback(input, seed), riverPolygons(input, seed));
 
   return {
     population: input.population,
