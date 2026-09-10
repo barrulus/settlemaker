@@ -106,6 +106,16 @@ than dropping it silently.
 generateSettlement(burg, { village: { theme: villageThemeFor('desert') } });
 ```
 
+Village roads use existing frontage before adding streets. Small settlements can
+stay as a green and a short access lane; larger ones add streets only when they
+provide useful housing capacity. Explicit regional roads retain their class and
+connections. Local surfaces, reserved corridors and parcel setbacks are distinct
+([width semantics](docs/schema-v3.md#village-road-cross-sections)).
+
+Run `npm run review:roads` to generate the local road gallery. The
+[road design report](docs/plans/2026-09-10-village-road-results.md) includes commands
+for matched historical comparisons, held-out seeds and validation results.
+
 Villages are themed by biome — `villageThemeFor(biome)` selects the ground,
 vegetation and dwelling glyphs. Only the temperate theme has been through a
 render gate so far; the others are usable but unreviewed.

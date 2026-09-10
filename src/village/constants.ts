@@ -747,34 +747,6 @@ export const MAX_FEEDBACK_ROUNDS = 12;
  */
 export const DISC_ESCALATION_STEP_RATIO = 0.06;
 
-/**
- * Task 2 (2026-08-24): how many rounds the ladder may spend chasing
- * ENCLOSED BLOCKS ALONE, once the census is already housed, before it
- * gives up and ships whatever it has. Unlike the unhoused case -- where
- * every extra round demonstrably buys more houses, so the full
- * MAX_FEEDBACK_ROUNDS budget is the right bound -- a fabric whose blocks
- * fall short "where achievable" (standing bars) is not guaranteed to
- * improve with more rounds AT ALL: measured directly, one pop-900 seed
- * (the flattest-profile one, already the sole exception the pop-900
- * blocks bar carries) sat at 4 enclosed blocks through five further widen
- * rounds after housing succeeded -- no improvement, but each round still
- * perturbed the RNG stream enough to collapse that seed's anisotropy
- * ratio from ~3 to ~1.1, failing a SEPARATE standing bar for no gain. A
- * short, bounded chase gets the genuinely fixable seeds (measured: they
- * need zero extra rounds once the block check itself is accurate) without
- * letting an unfixable one burn the whole ladder for nothing.
- */
-// Typed `number`, not inferred as the literal `1`: `village-model.ts` compares
-// this against `1` to pick a pluralised word in a diagnostic message, and a
-// literal-typed const makes that comparison a compile error the instant this
-// value is tuned to anything else (TS2367, "no overlap" between two disjoint
-// literal types) -- a real trap this file's own bisection history hit once
-// already (see the constant's own comment above) while walking this value
-// through 3, 2, 1 and back. Widening the type here, once, makes every future
-// retune safe regardless of which literal the comparison in that message is
-// written against.
-export const BLOCK_CHASE_ROUND_CAP: number = 2;
-
 // Trunks task 5: LANE_EXTENT_FACTOR (how far `runArm`'s straight extent ran
 // past the green) retired with `buildArms`/`runArm`/`laneExtentM` -- a trunk
 // lane's outward reach is drawn by `drawTrunkPath` to the contract circle

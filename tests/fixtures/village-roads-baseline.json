@@ -1,0 +1,1836 @@
+{
+  "revision": "aa841a49a096bedbd9f98ffd21ffe2106bfd809d",
+  "dirty": false,
+  "heldOut": false,
+  "metricVersion": 1,
+  "turnWindowM": 4,
+  "rows": [
+    {
+      "id": "p40-s1",
+      "seed": 1,
+      "input": {
+        "name": "Road review",
+        "population": 40,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 40.069235000000006,
+      "buildings": 8,
+      "ordinaryDwellings": 8,
+      "metresPerDwelling": 20.572523739076274,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 40,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.056602973446000376,
+      "internalLanes": 5,
+      "internalMetres": 164.5801899126102,
+      "metresPerBuilding": 20.572523739076274,
+      "requiredMetres": 219.49460247718966,
+      "emptyMetres": 128.30509062923448,
+      "blocks": 2,
+      "maxTurn": 109.55338070250974,
+      "sharpWindows": 2,
+      "minBendRadius": 2.1911900653423504
+    },
+    {
+      "id": "p40-s2",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 40,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 14.706164999999999,
+      "buildings": 8,
+      "ordinaryDwellings": 8,
+      "metresPerDwelling": 22.61874003221732,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 40,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.07046887959049024,
+      "internalLanes": 7,
+      "internalMetres": 180.94992025773857,
+      "metresPerBuilding": 22.61874003221732,
+      "requiredMetres": 236.748939357806,
+      "emptyMetres": 156.93672284865335,
+      "blocks": 1,
+      "maxTurn": 57.60056355422887,
+      "sharpWindows": 0,
+      "minBendRadius": 4.068120927677987
+    },
+    {
+      "id": "p40-s3",
+      "seed": 3,
+      "input": {
+        "name": "Road review",
+        "population": 40,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 11.671196999999992,
+      "buildings": 8,
+      "ordinaryDwellings": 8,
+      "metresPerDwelling": 36.530463202919854,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 40,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.033010134207696176,
+      "internalLanes": 9,
+      "internalMetres": 292.24370562335884,
+      "metresPerBuilding": 36.530463202919854,
+      "requiredMetres": 245.00829788680073,
+      "emptyMetres": 235.39171404292335,
+      "blocks": 1,
+      "maxTurn": 100.1739397694347,
+      "sharpWindows": 4,
+      "minBendRadius": 2.3668525743096263
+    },
+    {
+      "id": "p80-s1",
+      "seed": 1,
+      "input": {
+        "name": "Road review",
+        "population": 80,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 13.279960000000003,
+      "buildings": 16,
+      "ordinaryDwellings": 16,
+      "metresPerDwelling": 18.861979655958535,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 80,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.09408213496710006,
+      "internalLanes": 9,
+      "internalMetres": 301.79167449533657,
+      "metresPerBuilding": 18.861979655958535,
+      "requiredMetres": 279.0965748872568,
+      "emptyMetres": 126.3795269355983,
+      "blocks": 2,
+      "maxTurn": 114.61876797045528,
+      "sharpWindows": 1,
+      "minBendRadius": 2.367486136713978
+    },
+    {
+      "id": "p80-s2",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 80,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 15.07024100000001,
+      "buildings": 16,
+      "ordinaryDwellings": 16,
+      "metresPerDwelling": 23.710893853362837,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 80,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.11268793650207963,
+      "internalLanes": 11,
+      "internalMetres": 379.3743016538054,
+      "metresPerBuilding": 23.710893853362837,
+      "requiredMetres": 301.1673583636741,
+      "emptyMetres": 96.59830363353537,
+      "blocks": 5,
+      "maxTurn": 50.63021319749623,
+      "sharpWindows": 0,
+      "minBendRadius": 4.663291772753813
+    },
+    {
+      "id": "p80-s3",
+      "seed": 3,
+      "input": {
+        "name": "Road review",
+        "population": 80,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 11.93987899999999,
+      "buildings": 16,
+      "ordinaryDwellings": 16,
+      "metresPerDwelling": 15.657876996843093,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 80,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.13435566173340768,
+      "internalLanes": 6,
+      "internalMetres": 250.5260319494895,
+      "metresPerBuilding": 15.657876996843093,
+      "requiredMetres": 289.500732076607,
+      "emptyMetres": 98.48282443081912,
+      "blocks": 2,
+      "maxTurn": 41.85089336857709,
+      "sharpWindows": 0,
+      "minBendRadius": 5.592568791198912
+    },
+    {
+      "id": "p119-s1",
+      "seed": 1,
+      "input": {
+        "name": "Road review",
+        "population": 119,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 14.544341000000003,
+      "buildings": 24,
+      "ordinaryDwellings": 24,
+      "metresPerDwelling": 16.082274903639757,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 120,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.15723727447700744,
+      "internalLanes": 16,
+      "internalMetres": 385.97459768735416,
+      "metresPerBuilding": 16.082274903639757,
+      "requiredMetres": 252.49428248159535,
+      "emptyMetres": 190.56038042316698,
+      "blocks": 2,
+      "maxTurn": 37.8489878202563,
+      "sharpWindows": 0,
+      "minBendRadius": 5.466266973364211
+    },
+    {
+      "id": "p119-s2",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 119,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 16.583292999999998,
+      "buildings": 24,
+      "ordinaryDwellings": 24,
+      "metresPerDwelling": 15.223587676618536,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 120,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.16915214397162268,
+      "internalLanes": 11,
+      "internalMetres": 365.36610423884485,
+      "metresPerBuilding": 15.223587676618536,
+      "requiredMetres": 288.04615345688615,
+      "emptyMetres": 45.64549066671373,
+      "blocks": 4,
+      "maxTurn": 50.420579515557336,
+      "sharpWindows": 0,
+      "minBendRadius": 4.612444871247421
+    },
+    {
+      "id": "p119-s3",
+      "seed": 3,
+      "input": {
+        "name": "Road review",
+        "population": 119,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 12.568689999999975,
+      "buildings": 24,
+      "ordinaryDwellings": 24,
+      "metresPerDwelling": 12.453075543075713,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 120,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.17226190418969217,
+      "internalLanes": 8,
+      "internalMetres": 298.8738130338171,
+      "metresPerBuilding": 12.453075543075713,
+      "requiredMetres": 265.1112109486046,
+      "emptyMetres": 26.679946654374085,
+      "blocks": 2,
+      "maxTurn": 40.06325251163992,
+      "sharpWindows": 0,
+      "minBendRadius": 5.827578126927593
+    },
+    {
+      "id": "p120-s1",
+      "seed": 1,
+      "input": {
+        "name": "Road review",
+        "population": 120,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 15.624397000000016,
+      "buildings": 30,
+      "ordinaryDwellings": 30,
+      "metresPerDwelling": 11.806157245757625,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 120,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.18086394512672985,
+      "internalLanes": 13,
+      "internalMetres": 354.18471737272876,
+      "metresPerBuilding": 11.806157245757625,
+      "requiredMetres": 287.69331236396494,
+      "emptyMetres": 157.03361614145305,
+      "blocks": 2,
+      "maxTurn": 157.84858893227113,
+      "sharpWindows": 4,
+      "minBendRadius": 2.450413572996768
+    },
+    {
+      "id": "p120-s2",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 120,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 13.157038,
+      "buildings": 30,
+      "ordinaryDwellings": 30,
+      "metresPerDwelling": 10.441698783554587,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 120,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.19670432397220075,
+      "internalLanes": 10,
+      "internalMetres": 313.2509635066376,
+      "metresPerBuilding": 10.441698783554587,
+      "requiredMetres": 302.9932357088875,
+      "emptyMetres": 52.26392476751319,
+      "blocks": 2,
+      "maxTurn": 52.89124939610474,
+      "sharpWindows": 0,
+      "minBendRadius": 4.441403470101186
+    },
+    {
+      "id": "p120-s3",
+      "seed": 3,
+      "input": {
+        "name": "Road review",
+        "population": 120,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 11.330365,
+      "buildings": 30,
+      "ordinaryDwellings": 30,
+      "metresPerDwelling": 8.437574860989347,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 120,
+      "components": 2,
+      "accessFailures": 4,
+      "occupiedFrontageShare": 0.19535569136831155,
+      "internalLanes": 5,
+      "internalMetres": 253.12724582968042,
+      "metresPerBuilding": 8.437574860989347,
+      "requiredMetres": 281.71529324721365,
+      "emptyMetres": 2.880000000000002,
+      "blocks": 2,
+      "maxTurn": 36.648841906935445,
+      "sharpWindows": 0,
+      "minBendRadius": 6.296369622189099
+    },
+    {
+      "id": "p150-s1",
+      "seed": 1,
+      "input": {
+        "name": "Road review",
+        "population": 150,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 15.990496999999976,
+      "buildings": 38,
+      "ordinaryDwellings": 38,
+      "metresPerDwelling": 10.024008858465715,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 152,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.2425944051359805,
+      "internalLanes": 14,
+      "internalMetres": 380.91233662169714,
+      "metresPerBuilding": 10.024008858465715,
+      "requiredMetres": 246.65929393989995,
+      "emptyMetres": 142.1550375379998,
+      "blocks": 3,
+      "maxTurn": 157.71656694952196,
+      "sharpWindows": 4,
+      "minBendRadius": 2.4296711885276423
+    },
+    {
+      "id": "p150-s2",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 150,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 13.802814000000012,
+      "buildings": 38,
+      "ordinaryDwellings": 38,
+      "metresPerDwelling": 8.00016972831593,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 152,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.2988290475347405,
+      "internalLanes": 8,
+      "internalMetres": 304.00644967600533,
+      "metresPerBuilding": 8.00016972831593,
+      "requiredMetres": 304.447843225973,
+      "emptyMetres": 2.880000000000001,
+      "blocks": 2,
+      "maxTurn": 52.89124939610474,
+      "sharpWindows": 0,
+      "minBendRadius": 4.44140347010118
+    },
+    {
+      "id": "p150-s3",
+      "seed": 3,
+      "input": {
+        "name": "Road review",
+        "population": 150,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 17.048950999999988,
+      "buildings": 38,
+      "ordinaryDwellings": 38,
+      "metresPerDwelling": 7.243866246479,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 152,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.2756209801624046,
+      "internalLanes": 6,
+      "internalMetres": 275.266917366202,
+      "metresPerBuilding": 7.243866246479,
+      "requiredMetres": 271.32731430140575,
+      "emptyMetres": 13.80023303154584,
+      "blocks": 2,
+      "maxTurn": 38.83015221066876,
+      "sharpWindows": 0,
+      "minBendRadius": 5.996187361564326
+    },
+    {
+      "id": "p300-s1",
+      "seed": 1,
+      "input": {
+        "name": "Road review",
+        "population": 300,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 38.055695000000014,
+      "buildings": 76,
+      "ordinaryDwellings": 74,
+      "metresPerDwelling": 9.165410275347742,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 302,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.3237762960056257,
+      "internalLanes": 22,
+      "internalMetres": 678.240360375733,
+      "metresPerBuilding": 8.924215268101749,
+      "requiredMetres": 363.21247414181903,
+      "emptyMetres": 158.2096490633777,
+      "blocks": 7,
+      "maxTurn": 164.32885975548135,
+      "sharpWindows": 5,
+      "minBendRadius": 2.19775112381148
+    },
+    {
+      "id": "p300-s2",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 300,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 33.22283299999998,
+      "buildings": 76,
+      "ordinaryDwellings": 74,
+      "metresPerDwelling": 7.75500828427038,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 302,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.4228497196219867,
+      "internalLanes": 22,
+      "internalMetres": 573.8706130360081,
+      "metresPerBuilding": 7.550929118894843,
+      "requiredMetres": 425.5221427221634,
+      "emptyMetres": 69.64788487407208,
+      "blocks": 4,
+      "maxTurn": 162.06974260322397,
+      "sharpWindows": 3,
+      "minBendRadius": 2.6625096522339424
+    },
+    {
+      "id": "p300-s3",
+      "seed": 3,
+      "input": {
+        "name": "Road review",
+        "population": 300,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 44.63189999999997,
+      "buildings": 69,
+      "ordinaryDwellings": 67,
+      "metresPerDwelling": 6.571163445350766,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 280,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.4232064014984291,
+      "internalLanes": 15,
+      "internalMetres": 440.26795083850135,
+      "metresPerBuilding": 6.380694939688425,
+      "requiredMetres": 356.7480416331964,
+      "emptyMetres": 58.26631085076277,
+      "blocks": 3,
+      "maxTurn": 43.0034200500545,
+      "sharpWindows": 0,
+      "minBendRadius": 5.382314008576961
+    },
+    {
+      "id": "p600-s1",
+      "seed": 1,
+      "input": {
+        "name": "Road review",
+        "population": 600,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 79.949748,
+      "buildings": 147,
+      "ordinaryDwellings": 144,
+      "metresPerDwelling": 6.91955397136079,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 588,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.42769725021435795,
+      "internalLanes": 26,
+      "internalMetres": 996.4157718759537,
+      "metresPerBuilding": 6.778338584190162,
+      "requiredMetres": 458.9187268356401,
+      "emptyMetres": 111.32336060203427,
+      "blocks": 4,
+      "maxTurn": 121.20886577293601,
+      "sharpWindows": 3,
+      "minBendRadius": 2.011584094304535
+    },
+    {
+      "id": "p600-s2",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 600,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 84.96697699999999,
+      "buildings": 148,
+      "ordinaryDwellings": 146,
+      "metresPerDwelling": 7.668942427935841,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 590,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.41714815441792946,
+      "internalLanes": 33,
+      "internalMetres": 1119.6655944786328,
+      "metresPerBuilding": 7.5653080708015725,
+      "requiredMetres": 483.6593299942314,
+      "emptyMetres": 96.1140967007214,
+      "blocks": 13,
+      "maxTurn": 98.28881044139973,
+      "sharpWindows": 2,
+      "minBendRadius": 2.6337616913333264
+    },
+    {
+      "id": "p600-s3",
+      "seed": 3,
+      "input": {
+        "name": "Road review",
+        "population": 600,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 86.60463600000003,
+      "buildings": 151,
+      "ordinaryDwellings": 149,
+      "metresPerDwelling": 6.530158531767804,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 602,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.44146497970121534,
+      "internalLanes": 25,
+      "internalMetres": 972.9936212334028,
+      "metresPerBuilding": 6.443666365784124,
+      "requiredMetres": 491.16874666438935,
+      "emptyMetres": 126.24716200962757,
+      "blocks": 8,
+      "maxTurn": 99.00764262826556,
+      "sharpWindows": 2,
+      "minBendRadius": 2.596409305243099
+    },
+    {
+      "id": "p900-s1",
+      "seed": 1,
+      "input": {
+        "name": "Road review",
+        "population": 900,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 175.66086800000005,
+      "buildings": 225,
+      "ordinaryDwellings": 222,
+      "metresPerDwelling": 7.1621350808664905,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 900,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.4294697051236748,
+      "internalLanes": 37,
+      "internalMetres": 1589.9939879523608,
+      "metresPerBuilding": 7.066639946454937,
+      "requiredMetres": 555.2902799413735,
+      "emptyMetres": 97.79861421794367,
+      "blocks": 14,
+      "maxTurn": 73.83354639822403,
+      "sharpWindows": 3,
+      "minBendRadius": 3.129234998086612
+    },
+    {
+      "id": "p900-s2",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 900,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 293.89258099999995,
+      "buildings": 224,
+      "ordinaryDwellings": 222,
+      "metresPerDwelling": 9.239634615121561,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 900,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.3218979974091935,
+      "internalLanes": 47,
+      "internalMetres": 2051.1988845569867,
+      "metresPerBuilding": 9.157137877486548,
+      "requiredMetres": 548.3207742019645,
+      "emptyMetres": 170.51506314165508,
+      "blocks": 27,
+      "maxTurn": 154.82831438887763,
+      "sharpWindows": 11,
+      "minBendRadius": 2.0487152661210555
+    },
+    {
+      "id": "p900-s3",
+      "seed": 3,
+      "input": {
+        "name": "Road review",
+        "population": 900,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 212.17311900000004,
+      "buildings": 224,
+      "ordinaryDwellings": 222,
+      "metresPerDwelling": 7.479797865922985,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 900,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.36933586624732395,
+      "internalLanes": 41,
+      "internalMetres": 1660.5151262349027,
+      "metresPerBuilding": 7.413013956405815,
+      "requiredMetres": 602.8728993211573,
+      "emptyMetres": 135.1715624543272,
+      "blocks": 18,
+      "maxTurn": 133.40379158218911,
+      "sharpWindows": 15,
+      "minBendRadius": 2.025382885257769
+    },
+    {
+      "id": "brook-dry",
+      "seed": 3,
+      "input": {
+        "name": "Brook",
+        "population": 300,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 135,
+            "kind": "main",
+            "through": true,
+            "route_id": "r-cross"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 94.21082200000001,
+      "buildings": 76,
+      "ordinaryDwellings": 74,
+      "metresPerDwelling": 10.026329243734196,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 302,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.23436704202509284,
+      "internalLanes": 25,
+      "internalMetres": 741.9483640363305,
+      "metresPerBuilding": 9.762478474162243,
+      "requiredMetres": 706.4707274196849,
+      "emptyMetres": 195.01444640700063,
+      "blocks": 10,
+      "maxTurn": 172.32490646684,
+      "sharpWindows": 8,
+      "minBendRadius": 2.641573399318719
+    },
+    {
+      "id": "brook",
+      "seed": 3,
+      "input": {
+        "name": "Brook",
+        "population": 300,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 135,
+            "kind": "main",
+            "through": true,
+            "route_id": "r-cross"
+          }
+        ],
+        "coastlineGeometry": [
+          [
+            {
+              "x": -900,
+              "y": -898
+            },
+            {
+              "x": 900,
+              "y": 902
+            },
+            {
+              "x": 900,
+              "y": 906
+            },
+            {
+              "x": -900,
+              "y": -894
+            }
+          ]
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 74.347305,
+      "buildings": 74,
+      "ordinaryDwellings": 72,
+      "metresPerDwelling": 8.4778806523323,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 300,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.3112216486625918,
+      "internalLanes": 22,
+      "internalMetres": 610.4074069679256,
+      "metresPerBuilding": 8.248748742809806,
+      "requiredMetres": 801.3612493140524,
+      "emptyMetres": 92.16000864552397,
+      "blocks": 5,
+      "maxTurn": 165.17161935026593,
+      "sharpWindows": 5,
+      "minBendRadius": 2.7313766195394535
+    },
+    {
+      "id": "boundary-121",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 121,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 13.853008000000045,
+      "buildings": 31,
+      "ordinaryDwellings": 31,
+      "metresPerDwelling": 10.103999325345168,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 124,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.20733938343872224,
+      "internalLanes": 10,
+      "internalMetres": 313.2239790857002,
+      "metresPerBuilding": 10.103999325345168,
+      "requiredMetres": 302.66161746440963,
+      "emptyMetres": 52.26392525804073,
+      "blocks": 2,
+      "maxTurn": 52.89124939610474,
+      "sharpWindows": 0,
+      "minBendRadius": 4.441403470101186
+    },
+    {
+      "id": "boundary-899",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 899,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 281.79702799999995,
+      "buildings": 224,
+      "ordinaryDwellings": 222,
+      "metresPerDwelling": 9.238615715642712,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 900,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.3220049772552925,
+      "internalLanes": 47,
+      "internalMetres": 2050.9726888726823,
+      "metresPerBuilding": 9.156128075324474,
+      "requiredMetres": 548.3301337810287,
+      "emptyMetres": 170.46590373418107,
+      "blocks": 27,
+      "maxTurn": 154.83984532786803,
+      "sharpWindows": 11,
+      "minBendRadius": 2.0488516501013727
+    },
+    {
+      "id": "boundary-1000",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 1000,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 182.888369,
+      "buildings": 247,
+      "ordinaryDwellings": 244,
+      "metresPerDwelling": 7.681629782771931,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 988,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.4114709439885398,
+      "internalLanes": 48,
+      "internalMetres": 1874.3176669963511,
+      "metresPerBuilding": 7.588330635612758,
+      "requiredMetres": 534.8435694304897,
+      "emptyMetres": 123.90714844364415,
+      "blocks": 22,
+      "maxTurn": 162.42737365520134,
+      "sharpWindows": 7,
+      "minBendRadius": 2.6186800821836664
+    },
+    {
+      "id": "boundary-1001",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 1001,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "settlement",
+      "runtimeMs": 33.42028299999993
+    },
+    {
+      "id": "no-routes",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 40,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": []
+      },
+      "kind": "village",
+      "runtimeMs": 12.746104000000287,
+      "buildings": 8,
+      "ordinaryDwellings": 8,
+      "metresPerDwelling": 15.230296359973602,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 40,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.21080277569558875,
+      "internalLanes": 6,
+      "internalMetres": 121.84237087978882,
+      "metresPerBuilding": 15.230296359973602,
+      "requiredMetres": 0,
+      "emptyMetres": 59.84012268717943,
+      "blocks": 1,
+      "maxTurn": 125.07961137368858,
+      "sharpWindows": 2,
+      "minBendRadius": 2.137766227813685
+    },
+    {
+      "id": "trail",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 40,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "trail"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 6.554294999999911,
+      "buildings": 8,
+      "ordinaryDwellings": 8,
+      "metresPerDwelling": 1.6225209710620963,
+      "internalSurfaceRangeM": [
+        1.9250000000000003,
+        1.9250000000000003
+      ],
+      "housed": 40,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.957146036664868,
+      "internalLanes": 2,
+      "internalMetres": 12.98016776849677,
+      "metresPerBuilding": 1.6225209710620963,
+      "requiredMetres": 186.43294692065382,
+      "emptyMetres": 0.9799999999999998,
+      "blocks": 0,
+      "maxTurn": 0,
+      "sharpWindows": 0,
+      "minBendRadius": null
+    },
+    {
+      "id": "local",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 80,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "local"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 13.009708000000046,
+      "buildings": 16,
+      "ordinaryDwellings": 16,
+      "metresPerDwelling": 10.24797672636729,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 80,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.21699375983534838,
+      "internalLanes": 9,
+      "internalMetres": 163.96762762187663,
+      "metresPerBuilding": 10.24797672636729,
+      "requiredMetres": 271.3673194365484,
+      "emptyMetres": 47.67993494658064,
+      "blocks": 1,
+      "maxTurn": 43.41860631232305,
+      "sharpWindows": 0,
+      "minBendRadius": 5.288135067988426
+    },
+    {
+      "id": "royal",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 40,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "royal"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 7.258431000000201,
+      "buildings": 8,
+      "ordinaryDwellings": 8,
+      "metresPerDwelling": 21.354819536353908,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 40,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.12132502793358864,
+      "internalLanes": 9,
+      "internalMetres": 170.83855629083126,
+      "metresPerBuilding": 21.354819536353908,
+      "requiredMetres": 176.66010346682745,
+      "emptyMetres": 115.70861036232687,
+      "blocks": 1,
+      "maxTurn": 70.00178533580208,
+      "sharpWindows": 1,
+      "minBendRadius": 3.362465865523211
+    },
+    {
+      "id": "through",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 300,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 30,
+            "kind": "main",
+            "through": true
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 80.25542700000005,
+      "buildings": 75,
+      "ordinaryDwellings": 74,
+      "metresPerDwelling": 8.3571854996092,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 302,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.31478170588811,
+      "internalLanes": 23,
+      "internalMetres": 618.4317269710808,
+      "metresPerBuilding": 8.245756359614411,
+      "requiredMetres": 628.4520318190336,
+      "emptyMetres": 99.78430191799613,
+      "blocks": 10,
+      "maxTurn": 111.75175683042221,
+      "sharpWindows": 4,
+      "minBendRadius": 2.2983280680146327
+    },
+    {
+      "id": "tri",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 900,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          0,
+          120,
+          240
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 339.21151899999995,
+      "buildings": 225,
+      "ordinaryDwellings": 224,
+      "metresPerDwelling": 6.87217958424916,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 902,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.3905668647348746,
+      "internalLanes": 38,
+      "internalMetres": 1539.3682268718119,
+      "metresPerBuilding": 6.84163656387472,
+      "requiredMetres": 1374.9418484319308,
+      "emptyMetres": 149.70442357053665,
+      "blocks": 19,
+      "maxTurn": 124.17498434866451,
+      "sharpWindows": 6,
+      "minBendRadius": 2.0095999966271743
+    },
+    {
+      "id": "close",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 150,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          0,
+          15,
+          180
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 31.916761999999835,
+      "buildings": 38,
+      "ordinaryDwellings": 38,
+      "metresPerDwelling": 7.722997490734437,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 152,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.2936761549542651,
+      "internalLanes": 16,
+      "internalMetres": 293.4739046479086,
+      "metresPerBuilding": 7.722997490734437,
+      "requiredMetres": 563.4652628772487,
+      "emptyMetres": 97.75513868779962,
+      "blocks": 1,
+      "maxTurn": 17.909434972305235,
+      "sharpWindows": 0,
+      "minBendRadius": 12.83144433554884
+    },
+    {
+      "id": "coast",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 300,
+        "port": true,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ],
+        "oceanBearing": 90
+      },
+      "kind": "village",
+      "runtimeMs": 45.42038999999977,
+      "buildings": 76,
+      "ordinaryDwellings": 74,
+      "metresPerDwelling": 7.75500828427038,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 302,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.4228497196219867,
+      "internalLanes": 22,
+      "internalMetres": 573.8706130360081,
+      "metresPerBuilding": 7.550929118894843,
+      "requiredMetres": 425.5221427221634,
+      "emptyMetres": 69.64788487407208,
+      "blocks": 4,
+      "maxTurn": 162.06974260322397,
+      "sharpWindows": 3,
+      "minBendRadius": 2.6625096522339424
+    },
+    {
+      "id": "water",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 80,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ],
+        "coastlineGeometry": [
+          [
+            {
+              "x": 25,
+              "y": -300
+            },
+            {
+              "x": 400,
+              "y": -300
+            },
+            {
+              "x": 400,
+              "y": 300
+            },
+            {
+              "x": 25,
+              "y": 300
+            }
+          ]
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 10.113937999999962,
+      "buildings": 16,
+      "ordinaryDwellings": 16,
+      "metresPerDwelling": 20.092241803929088,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 80,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.13137554748291094,
+      "internalLanes": 11,
+      "internalMetres": 321.4758688628654,
+      "metresPerBuilding": 20.092241803929088,
+      "requiredMetres": 203.49675345762319,
+      "emptyMetres": 175.11083756540128,
+      "blocks": 3,
+      "maxTurn": 80.87477042052933,
+      "sharpWindows": 1,
+      "minBendRadius": 2.9186484398601684
+    },
+    {
+      "id": "landmarks",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 300,
+        "port": false,
+        "citadel": true,
+        "walls": false,
+        "plaza": true,
+        "temple": true,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ]
+      },
+      "kind": "village",
+      "runtimeMs": 33.087935000000016,
+      "buildings": 76,
+      "ordinaryDwellings": 74,
+      "metresPerDwelling": 7.75500828427038,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 302,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.4228497196219867,
+      "internalLanes": 22,
+      "internalMetres": 573.8706130360081,
+      "metresPerBuilding": 7.550929118894843,
+      "requiredMetres": 425.5221427221634,
+      "emptyMetres": 69.64788487407208,
+      "blocks": 4,
+      "maxTurn": 162.06974260322397,
+      "sharpWindows": 3,
+      "minBendRadius": 2.6625096522339424
+    },
+    {
+      "id": "desert",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 80,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ],
+        "biome": "desert"
+      },
+      "kind": "village",
+      "runtimeMs": 12.320905000000039,
+      "buildings": 16,
+      "ordinaryDwellings": 16,
+      "metresPerDwelling": 23.710893853362837,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 80,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.11268793650207963,
+      "internalLanes": 11,
+      "internalMetres": 379.3743016538054,
+      "metresPerBuilding": 23.710893853362837,
+      "requiredMetres": 301.1673583636741,
+      "emptyMetres": 96.59830363353537,
+      "blocks": 5,
+      "maxTurn": 50.63021319749623,
+      "sharpWindows": 0,
+      "minBendRadius": 4.663291772753813
+    },
+    {
+      "id": "tundra",
+      "seed": 2,
+      "input": {
+        "name": "Road review",
+        "population": 300,
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": false,
+        "temple": false,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 225,
+            "kind": "road"
+          }
+        ],
+        "biome": "tundra"
+      },
+      "kind": "village",
+      "runtimeMs": 32.690423999999894,
+      "buildings": 76,
+      "ordinaryDwellings": 74,
+      "metresPerDwelling": 7.75500828427038,
+      "internalSurfaceRangeM": [
+        0.66,
+        1.9250000000000003
+      ],
+      "housed": 302,
+      "components": 1,
+      "accessFailures": 0,
+      "occupiedFrontageShare": 0.4151323399808295,
+      "internalLanes": 22,
+      "internalMetres": 573.8706130360081,
+      "metresPerBuilding": 7.550929118894843,
+      "requiredMetres": 374.24330571662404,
+      "emptyMetres": 69.64788487407208,
+      "blocks": 4,
+      "maxTurn": 162.06974260322397,
+      "sharpWindows": 3,
+      "minBendRadius": 2.6625096522339424
+    }
+  ]
+}

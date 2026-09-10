@@ -44,7 +44,12 @@ export interface Lane {
   type: RouteType;
   /** Metres. Ordered from the green outward. */
   points: Point[];
+  /** Reserved corridor, including shoulders. Existing consumers retain this meaning. */
   widthM: number;
+  /** Explicit travelled surface; absent uses the legacy class-based paint width. */
+  surfaceWidthM?: number;
+  /** Ground between corridor edge and lot frontage. */
+  setbackM?: number;
   parentId?: string;
   /**
    * Trunks task 5: `INCOMING_ARM_MERGE_DEG`/`mergeIncomingRoutes` (Task 3's

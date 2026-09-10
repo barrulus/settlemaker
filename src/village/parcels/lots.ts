@@ -1,3 +1,4 @@
+import { frontageOffsetM } from '../cross-section.js';
 import { SeededRandom } from '../../utils/random.js';
 import { offsetPolyline } from './strip.js';
 import {
@@ -65,7 +66,7 @@ export function subdivideLane(
 ): Lot[] {
   const reachAt = typeof maxDistanceM === 'function' ? maxDistanceM : () => maxDistanceM;
   const lots: Lot[] = [];
-  const setback = lane.widthM / 2 + (LANE_SETBACK_M[lane.type] ?? 2);
+  const setback = frontageOffsetM(lane);
 
   for (const side of [1, -1] as const) {
     const edge = offsetPolyline(lane.points, setback, side);

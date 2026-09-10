@@ -11,6 +11,11 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true
   },
-  "include": ["scripts/metrics-lib.ts", "src/**/*.ts"],
+  "include": [
+    "scripts/metrics-lib.ts",
+    "src/**/*.ts",
+    "scripts/review-village-roads.ts",
+    "tests/fixtures/village-roads.ts"
+  ],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }

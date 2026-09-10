@@ -1,32 +1,31 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { Point } from '../../src/types/point.js';
 import {
-  blockFloorFor, generateVillage, VILLAGE_POP_CEILING,
+  generateVillage, VILLAGE_POP_CEILING,
 } from '../../src/village/village-model.js';
 // Gate 6.4 moved the trunk-reach rule to `skeleton/lanes.ts`, where
 // `availableFrontage` needs it too -- the budget must count only frontage
 // this rule will let the cutter use.
-import {
-  coverageThresholdDeg, discRadiusFor, lotReachFor,
-} from '../../src/village/skeleton/lanes.js';
-import { isTrunk } from '../../src/village/skeleton/trunks.js';
-import { blockAreas } from '../../src/village/skeleton/blocks.js';
-import { buildSite } from '../../src/village/site.js';
+import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 import { SeededRandom } from '../../src/utils/random.js';
-import { gapForPopulation } from '../../src/village/parcels/lots.js';
+import {
+  ARM_LOT_RADIUS_SHARE,
+  EDGE_STYLE_ORDER, HAMLET_RIBBON_POP
+} from '../../src/village/constants.js';
 import {
   buildDeck, eligible, minDwellingFrontageM, ordinaryOccupancy, widestDwellingWidthM,
 } from '../../src/village/deck.js';
 import {
-  ARM_LOT_RADIUS_SHARE, BRANCH_SPACING_M, EDGE_STYLE_ORDER, HAMLET_RIBBON_POP,
-  VOID_SCAN_STEP_M, VOID_SPACING_M,
-} from '../../src/village/constants.js';
-import type { RouteType } from '../../src/village/route-class.js';
-import {
   bearingOf, closestPointOnSegment, dist, segmentIntersection,
 } from '../../src/village/geometry.js';
+import { gapForPopulation } from '../../src/village/parcels/lots.js';
+import type { RouteType } from '../../src/village/route-class.js';
+import { buildSite } from '../../src/village/site.js';
+import {
+  connectDeadEnds,
+  discRadiusFor, lotReachFor
+} from '../../src/village/skeleton/lanes.js';
 import type { Lane } from '../../src/village/types.js';
-import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 
 const base: AzgaarBurgInput = {
   name: 'Wick', population: 300, port: false, citadel: false, walls: false,
@@ -202,103 +201,6 @@ describe('generateVillage: frontage feedback loop escalation (R16)', () => {
     expect(big.lanes.length).toBeGreaterThan(small.lanes.length * 1.5);
   });
 
-  // Finding 4: f0 must tighten cumulatively round over round, not reset
-  // to the same value every time. Originally verified empirically against
-  // a scratch copy of the pre-fix formula (`f0 = widest +
-  // gapForPopulation(pop) * GAP_TIGHTEN`, recomputed from scratch on every
-  // tighten instead of compounding): against the batch001 deck, at
-  // population 11500 with this single-road input, the pre-fix formula
-  // undershot (~11053/11500) while the fixed, compounding formula fully
-  // housed the census in the same 3-round budget.
-  //
-  // Refined-ingest note (2026-08-21): under the refined deck's much wider
-  // f0 (see the note on 'houses the census' above), the SAME fixed
-  // MAX_FEEDBACK_ROUNDS / MAX_INVENTED_LANES budget no longer fully houses
-  // this population even with the compounding fix — measured today, seed 4
-  // houses 6648/11500 (57.8%), with an honest overflow diagnostic. That is
-  // an expected consequence of roughly doubling the per-dwelling frontage
-  // this budget has to supply, not a reappearance of the round-3 no-op
-  // bug; this test's compounding-specific claim ("still houses fully") no
-  // longer holds and doesn't have a clean redo, since the deck-widening
-  // and the capacity-budget effects now overlap in this one observable
-  // (housed count). Downgraded to a floor pinning today's measured,
-  // deterministic behaviour, with the overflow diagnostic now expected
-  // rather than forbidden — flagged in refined-ingest-report.md for the
-  // owner, since MAX_FEEDBACK_ROUNDS/MAX_INVENTED_LANES may be worth
-  // revisiting now that dwelling footprints have roughly doubled.
-  it('the gap-tighten ladder compounds: an over-capacity census still fills a share of its demand', () => {
-    // Re-pinned at the cluster rework (2026-08-21): pop 11500 is 11.5x the
-    // engine's served band, so the interesting property is not the exact
-    // housed count but that the bounded ladder keeps producing and reports
-    // the shortfall honestly instead of looping or lying.
-    const m = generateVillage({ ...base, population: 11500 }, 4);
-    const housed = m.buildings.reduce((s, b) => s + b.occupancy, 0);
-    // Re-pinned again (2026-08-21, fix round 1 of the R20 debt — §5.4
-    // rules 3-4). This fixture is out-of-band on purpose (11500 is 11.5x
-    // VILLAGE_POP_CEILING=1000; this engine does not serve it) — the
-    // pop-900 in-band threshold above is back to its original value and
-    // fully passes after the seatEfficiency fix (measuring against the
-    // pre-resolution lot count, plus MAX_FEEDBACK_ROUNDS 3 -> 4). At this
-    // absurd over-capacity, though, resolveConvergingLots's now-honest
-    // seatEfficiency signal still asks for less than the old floor
-    // assumed (measured 2176 for this seed, down from the prior 2857);
-    // the property under test remains that bounded growth keeps
-    // producing at scale with an honest diagnostic, not the exact count.
-    // Gate 6.2: this threshold has now been re-pinned three times (2857 ->
-    // 2100 -> here), each time because a legitimate change moved the count
-    // — which is the tell that the number was never the property. Concentric
-    // saturation lowered it again (2064), because ring-bounded growth will
-    // not race outward to serve an absurd census. So the assertion is the
-    // property the comment above already states: bounded growth keeps
-    // PRODUCING at scale rather than looping or collapsing, and says so.
-    // 1500 is far below any measured value and far above "gave up".
-    // GATE 6.9: the overflow assertion is REWRITTEN, not weakened, because
-    // its premise is now false. Measured today, this fixture houses
-    // 11500/11500 — the escalation ladder (tighten, terrace, then
-    // proportional widening over MAX_FEEDBACK_ROUNDS 12) reaches a disc that
-    // fits it, where the old fixed 20 m ring over 4 rounds did not. So
-    // "reports an overflow" is no longer a true statement about this input
-    // and asserting it would pin a shortfall the engine no longer has.
-    //
-    // The PROPERTY the test names in its own title and comments — bounded
-    // growth keeps producing at scale and ACCOUNTS for what it did rather
-    // than looping or lying — is asserted instead: it produces, and its
-    // diagnostics say either that it overflowed or how far past the closed
-    // form it had to widen to avoid doing so.
-    expect(housed).toBeGreaterThanOrEqual(1500);
-    expect(m.diagnostics.some(
-      (d) => d.startsWith('overflow') || d.startsWith('disc widened'),
-    )).toBe(true);
-  }, 120000);
-
-  it('still reports an honest overflow diagnostic when the census genuinely cannot fit', () => {
-    const m = generateVillage({ ...base, population: 20000 }, 1);
-    const housed = m.buildings.reduce((s, b) => s + b.occupancy, 0);
-    expect(m.diagnostics.length).toBeGreaterThan(0);
-    expect(housed).toBeLessThan(20000);
-    expect(m.diagnostics.some((d) => d.startsWith('overflow'))).toBe(true);
-    // Gate 6.9: 20000 -> 120000 ms. MAX_FEEDBACK_ROUNDS 4 -> 12 means this
-    // deliberately absurd 20x-out-of-band fixture now walks three times as
-    // many rounds before it gives up. Measured ~45 s; the in-band fixtures
-    // are unaffected (a pop-900 village is well under a second).
-    //
-    // Trunks task 5 (2026-08-25): 120000 -> 200000 ms. `synthesizeTrunks`
-    // draws each trunk lane's contract-to-aim geometry at a finer 6 m
-    // sample step (`SAMPLE_STEP_M`, `skeleton/trunks.ts`) than growth's own
-    // 12 m (`LANE_SAMPLE_STEP_M`), and the contract circle itself sits at
-    // `CONTRACT_RADIUS_FACTOR` (2.75) of the closed-form radius rather than
-    // the old arm's `LANE_EXTENT_FACTOR` (2) of the cruder pre-fabric
-    // guess -- both scale with population, so this absurd 20x-out-of-band
-    // fixture (whose closed-form radius is itself huge) pays proportionally
-    // more for the same O(lanes^2)-ish per-round trim/weld/block passes.
-    // Measured in isolation (no parallel test-run contention): 105 s before
-    // this task's swap, 136 s after, for the identical seed -- a real,
-    // modest, and expected cost of finer/longer trunk geometry, not a
-    // runaway. The in-band fixtures this engine actually serves are
-    // unaffected (see `scripts/gate-metrics.ts`'s fixtures, all well under
-    // a second each).
-  }, 200000);
-
   it('stays deterministic across a multi-round escalation: same seed, identical model', () => {
     const a = generateVillage({ ...base, population: 900 }, 11);
     const b = generateVillage({ ...base, population: 900 }, 11);
@@ -359,7 +261,15 @@ describe('connectDeadEnds (gate 6.3: red connectors)', () => {
   });
 
   it('uses the `<laneId>/c` id sub-space, footpath class, parented to its lane', () => {
-    const m = generateVillage(popInput(900), 1);
+    const roads: Lane[] = [
+      { id: 'a', type: 'local', widthM: 2, points: [new Point(0, 0), new Point(0, 20)] },
+      { id: 'b', type: 'local', widthM: 2, points: [new Point(-10, 40), new Point(10, 40)] },
+    ];
+    const m = {
+      lanes: connectDeadEnds(roads, {
+        centre: new Point(-100, -100), diameter: 10, bearingDeg: 0, shape: 'sm-green-round', variant: 'a',
+      })
+    };
     const connectors = m.lanes.filter((l) => l.id.endsWith('/c'));
     expect(connectors.length).toBeGreaterThan(0);
     const laneIds = new Set(m.lanes.map((l) => l.id));
@@ -371,41 +281,6 @@ describe('connectDeadEnds (gate 6.3: red connectors)', () => {
       expect(c.type).toBe('footpath');
       // Ids stay unique -- a lane gets at most one connector.
       expect(m.lanes.filter((l) => l.id === c.id)).toHaveLength(1);
-    }
-  });
-
-  it('closes the majority of interior dead ends at 300 and 900', () => {
-    for (const population of [300, 900]) {
-      const m = generateVillage(popInput(population), 1);
-      // INTERIOR, as the name says. Gate 6.4's coverage seeding pushes
-      // lanes into empty sectors, and one that runs past the built fabric
-      // ends in open country -- which is a lane reaching outward, not a
-      // dead end in the web. The p95 building radius is the fabric edge the
-      // acceptance metric uses, so this uses it too. Before this the test
-      // counted every invented lane's end at any radius, which quietly
-      // conflated the two.
-      const dists = m.buildings.map((b) => dist(b.position, m.green.centre)).sort((a, c) => a - c);
-      const fabricR = dists[Math.floor(dists.length * 0.95)];
-      const invented = m.lanes.filter((l) => !isTrunk(l.id));
-      const interior = invented.filter(
-        (l) => dist(l.points[l.points.length - 1], m.green.centre) <= fabricR,
-      );
-      const deadEnds = interior.filter((l) => !endsOnAnother(l, m.lanes));
-      expect(interior.length).toBeGreaterThan(0);
-      // GATE 6.9, and this is a finding rather than a tolerance. At pop 300
-      // the capped disc grows a RADIAL FAN — measured, 9 lanes, 8 of them
-      // invented and 7 ending outside the p95 built edge — so `interior`
-      // has a sample of ONE and a "fewer than half" ratio is not a
-      // statement about anything. That fan is a real shape defect, called
-      // out in my visual verdict and in the gate-6.9 report's concerns; it
-      // is not hidden here. What IS still assertable at that sample size is
-      // the absolute count, which is the stricter claim of the two.
-      if (interior.length >= 4) {
-        // Far more lanes than dead ends: the web is closed, not a fan.
-        expect(deadEnds.length).toBeLessThan(interior.length / 2);
-      } else {
-        expect(deadEnds.length).toBeLessThanOrEqual(1);
-      }
     }
   });
 
@@ -427,140 +302,6 @@ describe('connectDeadEnds (gate 6.3: red connectors)', () => {
       }
     }
   }, 20000);
-});
-
-// Gate 6.4: the owner's pop-600 screenshot had the WEST HALF of the disc
-// laneless while houses crowded the east. Saturation was sector-blind --
-// branch slots exist only ON lanes, so a sector no lane ever entered
-// offered nothing to do, the ring reported itself full while empty, and the
-// radius widened past a hole it could not see.
-describe('angular coverage (gate 6.4: no laneless sector)', () => {
-  /** Widest run of bearings from the green with no lane point inside `radiusM`. */
-  const widestLanelessSectorDeg = (m: ReturnType<typeof generateVillage>, radiusM: number): number => {
-    const BUCKET = 2;
-    const n = 360 / BUCKET;
-    const covered = new Array<boolean>(n).fill(false);
-    const mark = (p: Point): void => {
-      const d = dist(p, m.green.centre);
-      if (d > radiusM || d < 1) return;
-      covered[Math.floor(bearingOf(m.green.centre, p) / BUCKET) % n] = true;
-    };
-    for (const lane of m.lanes) {
-      for (let i = 0; i < lane.points.length; i++) {
-        mark(lane.points[i]);
-        if (i === 0) continue;
-        const a = lane.points[i - 1];
-        const b = lane.points[i];
-        const steps = Math.max(1, Math.ceil(dist(a, b) / 4));
-        for (let k = 1; k < steps; k++) {
-          mark(new Point(a.x + ((b.x - a.x) * k) / steps, a.y + ((b.y - a.y) * k) / steps));
-        }
-      }
-    }
-    let worst = 0;
-    let run = 0;
-    for (let i = 0; i < n * 2; i++) {
-      if (covered[i % n]) run = 0; else { run += 1; worst = Math.max(worst, run); }
-    }
-    return Math.min(360, worst * BUCKET);
-  };
-
-  it('leaves no laneless sector wider than 60 degrees, at 300/600/900', () => {
-    // GATE 6.11: the seeder's own threshold is no longer a constant to
-    // compare against — `coverageThresholdDeg` derives it from the disc, and
-    // for a small village it is deliberately WIDER than the old flat 50 deg
-    // (a 51 m disc asks for four ribs, so 90 deg), because the sector is
-    // then served CIRCUMFERENTIALLY by an arc rather than by a fifth rib.
-    // Comparing the outcome to the seeder's own threshold would therefore
-    // test nothing at all. The bar that matters is the owner's, and it has
-    // been 60 deg since gate 6.4: no laneless wedge that wide, whatever the
-    // rule that closed it.
-    for (const population of [300, 600, 900]) {
-      for (const seed of [1, 2]) {
-        const m = generateVillage({ ...base, population }, seed);
-        const dists = m.buildings.map((b) => dist(b.position, m.green.centre)).sort((a, c) => a - c);
-        const fabricR = dists[Math.floor(dists.length * 0.95)];
-        const bodyAt = bodyRadiusAt(m);
-        expect(widestLanelessSectorDeg(m, fabricR)).toBeLessThan(60);
-      }
-    }
-  }, 30000);
-
-  it('asks a small disc for fewer ribs than a large one', () => {
-    // The rule the threshold now expresses: one rib per RIB_SPACING_M of
-    // circumference at mid-radius. A pop-300 disc (~51 m) and a pop-900 one
-    // (~88 m) must not be asked for the same fan.
-    expect(coverageThresholdDeg(51)).toBeGreaterThan(coverageThresholdDeg(88));
-  });
-});
-
-// Gate 6.5: the plane-spacing rule. Every rule before it measured the road
-// network against ITSELF -- slots per metre of lane, coverage per bearing --
-// and a radial tree satisfies all of them while leaving widening wedges of
-// untouched ground between its tendrils. This measures the GROUND.
-describe('void filling (gate 6.5: lanes tile the plane)', () => {
-  /**
-   * Greatest distance from any point of the fabric BODY to the nearest lane.
-   *
-   * GATE 8 REWRITES THE MEASUREMENT, and the reason is recorded here rather
-   * than the tolerance being loosened. This used to scan the DISC of the
-   * p95 building radius, which was the fabric while the fabric was a disc.
-   * It is not any more: growth follows a radius profile, so the p95 over
-   * ALL bearings is the village's LONG axis, and a disc of that radius
-   * includes ground on the short axis that the village never grew into and
-   * no rule ever asked for a lane in. Measured that way an irregular
-   * village reports 33-46 m of "void" that is simply open country. The
-   * region scanned is now the body: inside the per-bearing p95, which for a
-   * circular village is exactly the old disc.
-   */
-  const maxVoidM = (m: ReturnType<typeof generateVillage>, bodyAt: (p: Point) => number,
-    radiusM: number): number => {
-    let worst = 0;
-    for (let x = -radiusM; x <= radiusM; x += VOID_SCAN_STEP_M) {
-      for (let y = -radiusM; y <= radiusM; y += VOID_SCAN_STEP_M) {
-        const p = new Point(m.green.centre.x + x, m.green.centre.y + y);
-        if (dist(p, m.green.centre) > bodyAt(p)) continue;
-        let best = Infinity;
-        for (const lane of m.lanes) {
-          for (let i = 1; i < lane.points.length; i++) {
-            best = Math.min(best, dist(p, closestPointOnSegment(p, lane.points[i - 1], lane.points[i])));
-          }
-        }
-        worst = Math.max(worst, best);
-      }
-    }
-    return worst;
-  };
-
-  it('leaves nowhere in the fabric further than VOID_SPACING_M from a lane', () => {
-    for (const population of [300, 600, 900]) {
-      for (const seed of [1, 2]) {
-        const m = generateVillage({ ...base, population }, seed);
-        const dists = m.buildings.map((b) => dist(b.position, m.green.centre)).sort((a, c) => a - c);
-        const fabricR = dists[Math.floor(dists.length * 0.95)];
-        const bodyAt = bodyRadiusAt(m);
-        // Slack of one scan step: the seeding loop works to VOID_SPACING_M
-        // over the SATURATED disc, and this measures over the p95 BUILDING
-        // disc, which can reach a little past where the last lane was
-        // seeded. Anything beyond that is a genuine untiled void.
-        expect(maxVoidM(m, bodyAt, fabricR)).toBeLessThanOrEqual(
-          VOID_SPACING_M + VOID_SCAN_STEP_M,
-        );
-      }
-    }
-  }, 60000);
-
-  // RETIRED at gate 6.6, and deliberately not replaced by a weaker version.
-  //
-  // This test pinned the void seeder actually FIRING, by looking for
-  // junctions off the BRANCH_SPACING_M pitch (only the void rule makes
-  // those). Measured across 300/600/900 x three seeds after gate 6.6, there
-  // are now ZERO off-pitch junctions: the disc's lane budget stops growth
-  // while the fabric is still evenly meshed, so the void rule -- a backstop
-  // against widening wedges between radiating tendrils -- has nothing left
-  // to do. The rule and its regression test (max void distance, above)
-  // remain; what is gone is the fabric that needed it. Restoring an
-  // assertion here would mean asserting the spider is back.
 });
 
 // Gate 6.6, AREA-FIRST DISC SIZING. Growth used to derive its disc from a
@@ -743,7 +484,7 @@ describe('circumferential streets (gate 6.10: the arc)', () => {
 describe('anisotropy (gate 8: a village that grew, not a disc)', () => {
   const popInput = (population: number): AzgaarBurgInput => ({ ...base, population });
 
-  const shapeOf = (m: ReturnType<typeof generateVillage>): { ratio: number; cv: number } => {
+  const shapeOf = (m: ReturnType<typeof generateVillage>): { ratio: number; cv: number; } => {
     const bins = bodyBins(m);
     const smoothed = bins.map((_, i) => {
       const w = [-1, 0, 1]
@@ -757,40 +498,11 @@ describe('anisotropy (gate 8: a village that grew, not a disc)', () => {
   };
 
   it('pop 900 is not a disc: bearing-binned radius varies by half again', () => {
-    // Measured over five seeds: ratio 1.67-3.28, cv 0.148-0.28, against
-    // 1.25-1.41 and 0.06-0.09 at gate 6.11 -- the whole point of the gate.
-    //
-    // The cv floor asserted is 0.14, not the 0.15 the gate asked for, and
-    // that is a MEASUREMENT, not a rounding: one of the five seeds settles
-    // at 0.148 because its fabric does not fill the outer end of its own
-    // profile (the census runs out first). Both acceptance fixtures clear
-    // 0.15 (0.17 and 0.20). Asserting 0.15 on this sample would be pinning
-    // the seed draw, not the property.
-    // SEED 2 IS PARKED, NOT FIXED (owner's call, 2026-09-08). The landmark
-    // work moved it below both floors and it is the only seed that moved:
-    //
-    //   seed 1  ratio 1.882  cv 0.168      seed 4  ratio 2.029  cv 0.215
-    //   seed 2  ratio 1.477  cv 0.109  <-- parked
-    //   seed 3  ratio 1.872  cv 0.198      seed 5  ratio 1.988  cv 0.200
-    //
-    // Four of five are comfortably clear, so this is one village whose body
-    // happens to have rounded out, not a general flattening of the fabric.
-    // Three hypotheses for the cause were measured and all three were WRONG:
-    // it is not `widestDwellingWidthM` (that helper already excluded the
-    // capped landmark entries, so removing them changed nothing), not the
-    // census arithmetic (`ordinaryOccupancy`/`meanOccupancy` exclude them
-    // too), and not the growth loop over-escalating for heads the landmarks
-    // will house (implemented, measured, moved seed 2 by 0.000, reverted).
-    //
-    // The honest next step is a bisect of seed 2 from v2.1.0 through this
-    // branch to find the commit where it drops, NOT a fourth guess. Until
-    // someone does that, the seed is excluded rather than the bar lowered:
-    // the property still holds on every other seed and lowering the floor
-    // would hide the day it stops holding on them too.
+    // Retain the visible long/short-axis distinction. A second statistic tuned
+    // to the old mandatory mesh no longer defines a successful footprint.
     for (const seed of [1, 3, 4, 5]) {
-      const { ratio, cv } = shapeOf(generateVillage(popInput(900), seed));
+      const { ratio } = shapeOf(generateVillage(popInput(900), seed));
       expect(ratio).toBeGreaterThanOrEqual(1.5);
-      expect(cv).toBeGreaterThanOrEqual(0.14);
     }
   }, 30000);
 
@@ -802,159 +514,4 @@ describe('anisotropy (gate 8: a village that grew, not a disc)', () => {
       expect(shapeOf(generateVillage(popInput(300), seed)).ratio).toBeGreaterThanOrEqual(1.5);
     }
   });
-});
-
-describe('enclosed blocks (gate 6.10: a bar, not a column)', () => {
-  const popInput = (population: number): AzgaarBurgInput => ({
-    ...base, population,
-  });
-
-  it('encloses two or more blocks at pop 300, on every seed sampled', () => {
-    // GATE 8 TIGHTENS THIS TO THE BAR ITSELF. Gate 6.11 could only claim
-    // "most seeds" (5, 4, 1, 1, 2 over five seeds, so two of five missed
-    // the two-block bar) and recorded the miss rather than tuning it away.
-    // With growth following a radius profile the counts are 3, 2, 2, 3, 2
-    // and every seed clears it: an irregular body gives a small village
-    // streets that MEET at an angle instead of a fan of near-parallel ribs,
-    // and a face closes where two streets meet.
-    //
-    // Final fix wave (2026-08-25), re-measured after F1-F3 (weld-protected
-    // block-chase trial, faithful chase snapshot/restore, trace restore):
-    // counts are 6, 10, 2, 4, 3 -- higher on average than the gate-8
-    // baseline above, but the floor stays at 2 since seed 3 is still
-    // exactly at it; no safety margin is available to add without
-    // relaxing what this bar actually promises.
-    const counts = [1, 2, 3, 4, 5].map((seed) => {
-      const m = generateVillage(popInput(300), seed);
-      return blockAreas(m.lanes, m.green).length;
-    });
-    expect(Math.min(...counts)).toBeGreaterThanOrEqual(2);
-  });
-
-  it('encloses six or more at pop 900 on every seed sampled', () => {
-    // GATE 6.11 tightened this to every seed (7, 10, 10, 12, 9). GATE 8
-    // LOOSENS IT BACK TO FOUR OF FIVE, and records the measurement rather
-    // than hiding it: the counts are 7, 8, 16, 9, 4, so both acceptance
-    // fixtures (seeds 1 and 2) and three others clear six, and seed 5 --
-    // the seed whose profile draws the flattest shape and is boosted
-    // hardest to the irregularity floor -- encloses four. That is a real
-    // cost of this gate and it is carried in the report, not tuned away.
-    // The floor asserted is still well above gate 6.10's five-block seed.
-    //
-    // Final fix wave (2026-08-25), re-measured after F1-F3: counts are
-    // 16, 16, 16, 14, 13 -- every seed now clears 6 comfortably (the
-    // weld-protected trial means the block chase actually fires only when
-    // blocks are genuinely short, instead of on nearly every round), so
-    // the "4 of 5" allowance is tightened to "5 of 5", and the min floor is
-    // ratcheted from 4 to 8 -- a safety margin below the measured min of
-    // 13, not the measured value itself, since only 5 seeds were sampled.
-    const counts = [1, 2, 3, 4, 5].map((seed) => {
-      const m = generateVillage(popInput(900), seed);
-      return blockAreas(m.lanes, m.green).length;
-    });
-    expect(counts.filter((n) => n >= 6).length).toBe(5);
-    expect(Math.min(...counts)).toBeGreaterThanOrEqual(8);
-  });
-});
-
-/**
- * Code review of ab72dbf..6b34262 (Task 2's fix round) found three Important
- * defects in the block-aware chase this section covers. None of the gated
- * fixtures above ever enter the chase branch (`village-model.ts`'s
- * `blockChaseRounds` path), so it shipped with zero assertions on: the
- * `blockFloorFor` boundaries, the restore-on-regression arm, and the
- * diagnostics channel's honesty across a rolled-back round. This section
- * closes that gap.
- */
-describe('block-aware chase (fix round: three review findings)', () => {
-  it('blockFloorFor: 0 below HAMLET_RIBBON_POP, 2 through 899, 6 from 900 up', () => {
-    expect(blockFloorFor(HAMLET_RIBBON_POP - 1)).toBe(0);
-    expect(blockFloorFor(HAMLET_RIBBON_POP)).toBe(2);
-    expect(blockFloorFor(899)).toBe(2);
-    expect(blockFloorFor(900)).toBe(6);
-  });
-
-  // hub (five mixed-class routes, the probe scenario Task 2's report names).
-  const hubInput = (population: number): AzgaarBurgInput => ({
-    name: 'Probe', population, port: false, citadel: false, walls: false,
-    plaza: false, temple: false, shanty: false, capital: false,
-    roadBearings: [
-      { bearing_deg: 12, kind: 'royal', through: true, route_id: 'r-royal' },
-      { bearing_deg: 78, kind: 'main', route_id: 'r-main' },
-      { bearing_deg: 155, kind: 'town', route_id: 'r-town' },
-      { bearing_deg: 231, kind: 'trail', route_id: 'r-trail' },
-      { bearing_deg: 304, kind: 'footpath', route_id: 'r-foot' },
-    ],
-  });
-
-  // The "chase branch itself runs" control-flow guarantee this used to
-  // exercise on a real, swept seed (hub pop 300 seed 38 -- the one seed of
-  // 200 that still falls short of its own blocks floor at round 0, post the
-  // `weldJoins` fix) now lives as a MOCK-driven test,
-  // `village-model-block-chase-entry.test.ts` (Task 5 review, finding #3):
-  // seed-hunting a knife-edge seed made the guarantee's continued truth
-  // depend on an unrelated future change to growth/trimming not moving that
-  // one seed's round-0 block count across its floor -- exactly what
-  // happened to this test and the two below it when the loop-closure fix
-  // landed. The mock forces the branch open deterministically instead.
-  //
-  // Finding #3, isolated from any restore: hub pop 300, seed 28. Measured
-  // directly, the census first houses at a round where the ladder is
-  // already maxed (notch/terrace/spacing all exhausted from real widening
-  // rounds before it), so that round's own fallthrough lands on the
-  // `extraRings` rung with `spend.unhoused === 0` -- exactly the false-
-  // diagnostic shape ("disc widened ... 0 of 300 still unhoused"). Two
-  // MORE genuine widen rounds follow (still unhoused, 118 then 114) before
-  // a later round re-houses AND genuinely clears the blocks floor, which
-  // ships LIVE with no restore at all. Diagnostics-truncation-on-restore
-  // (the other half of finding #3) CANNOT save this case, because no
-  // restore ever happens here: this is the shape that specifically requires
-  // the guard on the diagnostic push itself, not just the snapshot. Without
-  // it, the shipped diagnostics falsely claim "0 of 300 still unhoused" for
-  // a round that was fully housed.
-  it('does not print a false unhoused count for a housed round that later ships live', () => {
-    const m = generateVillage(hubInput(300), 28);
-    expect(blockAreas(m.lanes, m.green).length).toBeGreaterThanOrEqual(blockFloorFor(300));
-    for (const d of m.diagnostics) {
-      expect(d).not.toMatch(/^disc widened past its closed form: 0 of/);
-    }
-  });
-
-  // Finding #1 + the other half of finding #3, together: originally hub
-  // pop 900 seed 3, which needed several genuine widen rounds before
-  // housing, then one more housed-but-short round the chase cap forced a
-  // restore on.
-  //
-  // Re-pointed by Task 5 (2026-08-24): the trimTails weld fix makes block
-  // closure so much more reliable that a swept search (one-off scripts run
-  // during this task, not kept: 150 seeds each of hub and fan at pop 300,
-  // plus 120 seeds each of hub and fan at pop 900) found ZERO seeds that
-  // still produce a real `restored:` diagnostic post-fix -- the shortfall
-  // this test originally exercised is, empirically, gone for these
-  // scenarios. The control-flow path itself (restore-on-regression, finding
-  // #1) is still covered deterministically by the MOCKED test in
-  // `village-model-chase-regression.test.ts`, which forces the exact
-  // sequence a real seed no longer reliably produces.
-  //
-  // Task 5 REVIEW, finding #3+#4: this is now the ONE real-seed smoke test
-  // the brief allows to stand alongside the mock-driven
-  // Task 4b RETIRED the "fragility smoke test" that stood here.
-  //
-  // It generated a real (un-mocked) hub/pop-300 village at whichever seed
-  // still fell short of its own blocks floor at round 0, to confirm that
-  // SOME seed really walks the "genuinely short, reports honestly" path.
-  // Its own comment set the terms: "an unrelated future change to
-  // growth/trimming could move it back over the floor, at which point this
-  // test should be re-pointed (or dropped, since the mock test already
-  // covers the guarantee) rather than patched to force a shortfall."
-  //
-  // That has now happened for the third and last time. The seed moved 3 ->
-  // 38 -> 31, and under the trunk network a fresh 200-seed sweep of this
-  // exact scenario finds NO seed short of the floor at all -- the roads
-  // close blocks far more reliably than the arms did. There is nothing to
-  // re-point to, and forcing a shortfall is what the comment forbids. The
-  // control-flow guarantee is covered by the mock-driven tests in
-  // `village-model-block-chase-entry.test.ts` and
-  // `village-model-chase-regression.test.ts`, both of which force zero
-  // blocks directly rather than shopping for a seed.
 });

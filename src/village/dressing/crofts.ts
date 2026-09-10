@@ -1,3 +1,4 @@
+import { frontageOffsetM } from '../cross-section.js';
 import { Point } from '../../types/point.js';
 import {
   bearingVector, dist, greenDrawnRadius, inAnyWater,
@@ -41,7 +42,7 @@ export function croftDepthTarget(
 /** Tangent/normal for a lot, matching `lotObb`'s convention: `bearingDeg`
  * points AT the lane/green; `normal` is the opposite (away), the direction
  * both the claim and its croft extend. */
-function lotAxes(lot: Lot): { tangent: Point; normal: Point } {
+function lotAxes(lot: Lot): { tangent: Point; normal: Point; } {
   const facing = bearingVector(lot.bearingDeg);
   const normal = new Point(-facing.x, -facing.y);
   const tangent = new Point(-facing.y, facing.x);
@@ -108,7 +109,7 @@ function obbSamplePoints(obb: Obb): Point[] {
 }
 
 function laneClearance(lane: Lane): number {
-  return lane.widthM / 2 + (LANE_SETBACK_M[lane.type] ?? 2);
+  return frontageOffsetM(lane);
 }
 
 /** Whether `lane`'s centreline comes within its clearance of `obb`, sampled

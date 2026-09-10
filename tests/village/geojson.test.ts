@@ -9,12 +9,12 @@
  * metadata block consumers gate their ingestion on.
  */
 import { describe, expect, it } from 'vitest';
-import { generateVillage } from '../../src/village/village-model.js';
+import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
+import { GEOJSON_SCHEMA_VERSION } from '../../src/output/geojson-builder.js';
 import { generateVillageGeoJson } from '../../src/village/geojson.js';
 import { renderVillage } from '../../src/village/render.js';
 import { isApron } from '../../src/village/types.js';
-import { GEOJSON_SCHEMA_VERSION } from '../../src/output/geojson-builder.js';
-import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
+import { generateVillage } from '../../src/village/village-model.js';
 
 const flags = {
   port: false, citadel: false, walls: false, plaza: false,
@@ -36,13 +36,13 @@ const wet: AzgaarBurgInput = {
 const model = generateVillage(wet, 1);
 const fc = generateVillageGeoJson(model);
 const layer = (name: string) => fc.features.filter((f) => f.properties?.layer === name);
-const metadata = (c: typeof fc) => (c as unknown as { metadata: Record<string, any> }).metadata;
+const metadata = (c: typeof fc) => (c as unknown as { metadata: Record<string, any>; }).metadata;
 const input = wet;
 
 describe('generateVillageGeoJson', () => {
   it('is a FeatureCollection carrying the schema consumers gate on', () => {
     expect(fc.type).toBe('FeatureCollection');
-    const meta = (fc as unknown as { metadata: Record<string, unknown> }).metadata;
+    const meta = (fc as unknown as { metadata: Record<string, unknown>; }).metadata;
     expect(meta.schema_version).toBe(GEOJSON_SCHEMA_VERSION);
     expect(meta.coordinate_units).toBe('metres');
     expect(typeof meta.generated_at).toBe('string');
@@ -65,6 +65,23 @@ describe('generateVillageGeoJson', () => {
     }
     for (const id of ['r-main', 'r-town', 'r-trail']) {
       expect(echoed.has(id), `route ${id} is not echoed on any street`).toBe(true);
+    }
+  });
+
+  it('exports the same centreline and travelled surface that SVG paints', () => {
+    const svg = renderVillage(model, 4);
+    for (const street of layer('street')) {
+      const lane = model.lanes.find(l => l.id === street.properties?.street_id)!;
+      expect(street.geometry.type).toBe('LineString');
+      if (street.geometry.type !== 'LineString') continue;
+      expect(street.geometry.coordinates).toEqual(lane.points.map(p => [p.x, p.y]));
+      expect(street.properties?.width_m).toBe(lane.widthM);
+      const path = svg.match(new RegExp(`<path data-lane="${lane.id}"[^>]*>`))?.[0];
+      expect(path).toBeDefined();
+      const painted = Number(path!.match(/stroke-width="([^"]+)"/)![1]) / 4;
+      expect(painted).toBeCloseTo(street.properties?.surface_width_m as number, 2);
+      expect(street.properties?.surface_width_m).toBeLessThanOrEqual(lane.widthM);
+      expect(street.properties?.setback_m).toBeGreaterThanOrEqual(0);
     }
   });
 
@@ -120,7 +137,7 @@ describe('generateVillageGeoJson', () => {
   });
 
   it('carries the contract circle so a consumer can align with FMG\'s routes', () => {
-    const meta = (fc as unknown as { metadata: Record<string, unknown> }).metadata;
+    const meta = (fc as unknown as { metadata: Record<string, unknown>; }).metadata;
     expect(meta.contract_radius_m).toBeCloseTo(model.contractRadiusM, 6);
   });
 });
@@ -195,12 +212,12 @@ describe('local_bounds is the drawn tile', () => {
     const tileSpan = Math.max(
       m.frame.maxX - m.frame.minX, m.frame.maxY - m.frame.minY,
     );
-    const diameterMeters = (meta.scale as { diameter_meters: number }).diameter_meters;
+    const diameterMeters = (meta.scale as { diameter_meters: number; }).diameter_meters;
     expect(diameterMeters).toBeLessThan(tileSpan);
 
     const xs: number[] = [m.green.centre.x];
     const ys: number[] = [m.green.centre.y];
-    const take = (p: { x: number; y: number }): void => { xs.push(p.x); ys.push(p.y); };
+    const take = (p: { x: number; y: number; }): void => { xs.push(p.x); ys.push(p.y); };
     for (const b of m.buildings) take(b.position);
     for (const l of m.lanes) {
       if (isApron(l.id)) continue;

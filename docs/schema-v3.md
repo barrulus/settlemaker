@@ -34,6 +34,31 @@ Consumers should treat IDs as **opaque** but may rely on them as primary keys fo
 
 Each `layer: 'street'` feature has exactly one `street_id`. IDs are **never shared** across features. Branches produce separate features with separate IDs. Crossings are geometric intersections only — no shared identity, no junction object. Streets stay flat LineStrings; no graph/node/edge model at the contract level.
 
+### Village road cross-sections
+
+Village street features retain `width_m` as the reserved road corridor in metres.
+Two additive properties describe the cross-section more precisely:
+
+| Property | Meaning |
+|---|---|
+| `surface_width_m` | Travelled surface, matching the SVG stroke width divided by its pixels-per-metre scale. |
+| `setback_m` | Offset from the corridor edge to the parcel frontage; total centreline offset is `width_m / 2 + setback_m`. |
+
+The model equivalents are `Lane.widthM`, optional `surfaceWidthM`, and optional
+`setbackM`. Older model objects without the optional fields keep their existing
+class-based setback and paint defaults. Collision and dressing clearance use the
+reserved corridor; parcel frontage uses the corridor plus setback. Streets remain
+flat LineStrings sampled from the same centreline used to render and place lots.
+These fields do not change the schema version or city output.
+
+Village layouts changed with the frontage-driven road policy. IDs and geometry
+remain deterministic for identical inputs **within a generator version**; they
+are not promised stable across generator upgrades. The existing
+`settlement_generation_version: "village"` metadata value identifies the engine,
+not a source revision, and remains unchanged. Consumers caching generated output
+should include their deployed package/build revision in the cache key or refresh
+that cache when upgrading.
+
 ## `building_id` rule for POIs
 
 `building_id` is `null` only when `poi.kind ∈ {'pier', 'well', 'market', 'mill'}`. For all other kinds, `building_id` is non-null; if no suitable building exists, the POI is omitted entirely rather than emitted with `null`.

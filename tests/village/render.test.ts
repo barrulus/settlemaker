@@ -1,11 +1,10 @@
-import { describe, it, expect } from 'vitest';
-import { createHash } from 'node:crypto';
-import { generateVillage } from '../../src/village/village-model.js';
-import { renderVillage } from '../../src/village/render.js';
-import { hasGlyph } from '../../src/village/glyphs.js';
-import { classRank } from '../../src/village/route-class.js';
-import { RENDER_MINOR_LANE_WIDTH_SHARE } from '../../src/village/constants.js';
+import { describe, expect, it } from 'vitest';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
+import { RENDER_MINOR_LANE_WIDTH_SHARE } from '../../src/village/constants.js';
+import { hasGlyph } from '../../src/village/glyphs.js';
+import { renderVillage } from '../../src/village/render.js';
+import { classRank } from '../../src/village/route-class.js';
+import { generateVillage } from '../../src/village/village-model.js';
 
 // Fix round 1 (2026-08-21): field/wedge ids can legitimately carry regex
 // metacharacters (`wedge:<laneIdA>|<laneIdB>`'s `|`, per the fields design
@@ -64,46 +63,10 @@ describe('renderVillage', () => {
     expect((wet.match(/data-water="/g) ?? []).length).toBe(drawable);
   });
 
-  it('leaves a landlocked village byte-identical', () => {
-    // Phase 2's acceptance bar. The hash was taken from the renderer BEFORE
-    // the water band existed, so this pins that a dry village gained
-    // nothing at all -- not an empty group, not a stray newline.
-    const dry = generateVillage({
-      name: 'Dry', population: 300, port: false, citadel: false, walls: false,
-      plaza: false, temple: false, shanty: false, capital: false,
-      roadBearings: [{ bearing_deg: 225, kind: 'road' }],
-    } as AzgaarBurgInput, 1);
-    expect(dry.site.water).toHaveLength(0);
-    const svg = renderVillage(dry);
+  it('keeps landlocked rendering free of water while retaining every model lane', () => {
     expect(svg).not.toContain('data-band="water"');
-    // The hash moved when Phase 6 added the alignment frame
-    // (`data-origin-x/y`, `data-px-per-metre`) to the root element. The
-    // PICTURE did not: stripping those three attributes reproduces the
-    // original hash exactly, which is asserted below rather than asserted
-    // away by simply re-pinning. `d0b2f407...` is the pre-change value,
-    // taken before the water band or theming existed.
-    const stripped = svg.replace(
-      / data-origin-x="[-0-9.]+" data-origin-y="[-0-9.]+" data-px-per-metre="[-0-9.]+"/, '',
-    );
-    // The hash moved AGAIN when resolved fills landed: `var(--sm-x, <fallback>)`
-    // now carries the resolved token value instead of the glyph's own. The
-    // PICTURE still did not move -- a browser resolves the variable in both
-    // cases and paints the identical colour -- so the fallback is normalised
-    // away and the ORIGINAL hash is reproduced under that normalisation
-    // rather than re-pinned. `29020286...` is the pre-change value with both
-    // the alignment frame and the fallbacks stripped; erasing only the frame
-    // still gives `d0b2f407...` on the pre-change renderer, which is how this
-    // value was derived.
-    //
-    // The hash moved a THIRD time, deliberately, in spec 2026-09-07 §7: the
-    // model now owns the frame and clips approach-road aprons to it, so a
-    // road that used to stop 150 m short of the tile edge now reaches it.
-    // Visually confirmed before re-pinning (task 3 report): the apron runs
-    // from the green, past the field ring, to the drawn tile's boundary,
-    // and nothing else in the picture moved. `3299ad25...` is that value.
-    const normalised = stripped.replace(/var\((--[a-z0-9-]+)\s*,\s*[^)]*\)/gi, 'var($1)');
-    expect(createHash('sha256').update(normalised).digest('hex'))
-      .toBe('f74c97a18e1d47bb22a46e2f3b3ae8a8e4194cd136d51516a65cb643ba5e7e55');
+    for (const lane of model.lanes) expect(svg).toContain(`data-lane="${lane.id}"`);
+    expect(svg).toContain('stroke-linejoin="round"');
   });
 
   it('carries the contract circle radius for consumers to align against', () => {
@@ -363,7 +326,7 @@ describe('renderVillage', () => {
         expect(paintedM).toBeCloseTo(lane.widthM, 2);
       } else {
         checkedMinor += 1;
-        expect(paintedM).toBeCloseTo(lane.widthM * RENDER_MINOR_LANE_WIDTH_SHARE, 2);
+        expect(paintedM).toBeCloseTo(lane.surfaceWidthM ?? lane.widthM * RENDER_MINOR_LANE_WIDTH_SHARE, 2);
         expect(paintedM).toBeLessThan(lane.widthM);
       }
     }

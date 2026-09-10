@@ -1,3 +1,4 @@
+import { frontageOffsetM } from '../cross-section.js';
 import { Point } from '../../types/point.js';
 import { pointInPolygon } from '../../geom/point-in-polygon.js';
 import { SeededRandom } from '../../utils/random.js';
@@ -329,7 +330,7 @@ export function exitRoads(green: Green, lanes: Lane[], belt: Point[]): RoadLine[
       out.push({
         p: tip,
         dirDeg,
-        halfWidthM: lane.widthM / 2 + (LANE_SETBACK_M[lane.type] ?? 2) + FIELD_ROAD_MARGIN_M,
+        halfWidthM: frontageOffsetM(lane) + FIELD_ROAD_MARGIN_M,
         outX: d.x,
         outY: d.y,
       });
@@ -378,7 +379,7 @@ function buildObstacles(lots: Lot[], crofts: Croft[], lanes: Lane[], water: Poin
   for (const croft of crofts) add(croft.polygon);
   const segs: LaneSeg[] = [];
   for (const lane of lanes) {
-    const clearanceM = lane.widthM / 2 + (LANE_SETBACK_M[lane.type] ?? 2);
+    const clearanceM = frontageOffsetM(lane);
     for (let i = 1; i < lane.points.length; i++) {
       segs.push({ a: lane.points[i - 1], b: lane.points[i], clearanceM });
     }
@@ -393,7 +394,7 @@ function buildObstacles(lots: Lot[], crofts: Croft[], lanes: Lane[], water: Poin
  */
 function blockerAt(
   p: Point, obs: Obstacles,
-): { kind: 'claim'; obstacle: Obstacle } | { kind: 'lane'; seg: LaneSeg } | { kind: 'water' } | null {
+): { kind: 'claim'; obstacle: Obstacle; } | { kind: 'lane'; seg: LaneSeg; } | { kind: 'water'; } | null {
   if (inAnyWater(p, obs.water)) return { kind: 'water' };
   for (const claim of obs.claims) {
     if (dist(p, claim.centre) > claim.radiusM + FIELD_CLAIM_MARGIN_M) continue;
@@ -435,7 +436,7 @@ function parcelSamples(poly: Point[]): Point[] {
 /** The first sample that is standing on something, with what it is. */
 function firstBlocker(
   poly: Point[], obs: Obstacles,
-): { at: Point; blocker: NonNullable<ReturnType<typeof blockerAt>> } | null {
+): { at: Point; blocker: NonNullable<ReturnType<typeof blockerAt>>; } | null {
   for (const p of parcelSamples(poly)) {
     const blocker = blockerAt(p, obs);
     if (blocker !== null) return { at: p, blocker };
@@ -470,7 +471,7 @@ function trimToClearGround(poly: Point[], obs: Obstacles): Point[] {
     const found = firstBlocker(cur, obs);
     if (found === null) return cur;
     if (found.blocker.kind === 'water') return [];
-    const cands: Array<{ nx: number; ny: number; c: number }> = [];
+    const cands: Array<{ nx: number; ny: number; c: number; }> = [];
     if (found.blocker.kind === 'claim') {
       const cp = found.blocker.obstacle.poly;
       let sgn = 0;
@@ -586,10 +587,10 @@ export function clipOutsideBelt(cell: Point[], belt: Point[]): Point[] {
 }
 
 /** The road whose line runs nearest this cell, and how far off it is. */
-function nearestRoad(cell: Point[], roads: RoadLine[]): { road: RoadLine; distM: number } | null {
+function nearestRoad(cell: Point[], roads: RoadLine[]): { road: RoadLine; distM: number; } | null {
   if (roads.length === 0) return null;
   const c = polygonCentroid(cell);
-  let best: { road: RoadLine; distM: number } | null = null;
+  let best: { road: RoadLine; distM: number; } | null = null;
   for (const road of roads) {
     if ((c.x - road.p.x) * road.outX + (c.y - road.p.y) * road.outY < -road.halfWidthM) continue;
     const r = ((road.dirDeg + 90) * Math.PI) / 180;
@@ -735,7 +736,7 @@ function subdivide(
  */
 function pickCropGlyph(
   crops: string[], ordinal: number, allowOrchardVine: boolean,
-  roll: number, toggle: { n: number },
+  roll: number, toggle: { n: number; },
 ): string {
   if (allowOrchardVine && roll < FIELD_ORCHARD_VINE_CHANCE) {
     const glyph = toggle.n % 2 === 0 ? 'sm-field-orchard' : 'sm-field-vine';

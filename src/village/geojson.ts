@@ -1,3 +1,4 @@
+import { roadCrossSection } from './cross-section.js';
 /**
  * Ship plan Phase 4 — the village engine's GeoJSON.
  *
@@ -18,14 +19,14 @@
 import type { Feature, FeatureCollection } from 'geojson';
 import { GEOJSON_SCHEMA_VERSION, SETTLEMAKER_VERSION } from '../output/geojson-builder.js';
 import { regimeFor } from '../poi/poi-selector.js';
-import { inkExtent } from './glyphs.js';
 import { Point } from '../types/point.js';
+import { inkExtent } from './glyphs.js';
 import { isApron, type Building, type VillageModel } from './types.js';
 
 type Pos = [number, number];
 
-const pt = (p: { x: number; y: number }): Pos => [p.x, p.y];
-const ring = (points: Array<{ x: number; y: number }>): Pos[] => {
+const pt = (p: { x: number; y: number; }): Pos => [p.x, p.y];
+const ring = (points: Array<{ x: number; y: number; }>): Pos[] => {
   const r = points.map(pt);
   if (r.length > 0 && (r[0][0] !== r[r.length - 1][0] || r[0][1] !== r[r.length - 1][1])) {
     r.push(r[0]);
@@ -58,7 +59,7 @@ function inkBounds(model: VillageModel): {
 } {
   const xs: number[] = [];
   const ys: number[] = [];
-  const take = (p: { x: number; y: number }): void => { xs.push(p.x); ys.push(p.y); };
+  const take = (p: { x: number; y: number; }): void => { xs.push(p.x); ys.push(p.y); };
   for (const b of model.buildings) take(b.position);
   // An apron is CLIPPED to the tile edge (`clipApronsToFrame`), so counting
   // its points would make "the village's own extent" measure the tile
@@ -115,6 +116,8 @@ export function generateVillageGeoJson(model: VillageModel): FeatureCollection {
       properties: {
         layer: 'street', street_id: lane.id, streetType: lane.type,
         width_m: lane.widthM,
+        surface_width_m: roadCrossSection(lane).surfaceM,
+        setback_m: roadCrossSection(lane).setbackM,
         ...(routeIds.length > 0 ? { route_ids: routeIds } : {}),
         ...(lane.parentId !== undefined ? { parent_street_id: lane.parentId } : {}),
       },

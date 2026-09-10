@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { beforeAll, describe, it, expect } from 'vitest';
 import { generateVillage } from '../../src/village/village-model.js';
 import { intrudesOnLane, overlaps } from '../../src/village/dwellings.js';
 import { lotObb, obbOverlap } from '../../src/village/parcels/overlap.js';
@@ -41,6 +41,18 @@ const inputs: AzgaarBurgInput[] = [
 
 describe('village invariants (design §5.7)', () => {
   const seeds = [1, 2, 3, 4, 5, 6, 7, 8];
+  // Generate each immutable fixture once, yielding between cases so Vitest's
+  // worker can service task-update RPCs during this CPU-heavy grid.
+  const models = new Map<string, ReturnType<typeof generateVillage>>();
+  const key = (input: AzgaarBurgInput, seed: number) => `${input.name}:${seed}`;
+  beforeAll(async () => {
+    for (const input of inputs) for (const seed of seeds) {
+      models.set(key(input, seed), generateVillage(input, seed));
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+  }, 60000);
+  const model = (input: AzgaarBurgInput, seed: number) => models.get(key(input, seed))!;
+
 
   // Fix round 1 (2026-08-21): MAX_FEEDBACK_ROUNDS went 3 -> 4 to restore
   // full-census housing after the seatEfficiency fix, so every test below
@@ -59,7 +71,7 @@ describe('village invariants (design §5.7)', () => {
   it('never puts a lot in water', () => {
     for (const input of inputs) {
       for (const seed of seeds) {
-        const m = generateVillage(input, seed);
+        const m = model(input, seed);
         for (const lot of m.lots) {
           for (const ring of m.site.water) {
             expect(pointInPolygon(lot.front, ring)).toBe(false);
@@ -72,7 +84,7 @@ describe('village invariants (design §5.7)', () => {
   it('never overlaps two buildings', () => {
     for (const input of inputs) {
       for (const seed of seeds) {
-        const bs = generateVillage(input, seed).buildings;
+        const bs = model(input, seed).buildings;
         for (let i = 0; i < bs.length; i++) {
           for (let j = i + 1; j < bs.length; j++) {
             expect(overlaps(bs[i], bs[j])).toBe(false);
@@ -85,7 +97,7 @@ describe('village invariants (design §5.7)', () => {
   it('gives every lot a unique stable id', () => {
     for (const input of inputs) {
       for (const seed of seeds) {
-        const m = generateVillage(input, seed);
+        const m = model(input, seed);
         expect(new Set(m.lots.map((l) => l.id)).size).toBe(m.lots.length);
       }
     }
@@ -94,7 +106,7 @@ describe('village invariants (design §5.7)', () => {
   it('anchors every building to a lot that exists', () => {
     for (const input of inputs) {
       for (const seed of seeds) {
-        const m = generateVillage(input, seed);
+        const m = model(input, seed);
         const ids = new Set(m.lots.map((l) => l.id));
         for (const b of m.buildings) expect(ids.has(b.lotId)).toBe(true);
       }
@@ -104,7 +116,7 @@ describe('village invariants (design §5.7)', () => {
   it('never seats a building on a road (gate 2: houses ON the roads)', () => {
     for (const input of inputs) {
       for (const seed of seeds) {
-        const m = generateVillage(input, seed);
+        const m = model(input, seed);
         for (const b of m.buildings) {
           expect(intrudesOnLane(b, m.lanes)).toBe(false);
         }
@@ -115,7 +127,7 @@ describe('village invariants (design §5.7)', () => {
   it('always produces at least one lane and one building', () => {
     for (const input of inputs) {
       for (const seed of seeds) {
-        const m = generateVillage(input, seed);
+        const m = model(input, seed);
         expect(m.lanes.length).toBeGreaterThan(0);
         expect(m.buildings.length).toBeGreaterThan(0);
       }
@@ -132,7 +144,7 @@ describe('village invariants (design §5.7)', () => {
     const OVERLAP_EPS_M = 0.25;
     for (const input of inputs) {
       for (const seed of seeds) {
-        const m = generateVillage(input, seed);
+        const m = model(input, seed);
         const obbs = m.lots.map((l) => lotObb(l));
         for (let i = 0; i < obbs.length; i++) {
           for (let j = i + 1; j < obbs.length; j++) {
@@ -154,7 +166,7 @@ describe('village invariants (design §5.7)', () => {
     // swing at a sharp bend (miter capped at 4x the setback in strip.ts).
     for (const input of inputs) {
       for (const seed of seeds) {
-        const m = generateVillage(input, seed);
+        const m = model(input, seed);
         const laneById = new Map(m.lanes.map((l) => [l.id, l]));
         const housed = new Set(m.buildings.map((b) => b.lotId));
         for (const lot of m.lots) {
@@ -206,7 +218,7 @@ describe('village invariants (design §5.7)', () => {
     let checkedCrofts = 0;
     for (const input of inputs) {
       for (const seed of seeds) {
-        const m = generateVillage(input, seed);
+        const m = model(input, seed);
         const lotIds = new Set(m.lots.map((l) => l.id));
         expect(m.buildings.length).toBeGreaterThan(0);
         for (const b of m.buildings) expect(lotIds.has(b.lotId)).toBe(true);
@@ -230,7 +242,7 @@ describe('village invariants (design §5.7)', () => {
     const OVERLAP_EPS_M = 0.25;
     for (const input of inputs) {
       for (const seed of seeds) {
-        const m = generateVillage(input, seed);
+        const m = model(input, seed);
         if (m.crofts.length === 0) continue;
         const lotObbs = m.lots.map((l) => ({ id: l.id, obb: lotObb(l) }));
         for (const croft of m.crofts) {
@@ -268,7 +280,7 @@ describe('village invariants (design §5.7)', () => {
     const OVERLAP_EPS_M = 0.25;
     for (const input of inputs) {
       for (const seed of seeds) {
-        const m = generateVillage(input, seed);
+        const m = model(input, seed);
         if (m.fields.length === 0) continue;
         const lotObbs = m.lots.map((l) => lotObb(l));
         // GATE 8.1: the assertion is made ONCE per village, on a collected

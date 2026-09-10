@@ -8,7 +8,7 @@ const defaultPoints = () => [
 ];
 
 const lane = (): Lane => ({
-  id: 'trunk-main-090', type: 'main', widthM: 5, points: defaultPoints(),
+  id: 'lane-090', type: 'main', widthM: 5, points: defaultPoints(),
 });
 
 const trunkLane = (): Lane => ({

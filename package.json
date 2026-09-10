@@ -9,7 +9,8 @@
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
     "build:lib": "esbuild src/index.ts --bundle --format=esm --target=es2022 --minify --outfile=dist/settlemaker.browser.js --banner:js=\"/* settlemaker — GPL-3.0-only. Corresponding source: https://github.com/barrulus/settlemaker */\"",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "review:roads": "node scripts/run-road-review.mjs"
   },
   "license": "GPL-3.0-only",
   "author": "Barry Gill <b@rry.im>",

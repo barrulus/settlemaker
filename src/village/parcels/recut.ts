@@ -1,12 +1,14 @@
-import { offsetPolyline } from './strip.js';
-import { lotObb, maxDepthClearOf, obbOverlap, type Obb } from './overlap.js';
-import { arcLengths, closestPointOnSegment, dist, sampleAt } from '../geometry.js';
-import { frontageAt } from './lots.js';
-import {
-  CLAIM_TOUCH_EPS_M, F0_FLOOR_RATIO, LANE_SETBACK_M, MIN_BUILD_DEPTH_M,
-} from '../constants.js';
 import { Point } from '../../types/point.js';
+import {
+  CLAIM_TOUCH_EPS_M, F0_FLOOR_RATIO,
+  MIN_BUILD_DEPTH_M
+} from '../constants.js';
+import { frontageOffsetM } from '../cross-section.js';
+import { arcLengths, closestPointOnSegment, dist, sampleAt } from '../geometry.js';
 import { recutLotId, type Green, type Lane, type Lot } from '../types.js';
+import { frontageAt } from './lots.js';
+import { lotObb, maxDepthClearOf, obbOverlap, type Obb } from './overlap.js';
+import { offsetPolyline } from './strip.js';
 
 /**
  * GATE 6.9 -- RE-CUT THE FREED GROUND.
@@ -98,30 +100,32 @@ function arcPositionOf(edge: Point[], acc: number[], p: Point): number {
  * that carriageway by construction, and testing it there only ever produces
  * a false positive.
  */
-function maxDepthClearOfLanes(lot: Lot, lanes: Lane[]): number {
-  let depth = lot.depthM;
-  for (const lane of lanes) {
-    if (lane.id === lot.laneId) continue;
-    for (let i = 1; i < lane.points.length; i++) {
-      if (depth < MIN_BUILD_DEPTH_M) return depth;
-      const a = lane.points[i - 1];
-      const b = lane.points[i];
-      const len = dist(a, b);
-      if (len <= 0) continue;
-      // The segment's own oriented box: half its length along the road,
-      // the lane's half width across it.
-      const t = new Point((b.x - a.x) / len, (b.y - a.y) / len);
-      const corridor: Obb = {
+type Corridor = { laneId: string; box: Obb; };
+
+/** Road geometry is immutable during a re-cut pass; construct its boxes once. */
+function roadCorridors(lanes: Lane[]): Corridor[] {
+  return lanes.flatMap(lane => lane.points.slice(1).flatMap((b, i) => {
+    const a = lane.points[i], len = dist(a, b);
+    if (len <= 0) return [];
+    const t = new Point((b.x - a.x) / len, (b.y - a.y) / len);
+    return [{
+      laneId: lane.id, box: {
         center: new Point((a.x + b.x) / 2, (a.y + b.y) / 2),
-        tangent: t,
-        normal: new Point(-t.y, t.x),
-        halfW: len / 2,
-        halfD: lane.widthM / 2,
-      };
-      const claim = lotObb({ ...lot, depthM: depth });
-      if (!obbOverlap(claim, corridor)) continue;
-      depth = maxDepthClearOf({ ...lot, depthM: depth }, corridor);
-    }
+        tangent: t, normal: new Point(-t.y, t.x), halfW: len / 2, halfD: lane.widthM / 2,
+      }
+    }];
+  }));
+}
+
+function maxDepthClearOfLanes(lot: Lot, corridors: Corridor[]): number {
+  let depth = lot.depthM;
+  let claim = lotObb(lot);
+  for (const { laneId, box } of corridors) {
+    if (laneId === lot.laneId) continue;
+    if (depth < MIN_BUILD_DEPTH_M) return depth;
+    if (!obbOverlap(claim, box)) continue;
+    depth = maxDepthClearOf({ ...lot, depthM: depth }, box);
+    claim = lotObb({ ...lot, depthM: depth });
   }
   return depth;
 }
@@ -167,21 +171,22 @@ export function recutFreedGround(input: RecutInput): RecutResult {
   // is RETURNED must be the depth it ended up with, not the depth it was
   // first cut at. (Measured: without this, one pop-900 seed shipped a pair
   // of re-cut claims overlapping by 6 m and the §5.7 net caught it.)
-  const addedClaims: Array<{ lot: Lot; depth: number }> = [];
+  const corridors = roadCorridors(lanes);
+  const addedClaims: Array<{ lot: Lot; depth: number; }> = [];
   const trimmed = new Map<string, number>();
   // Claims to clear: everything standing, plus what this pass has added.
   // `depth` is mutable — a standing GARDEN may give way to a new house.
-  const claims: Array<{ lot: Lot; depth: number }> = standing.map((lot) => ({
+  const claims: Array<{ lot: Lot; depth: number; }> = standing.map((lot) => ({
     lot, depth: lot.depthM,
   }));
   const addedIds = new Set<string>();
-  const obbOf = (c: { lot: Lot; depth: number }): Obb =>
+  const obbOf = (c: { lot: Lot; depth: number; }): Obb =>
     lotObb({ ...c.lot, depthM: c.depth });
-  const reachOfClaim = (c: { lot: Lot; depth: number }): number =>
+  const reachOfClaim = (c: { lot: Lot; depth: number; }): number =>
     Math.hypot(c.lot.frontageM / 2, c.depth);
 
   for (const lane of lanes) {
-    const setback = lane.widthM / 2 + (LANE_SETBACK_M[lane.type] ?? 2);
+    const setback = frontageOffsetM(lane);
     const reachAt = reachOf(lane);
     for (const side of [1, -1] as const) {
       const edge = offsetPolyline(lane.points, setback, side);
@@ -248,8 +253,8 @@ export function recutFreedGround(input: RecutInput): RecutResult {
           // and the result is still disjoint.
           const neighbours = claims.filter((c) =>
             dist(candidate.front, c.lot.front)
-              <= Math.hypot(frontage / 2, depthM) + reachOfClaim(c));
-          let depth = maxDepthClearOfLanes(candidate, lanes);
+            <= Math.hypot(frontage / 2, depthM) + reachOfClaim(c));
+          let depth = maxDepthClearOfLanes(candidate, corridors);
           for (const other of neighbours) {
             if (depth < MIN_BUILD_DEPTH_M) break;
             const yielded = obbOf({ ...other, depth: Math.min(other.depth, MIN_BUILD_DEPTH_M) });

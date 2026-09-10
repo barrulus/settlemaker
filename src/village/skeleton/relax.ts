@@ -1,5 +1,5 @@
 import { Point } from '../../types/point.js';
-import { arcLengths, closestPointOnSegment, dist } from '../geometry.js';
+import { arcLengths, closestPointOnSegment, dist, sampleAt } from '../geometry.js';
 import { inkExtent } from '../glyphs.js';
 import {
   RELAX_CLEARANCE_M, RELAX_ITERATIONS, RELAX_MAX_DISPLACEMENT_M, TAIL_STUB_M,
@@ -25,21 +25,19 @@ import { isTrunk } from './trunks.js';
  * Pure function of its inputs: no RNG, no mutation of the input lanes.
  */
 export function relaxLanes(lanes: Lane[], buildings: Building[]): Lane[] {
+  const attachments = lanes.flatMap(l => [l.points[0], l.points[l.points.length - 1]].map(p => ({ p, laneId: l.id })));
   return lanes.map((lane) => {
+    if (isTrunk(lane.id)) return lane;
     const origin = lane.points.map((p) => new Point(p.x, p.y));
     const points = lane.points.map((p) => new Point(p.x, p.y));
 
     for (let iter = 0; iter < RELAX_ITERATIONS; iter++) {
-      for (let i = 0; i < points.length; i++) {
+      for (let i = 1; i < points.length - 1; i++) {
+        if (attachments.some(({ p, laneId }) => laneId !== lane.id && (dist(p, closestPointOnSegment(p, origin[i - 1], origin[i])) < 0.15
+          || dist(p, closestPointOnSegment(p, origin[i], origin[i + 1])) < 0.15))) continue;
         for (const b of buildings) {
           const ink = inkExtent(b.glyph, b.footprint);
-          // Gate 3: use the SHORT ink half-axis, matching the seat-time
-          // corridor rule. The long-axis radius treated every legally
-          // seated house as an intruder and shoved its lane sideways —
-          // AFTER the crossing checks had run — quietly re-creating the
-          // untidy crossings the growth rules had just eliminated. With
-          // seat-time clearance guaranteed, relaxation now only fires for
-          // genuine intrusions.
+
           const keepOut = lane.widthM / 2 + RELAX_CLEARANCE_M + Math.min(ink.width, ink.depth) / 2;
           const dx = points[i].x - b.position.x;
           const dy = points[i].y - b.position.y;
@@ -70,71 +68,11 @@ export function relaxLanes(lanes: Lane[], buildings: Building[]): Lane[] {
   });
 }
 
-/**
- * Ruling R15: trim by provenance. Lanes in this engine come from two
- * different places, and trimming means something different for each:
- *
- *  - `trunk-*` lanes are FMG's roads made physical — the route to the next
- *    town, arriving at this village (Trunks task 5: previously `arm-*`,
- *    built by the now-retired `buildArms`; now every lane
- *    `synthesizeTrunks` commits, spec 2026-08-25 §5.1/5.2 — a plain root,
- *    a captured/merged sub-trunk, a loop segment, a y-tree connector, or a
- *    main-street spine). They exist whether or not anyone builds on them
- *    (the empty-site wireframe is precisely a trunk with zero buildings),
- *    so housing is irrelevant to their length: a trunk is never trimmed,
- *    full stop, whether it has zero buildings or buildings that stop short
- *    of the contract circle.
- *  - Everything else — `lane-*` (invented lanes) and any `.../bNN` branch,
- *    including a branch off a trunk — was invented by the frontage budget
- *    purely to supply frontage. If it earned no dwelling, it should not be
- *    drawn at all; if it earned some, it is trimmed to the last one plus a
- *    TAIL_STUB_M stub.
- *
- * A branch id such as `trunk-main-r1/b50` starts with `trunk-` but is NOT
- * exempt — the `/b` marks it as an invented branch, checked before the
- * trunk test (`isTrunk`, spec 5.1).
- *
- * `isTrunk` itself is defined once, in `skeleton/trunks.ts` (the module
- * that also builds the ids it recognises — Trunks task 5 moved the single
- * definition there from `lanes.ts`'s now-retired `isFmgArm`), and imported
- * from there.
- */
-
-/**
- * A building belongs to a lane only when its lotId's lane-id segment is an
- * exact match — `arm-090:R3` belongs to `arm-090`, but `arm-090/b50:R3`
- * (a branch lane with its own separate id) must not be claimed by
- * `arm-090`'s prefix test. Matching on `${lane.id}:` rather than a bare
- * `startsWith(lane.id)` is what keeps that boundary honest.
- */
 function buildingsOf(lane: Lane, buildings: Building[]): Building[] {
   const prefix = `${lane.id}:`;
   return buildings.filter((b) => b.lotId.startsWith(prefix));
 }
 
-/**
- * A lane tail that acquired no dwelling is the straggle at the edge of the
- * fabric: a road running 200 m past the last cottage looks like a mistake,
- * a road stopping dead at the last cottage looks unnatural. Trims invented
- * lanes back to their furthest-out building plus a TAIL_STUB_M stub, drops
- * invented lanes that earned no building at all, and leaves FMG's `arm-`
- * roads untouched regardless of what they did or didn't acquire (R15).
- *
- * The output may contain fewer lanes than the input — a dropped invented
- * lane is simply absent. That is fine: this runs after dwellings are
- * placed, and its output only feeds rendering and the model.
- *
- * The keep-filter below assumes a lane's points increase roughly
- * monotonically in distance from its own start point. That only has to
- * hold for the lanes that reach this code at all -- every trunk lane is
- * exempted above and never gets here (Trunks task 5: `isTrunk`'s early
- * `continue`) -- and it does hold for the rest: every invented lane and
- * every branch off one is built outward from its own anchor (the green, or
- * a slot on its parent), so a point further along the array is, by
- * construction, further from the start; a lane that wandered back toward
- * its own beginning would break the assumption, but no pass in this engine
- * produces one.
- */
 /** Arc length along `points` of the position nearest `p` — where a
  * building sits ALONG its lane, as opposed to how far it is from the
  * lane's start as the crow flies. */
@@ -154,124 +92,46 @@ function isConnector(laneId: string): boolean {
   return laneId.endsWith('/c');
 }
 
-// Task 5 (2026-08-24): `connectorParents` above protects only ONE closure
-// mechanism -- `connectDeadEnds`'s own `/c` lanes, added AFTER this first
-// trim already ran once. Growth itself closes loops too, earlier and far
-// more often (measured, task-5-report.md Part A): `growOne`'s rungs (a
-// branch whose far end lands on a neighbour via `loopSnap` or
-// `truncateAtFirstCrossing`, GATE 6.11's own "rung of a ladder") and
-// `seedArcThrough`'s joined arcs both build a real, crossing-free junction
-// on another lane -- but nothing marked that junction as anything other
-// than an ordinary invented lane. Two failures followed, both silent: a
-// rung earning no building of its own was DROPPED outright by the rule
-// below (same as any other empty invented lane), and even a rung that
-// survived could have its TARGET trimmed back past the exact point it
-// welded onto -- the id lives on, the junction does not. Measured directly
-// (task-5-report.md): at a failing pop-300 fixture, 4 of 12 growth-time
-// rungs were dropped outright and a further 4 of the 8 survivors had a
-// broken join, leaving zero of the fabric's real closures intact in the
-// shipped geometry despite growth having built them.
-//
-// The fix generalises the SAME protection `/c` connectors already get to
-// every growth-time join, purely from the geometry `trimTails` already has
-// -- no new field on `Lane`, nothing growth has to remember to tag. A join
-// is any point where one lane's END lands within WELD_EPS_M of ANOTHER
-// lane's polyline: exactly the weld `blockAreas` (skeleton/blocks.ts) uses
-// to trace enclosed faces in the first place, so a join this misses is a
-// join `blockAreas` would not have counted either, and a join this keeps
-// is one `blockAreas` can still trace after trimming.
+// Preserve surviving joins while trimming. Graph pruning removes redundancy first.
 const WELD_EPS_M = 1.5;
 
-/**
- * For every lane, the furthest arc-length ALONG IT where some other lane's
- * FAR END welds on -- the point trimming must never cut shorter than,
- * whatever that lane's own building count says. Also returns the set of
- * lanes that are themselves a join (their OWN far end welds onto another
- * lane): like a `/c` connector, such a lane is structural regardless of
- * whether it earned a dwelling, because dropping it reopens the junction
- * it made.
- *
- * Deliberately the LAST point only, not the first: a branch's first point
- * is its anchor on its parent BY CONSTRUCTION (that is what makes it a
- * branch, not a join), so treating that as a weld would exempt nearly
- * every ordinary invented lane from ever being dropped -- the join this
- * fixes is specifically the one `growOne`'s rung/arc primitives build at a
- * lane's FAR end (via `loopSnap` or `truncateAtFirstCrossing`), which is
- * always that lane's last point by construction.
- *
- * The exemption this produces is broader than "a rung is protected": ANY
- * lane whose last point lands within `WELD_EPS_M` of ANOTHER lane's
- * polyline is protected (added to `joiners`, exempt from the
- * zero-buildings drop below), and the lane it lands on gets a trim floor
- * at that point, regardless of which lane grew first or which one the
- * caller thinks of as "the rung." This includes a MUTUAL pair: two lanes
- * whose tips both happen to land near each other (a near-dead-end pair)
- * protect each other symmetrically -- each one's last point is close
- * enough to the other's polyline to count as a weld on it, so both end up
- * in `joiners` and both get a floor, not just whichever one `growOne`
- * happened to build second.
- */
-function weldJoins(lanes: Lane[]): { floorS: Map<string, number>; joiners: Set<string> } {
+/** Both ends of a surviving child protect their host's attachment position.
+ * Only a far-end join protects the child itself. Redundant loops have already
+ * been removed by graph connectivity, before trimming starts. */
+function weldJoins(lanes: Lane[]): { floorS: Map<string, number>; joiners: Set<string>; } {
   const floorS = new Map<string, number>();
   const joiners = new Set<string>();
-  // F1(a) (final fix wave): `arcLengths(host.points)` is O(host.points) and
-  // was recomputed on every (other, host) pair -- O(lanes) times more often
-  // than it needs to be, since it depends only on `host`. Hoisted to once
-  // per host, computed before the `other` loop even starts. This is what
-  // makes running `weldJoins` (and therefore `weld: true`) affordable at the
-  // mid-loop TRIAL call site in `village-model.ts` -- see that call's
-  // comment.
+  // Share arc lengths across all attachment queries for each host.
   const hostArcs = new Map<string, number[]>();
   for (const host of lanes) hostArcs.set(host.id, arcLengths(host.points));
   for (const other of lanes) {
     if (other.points.length < 2) continue;
-    const end = other.points[other.points.length - 1];
-    for (const host of lanes) {
-      if (host.id === other.id) continue;
-      const acc = hostArcs.get(host.id)!;
-      let bestD = WELD_EPS_M;
-      let bestS = -1;
-      for (let i = 1; i < host.points.length; i++) {
-        const q = closestPointOnSegment(end, host.points[i - 1], host.points[i]);
-        const d = dist(end, q);
-        if (d < bestD) { bestD = d; bestS = acc[i - 1] + dist(host.points[i - 1], q); }
-      }
-      if (bestS >= 0) {
-        floorS.set(host.id, Math.max(floorS.get(host.id) ?? 0, bestS));
-        joiners.add(other.id);
+    for (const [index, end] of [other.points[0], other.points[other.points.length - 1]].entries()) {
+      for (const host of lanes) {
+        if (host.id === other.id) continue;
+        const acc = hostArcs.get(host.id)!;
+        let bestD = WELD_EPS_M, bestS = -1;
+        for (let i = 1; i < host.points.length; i++) {
+          const q = closestPointOnSegment(end, host.points[i - 1], host.points[i]);
+          const d = dist(end, q);
+          if (d < bestD) { bestD = d; bestS = acc[i - 1] + dist(host.points[i - 1], q); }
+        }
+        if (bestS >= 0) {
+          floorS.set(host.id, Math.max(floorS.get(host.id) ?? 0, bestS));
+          if (index === 1) joiners.add(other.id);
+        }
       }
     }
   }
   return { floorS, joiners };
 }
 
-/**
- * `weld` defaults true. `village-model.ts`'s round loop also runs
- * `trimTails` a THIRD time, every round, purely as a read-only TRIAL to
- * estimate whether blocks already clear the population's floor (that
- * call's own comment already documents it as "not a guarantee... but
- * close enough" -- an approximation, not the shipped truth).
- *
- * F1 (final fix wave): this trial used to pass `{ weld: false }`, on the
- * measured grounds that `weldJoins`'s O(lanes^2) cost, paid on top of
- * `blockAreas`'s own weld pass right after it, blew a large-population
- * stress fixture past a 120s test timeout. That measurement was real, but
- * the trial it was protecting was itself broken by the same omission:
- * without weld protection the trial under-reads blocks 3-5x relative to
- * the weld-protected (shipped) truth (measured, tri 900 s1: 14 blocks
- * weld-protected vs 3 without, against a floor of 6) -- so the trial's own
- * `blocksNow >= blockFloor` check was very rarely true, the block chase
- * fired on nearly every housed round, and the "wasted" chase round's rng
- * draws perturbed every downstream draw even when nothing was actually
- * short. `weldJoins` itself is now the O(lanes) cost the hoisted
- * `hostArcs` precompute makes it (see that function's comment) rather than
- * the O(lanes^2) cost it used to be recomputing `arcLengths` per pair, so
- * the trial can afford to weld-protect too: `weld: false` is no longer
- * passed anywhere, and the option exists only in case a future caller
- * needs the cheaper, less accurate form for some other reason.
+/** Trim unoccupied tails to the last house plus a short stub, preserving
+ * required routes and attachments between surviving streets. Run graph pruning
+ * first: this local geometric pass cannot decide whether a loop is useful.
  */
 export function trimTails(
-  lanes: Lane[], buildings: Building[], opts: { weld?: boolean } = {},
+  lanes: Lane[], buildings: Building[], opts: { weld?: boolean; } = {},
 ): Lane[] {
   const { weld = true } = opts;
   const result: Lane[] = [];
@@ -365,16 +225,12 @@ export function trimTails(
     // welded onto -- see `weldJoins`. A lane may earn its keep from its own
     // buildings alone, from hosting a junction alone, or both; the cutoff
     // is whichever reaches further.
-    const cutoff = Math.max(furthestS + TAIL_STUB_M, weldFloor);
-    let k = lane.points.length;
-    while (k > 2 && acc[k - 1] > cutoff) k -= 1;
-
-    // A lane must always keep at least two points — a single point is not
-    // a lane. If the trim window collapsed below that (the last dwelling
-    // sits well inside the first segment), fall back to the lane's own
-    // first two points, which is the shortest possible stub this lane can
-    // honestly offer.
-    result.push({ ...lane, points: lane.points.slice(0, Math.max(2, k)) });
+    const cutoff = Math.min(acc[acc.length - 1], Math.max(furthestS + TAIL_STUB_M, weldFloor));
+    const points = lane.points.filter((_, i) => acc[i] < cutoff);
+    const end = sampleAt(lane.points, acc, cutoff).p;
+    if (points.length === 0) points.push(lane.points[0]);
+    if (dist(points[points.length - 1], end) > 1e-6) points.push(end);
+    result.push({ ...lane, points: points.length >= 2 ? points : lane.points.slice(0, 2) });
   }
 
   return result;

@@ -1,3 +1,4 @@
+import { frontageOffsetM } from '../cross-section.js';
 /**
  * Landmark siting (owner's ruling, 2026-09-08): "landmarks should get their
  * own ground, like the green does." Village lots are cut along lanes with a
@@ -84,7 +85,7 @@ function specsFor(site: Site): LandmarkSpec[] {
 }
 
 function laneSetback(lane: Lane): number {
-  return lane.widthM / 2 + (LANE_SETBACK_M[lane.type] ?? 2);
+  return frontageOffsetM(lane);
 }
 
 /** Closest point ON `obb`'s boundary/interior to `p` (clamped projection),
@@ -287,7 +288,7 @@ export function landmarkCandidateCount(site: Site): number {
  */
 export function siteLandmarks(
   site: Site, green: Green, trunks: Lane[], builtRadiusM: number, rng: SeededRandom,
-): { landmarks: Landmark[]; diagnostics: string[] } {
+): { landmarks: Landmark[]; diagnostics: string[]; } {
   void rng;
   const diagnostics: string[] = [];
   const landmarks: Landmark[] = [];

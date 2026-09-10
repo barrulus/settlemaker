@@ -1,3 +1,5 @@
+import { usefulShortcut } from './network.js';
+import { forwardJoin, smoothLane } from './curves.js';
 import { Point } from '../../types/point.js';
 import { SeededRandom } from '../../utils/random.js';
 import { classRank, laneWidth, stepDown, type RouteType } from '../route-class.js';
@@ -20,8 +22,8 @@ import {
 import { type RadiusProfile } from './profile.js';
 import { isTrunk } from './trunks.js';
 import {
-  armLaneId, branchLaneId, inventedLaneId,
-  type Building, type Green, type Lane,
+  armLaneId, branchLaneId, inventedLaneId, isApron,
+  type Building, type Green, type Lane, type Lot,
 } from '../types.js';
 
 // geometry.ts owns polylineLength; re-exported here since Task 8's tests
@@ -543,7 +545,7 @@ function branchSlots(
 
 /** End of a candidate branch near another lane? Return the join point. */
 function loopSnap(
-  out: Lane[], end: Point, excludeIds: Set<string>, radiusM: number = LOOP_SNAP_M,
+  out: Lane[], end: Point, excludeIds: Set<string>, radiusM: number = LOOP_SNAP_M, previous?: Point,
 ): Point | null {
   let best: Point | null = null;
   let bestD = radiusM;
@@ -552,7 +554,7 @@ function loopSnap(
     for (let i = 1; i < lane.points.length; i++) {
       const q = closestPointOnSegment(end, lane.points[i - 1], lane.points[i]);
       const d = dist(end, q);
-      if (d < bestD) { bestD = d; best = q; }
+      if (d < bestD && (!previous || forwardJoin(previous, end, q))) { bestD = d; best = q; }
     }
   }
   return best;
@@ -622,7 +624,7 @@ function truncateAtFirstCrossing(
   // anyway: they leave the centre at different bearings and diverge.
   const start = points[0];
   for (let i = 1; i < points.length; i++) {
-    let best: { q: Point; t: number } | null = null;
+    let best: { q: Point; t: number; } | null = null;
     for (const lane of out) {
       for (let j = 1; j < lane.points.length; j++) {
         const q = segmentIntersection(points[i - 1], points[i], lane.points[j - 1], lane.points[j]);
@@ -876,7 +878,7 @@ function growOne(
   // FMG's own arms let two incoming routes eat a cap of 3, leaving a
   // pop-900 green a single radial and a dead quadrant.
   if (out.filter((l) => isGreenAttached(green, l) && l.id.startsWith('lane-')).length
-      < ribCountFor(profile.radiusM)) {
+    < ribCountFor(profile.radiusM)) {
     // Task 4b (F15). `taken` is the bearing-collision list the
     // MIN_ARM_SEPARATION_DEG check below tests a candidate rib against, and
     // it must contain every road already occupying a bearing -- which is
@@ -971,7 +973,7 @@ function growOne(
       // now), so a short street reaching for its neighbour joins it and
       // closes a block rather than stopping short as a dead end. The
       // class-drop is unchanged — a snapped lane is still a connector.
-      const snap = loopSnap(out, points[points.length - 1], new Set([slot.parent.id]));
+      const snap = loopSnap(out, points[points.length - 1], new Set([slot.parent.id]), LOOP_SNAP_M, points[points.length - 2]);
       if (snap) points = [...points, snap];
       const assembled = points.length;
       points = truncateAtFirstCrossing(points, blockers, green, slot.parent.id);
@@ -1062,11 +1064,11 @@ function growOne(
  */
 function nearestOnOtherLanes(
   from: Point, lanes: Lane[], excludeIds: Set<string>,
-): Array<{ point: Point; distance: number }> {
-  const out: Array<{ point: Point; distance: number }> = [];
+): Array<{ point: Point; distance: number; }> {
+  const out: Array<{ point: Point; distance: number; }> = [];
   for (const lane of lanes) {
     if (excludeIds.has(lane.id)) continue;
-    let best: { point: Point; distance: number } | null = null;
+    let best: { point: Point; distance: number; } | null = null;
     for (let i = 1; i < lane.points.length; i++) {
       const q = closestPointOnSegment(from, lane.points[i - 1], lane.points[i]);
       const d = dist(from, q);
@@ -1118,7 +1120,7 @@ function crossesAnyLane(points: Point[], lanes: Lane[]): boolean {
  * loop is made at a lower class than the lanes it joins.
  */
 export function connectDeadEnds(
-  lanes: Lane[], green: Green, buildings: Building[] = [],
+  lanes: Lane[], green: Green, buildings: Building[] = [], lots?: Lot[],
 ): Lane[] {
   const out = [...lanes];
   const candidates = lanes
@@ -1133,7 +1135,13 @@ export function connectDeadEnds(
       if (target.distance > CONNECT_MAX_M) break; // sorted: the rest are further
       if (target.distance < CONNECT_MIN_M) continue;
 
-      const points = [end, target.point];
+      const previous = lane.points[lane.points.length - 2];
+      if (!forwardJoin(previous, end, target.point)) continue;
+      const tangent = bearingVector(bearingOf(previous, end));
+      const reach = Math.min(6, target.distance / 3);
+      const guide = new Point(end.x + tangent.x * reach, end.y + tangent.y * reach);
+      const points = smoothLane([end, guide, target.point]);
+      if (!points) continue;
       // Tested against EVERY lane including its own parent. The connector
       // legitimately touches its parent at the start and its target at the
       // end, and `segmentIntersection` ignores both as endpoint touches --
@@ -1158,6 +1166,7 @@ export function connectDeadEnds(
       // would notice. Missing this put buildings in the road once
       // connectors were adopted whether or not a re-seat followed.
       if (buildings.some((b) => intrudesOnLane(b, [connector]))) continue;
+      if (lots && !usefulShortcut(out, connector, green, buildings, lots)) continue;
       out.push(connector);
       break; // this dead end is closed; on to the next
     }
@@ -1198,7 +1207,7 @@ function angularCoverage(
 }
 
 /** The widest run of uncovered buckets, as {bisectorDeg, widthDeg}. */
-function widestGap(covered: boolean[]): { bisectorDeg: number; widthDeg: number } {
+function widestGap(covered: boolean[]): { bisectorDeg: number; widthDeg: number; } {
   const n = covered.length;
   if (covered.every((c) => !c)) return { bisectorDeg: 0, widthDeg: 360 };
   let best = { start: 0, len: 0 };
@@ -1228,8 +1237,8 @@ function widestGap(covered: boolean[]): { bisectorDeg: number; widthDeg: number 
  */
 function widestVoid(
   lanes: Lane[], green: Green, profile: RadiusProfile, satRadiusM: number,
-): { point: Point; junction: Point; parent: Lane; distance: number } | null {
-  let best: { point: Point; junction: Point; parent: Lane; distance: number } | null = null;
+): { point: Point; junction: Point; parent: Lane; distance: number; } | null {
+  let best: { point: Point; junction: Point; parent: Lane; distance: number; } | null = null;
   // GATE 8: the scan BOX is the profile's widest reach; the membership test
   // inside it is the profile itself, so the ground scanned is the body.
   const boxM = satRadiusM * PROFILE_SHAPE_MAX;
@@ -1237,7 +1246,7 @@ function widestVoid(
     for (let y = -boxM; y <= boxM; y += VOID_SCAN_STEP_M) {
       const p = new Point(green.centre.x + x, green.centre.y + y);
       if (!insideRing(green, profile, satRadiusM, p)) continue;
-      let nearest: { point: Point; parent: Lane; distance: number } | null = null;
+      let nearest: { point: Point; parent: Lane; distance: number; } | null = null;
       for (const lane of lanes) {
         for (let i = 1; i < lane.points.length; i++) {
           const q = closestPointOnSegment(p, lane.points[i - 1], lane.points[i]);
@@ -1263,8 +1272,8 @@ function widestVoid(
  * there — enough to ask which way the fabric runs near a point. */
 function nearestWithHeading(
   p: Point, lane: Lane,
-): { point: Point; distance: number; dirDeg: number } | null {
-  let best: { point: Point; distance: number; dirDeg: number } | null = null;
+): { point: Point; distance: number; dirDeg: number; } | null {
+  let best: { point: Point; distance: number; dirDeg: number; } | null = null;
   for (let i = 1; i < lane.points.length; i++) {
     const q = closestPointOnSegment(p, lane.points[i - 1], lane.points[i]);
     const d = dist(p, q);
@@ -1325,7 +1334,7 @@ function locallyRadial(lanes: Lane[], p: Point, green: Green): boolean {
 function buildArc(
   out: Lane[], green: Green, profile: RadiusProfile, through: Point,
   snapExclude: Set<string>,
-): { points: Point[]; joinedEnds: number } | null {
+): { points: Point[]; joinedEnds: number; } | null {
   const radiusM = dist(through, green.centre);
   if (radiusM < greenDrawnRadius(green) + LANE_SAMPLE_STEP_M) return null;
   const stepDeg = (LANE_SAMPLE_STEP_M / radiusM) * (180 / Math.PI);
@@ -1343,7 +1352,7 @@ function buildArc(
     return new Point(green.centre.x + d.x * r, green.centre.y + d.y * r);
   };
 
-  const sweep = (sign: 1 | -1): { pts: Point[]; joined: boolean } => {
+  const sweep = (sign: 1 | -1): { pts: Point[]; joined: boolean; } => {
     const pts: Point[] = [];
     let prev = through;
     for (let k = 1; k * stepDeg <= ARC_MAX_SWEEP_DEG / 2; k++) {
@@ -1366,7 +1375,7 @@ function buildArc(
       // stopped a metre short of its neighbour would be a dead end where a
       // junction is the whole point.
       if ((k * stepDeg * Math.PI) / 180 * radiusM >= CONNECT_MIN_M) {
-        const snap = loopSnap(out, cur, snapExclude);
+        const snap = loopSnap(out, cur, snapExclude, LOOP_SNAP_M, pts.length > 1 ? pts[pts.length - 2] : through);
         if (snap) { pts.push(snap); return { pts, joined: true }; }
       }
     }
@@ -1561,7 +1570,7 @@ function seedVoidLane(
 
   let cls = inventedChildClass(void_.parent.type);
   let points = runLine(void_.junction, bearing, nominal, rng);
-  const snap = loopSnap(out, points[points.length - 1], new Set([void_.parent.id]));
+  const snap = loopSnap(out, points[points.length - 1], new Set([void_.parent.id]), LOOP_SNAP_M, points[points.length - 2]);
   if (snap) points = [...points, snap];
   const assembled = points.length;
   points = truncateAtFirstCrossing(
@@ -1708,28 +1717,15 @@ function seedCoverageLane(
   return false;
 }
 
-/**
- * Grow the village's own streets until the disc of radius `targetRadiusM`
- * is SATURATED, and no further.
- *
- * Growth is cluster-first (2026-08-21 gate rework): a handful of streets at
- * the green, then short branches attaching near the centre, branching
- * again, occasionally looping — never the radial spoke fan the first gate
- * rejected. `meanFrontageM` sizes each branch to the lots it must host.
- *
- * Gate 6.6 changed only WHERE IT STOPS. It used to run until a frontage
- * budget was met, with the disc widening by a growth factor whenever the
- * budget was still owed — a loop that fed back on itself and over-tiled the
- * ground (see DISC_MARGIN). The disc is now handed in, sized in closed form
- * from the census by `discRadiusFor`, and this function's only job is to
- * fill it: rings widen by SATURATION_RING_STEP_M up to the target and stop
- * there. The caller widens the target if the census still comes up short.
+/** Legacy saturation probe retained for lower-level geometry tests. Production
+ * generation uses proposeGrowth and accepts roads only on real housing gain.
+ * @deprecated This helper's coverage/budget policy is not the village policy.
  */
 export function saturateDisc(
   lanes: Lane[], green: Green, meanFrontageM: number,
   target: RadiusProfile, rng: SeededRandom, spacingScale = 1,
   obstacles: Lane[] = [],
-): { lanes: Lane[]; radiusM: number; profile: RadiusProfile } {
+): { lanes: Lane[]; radiusM: number; profile: RadiusProfile; } {
   // GATE 8: the disc is a PROFILE. `targetRadiusM` below is its
   // area-equivalent radius -- every ring test in growth goes through
   // `insideRing`, which reads the profile's shape at the bearing of the
@@ -1816,4 +1812,71 @@ export function saturateDisc(
   // reached. The lot cutter, the trunk cap and the dressing passes all read
   // this profile, so nothing downstream of growth speaks about a circle.
   return { lanes: out, radiusM: satRadiusM, profile: target.scaled(satRadiusM / targetRadiusM) };
+}
+
+/** Propose a bounded set of additions; placement decides which earns frontage.
+ * Every trial owns its lanes, including extensions of existing streets. */
+export function proposeGrowth(
+  lanes: Lane[], green: Green, frontageM: number, profile: RadiusProfile,
+  rng: SeededRandom, spacingScale = 1, limit = Infinity,
+): Lane[][] {
+  const obstacles = lanes.filter(l => isApron(l.id));
+  const standing = lanes.filter(l => !isApron(l.id));
+  const proposals: Lane[][] = [];
+  const offer = (out: Lane[]): void => {
+    const prepared: Lane[] = [];
+    for (const lane of out) {
+      const old = standing.find(l => l.id === lane.id);
+      // Existing occupied geometry and its junctions never move during a trial.
+      const points = old ? lane.points : smoothLane(lane.points, standing);
+      if (!points) return;
+      if (!old && out.some(host => host.id !== lane.id && crossesLanePoints(points, host.points))) return;
+      prepared.push({ ...lane, points });
+    }
+    if (prepared.some(l => obstacles.some(o => crossesLanePoints(l.points, o.points)))) return;
+    proposals.push([...prepared, ...obstacles]);
+  };
+  for (let kind = 0; kind < 4; kind++) {
+    const out = standing.map(l => ({ ...l, points: [...l.points] }));
+    const radius = profile.radiusM;
+    const changed = kind === 0
+      ? seedCoverageLane(out, green, frontageM, profile, radius, rng, spacingScale, obstacles)
+      : kind === 1
+        ? seedVoidLane(out, green, frontageM, profile, radius, rng, spacingScale, obstacles)
+        : growOne(out, green, frontageM, profile, rng, radius, spacingScale, obstacles);
+    if (changed) offer(out);
+    if (proposals.length >= limit) return proposals;
+  }
+  const slots = branchSlots(standing, green, profile, slotPitchFor(green, profile.radiusM));
+  // Visit different parts of the existing frontage, rather than always retrying
+  // the first valid but unproductive junction. The shuffle has its own stream.
+  const ordered = slots.map(slot => ({ slot, key: rng.float() })).sort((a, b) => a.key - b.key);
+  for (const { slot } of ordered.slice(0, 6)) for (const side of [-1, 1]) {
+    const id = branchLaneId(slot.parent.id, slot.at);
+    if (standing.some(l => l.id === id)) continue;
+    const bearing = slot.dirDeg + side * 85;
+    const length = Math.min(48, Math.max(18, profile.radiusM * 0.65));
+    const points = truncateAtFirstCrossing(runLine(slot.anchor, bearing, length, rng), lanes, green, slot.parent.id);
+    if (points.length < 2 || polylineLength(points) < 12 || crossesParentTwice(points, slot.parent)) continue;
+    if (!earnsItsSpace(points, standing, spacingScale, slot.parent.id)) continue;
+    const type = inventedChildClass(slot.parent.type);
+    offer([...standing, { id, type, points, widthM: laneWidth(type), parentId: slot.parent.id }]);
+    if (proposals.length >= limit) return proposals;
+  }
+  // Remaining housing demand may need a new approach to a vacant sector even
+  // after the old rib quota is reached. These are last-choice candidates, never
+  // compulsory coverage: placement still has to show a capacity gain.
+  const offset = rng.int(0, 30);
+  for (let angle = offset; angle < 360; angle += 30) {
+    const id = inventedLaneId(angle);
+    if (standing.some(l => l.id === id)) continue;
+    const dir = bearingVector(angle);
+    const start = new Point(green.centre.x + dir.x * green.diameter * GREEN_UNDERLAP_RATIO / 2,
+      green.centre.y + dir.y * green.diameter * GREEN_UNDERLAP_RATIO / 2);
+    const points = truncateAtFirstCrossing(runLine(start, angle, profile.at(angle), rng), lanes, green);
+    if (points.length < 2 || polylineLength(points) < 12 || !earnsItsSpace(points, standing, spacingScale)) continue;
+    offer([...standing, { id, type: 'local', points, widthM: laneWidth('local') }]);
+    if (proposals.length >= limit) return proposals;
+  }
+  return proposals;
 }
