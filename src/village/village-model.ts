@@ -30,7 +30,7 @@ import { findWaterCrossings } from './skeleton/crossings.js';
 import {
   predictedBuiltRadius, siteGreenOnNetwork, waterPushedCentre, type GreenRelation,
 } from './skeleton/green-siting.js';
-import { isLandmarkLot, landmarkCandidateCount } from './skeleton/landmarks.js';
+import { isLandmarkLot, landmarkCandidateCount, seatLandmark, siteLandmarks } from './skeleton/landmarks.js';
 import {
   connectDeadEnds, discRadiusFor,
   proposeGrowth
@@ -144,9 +144,15 @@ export function generateVillage(
   let lotProfile = discProfile;
   let lotRadiusM = lotProfile.radiusM;
   let terrace = false;
+  // Reserve landmark frontage on the required network before housing growth.
+  // Later streets must work around the inn and religious centre, not relocate
+  // them to whichever residual lane happens to have room in that trial.
+  const reserved = siteLandmarks(site, green, lanes.filter(l => !isApron(l.id)), lotRadiusM, new SeededRandom(seed * 3571 + 90));
+  const reservedBuildings = reserved.landmarks.map(seatLandmark);
+  diagnostics.push(...reserved.diagnostics);
   const placement = (trial: Lane[], collectTrace = false) => evaluatePlacement({
     lanes: trial, green, site, activeDeck, lotProfile, f0, lotFloorM, lotCapM,
-    seed: seed * 3571 + 71, terrace, trace: collectTrace ? trace : undefined,
+    seed: seed * 3571 + 71, terrace, reservedLandmarks: reserved.landmarks, trace: collectTrace ? trace : undefined,
   });
   let evaluated = placement(lanes);
   const snapshot = () => ({ evaluated, lanes, lotProfile, lotRadiusM, f0, lotFloorM, activeDeck, terrace });
@@ -171,6 +177,7 @@ export function generateVillage(
       if (option >= GROWTH_SHORTLIST && best) break;
       const raw = proposals[option];
       const candidate = raw.map(l => villageCrossSection(l, dwellingsNeeded));
+      if (reservedBuildings.some(b => intrudesOnLane(b, candidate))) { rejected++; continue; }
       const result = placement(candidate);
       const gained = result.spend.housed - evaluated.spend.housed;
       if (gained <= 0) { rejected++; continue; }
@@ -204,6 +211,7 @@ export function generateVillage(
           lotProfile, new SeededRandom(seed * 31 + step * 997), spacingScale, GROWTH_LOOKAHEAD);
         for (const raw of next) {
           const candidate = raw.map(l => villageCrossSection(l, dwellingsNeeded));
+          if (reservedBuildings.some(b => intrudesOnLane(b, candidate))) { rejected++; continue; }
           const result = placement(candidate);
           const gained = result.spend.housed - evaluated.spend.housed;
           if (gained <= 0) { rejected++; continue; }
@@ -266,7 +274,7 @@ export function generateVillage(
   }
   // Trim only after occupied access has been protected. Optional shortcuts
   // preserve the accepted houses and cannot trigger another seating pass.
-  const trimmed = trimTails(pruneRedundantLanes(relaxedLanes, green, spend.buildings, lots), spend.buildings);
+  const trimmed = trimTails(pruneRedundantLanes(relaxedLanes, green, spend.buildings, lots), spend.buildings, { lots });
   const relaxed = connectDeadEnds(trimmed, green, spend.buildings, lots);
 
   diagnostics.push(...evaluated.diagnostics);

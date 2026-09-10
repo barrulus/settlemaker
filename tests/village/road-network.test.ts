@@ -52,6 +52,11 @@ describe('road network access and redundant edges', () => {
     const detached = roadNetwork([separated], green, [r.building], [r.lot]);
     expect(networkDistances(detached, 'green').has(detached.buildings.get('home')!)).toBe(false);
   });
+  it('keeps access to a landmark whose lot ID differs from ordinary dwelling IDs', () => {
+    const road = lane('approach', [[0, 0], [30, 0]]);
+    const r = resident('landmark:faith:approach:R0', 'approach', 15, 8);
+    expect(trimTails([road], [r.building], { lots: [r.lot] })).toHaveLength(1);
+  });
   it('keeps the interpolated host attachment when trimming past its last house', () => {
     const parent = lane('parent', [[0, 0], [20, 0], [40, 0], [60, 0]]);
     const child = { ...lane('child', [[35, 0], [35, 40]]), parentId: 'parent' };

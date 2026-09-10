@@ -211,7 +211,7 @@ describe('vegetation geometric invariants (real village fixtures)', () => {
 
   const pointInAnyWater = (p: Point, w: Point[][]): boolean => w.some((ring) => pointInPolygon(p, ring));
 
-  it('no tree falls on a lane corridor, lot claim, croft, field strip, the green, or water', () => {
+  it('no tree falls on occupied ground, a lane corridor, croft, field strip, the green, or water', () => {
     for (const input of inputs) {
       for (const seed of [1, 2, 3]) {
         const m = generateVillage(input, seed);
@@ -220,7 +220,7 @@ describe('vegetation geometric invariants (real village fixtures)', () => {
           const p = tree.position;
           expect(pointInAnyCroft(p, m.crofts)).toBe(false);
           expect(pointInAnyField(p, m.fields)).toBe(false);
-          expect(pointInAnyLotClaim(p, m.lots)).toBe(false);
+          expect(pointInAnyLotClaim(p, m.lots.filter(l => m.buildings.some(b => b.lotId === l.id)))).toBe(false);
           expect(pointInAnyLaneCorridor(p, m.lanes)).toBe(false);
           expect(pointInAnyWater(p, m.site.water)).toBe(false);
           expect(dist(p, m.green.centre)).toBeGreaterThanOrEqual(greenRadius - 1e-6);

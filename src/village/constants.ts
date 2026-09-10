@@ -1508,29 +1508,6 @@ export const MERGE_BAND_WEIGHTS = { fields: 0.4, edge: 0.35, inner: 0.25 };
 export const LOOP_RADIUS_FACTOR = 0.75;
 
 /**
- * Task 7: how the green relates to the network that made it (spec 5.3),
- * weighted by which convergence pattern the network resolved to. Seeded,
- * never hard-ruled -- ruling 4 gives the generator complete creative
- * freedom here, so every row is a weighting and none is a law. Tuned at G2.
- *
- *  - `tangent`  green in a crook beside the road (panels 1 and 3)
- *  - `astride`  the road runs through the green (the lens shapes)
- *  - `enclosed` inside a core loop (panel 2)
- *  - `terminal` the road ends at the green (ruling 4's worked example)
- *
- * `loop` and `terminal` are single-outcome rows: a ring exists precisely to
- * enclose something, and a road that stops at the village stops AT the
- * green. The rest are genuine choices.
- */
-export const GREEN_RELATION_WEIGHTS: Record<string, Record<string, number>> = {
-  'main-street': { tangent: 0.55, astride: 0.45 },
-  'y-tree': { tangent: 0.6, terminal: 0.4 },
-  loop: { enclosed: 1 },
-  junction: { astride: 0.7, tangent: 0.3 },
-  terminal: { terminal: 1 },
-};
-
-/**
  * How far a green connector may run to reach the network, as a share of the
  * built radius (task 7). A green further off the network than this is sited
  * wrong, not connected harder.
@@ -1592,8 +1569,8 @@ export const FRAME_PAD_M = 40;
  * deliberately overlap -- they are a preference, not a partition.
  */
 export const LANDMARK_BAND: Record<'faith' | 'inn' | 'manor', [number, number]> = {
-  faith: [0.4, 1.2],
-  inn: [0.6, 1.6],
+  faith: [0, 0.8],
+  inn: [0, 1.1],
   manor: [0.9, 2.0],
 };
 

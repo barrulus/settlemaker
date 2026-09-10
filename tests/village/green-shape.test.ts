@@ -12,9 +12,9 @@ const site = (routes: SiteRoute[]): Site =>
      flags: { port: false, temple: false, trade: false, walls: false } });
 
 describe('roadArms', () => {
-  it('drops trails and footpaths — they never influence the green', () => {
+  it('includes trails and footpaths in the route junction', () => {
     const arms = roadArms(site([route(0, 'main'), route(90, 'trail'), route(180, 'footpath')]));
-    expect(arms.map((a) => a.type)).toEqual(['main']);
+    expect(arms.map((a) => a.type)).toEqual(['main', 'trail', 'footpath']);
   });
 });
 

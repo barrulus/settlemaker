@@ -1,3 +1,4 @@
+import { roadSurfaceClips } from './road-surface.js';
 import { roadCrossSection } from './cross-section.js';
 /**
  * Ship plan Phase 4 — the village engine's GeoJSON.
@@ -108,6 +109,7 @@ export function generateVillageGeoJson(model: VillageModel): FeatureCollection {
   //    `sourceRouteIds` is how a merged road reports the several routes it
   //    stands for (spec 5.5), so a consumer can trace any route FMG sent to
   //    the street it became.
+  const surfaceClips = roadSurfaceClips(model.lanes);
   for (const lane of model.lanes) {
     if (lane.points.length < 2) continue;
     const routeIds = lane.sourceRouteIds ?? [];
@@ -117,6 +119,7 @@ export function generateVillageGeoJson(model: VillageModel): FeatureCollection {
         layer: 'street', street_id: lane.id, streetType: lane.type,
         width_m: lane.widthM,
         surface_width_m: roadCrossSection(lane).surfaceM,
+        ...(surfaceClips.has(lane.id) ? { surface_clip_m: surfaceClips.get(lane.id)!.map(pt) } : {}),
         setback_m: roadCrossSection(lane).setbackM,
         ...(routeIds.length > 0 ? { route_ids: routeIds } : {}),
         ...(lane.parentId !== undefined ? { parent_street_id: lane.parentId } : {}),
@@ -132,6 +135,7 @@ export function generateVillageGeoJson(model: VillageModel): FeatureCollection {
       layer: 'green', shape: model.green.shape, variant: model.green.variant,
       diameter_m: model.green.diameter, bearing_deg: model.green.bearingDeg,
       relation: model.greenRelation,
+      ...(model.green.outline ? { outline_m: model.green.outline.map(pt) } : {}),
     },
     geometry: { type: 'Point', coordinates: pt(model.green.centre) },
   });
@@ -252,6 +256,7 @@ export function generateVillageGeoJson(model: VillageModel): FeatureCollection {
        * a consumer holding it can align this tile with FMG's route lines. */
       contract_radius_m: model.contractRadiusM,
       green_relation: model.greenRelation,
+      ...(model.green.outline ? { outline_m: model.green.outline.map(pt) } : {}),
       diagnostics: model.diagnostics,
     },
   } as FeatureCollection;

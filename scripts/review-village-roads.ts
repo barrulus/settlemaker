@@ -51,6 +51,8 @@ function metrics(m: VillageModel) {
     }
   }
   return {
+    waterPolygons: m.site.water.length, greenShape: m.green.shape,
+    landmarkFrontage: m.buildings.filter(b => isLandmarkLot(b.lotId)).map(b => ({ id: b.lotId, distanceToGreenM: dist(b.position, m.green.centre) })),
     buildings: m.buildings.length, ordinaryDwellings: dwellings,
     metresPerDwelling: length / Math.max(1, dwellings),
     internalSurfaceRangeM: internal.length ? [Math.min(...internal.map(l => roadCrossSection(l).surfaceM)), Math.max(...internal.map(l => roadCrossSection(l).surfaceM))] : null,
@@ -115,8 +117,8 @@ for (const f of roadReviewFixtures) {
   writeFileSync(join(out, `${f.id}.detail.svg`), detail);
   rows.push({ id: f.id, seed, input: f.input, kind: result.kind, runtimeMs, ...measures });
   const hasBefore = matchedBaseline && existsSync(join(out, `${f.id}.before.svg`));
-  cards.push(`<article><h2>${escape(f.id)} · pop ${f.input.population} · seed ${seed}</h2><p>${escape(JSON.stringify(measures))}</p><div class="pair">${hasBefore ? `<object data="${f.id}.before.svg"></object>` : ''}<object data="${f.id}.detail.svg"></object></div><a href="${f.id}.svg">Whole settlement</a></article>`);
+  cards.push(`<article><h2>${escape(f.id)} · pop ${f.input.population} · seed ${seed}</h2><p>${escape(JSON.stringify(measures))}</p><div class="pair">${hasBefore ? `<object data="${f.id}.before.svg"></object>` : ''}<object data="${f.id}.detail.svg"></object></div><a href="${f.id}.svg">Whole settlement</a>${measures.waterPolygons ? `<h3>Landscape overview — coastline and water</h3><object class="landscape" data="${f.id}.svg"></object>` : ''}</article>`);
   console.log(`${f.id}: ${Math.round(runtimeMs)} ms ${measures.internalMetres === undefined ? 'city' : `${Math.round(measures.internalMetres as number)} m internal`}`);
 }
 writeFileSync(join(out, 'metrics.json'), JSON.stringify({ revision, dirty, heldOut, metricVersion: 1, turnWindowM: 4, rows }, null, 2));
-writeFileSync(join(out, 'index.html'), `<!doctype html><meta charset="utf-8"><title>Village road comparison</title><style>body{font:15px system-ui;margin:24px;background:#eee}article{background:white;padding:16px;margin:16px 0}h2{font-size:18px}p{max-height:70px;overflow:auto;font:12px monospace}.pair{display:flex}.pair object{width:50%;height:550px;flex:1}</style><h1>Village road review</h1><p>${escape(revision)}${dirty ? ' + source changes' : ''}. Before on left; current on right. Pairs share scale. Click current drawing to isolate roads.</p>${cards.join('\n')}`);
+writeFileSync(join(out, 'index.html'), `<!doctype html><meta charset="utf-8"><title>Village road comparison</title><style>body{font:15px system-ui;margin:24px;background:#eee}article{background:white;padding:16px;margin:16px 0}h2{font-size:18px}p{max-height:70px;overflow:auto;font:12px monospace}.landscape{width:100%;height:450px}.pair{display:flex}.pair object{width:50%;height:550px;flex:1}</style><h1>Village road review</h1><p>${escape(revision)}${dirty ? ' + source changes' : ''}. Matched pairs show previous/current at the same scale. Unpaired cases show current only. Click current drawing to isolate roads.</p>${cards.join('\n')}`);

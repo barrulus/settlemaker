@@ -11,6 +11,29 @@ export function roadFixture(population: number, overrides: Partial<AzgaarBurgInp
 export const roadReviewFixtures: RoadFixture[] = [
   ...[40, 80, 119, 120, 150, 300, 600, 900].flatMap(population =>
     [1, 2, 3].map(seed => ({ id: `p${population}-s${seed}`, input: roadFixture(population), seed }))),
+  ...[
+    ['class-joins', { roadBearings: [{ bearing_deg: 45, kind: 'royal', through: true }, { bearing_deg: 190, kind: 'town' }, { bearing_deg: 270, kind: 'footpath' }] }],
+    ['headland', {
+      port: true, coastlineGeometry: [[
+        { x: 38, y: -500 }, { x: 32, y: -120 }, { x: 70, y: -55 }, { x: 120, y: -10 },
+        { x: 105, y: 35 }, { x: 46, y: 80 }, { x: 38, y: 150 }, { x: 80, y: 500 },
+        { x: 600, y: 500 }, { x: 600, y: -500 },
+      ]]
+    }],
+    ['estuary', {
+      port: true, roadBearings: [0, 180], coastlineGeometry: [[
+        { x: 12, y: -500 }, { x: 22, y: -120 }, { x: 38, y: -55 }, { x: 30, y: 0 },
+        { x: 55, y: 60 }, { x: 120, y: 140 }, { x: 500, y: 200 }, { x: 500, y: -500 },
+      ]]
+    }],
+    ['meander', {
+      roadBearings: [{ bearing_deg: 90, kind: 'main', through: true }],
+      coastlineGeometry: [[
+        ...Array.from({ length: 61 }, (_, i) => ({ x: 35 + 26 * Math.sin((i - 30) / 5) - 4, y: (i - 30) * 12 })),
+        ...Array.from({ length: 61 }, (_, i) => ({ x: 35 + 26 * Math.sin((30 - i) / 5) + 4, y: (30 - i) * 12 })),
+      ]]
+    }],
+  ].map(([id, overrides]) => ({ id: String(id), seed: 2, input: roadFixture(300, overrides as Partial<AzgaarBurgInput>) })),
   ...[false, true].map(wet => ({
     id: wet ? 'brook' : 'brook-dry', seed: 3,
     input: roadFixture(300, {

@@ -25,6 +25,19 @@ describe('frontage-driven road policy', () => {
       expect(groups.get(graph.buildings.get(b.id)!), b.id).toBe(groups.get('green'));
     }
   });
+  it('keeps inns on regional frontage and religious buildings near the centre after growth', () => {
+    for (const f of fixtures.filter(f => f.input.population >= 180)) {
+      const m = models.get(f.id)!;
+      const inn = m.buildings.find(b => b.lotId.startsWith('landmark:inn:'));
+      expect(inn, `${f.id}: missing inn`).toBeDefined();
+      expect(isTrunk(m.lots.find(l => l.id === inn!.lotId)!.laneId), `${f.id}: inn lost regional frontage`).toBe(true);
+      if (f.input.population < 300) continue;
+      const faith = m.buildings.find(b => b.lotId.startsWith('landmark:faith:'));
+      expect(faith, `${f.id}: missing religious centre`).toBeDefined();
+      const distance = Math.hypot(faith!.position.x - m.green.centre.x, faith!.position.y - m.green.centre.y);
+      expect(distance, `${f.id}: religious building on the fringe`).toBeLessThan(m.green.diameter / 2 + 30);
+    }
+  });
   it('at least halves median hamlet internal length without removing homes or required roads', () => {
     const lengths = [1, 2, 3].map(seed => models.get(`p40-s${seed}`)!.lanes.filter(l => !isTrunk(l.id)).reduce((sum, l) => sum + polylineLength(l.points), 0)).sort((a, b) => a - b);
     const before = baseline.rows.filter(f => f.id.startsWith('p40-')).map(f => f.internalMetres!).sort((a, b) => a - b);

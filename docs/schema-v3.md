@@ -51,6 +51,18 @@ reserved corridor; parcel frontage uses the corridor plus setback. Streets remai
 flat LineStrings sampled from the same centreline used to render and place lots.
 These fields do not change the schema version or city output.
 
+At a width transition, optional `surface_clip_m` on a street contains a polygon
+in the same local metre coordinates. Intersect its ordinary centreline stroke
+with this polygon to reproduce the narrowing drawn in SVG. `surface_width_m`
+remains the nominal width; the reserved corridor is unchanged. Clips only remove
+paint, so they cannot widen a road into a parcel. A continuing main street keeps
+its width when a small path meets its side.
+
+A triangular green may include `outline_m`, three corner coordinates lying on
+its actual approach routes. Its feature remains a Point with the same identity
+and location contract; the optional outline reproduces the road-defined shape.
+Elongated green bearings describe the world-space long axis (0 = north).
+
 Village layouts changed with the frontage-driven road policy. IDs and geometry
 remain deterministic for identical inputs **within a generator version**; they
 are not promised stable across generator upgrades. The existing

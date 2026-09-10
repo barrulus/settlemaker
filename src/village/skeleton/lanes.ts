@@ -1136,11 +1136,14 @@ export function connectDeadEnds(
       if (target.distance < CONNECT_MIN_M) continue;
 
       const previous = lane.points[lane.points.length - 2];
-      if (!forwardJoin(previous, end, target.point)) continue;
+      const continuing = forwardJoin(previous, end, target.point);
+      // A separate footpath can leave a street at a T. It need not pretend
+      // to continue the street's heading; reject only a backward hook.
+      if (!continuing && angularGap(bearingOf(previous, end), bearingOf(end, target.point)) > 100) continue;
       const tangent = bearingVector(bearingOf(previous, end));
       const reach = Math.min(6, target.distance / 3);
       const guide = new Point(end.x + tangent.x * reach, end.y + tangent.y * reach);
-      const points = smoothLane([end, guide, target.point]);
+      const points = continuing ? smoothLane([end, guide, target.point]) : [end, target.point];
       if (!points) continue;
       // Tested against EVERY lane including its own parent. The connector
       // legitimately touches its parent at the start and its target at the

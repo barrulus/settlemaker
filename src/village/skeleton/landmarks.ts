@@ -1,37 +1,24 @@
 import { frontageOffsetM } from '../cross-section.js';
-/**
- * Landmark siting (owner's ruling, 2026-09-08): "landmarks should get their
- * own ground, like the green does." Village lots are cut along lanes with a
- * hard width cap (`MAX_LOT_FRONTAGE_RATIO` x the widest dwelling) and a
- * fixed depth (`LOT_DEPTH_M`), so every glyph bigger than a dwelling is
- * structurally unplaceable by the ordinary cutter -- measured: `sm-inn`
- * (17x15) and `sm-temple` (22x17) placed in ZERO of 180 generated villages.
- *
- * The fix does not touch the cutter at all. A landmark's claim IS a `Lot`
- * (see types.ts) -- nothing in that type constrains `frontageM`/`depthM` to
- * the subdivider's caps, those caps live entirely in `subdivideLane`. Mint
- * the claim directly at the glyph's own footprint and every existing
- * lot-avoider (crofts, fields, vegetation, POI clearance) avoids it for
- * free, because to them it just looks like a lot.
- *
- * This module only SITES landmarks and returns claims -- it does not touch
- * `village-model.ts`'s pipeline (a later pass wires it in, presumably
- * before `subdivideLane` walks the same lanes so it can treat a landmark's
- * ground as already spoken for).
- */
-import { SeededRandom } from '../../utils/random.js';
+import { intrudesOnLane, renderBearingFor } from '../dwellings.js';
+import { classRank } from '../route-class.js';
+import { buildingId, type Building } from '../types.js';
+import { isTrunk } from './trunks.js';
+/** Landmarks reserve their own ground before ordinary homes are seated.
+ * Faith buildings choose central sites; inns choose visible regional frontage
+ * near the village entrance or its centre, never a lane merely sorted first. */
 import { Point } from '../../types/point.js';
+import { SeededRandom } from '../../utils/random.js';
 import {
-  arcLengths, closestPointOnSegment, dist, greenDrawnRadius, inAnyWater, sampleAt,
+  LANDMARK_BAND, LANDMARK_OBSTACLE_MARGIN_M, LANDMARK_SITE_STEP_M
+} from '../constants.js';
+import { resolveGlyphFor } from '../deck.js';
+import {
+  arcLengths, bearingVector, closestPointOnSegment, dist, greenDrawnRadius, inAnyWater, sampleAt,
   segmentIntersection,
 } from '../geometry.js';
-import { hasGlyph, nominalFootprint } from '../glyphs.js';
-import { resolveGlyphFor } from '../deck.js';
-import { offsetPolyline } from '../parcels/strip.js';
+import { hasGlyph, inkExtent, nominalFootprint } from '../glyphs.js';
 import { lotObb, obbOverlap, type Obb } from '../parcels/overlap.js';
-import {
-  LANDMARK_BAND, LANDMARK_OBSTACLE_MARGIN_M, LANDMARK_SITE_STEP_M, LANE_SETBACK_M,
-} from '../constants.js';
+import { offsetPolyline } from '../parcels/strip.js';
 import type { Green, Lane, Lot, Site } from '../types.js';
 
 export type LandmarkKind = 'faith' | 'inn' | 'manor';
@@ -45,6 +32,19 @@ export interface Landmark {
   /** Heads housed; 0 for a faith building. */
   occupancy: number;
   kind: LandmarkKind;
+}
+
+/** Prominent buildings fit their reserved claims exactly. Random size and
+ * bearing jitter must not invalidate the site after its safety checks. */
+export function seatLandmark(landmark: Landmark): Building {
+  const { lot, glyph, occupancy } = landmark;
+  const footprint = nominalFootprint(glyph), inward = bearingVector(lot.bearingDeg + 180);
+  const offset = inkExtent(glyph, footprint).depth / 2 + 0.5;
+  return {
+    id: buildingId(lot.id), lotId: lot.id, glyph, footprint, occupancy,
+    position: new Point(lot.front.x + inward.x * offset, lot.front.y + inward.y * offset),
+    bearingDeg: renderBearingFor(glyph, lot.bearingDeg, 0, false)
+  };
 }
 
 interface LandmarkSpec {
@@ -167,7 +167,7 @@ function overlapsWater(obb: Obb, water: Point[][]): boolean {
  * arm but 6 m from the loop's OTHER arm, close enough for the finished
  * building to intrude on it.
  */
-function overlapsOtherTrunk(obb: Obb, trunks: Lane[], ownLaneId: string): boolean {
+function overlapsOtherLane(obb: Obb, trunks: Lane[], ownLaneId: string): boolean {
   for (const lane of trunks) {
     if (lane.id === ownLaneId) continue;
     const r = lane.widthM / 2 + LANDMARK_OBSTACLE_MARGIN_M;
@@ -180,7 +180,6 @@ function overlapsOtherTrunk(obb: Obb, trunks: Lane[], ownLaneId: string): boolea
   return false;
 }
 
-let claimCounter = 0;
 
 /** `landmark:<kind>:<laneId>:<R|L><ordinal>` -- follows the same
  * `<laneId>:<side><ordinal>` shape `lotId` (types.ts) uses for an ordinary
@@ -192,17 +191,10 @@ function claimId(kind: LandmarkKind, laneId: string, side: 1 | -1, ordinal: numb
   return `landmark:${kind}:${laneId}:${side === 1 ? 'R' : 'L'}${ordinal}`;
 }
 
-/**
- * Try every candidate for one spec, in the fixed deterministic order the
- * design calls for: trunk lanes in id order, each lane's two sides (right
- * of travel, then left), each side sampled from the green end outward at
- * `LANDMARK_SITE_STEP_M`. Returns the FIRST candidate that clears the
- * band, the green, water and every claim already placed this pass -- or
- * null, with the reason left for the caller to report (fail soft, never
- * silently).
- */
+/** Rank every feasible roadside claim by the landmark's role. Candidate
+ * enumeration is deterministic; lane IDs break ties, never decide priority. */
 function siteOne(
-  spec: LandmarkSpec, trunksSorted: Lane[], green: Green, site: Site, builtRadiusM: number,
+  spec: LandmarkSpec, lanesSorted: Lane[], green: Green, site: Site, builtRadiusM: number,
   placed: Obb[],
 ): Lot | null {
   const [frontageM, depthM] = nominalFootprint(spec.glyph);
@@ -210,7 +202,8 @@ function siteOne(
   const bandLoM = lo * builtRadiusM;
   const bandHiM = hi * builtRadiusM;
 
-  for (const lane of trunksSorted) {
+  let best: { lot: Lot; score: number; } | undefined;
+  for (const lane of lanesSorted) {
     const setback = laneSetback(lane);
     for (const side of [1, -1] as const) {
       const edge = offsetPolyline(lane.points, setback, side);
@@ -241,14 +234,21 @@ function siteOne(
         if (overlapsGreen(obb, green)) continue;
         if (overlapsWater(obb, site.water)) continue;
         if (placed.some((other) => obbOverlap(obb, other))) continue;
-        if (overlapsOtherTrunk(obb, trunksSorted, lane.id)) continue;
+        if (overlapsOtherLane(obb, lanesSorted, lane.id)) continue;
 
-        claimCounter++;
-        return lot;
+        const regional = isTrunk(lane.id);
+        const score = spec.kind === 'faith' ? dist(obb.center, green.centre)
+          : spec.kind === 'inn'
+            ? (regional ? 0 : builtRadiusM * 4) + classRank(lane.type) * 2
+            + Math.min(d * 0.6, Math.abs(d - builtRadiusM * 0.75))
+            : Math.abs(d - builtRadiusM * 1.05);
+        if (best && score >= best.score) continue;
+        if (intrudesOnLane(seatLandmark({ lot, glyph: spec.glyph, kind: spec.kind, occupancy: spec.occupancy }), lanesSorted)) continue;
+        best = { lot, score };
       }
     }
   }
-  return null;
+  return best?.lot ?? null;
 }
 
 /** True for a landmark's own lot id (`landmark:<kind>:<laneId>:<R|L><n>`) --
@@ -293,7 +293,7 @@ export function siteLandmarks(
   const diagnostics: string[] = [];
   const landmarks: Landmark[] = [];
   const placed: Obb[] = [];
-  const trunksSorted = [...trunks].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const lanesSorted = [...trunks].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
   for (const spec of specsFor(site)) {
     if (site.population < spec.minPop) continue;
@@ -303,11 +303,11 @@ export function siteLandmarks(
       );
       continue;
     }
-    const lot = siteOne(spec, trunksSorted, green, site, builtRadiusM, placed);
+    const lot = siteOne(spec, lanesSorted, green, site, builtRadiusM, placed);
     if (!lot) {
       diagnostics.push(
         `landmark ${spec.kind}: no site cleared band [${LANDMARK_BAND[spec.kind].join(', ')}]`
-        + ` x builtRadiusM, green, water and prior claims across ${trunks.length} trunk lane(s), skipped`,
+        + ` x builtRadiusM, green, water and prior claims across ${trunks.length} lane(s), skipped`,
       );
       continue;
     }

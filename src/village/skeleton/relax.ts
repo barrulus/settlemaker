@@ -1,10 +1,10 @@
 import { Point } from '../../types/point.js';
-import { arcLengths, closestPointOnSegment, dist, sampleAt } from '../geometry.js';
-import { inkExtent } from '../glyphs.js';
 import {
   RELAX_CLEARANCE_M, RELAX_ITERATIONS, RELAX_MAX_DISPLACEMENT_M, TAIL_STUB_M,
 } from '../constants.js';
-import type { Building, Lane } from '../types.js';
+import { arcLengths, closestPointOnSegment, dist, sampleAt } from '../geometry.js';
+import { inkExtent } from '../glyphs.js';
+import type { Building, Lane, Lot } from '../types.js';
 import { isTrunk } from './trunks.js';
 
 /**
@@ -68,9 +68,9 @@ export function relaxLanes(lanes: Lane[], buildings: Building[]): Lane[] {
   });
 }
 
-function buildingsOf(lane: Lane, buildings: Building[]): Building[] {
+function buildingsOf(lane: Lane, buildings: Building[], lotLanes: Map<string, string>): Building[] {
   const prefix = `${lane.id}:`;
-  return buildings.filter((b) => b.lotId.startsWith(prefix));
+  return buildings.filter((b) => lotLanes.has(b.lotId) ? lotLanes.get(b.lotId) === lane.id : b.lotId.startsWith(prefix));
 }
 
 /** Arc length along `points` of the position nearest `p` — where a
@@ -131,9 +131,10 @@ function weldJoins(lanes: Lane[]): { floorS: Map<string, number>; joiners: Set<s
  * first: this local geometric pass cannot decide whether a loop is useful.
  */
 export function trimTails(
-  lanes: Lane[], buildings: Building[], opts: { weld?: boolean; } = {},
+  lanes: Lane[], buildings: Building[], opts: { weld?: boolean; lots?: Lot[]; } = {},
 ): Lane[] {
   const { weld = true } = opts;
+  const lotLanes = new Map(opts.lots?.map(l => [l.id, l.laneId]) ?? []);
   const result: Lane[] = [];
   const connectorParents = new Set(
     lanes.filter((l) => isConnector(l.id) && l.parentId !== undefined).map((l) => l.parentId!),
@@ -183,7 +184,7 @@ export function trimTails(
       continue;
     }
 
-    const mine = buildingsOf(lane, buildings);
+    const mine = buildingsOf(lane, buildings, lotLanes);
     // Task 5: a lane earning no dwelling of its own is still kept if it is
     // the HOST of a growth-time join -- some other (surviving, per the
     // `joiners` check above) lane's far end welds onto it. Dropping the

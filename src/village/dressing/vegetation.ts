@@ -247,9 +247,11 @@ export function buildVegetation(
         cellOrigin.x + VEG_PATCH_CELL_M / 2,
         cellOrigin.y + VEG_PATCH_CELL_M / 2,
       );
-      const chance = patchChanceAt(
-        dist(cellCentre, green.centre), innerEdge.at(cellCentre), rimExtent.at(cellCentre),
-      );
+      const distance = dist(cellCentre, green.centre);
+      // Vacant interior ground can carry a coherent grove, using the same
+      // biome mix and clearance tests as outer woodland. Keep the green open.
+      const chance = distance > greenDrawnRadius(green) * 2 && distance < groveEdge.at(cellCentre)
+        ? 0.55 : patchChanceAt(distance, innerEdge.at(cellCentre), rimExtent.at(cellCentre));
       if (!(rng.float() < chance)) continue;
 
       const seed = new Point(

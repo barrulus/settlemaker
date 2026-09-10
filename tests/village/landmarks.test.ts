@@ -88,10 +88,18 @@ describe('siteLandmarks', () => {
     const { landmarks } = siteLandmarks(site(), green, trunks, built, rng);
     for (const lm of landmarks) {
       const d = Math.hypot(lm.lot.front.x - green.centre.x, lm.lot.front.y - green.centre.y);
-      const [lo, hi] = { faith: [0.4, 1.2], inn: [0.6, 1.6], manor: [0.9, 2.0] }[lm.kind];
+      const [lo, hi] = { faith: [0, 0.8], inn: [0, 1.1], manor: [0.9, 2.0] }[lm.kind];
       expect(d).toBeGreaterThanOrEqual(lo * built - 1e-6);
       expect(d).toBeLessThanOrEqual(hi * built + 1e-6);
     }
+  });
+
+  it('puts an inn on a regional road even when a back lane sorts first', () => {
+    const roads = [lane('a-back-lane', 270), lane('trunk-main-0', 90, 150, { type: 'main', widthM: 6 })];
+    const { landmarks } = siteLandmarks(site(), green, roads, builtRadiusM, new SeededRandom(1));
+    expect(landmarks.find(l => l.kind === 'inn')!.lot.laneId).toBe('trunk-main-0');
+    const faith = landmarks.find(l => l.kind === 'faith')!;
+    expect(Math.hypot(faith.lot.front.x, faith.lot.front.y)).toBeLessThan(builtRadiusM * 0.5);
   });
 
   it('refuses a candidate outside every kind\'s band (lane too short)', () => {

@@ -114,7 +114,9 @@ connections. Local surfaces, reserved corridors and parcel setbacks are distinct
 
 Run `npm run review:roads` to generate the local road gallery. The
 [road design report](docs/plans/2026-09-10-village-road-results.md) includes commands
-for matched historical comparisons, held-out seeds and validation results.
+for matched historical comparisons, held-out seeds and validation results. The
+[follow-up review](docs/plans/2026-09-10-village-followup.md) covers road-shaped greens,
+landmark locations, junction transitions and the expanded landscape panel.
 
 Villages are themed by biome — `villageThemeFor(biome)` selects the ground,
 vegetation and dwelling glyphs. Only the temperate theme has been through a

@@ -30,6 +30,8 @@ export interface Site {
 }
 
 export interface Green {
+  /** Road-defined corners for a junction green, in world metres. */
+  outline?: Point[];
   shape: GreenShape;
   variant: 'a' | 'b';
   centre: Point;

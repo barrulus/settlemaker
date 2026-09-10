@@ -8,13 +8,13 @@
  * enclosed by a ring.
  */
 import { describe, expect, it } from 'vitest';
+import { pointInPolygon } from '../../src/geom/point-in-polygon.js';
 import { Point } from '../../src/types/point.js';
 import { SeededRandom } from '../../src/utils/random.js';
-import { pointInPolygon } from '../../src/geom/point-in-polygon.js';
-import { closestPointOnPolyline, dist, greenDrawnRadius } from '../../src/village/geometry.js';
-import { synthesizeTrunks } from '../../src/village/skeleton/trunks.js';
-import { siteGreenOnNetwork } from '../../src/village/skeleton/green-siting.js';
 import { GREEN_CONNECTOR_MAX_SHARE } from '../../src/village/constants.js';
+import { closestPointOnPolyline, dist, greenDrawnRadius } from '../../src/village/geometry.js';
+import { siteGreenOnNetwork } from '../../src/village/skeleton/green-siting.js';
+import { synthesizeTrunks } from '../../src/village/skeleton/trunks.js';
 import type { Site, SiteRoute } from '../../src/village/types.js';
 
 const BUILT = 55;
@@ -40,36 +40,29 @@ function build(routes: SiteRoute[], seed: number, water: Point[][] = []) {
 }
 
 /** Closest any trunk polyline comes to `p`. */
-const nearestTrunk = (p: Point, trunks: { points: Point[] }[]): number =>
+const nearestTrunk = (p: Point, trunks: { points: Point[]; }[]): number =>
   Math.min(...trunks.filter((t) => t.points.length >= 2)
     .map((t) => closestPointOnPolyline(p, t.points).distance));
 
 describe('siteGreenOnNetwork', () => {
-  it('(a) picks a relation the network can actually support', () => {
-    const seen = new Set<string>();
+  it('places through-road greens on the road, without a random side-attached green', () => {
     for (let seed = 1; seed <= 50; seed++) {
-      const { network, relation } = build(THROUGH, seed);
-      if (network.pattern === 'main-street') {
-        expect(['tangent', 'astride']).toContain(relation);
-        seen.add(relation);
-      }
-      if (network.pattern === 'loop') expect(relation).toBe('enclosed');
-      if (network.pattern === 'terminal') expect(relation).toBe('terminal');
+      const { network, green, relation } = build(THROUGH, seed);
+      expect(relation).not.toBe('tangent');
+      expect(nearestTrunk(green.centre, network.trunks)).toBeLessThanOrEqual(1e-6);
     }
-    expect(seen.size, 'main-street should reach both tangent and astride').toBeGreaterThan(1);
   });
 
-  it('(a) a loop encloses the green inside the ring', () => {
+  it('gives every triangular corner an actual route, including small paths', () => {
+    let triangles = 0;
     for (let seed = 1; seed <= 60; seed++) {
-      const { network, green, relation } = build(THROUGH, seed);
-      if (network.pattern !== 'loop') continue;
-      expect(relation).toBe('enclosed');
-      // Read off the network, not rebuilt from lane ids — a crossing-split
-      // ring half sorts as NaN and yields a self-intersecting polygon.
-      const ring = network.ring;
-      expect(ring.length).toBeGreaterThanOrEqual(3);
-      expect(pointInPolygon(green.centre, ring), `seed ${seed}: green outside its own ring`).toBe(true);
+      const { network, green } = build(TERMINAL, seed);
+      if (green.shape !== 'sm-green-triangle') continue;
+      triangles++;
+      expect(green.outline).toHaveLength(3);
+      for (const corner of green.outline!) expect(nearestTrunk(corner, network.trunks)).toBeLessThan(1e-6);
     }
+    expect(triangles).toBeGreaterThan(0);
   });
 
   it('(a) a terminating road ends at the green it serves', () => {

@@ -12,8 +12,8 @@ export interface RoadNetwork {
   buildings: Map<string, string>;
 }
 const JOIN_EPS_M = 0.15;
-const SHORTCUT_MIN_SAVING_M = 12;
-const SHORTCUT_MIN_RATIO = 1.5;
+const SHORTCUT_MIN_SAVING_M = 8;
+const SHORTCUT_MIN_RATIO = 1.35;
 const SHORTCUT_RESIDENT_REACH_M = 24;
 
 /** Graph adapter: split at endpoint attachments and occupied frontage without

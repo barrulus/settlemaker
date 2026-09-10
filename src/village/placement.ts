@@ -1,22 +1,23 @@
 import { SeededRandom } from '../utils/random.js';
+import { LOT_DEPTH_M, RECUT_MAX_PASSES } from './constants.js';
 import type { DeckEntry } from './deck.js';
+import { intrudesOnLane, spendCensus } from './dwellings.js';
+import { resetLotTrace, type LotTrace } from './lot-trace.js';
+import { clipLots, orderLots, scoreLots, subdivideGreen, subdivideLane } from './parcels/lots.js';
+import { lotObb, obbOverlap, resolveConvergingLots } from './parcels/overlap.js';
+import { recutFreedGround } from './parcels/recut.js';
+import type { RouteType } from './route-class.js';
+import { seatLandmark, siteLandmarks, type Landmark } from './skeleton/landmarks.js';
+import { lotReachAt } from './skeleton/lanes.js';
+import type { RadiusProfile } from './skeleton/profile.js';
 import type { Green, Lane, Lot, Site } from './types.js';
 import { isApron } from './types.js';
-import type { RouteType } from './route-class.js';
-import type { RadiusProfile } from './skeleton/profile.js';
-import { lotReachAt } from './skeleton/lanes.js';
-import { LOT_DEPTH_M, RECUT_MAX_PASSES } from './constants.js';
-import { subdivideGreen, subdivideLane, clipLots, orderLots, scoreLots } from './parcels/lots.js';
-import { resolveConvergingLots, lotObb, obbOverlap } from './parcels/overlap.js';
-import { recutFreedGround } from './parcels/recut.js';
-import { spendCensus, seat, intrudesOnLane } from './dwellings.js';
-import { siteLandmarks } from './skeleton/landmarks.js';
-import { resetLotTrace, type LotTrace } from './lot-trace.js';
 
 export interface PlacementInput {
   lanes: Lane[]; green: Green; site: Site; activeDeck: DeckEntry[];
   lotProfile: RadiusProfile; f0: number; lotFloorM: number; lotCapM: number;
   seed: number; terrace: boolean; trace?: LotTrace;
+  reservedLandmarks?: Landmark[];
 }
 
 /** Evaluate real buildable frontage without consuming the caller's random stream.
@@ -89,10 +90,12 @@ export function evaluatePlacement(input: PlacementInput) {
   }
   // Reserve and seat landmarks in every trial, so the accepted census already
   // includes their ground. A later landmark pass must not displace housed people.
-  const landmarkResult = siteLandmarks(site, green, lanes.filter(l => !isApron(l.id)), lotRadiusM, new SeededRandom(input.seed + 19));
+  const landmarkResult = input.reservedLandmarks
+    ? { landmarks: input.reservedLandmarks, diagnostics: [] }
+    : siteLandmarks(site, green, lanes.filter(l => !isApron(l.id)), lotRadiusM, new SeededRandom(input.seed + 19));
   const landmarks = landmarkResult.landmarks.map(lm => ({
     lm,
-    building: seat({ glyph: lm.glyph, occupancy: lm.occupancy, weight: 0, sizeFactor: 1, minFrontage: 0 }, lm.lot, rng, false),
+    building: seatLandmark(lm),
   })).filter(({ building }) => !intrudesOnLane(building, lanes));
   lots = lots.filter(l => !landmarks.some(({ lm }) => obbOverlap(lotObb(l), lotObb(lm.lot))));
   lots.push(...landmarks.map(({ lm }) => lm.lot));

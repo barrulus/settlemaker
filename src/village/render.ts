@@ -1,3 +1,4 @@
+import { roadSurfaceClips } from './road-surface.js';
 import { REFINED_GLYPHS } from '../assets/refined-glyphs.js';
 import type { Point } from '../types/point.js';
 import { FURROW_PATTERN_STEP_DEG } from './constants.js';
@@ -409,13 +410,19 @@ export function renderVillage(
   // GREEN_UNDERLAP_RATIO x radius inside it). The field ring painted above
   // goes UNDER the routes; only the green rides above them.
   out.push('<g data-band="route" fill="none" stroke="#8a6f4a" stroke-linecap="round" stroke-linejoin="round">');
+  const surfaceClips = roadSurfaceClips(model.lanes);
   const byWidth = [...model.lanes].sort((a, b) => (b.widthM - a.widthM) || a.id.localeCompare(b.id));
-  for (const lane of byWidth) {
+  for (const [index, lane] of byWidth.entries()) {
+    const clip = surfaceClips.get(lane.id);
+    const clipPoints = clip?.map(p => `${n(X(p.x))},${n(Y(p.y))}`).join(' ') ?? '';
+    const clipHash = [...clipPoints].reduce((hash, c) => (Math.imul(hash, 31) + c.charCodeAt(0)) | 0, 0) >>> 0;
+    const clipId = `road-surface-${index}-${clipHash.toString(36)}`;
+    if (clip) out.push(`<defs><clipPath id="${clipId}"><polygon points="${clipPoints}"/></clipPath></defs>`);
     const d = lane.points
       .map((p, i) => `${i === 0 ? 'M' : 'L'}${n(X(p.x))},${n(Y(p.y))}`)
       .join(' ');
     out.push(
-      `<path data-lane="${lane.id}" d="${d}" `
+      `<path data-lane="${lane.id}" d="${d}" ${clip ? `clip-path="url(#${clipId})" ` : ''}`
       + `stroke-width="${n(roadCrossSection(lane).surfaceM * pxPerMetre)}"/>`,
     );
   }
@@ -424,11 +431,14 @@ export function renderVillage(
   // parcel band — the green's ground, over the roads that run beneath it
   out.push('<g data-band="parcel">');
   const r = (model.green.diameter / 2) * pxPerMetre;
-  if (greenGlyphAvailable) {
+  if (model.green.outline && model.green.shape === 'sm-green-triangle') {
+    const outline = model.green.outline.map(p => `${n(X(p.x))},${n(Y(p.y))}`).join(' ');
+    out.push(`<polygon data-green="junction" points="${outline}" fill="var(--sm-common, #a8bf6d)" stroke="var(--sm-common-band, #8aa855)" stroke-width="${n(0.4 * pxPerMetre)}" stroke-linejoin="round"/>`);
+  } else if (greenGlyphAvailable) {
     out.push(
       `<use href="#${greenGlyphId}" ` +
       `transform="translate(${n(X(model.green.centre.x))},${n(Y(model.green.centre.y))}) ` +
-      `rotate(${n(model.green.bearingDeg)}) scale(${n((r * 2) / 64)}) translate(-32,-32)"/>`,
+      `rotate(${n(model.green.bearingDeg - (model.green.shape.includes('lens') ? 90 : 0))}) scale(${n((r * 2) / 64)}) translate(-32,-32)"/>`,
     );
   }
   // No stand-in branch: every green shape/variant the deck can produce
