@@ -328,6 +328,9 @@ export function generateVillage(
     builtRadiusM: lotRadiusM, f0, rng,
   });
 
+  const dressedLanes = [...relaxed, ...dressing.accessLanes];
+  diagnostics.push(...dressing.diagnostics);
+
   // Tell callers when water has severely constrained the farmland.
   if (site.water.length > 0) {
     const fieldArea = dressing.fields.reduce((sum, f) => {
@@ -353,7 +356,7 @@ export function generateVillage(
   }
 
   const frame = computeFrame({
-    lanes: relaxed,
+    lanes: dressedLanes,
     buildings: spend.buildings.map((b) => b.position),
     greenCentre: green.centre,
     dressing: [
@@ -363,7 +366,7 @@ export function generateVillage(
       ...dressing.pois.map((p) => p.position),
     ],
   });
-  const framedLanes = clipApronsToFrame(relaxed, frame);
+  const framedLanes = clipApronsToFrame(dressedLanes, frame);
   const droppedAprons = relaxed.filter((l) => isApron(l.id)).length
     - framedLanes.filter((l) => isApron(l.id)).length;
   if (droppedAprons > 0) {

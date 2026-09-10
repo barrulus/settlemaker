@@ -249,6 +249,10 @@ export function buildSite(input: AzgaarBurgInput, seed = 0): Site {
       temple: input.temple,
       trade: input.trade ?? false,
       walls: input.walls,
+      capital: input.capital ?? false,
+      citadel: input.citadel ?? false,
+      plaza: input.plaza ?? false,
+      shanty: input.shanty ?? false,
     },
   };
 }

@@ -415,7 +415,7 @@ classes outside the village; internal streets normally use town/local/footpath.
 | `citadel` | boolean | `false` | |
 | `walls` | boolean | `false` | |
 | `plaza` | boolean | `false` | |
-| `temple` | boolean | `false` | |
+| `temple` | boolean | `false` | Villages reserve a henge clearing with footpath access; see feature flags below |
 | `shanty` | boolean | `false` | |
 | `capital` | boolean | `false` | |
 | `trade` | boolean | `false` | only present at all when true |
@@ -425,6 +425,23 @@ classes outside the village; internal streets normally use town/local/footpath.
 | `biome` | string | (unset) | data, not presentation: also picks the village dwelling/field/canopy decks. Azgaar's own biome names are accepted and normalised — see §Villages |
 | `urbanDensity` | number | (unset) | only kept if `> 0`; when unset, the generator falls back to a population-scaled default curve — see §6 |
 | `coreCapacity` | number | `10000` | only kept if `> 0`; people the walled core may hold — see §6 |
+
+Village feature flags (population 1–1000): FMG should send all seven existing
+booleans, using `shanty` for “Shanty Town”. They are preserved in `model.site.flags`.
+`temple: true` requests one `sm-stone-circle` henge, reserved on dry ground near
+an accessible street before fields and vegetation are placed. It is not subject
+to the incidental henge probability. Its approach is an internal `footpath`;
+its GeoJSON POI retains `kind: "stone-circle"`. An impossible site reports a
+`temple:` diagnostic rather than placing a henge in water or on occupied ground.
+Population-driven faith buildings may also appear. `port` enables the existing
+shore-dependent boathouse/jetty placement. `capital`, `citadel`, `walls`, `plaza`
+and `shanty` are accepted and retained, but currently have no dedicated village
+structure placement; their city-engine behavior remains unchanged.
+
+Village flora uses the normalized biome and fills unused ground around houses
+and between fields with groves and connected woodland. Roads, occupied plots,
+gardens, crops, water and requested henge clearings remain excluded. No new FMG
+field is required for either henges or woodland.
 
 That's all 16 flat data params (`src/url/params.ts`'s `FLAT_DATA_PARAMS`).
 

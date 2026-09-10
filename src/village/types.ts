@@ -26,7 +26,10 @@ export interface Site {
   routes: SiteRoute[];
   /** Closed polygons of water in burg-local metres. */
   water: Point[][];
-  flags: { port: boolean; temple: boolean; trade: boolean; walls: boolean };
+  flags: {
+    port: boolean; temple: boolean; trade: boolean; walls: boolean;
+    capital?: boolean; citadel?: boolean; plaza?: boolean; shanty?: boolean;
+  };
 }
 
 export interface Green {

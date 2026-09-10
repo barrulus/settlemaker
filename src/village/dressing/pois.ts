@@ -28,8 +28,8 @@ import type {
  *
  * Draw order, fixed:
  *   1. well -- draws NO rng (a deterministic geometric nudge, §8.5).
- *   2. stone circle -- ONE rng.bool(STONE_CIRCLE_CHANCE) draw ALWAYS, so
- *      whether it lands never shifts what comes after; if true, up to
+ *   2. reserved temple henge (no draws), or incidental stone circle:
+ *      ONE rng.bool(STONE_CIRCLE_CHANCE) draw; if true, up to
  *      STONE_CIRCLE_BEARING_TRIES rng.int(0,360) draws (only in the true
  *      branch -- gated deterministically by the bool already drawn).
  *   3. boathouse -- draws NO rng (a deterministic nearest-first shore slide).
@@ -123,7 +123,7 @@ function closestPointOnObb(p: Point, obb: Obb): Point {
 
 /** True when the disc of `radius` around `centre` intersects the (closed)
  * polygon -- containment OR an edge closer than `radius`. */
-function circleIntersectsPolygon(centre: Point, radius: number, polygon: Point[]): boolean {
+export function circleIntersectsPolygon(centre: Point, radius: number, polygon: Point[]): boolean {
   if (polygon.length < 2) return false;
   if (pointInPolygon(centre, polygon)) return true;
   for (let i = 0; i < polygon.length; i++) {
@@ -134,7 +134,7 @@ function circleIntersectsPolygon(centre: Point, radius: number, polygon: Point[]
   return false;
 }
 
-function circleClearOfClaims(
+export function circleClearOfClaims(
   centre: Point, radius: number, lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldBlock[],
 ): boolean {
   for (const lane of lanes) {
@@ -378,7 +378,7 @@ export function placeBoathouse(
  */
 export function buildPois(
   site: Site, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldBlock[],
-  vegetation: Vegetation[], dressedRadiusM: number, shorefrontReachM: number, rng: SeededRandom,
+  vegetation: Vegetation[], dressedRadiusM: number, shorefrontReachM: number, rng: SeededRandom, reservedHenge?: Poi,
 ): Poi[] {
   const pois: Poi[] = [];
 
@@ -387,7 +387,7 @@ export function buildPois(
     if (well) pois.push(well);
   }
 
-  const stoneCircle = placeStoneCircle(
+  const stoneCircle = reservedHenge ?? placeStoneCircle(
     green, dressedRadiusM, lanes, lots, crofts, fields, site.water, vegetation, rng,
   );
   if (stoneCircle) pois.push(stoneCircle);
