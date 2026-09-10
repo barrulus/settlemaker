@@ -71,6 +71,16 @@ remains the nominal width; the reserved corridor is unchanged. Clips only remove
 paint, so they cannot widen a road into a parcel. A continuing main street keeps
 its width when a small path meets its side.
 
+Village road surfaces are masked against the union of water polygons. Street
+LineStrings remain continuous for connectivity, but consumers drawing surfaces
+must likewise exclude water and draw bridge decks separately. Crossing Point
+features retain `crossing_id`, `street_id`, `span_m`, `bearing_deg` and `narrow`.
+Optional `deck_m` (polygon coordinates) and `centreline_m` (polyline coordinates)
+provide the bridge shape, including one metre of dry abutment at either end.
+The renderer draws these decks when `narrow` is true. Span measurements use
+exact bank intersections, including water narrower than the old one-metre
+sampling interval. Model equivalents are `WaterCrossing.deck` and `centreline`.
+
 A triangular green may include `outline_m`, three corner coordinates lying on
 its actual approach routes. Its feature remains a Point with the same identity
 and location contract; the optional outline reproduces the road-defined shape.

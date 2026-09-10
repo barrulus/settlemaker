@@ -1,3 +1,4 @@
+import { validWaterRoute } from './water-routing.js';
 import { usefulShortcut } from './network.js';
 import { forwardJoin, smoothLane } from './curves.js';
 import { Point } from '../../types/point.js';
@@ -1120,7 +1121,7 @@ function crossesAnyLane(points: Point[], lanes: Lane[]): boolean {
  * loop is made at a lower class than the lanes it joins.
  */
 export function connectDeadEnds(
-  lanes: Lane[], green: Green, buildings: Building[] = [], lots?: Lot[],
+  lanes: Lane[], green: Green, buildings: Building[] = [], lots?: Lot[], water: Point[][] = [],
 ): Lane[] {
   const out = [...lanes];
   const candidates = lanes
@@ -1144,7 +1145,7 @@ export function connectDeadEnds(
       const reach = Math.min(6, target.distance / 3);
       const guide = new Point(end.x + tangent.x * reach, end.y + tangent.y * reach);
       const points = continuing ? smoothLane([end, guide, target.point]) : [end, target.point];
-      if (!points) continue;
+      if (!points || !validWaterRoute(points, water)) continue;
       // Tested against EVERY lane including its own parent. The connector
       // legitimately touches its parent at the start and its target at the
       // end, and `segmentIntersection` ignores both as endpoint touches --

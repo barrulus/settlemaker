@@ -39,6 +39,7 @@ import { pruneRedundantLanes } from './skeleton/network.js';
 import { buildRadiusProfile } from './skeleton/profile.js';
 import { relaxLanes, trimTails } from './skeleton/relax.js';
 import { contractRadiusFor, synthesizeTrunks } from './skeleton/trunks.js';
+import { validWaterRoute } from './skeleton/water-routing.js';
 import {
   isApron,
   type Lane, type Lot, type VillageModel
@@ -177,6 +178,8 @@ export function generateVillage(
       if (option >= GROWTH_SHORTLIST && best) break;
       const raw = proposals[option];
       const candidate = raw.map(l => villageCrossSection(l, dwellingsNeeded));
+      if (site.water.length && candidate.some(l => !lanes.some(old => old.id === l.id && old.points === l.points)
+        && !validWaterRoute(l.points, site.water))) { rejected++; continue; }
       if (reservedBuildings.some(b => intrudesOnLane(b, candidate))) { rejected++; continue; }
       const result = placement(candidate);
       const gained = result.spend.housed - evaluated.spend.housed;
@@ -211,6 +214,8 @@ export function generateVillage(
           lotProfile, new SeededRandom(seed * 31 + step * 997), spacingScale, GROWTH_LOOKAHEAD);
         for (const raw of next) {
           const candidate = raw.map(l => villageCrossSection(l, dwellingsNeeded));
+          if (site.water.length && candidate.some(l => !lanes.some(old => old.id === l.id && old.points === l.points)
+            && !validWaterRoute(l.points, site.water))) { rejected++; continue; }
           if (reservedBuildings.some(b => intrudesOnLane(b, candidate))) { rejected++; continue; }
           const result = placement(candidate);
           const gained = result.spend.housed - evaluated.spend.housed;
@@ -223,7 +228,9 @@ export function generateVillage(
       }
     }
     if (best) { lanes = best.lanes; evaluated = best.result; bestState = snapshot(); accepted++; continue; }
-    if (rounds++ >= MAX_FEEDBACK_ROUNDS) break;
+    // River banks remove candidate frontage. Allow two additional bounded
+    // density/envelope trials before declaring overflow on a wet site.
+    if (rounds++ >= MAX_FEEDBACK_ROUNDS + (site.water.length ? 2 : 0)) break;
     if (tightenAttempts < maxTightenAttempts) {
       const tightenM = ++tightenAttempts * GAP_TIGHTEN_STEP_M;
       f0 = Math.max(inkFloorM, nominalF0 - tightenM);
@@ -256,7 +263,7 @@ export function generateVillage(
   const relaxedLanes = relaxLanes(lanes.filter((l) => !isApron(l.id)), spend.buildings)
     .map((relaxedLane) => {
       const intrudes = spend.buildings.some((b) => intrudesOnLane(b, [relaxedLane]));
-      return intrudes ? (lanes.find((l) => l.id === relaxedLane.id) ?? relaxedLane) : relaxedLane;
+      return (intrudes || !validWaterRoute(relaxedLane.points, site.water)) ? (lanes.find((l) => l.id === relaxedLane.id) ?? relaxedLane) : relaxedLane;
     })
     .concat(lanes.filter((l) => isApron(l.id)));
   for (let pass = 0; pass < 4; pass++) {
@@ -275,7 +282,8 @@ export function generateVillage(
   // Trim only after occupied access has been protected. Optional shortcuts
   // preserve the accepted houses and cannot trigger another seating pass.
   const trimmed = trimTails(pruneRedundantLanes(relaxedLanes, green, spend.buildings, lots), spend.buildings, { lots });
-  const relaxed = connectDeadEnds(trimmed, green, spend.buildings, lots);
+  const bankSafe = trimmed.map(l => validWaterRoute(l.points, site.water) ? l : relaxedLanes.find(old => old.id === l.id) ?? l);
+  const relaxed = connectDeadEnds(bankSafe, green, spend.buildings, lots, site.water);
 
   diagnostics.push(...evaluated.diagnostics);
 

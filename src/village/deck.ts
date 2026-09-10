@@ -114,23 +114,19 @@ const BIOME_SUFFIX: Record<string, string> = {
   tropical: '--tropical', coastal: '--coastal',
 };
 
-/**
- * Resolve one entry's glyph for a biome: try the suffixed id, fall back to
- * the plain (temperate) id when the manifest doesn't carry a variant.
- * Whether a suffixed id exists is a manifest question, so glyphs.ts answers
- * it via hasGlyph. Biome sets are deliberately partial — the refined set
- * covers dwellings and wells per biome but not every id — so the fallback
- * leg is ordinary behaviour, not an error path.
- */
+/** Prefer the exact biome variant, then a native dwelling in the same
+ * family, and only then the temperate fallback for an incomplete asset set. */
 export function resolveGlyphFor(biome: string, glyph: string): string {
   const suffix = BIOME_SUFFIX[biome] ?? '';
   if (suffix === '') return glyph;
   const suffixed = `${glyph}${suffix}`;
-  // Both legs are live since the refined 91-symbol ingest (2026-08-21):
-  // the house family resolves to real --tundra/--desert/... variants, and
-  // ids without a variant (the huts' base ids, the landmark set) take the
-  // temperate fallback. deck.test.ts pins one of each.
-  return hasGlyph(suffixed) ? suffixed : glyph;
+  if (hasGlyph(suffixed)) return suffixed;
+  // Prefer a native dwelling in the same family over a bare temperate roof.
+  // The tundra set has house/hut/longhouse, not every material variant.
+  const family = glyph === 'sm-house-tiled' ? 'sm-house'
+    : glyph === 'sm-hut-straw' || glyph === 'sm-hut-round' ? 'sm-hut'
+      : glyph === 'sm-house-large-tiled' ? 'sm-longhouse' : undefined;
+  return family && hasGlyph(`${family}${suffix}`) ? `${family}${suffix}` : glyph;
 }
 
 /**

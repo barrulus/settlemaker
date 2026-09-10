@@ -171,6 +171,7 @@ export function generateVillageGeoJson(model: VillageModel): FeatureCollection {
       properties: {
         layer: 'crossing', crossing_id: b.id, street_id: b.laneId,
         span_m: b.spanM, bearing_deg: b.bearingDeg, narrow: b.narrow,
+        ...(b.deck ? { deck_m: b.deck.map(pt), centreline_m: b.centreline?.map(pt) } : {}),
       },
       geometry: { type: 'Point', coordinates: pt(b.position) },
     });

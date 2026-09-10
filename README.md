@@ -121,6 +121,8 @@ for matched historical comparisons, held-out seeds and validation results. The
 landmark locations, junction transitions and the expanded landscape panel. The
 [route layout review](docs/plans/2026-09-10-village-route-layout.md) covers the
 shared street network, updated FMG contract and varied multi-approach gallery.
+The [water and roofs review](docs/plans/2026-09-10-village-water-roofs.md)
+covers dry road approaches, timber bridges and native tundra dwellings.
 
 Villages are themed by biome — `villageThemeFor(biome)` selects the ground,
 vegetation and dwelling glyphs. Only the temperate theme has been through a

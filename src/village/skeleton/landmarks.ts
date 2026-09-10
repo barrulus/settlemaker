@@ -80,7 +80,7 @@ function specsFor(site: Site): LandmarkSpec[] {
   return [
     faithSpecFor(site),
     { kind: 'inn', glyph: resolveGlyphFor(site.biome, 'sm-inn'), minPop: 180, occupancy: 6 },
-    { kind: 'manor', glyph: 'sm-house-large-tiled', minPop: 250, occupancy: 6 },
+    { kind: 'manor', glyph: resolveGlyphFor(site.biome, 'sm-house-large-tiled'), minPop: 250, occupancy: 6 },
   ];
 }
 

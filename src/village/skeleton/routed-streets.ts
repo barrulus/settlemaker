@@ -8,6 +8,7 @@ import type { SeededRandom } from '../../utils/random.js';
 import { angularGap, bearingOf, bearingVector, closestPointOnSegment, dist, inAnyWater } from '../geometry.js';
 import { classRank, laneWidth, type RouteType } from '../route-class.js';
 import { routeProvenanceKey, trunkLaneId, type Lane, type Site } from '../types.js';
+import { shortenWaterCrossings } from './water-routing.js';
 import { smoothLane } from './curves.js';
 import { drawTrunkPath, type TrunkEntry, type TrunkJunction, type TrunkNetwork } from './trunks.js';
 
@@ -66,6 +67,7 @@ function mesh(site: Site, radius: number, rng: SeededRandom, aim: Point): Node[]
       const key = [seedIds.get(a)!, seedIds.get(b)!].sort((a, b) => a - b).join(':');
       const other = boundary.get(key);
       if (other === undefined) { boundary.set(key, i); continue; }
+      if (inAnyWater(nodes[i].p, site.water) || inAnyWater(nodes[other].p, site.water)) continue;
       const cost = travelCost(nodes[i].p, nodes[other].p, site);
       if (!Number.isFinite(cost)) continue;
       const edge: Edge = { a: i, b: other, cost, sources: new Set() };
@@ -190,7 +192,7 @@ export function routeVillageStreets(
       // Chains end at junctions or arrivals. Round bends across parcel edges,
       // keeping junctions fixed and shared by every incident street.
       if (arrivals.has(indices[0])) indices.reverse();
-      const raw = indices.map(i => nodes[i].p);
+      const raw = shortenWaterCrossings(indices.map(i => nodes[i].p), site.water);
       // Very short mesh edges can create a hairpin between two useful bends.
       // Remove those geometric accidents before rounding, while retaining
       // the meaningful parcel-scale changes of direction and dry crossings.

@@ -52,6 +52,10 @@ function metrics(m: VillageModel) {
   }
   return {
     waterPolygons: m.site.water.length, greenShape: m.green.shape,
+    bridgeCount: m.bridges.filter(b => b.narrow).length,
+    longWaterCrossings: m.bridges.filter(b => !b.narrow).length,
+    maxWaterSpanM: Math.max(0, ...m.bridges.map(b => b.spanM)),
+    buildingGlyphs: [...new Set(m.buildings.map(b => b.glyph))].sort(),
     approachBearings: m.site.routes.map(r => ({ bearing: r.bearingDeg, type: r.type, routeId: r.routeId })),
     internalClasses: [...new Set(internal.map(l => l.type))].sort(),
     requiredStreetMetres: internal.filter(l => isTrunk(l.id)).reduce((sum, l) => sum + polylineLength(l.points), 0),

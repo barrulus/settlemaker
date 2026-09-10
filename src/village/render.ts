@@ -1,9 +1,10 @@
-import { roadSurfaceClips } from './road-surface.js';
 import { REFINED_GLYPHS } from '../assets/refined-glyphs.js';
 import type { Point } from '../types/point.js';
 import { FURROW_PATTERN_STEP_DEG } from './constants.js';
 import { roadCrossSection } from './cross-section.js';
+import { arcLengths, sampleAt } from './geometry.js';
 import { hasGlyph, nominalFootprint } from './glyphs.js';
+import { roadSurfaceClips } from './road-surface.js';
 import type { EdgeStamp, VillageModel } from './types.js';
 
 import { villageThemeFor, type VillageTheme } from './theme.js';
@@ -409,7 +410,13 @@ export function renderVillage(
   // every lane visibly disappears beneath the turf (their geometry runs to
   // GREEN_UNDERLAP_RATIO x radius inside it). The field ring painted above
   // goes UNDER the routes; only the green rides above them.
-  out.push('<g data-band="route" fill="none" stroke="#8a6f4a" stroke-linecap="round" stroke-linejoin="round">');
+  // Road paint is land only. Water remains visible even where a road's
+  // shoulder overlaps a bank; the separate bridge deck carries the crossing.
+  const waterPaths = waterPolys.map(poly => polygonPath(poly, X, Y));
+  const maskHash = waterPaths.join('').split('').reduce((h, c) => (Math.imul(h, 31) + c.charCodeAt(0)) | 0, 0) >>> 0;
+  const landMask = `road-land-${maskHash.toString(36)}`;
+  if (waterPaths.length) out.push(`<defs><mask id="${landMask}" maskUnits="userSpaceOnUse" x="0" y="0" width="${n(w)}" height="${n(h)}"><rect width="${n(w)}" height="${n(h)}" fill="white"/>${waterPaths.map(d => `<path d="${d}" fill="black"/>`).join('')}</mask></defs>`);
+  out.push(`<g data-band="route" ${waterPaths.length ? `mask="url(#${landMask})" ` : ''}fill="none" stroke="#8a6f4a" stroke-linecap="round" stroke-linejoin="round">`);
   const surfaceClips = roadSurfaceClips(model.lanes);
   const byWidth = [...model.lanes].sort((a, b) => (b.widthM - a.widthM) || a.id.localeCompare(b.id));
   for (const [index, lane] of byWidth.entries()) {
@@ -427,6 +434,28 @@ export function renderVillage(
     );
   }
   out.push('</g>');
+
+  if (model.bridges.some(b => b.narrow && b.deck && b.centreline)) {
+    out.push('<g data-band="bridge" fill="#c3aa80" stroke="#594e40" stroke-linejoin="round">');
+    for (const bridge of model.bridges) {
+      if (!bridge.narrow || !bridge.deck || !bridge.centreline) continue;
+      const lane = model.lanes.find(l => l.id === bridge.laneId)!;
+      const halfWidth = roadCrossSection(lane).surfaceM / 2 + 0.35;
+      out.push(`<g data-bridge="${bridge.id}"><path d="${polygonPath(bridge.deck, X, Y)}" stroke-width="${n(0.22 * pxPerMetre)}"/>`);
+      const acc = arcLengths(bridge.centreline), length = acc.at(-1)!;
+      for (let at = 0.5; at < length; at += 0.8) {
+        const sample = sampleAt(bridge.centreline, acc, at);
+        const before = sampleAt(bridge.centreline, acc, Math.max(0, at - 0.1)).p;
+        const after = sampleAt(bridge.centreline, acc, Math.min(length, at + 0.1)).p;
+        const span = Math.hypot(after.x - before.x, after.y - before.y);
+        if (span < 1e-6) continue;
+        const nx = -(after.y - before.y) / span * halfWidth, ny = (after.x - before.x) / span * halfWidth;
+        out.push(`<path d="M${n(X(sample.p.x + nx))},${n(Y(sample.p.y + ny))}L${n(X(sample.p.x - nx))},${n(Y(sample.p.y - ny))}" stroke-width="${n(0.1 * pxPerMetre)}"/>`);
+      }
+      out.push('</g>');
+    }
+    out.push('</g>');
+  }
 
   // parcel band — the green's ground, over the roads that run beneath it
   out.push('<g data-band="parcel">');

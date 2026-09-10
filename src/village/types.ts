@@ -192,20 +192,15 @@ export interface Poi {
   jetty?: { from: Point; to: Point; widthM: number };
 }
 
-/**
- * Where a lane crosses water (Phase 3). A wet run along a lane: the stretch
- * between entering the water and leaving it again.
- *
- * MARKED, not drawn. The plan defers full bridge geometry to the parked
- * rivers work; what this phase owes is that a road crossing a stream is a
- * recorded fact rather than a silent overlap, so a later pass (or a
- * consumer) can put a bridge there without re-deriving where it goes.
- */
+/** An exact wet interval with a deck spanning its two banks. */
 export interface WaterCrossing {
+  /** Bank-to-bank deck including one metre of dry abutment at each end. */
+  centreline?: Point[];
+  deck?: Point[];
   /** `bridge:<laneId>:<k>`, k counting crossings along that lane. */
   id: string;
   laneId: string;
-  /** Midpoint of the wet run — where a bridge would sit. */
+  /** Midpoint along the wet run. */
   position: Point;
   /** The lane's bearing across the water, for orienting a span. */
   bearingDeg: number;

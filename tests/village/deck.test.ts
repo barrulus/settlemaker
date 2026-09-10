@@ -128,16 +128,11 @@ describe('deck contents', () => {
     expect(dwelling.glyph.endsWith('--tundra')).toBe(true);
   });
 
-  // sm-house-tiled has no tundra (or any biome) variant, so the temperate
-  // id must survive unresolved — the fallback leg this mechanism exists for.
-  it('resolves biome suffixes with a temperate fallback when no variant exists', () => {
-    // The hut-family dwellings are sm-hut-straw / sm-hut-round; the refined
-    // manifest's tundra hut is a different base id (sm-hut--tundra), so no
-    // suffixed variant of either exists and the temperate id must survive.
-    const hamlet = deckFor('tundra', 80, new SeededRandom(1));
-    const dwelling = hamlet.filter((e) => !e.cap)[0];
-    expect(dwelling.glyph.startsWith('sm-hut')).toBe(true);
-    expect(dwelling.glyph.endsWith('--tundra')).toBe(false);
+  it('prefers a snowy dwelling family when the selected roof material has no tundra variant', () => {
+    for (const population of [40, 80, 300, 900]) for (const seed of [1, 2, 3, 103]) {
+      const deck = deckFor('tundra', population, new SeededRandom(seed));
+      expect(deck.every(e => e.glyph.endsWith('--tundra'))).toBe(true);
+    }
   });
 
   it('averages occupancy for the built-radius prediction', () => {
