@@ -110,6 +110,9 @@ const COAST_AMPLITUDE_SHARE = 1.15;
  */
 const COAST_WAVELENGTHS = [6.0, 2.4];
 const COAST_WAVE_WEIGHTS = [0.85, 0.15];
+/** Tiny hamlets still draw a landscape tile hundreds of metres across.
+ * Keep bays at that scale instead of shrinking them with the house count. */
+const COAST_MIN_BAY_WAVELENGTH_M = 360;
 /** Its own stream, so adding the coastline displaced no other draw. */
 const COAST_SEED_MULTIPLIER = 7919;
 const COAST_SEED_OFFSET = 104729;
@@ -121,6 +124,7 @@ function oceanBearingFallback(input: AzgaarBurgInput, seed: number): Point[][] {
   const dir = bearingVector(input.oceanBearing);
   const normal = new Point(-dir.y, dir.x);
   const standoff = COAST_STANDOFF_K * Math.sqrt(Math.max(1, input.population));
+  const coastScale = Math.max(standoff, COAST_MIN_BAY_WAVELENGTH_M / COAST_WAVELENGTHS[0]);
   const amplitude = standoff * COAST_AMPLITUDE_SHARE;
 
   const rng = new SeededRandom(seed * COAST_SEED_MULTIPLIER + COAST_SEED_OFFSET);
@@ -149,8 +153,8 @@ function oceanBearingFallback(input: AzgaarBurgInput, seed: number): Point[][] {
 
   // Sampled across the full width so the coast keeps its character all the
   // way to the corners; a straight run either side would read as a seam.
-  const wide = standoff * COAST_WIDE_MULT;
-  const shortestWavelength = standoff * Math.min(...COAST_WAVELENGTHS);
+  const wide = coastScale * COAST_WIDE_MULT;
+  const shortestWavelength = coastScale * Math.min(...COAST_WAVELENGTHS);
   const spacing = shortestWavelength / COAST_SAMPLE_PER_WAVE;
   const samples = Math.ceil((2 * wide) / spacing);
 
@@ -163,7 +167,7 @@ function oceanBearingFallback(input: AzgaarBurgInput, seed: number): Point[][] {
       // not a wavelength, and every wave comes out 2*PI too long — which is
       // exactly how the first attempt at this produced a near-straight coast.
       wobble += COAST_WAVE_WEIGHTS[w]
-        * Math.sin((2 * Math.PI * t) / (standoff * COAST_WAVELENGTHS[w]) + phases[w]);
+        * Math.sin((2 * Math.PI * t) / (coastScale * COAST_WAVELENGTHS[w]) + phases[w]);
     }
     // `standoff + amplitude` so the CLOSEST the water ever comes is the
     // standoff itself: the wobble only ever pushes the sea further out,

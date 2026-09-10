@@ -30,6 +30,7 @@ import {
   signedTurnDeg,
 } from '../geometry.js';
 import { apronLaneId, type Lane } from '../types.js';
+import { wetRuns } from './water-routing.js';
 // Type-only, so there is no runtime cycle with `trunks.ts`, which imports
 // `growAprons` from here.
 import type { TrunkEntry, TrunkJunction } from './trunks.js';
@@ -431,6 +432,9 @@ function followShore(
       for (const side of sides) {
         const candidate = off(side, s);
         if (inAnyWater(candidate, water)) continue;
+        // Dry endpoints can still cut across a bay. A shore-following road
+        // stays on the same bank; an incidental wet chord is not a bridge.
+        if (points.length && wetRuns([points[points.length - 1], candidate], water).length) continue;
         dry = candidate;
         hand = side;
         break;
