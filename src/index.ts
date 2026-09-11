@@ -1,3 +1,6 @@
+import { validateWaterContext } from './input/water-context.js';
+export { WaterContextError } from './input/water-context.js';
+export type { WaterContextV1, WaterContextResult, WaterIssueCode } from './input/water-context.js';
 // Public API
 export { Model } from './generator/model.js';
 export type { GenerationParams, RoadEntry, RouteKind, RouteRelief, DegradedFlag } from './generator/generation-params.js';
@@ -92,6 +95,7 @@ import { Point } from './types/point.js';
 import { computeOriginShift, NO_SHIFT, type OriginShift } from './generator/origin-shift.js';
 
 export interface GenerateFromBurgResult {
+  waterContextResult?: import('./input/water-context.js').WaterContextResult;
   model: Model;
   svg: string;
   geojson: FeatureCollection;
@@ -119,6 +123,9 @@ export function generateFromBurg(
   burg: AzgaarBurgInput,
   options?: { seed?: number; svg?: SvgOptions; geojson?: GenerateGeoJsonOptions },
 ): GenerateFromBurgResult {
+  if (Object.hasOwn(burg, 'waterContext')) {
+    validateWaterContext({ ...burg, population: 1001 });
+  }
   const paramsPass1 = mapToGenerationParams(burg, options?.seed);
 
   // Pass 1: minimal probe for wallRadius. Strip coastlineGeometry + harbourSize
@@ -185,6 +192,7 @@ export { generateVillage, VILLAGE_POP_CEILING };
  */
 export type GenerateSettlementResult =
   | ({ kind: 'village'; model: VillageModel } & {
+      waterContextResult?: import('./input/water-context.js').WaterContextResult;
       svg: string;
       geojson: FeatureCollection;
       degradedFlags: DegradedFlag[];
@@ -207,6 +215,7 @@ export function generateSettlement(
     village?: { pxPerMetre?: number; theme?: VillageTheme };
   },
 ): GenerateSettlementResult {
+  validateWaterContext(burg);
   if ((burg.population ?? 0) <= VILLAGE_POP_CEILING) {
     // The seed default MUST match the settlement branch's, which is
     // `hashString(burg.name)` inside `mapToGenerationParams`. Hard-coding 1
@@ -219,6 +228,7 @@ export function generateSettlement(
     return {
       kind: 'village',
       model,
+      ...(model.site.waterContextResult ? { waterContextResult: model.site.waterContextResult } : {}),
       // A caller's theme is honoured here exactly as `svg.palette`/`theme`
       // are on the settlement branch; without this the same option was
       // silently obeyed for a town and dropped for a village.

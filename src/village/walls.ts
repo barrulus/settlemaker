@@ -1,3 +1,4 @@
+import polygonClipping from 'polygon-clipping';
 import { Point } from '../types/point.js';
 import { drySegments } from '../generator/city-frontage.js';
 import { roadCrossSection } from './cross-section.js';
@@ -6,7 +7,16 @@ import type { WallFeature } from '../scene/scene.js';
 
 /** The farmland's inner boundary already encloses the surveyed village.
  * Reuse that irregular line; cut a real gate wherever a lane crosses it. */
-export function villageWall(boundary:Point[],lanes:Lane[],water:Point[][],biome:string):WallFeature {
+export function villageWall(boundary:Point[],lanes:Lane[],water:Point[][],biome:string,reservations:Point[][]=[]):WallFeature {
+  // Enclose any reserved clearing that straddles the farmland boundary. The
+  // union adds only its reserved ground, leaving neighbouring fields intact.
+  if (boundary.length >= 3 && reservations.length) {
+    const rings = [boundary, ...reservations].map(r => [r.map(p => [p.x,p.y] as [number,number])]);
+    const union = polygonClipping.union(rings[0], ...rings.slice(1));
+    const area = (r: number[][]) => Math.abs(r.reduce((sum,p,i) => {const q=r[(i+1)%r.length];return sum+p[0]*q[1]-q[0]*p[1];},0));
+    const outline = union.map(p=>p[0]).sort((a,b)=>area(b)-area(a))[0];
+    if(outline)boundary=outline.slice(0,-1).map(([x,y])=>new Point(x,y));
+  }
   const wall:WallFeature={polylines:[],gates:[],towers:[],large:false,material:biome==='desert'?'rubble':'palisade'};
   for(let i=0;i<boundary.length;i++){
     const a=boundary[i],b=boundary[(i+1)%boundary.length],dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy);

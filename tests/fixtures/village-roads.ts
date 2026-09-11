@@ -65,9 +65,7 @@ export const roadReviewFixtures: RoadFixture[] = [
       name: 'Brook',
       roadBearings: [{ bearing_deg: 135, kind: 'main', through: true, route_id: 'r-cross' }, { bearing_deg: 305, kind: 'main', through: true, route_id: 'r-cross' }],
       ...(wet ? {
-        coastlineGeometry: [[
-          { x: -900, y: -898 }, { x: 900, y: 902 }, { x: 900, y: 906 }, { x: -900, y: -894 },
-        ]]
+        rivers: [{ centreline: [{ x: -900, y: -896 }, { x: 900, y: 904 }], widthM: 2.83 }]
       } : {}),
     }),
   })),

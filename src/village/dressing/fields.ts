@@ -367,7 +367,7 @@ interface Obstacles {
   water: Point[][];
 }
 
-function buildObstacles(lots: Lot[], crofts: Croft[], lanes: Lane[], water: Point[][]): Obstacles {
+function buildObstacles(lots: Lot[], crofts: Croft[], lanes: Lane[], water: Point[][], reservations: Point[][] = []): Obstacles {
   const claims: Obstacle[] = [];
   const add = (poly: Point[]): void => {
     if (poly.length < 3) return;
@@ -378,6 +378,7 @@ function buildObstacles(lots: Lot[], crofts: Croft[], lanes: Lane[], water: Poin
   };
   for (const lot of lots) add(obbCorners(lotObb(lot)));
   for (const croft of crofts) add(croft.polygon);
+  for (const polygon of reservations) add(polygon);
   const segs: LaneSeg[] = [];
   for (const lane of lanes) {
     const clearanceM = frontageOffsetM(lane);
@@ -789,6 +790,7 @@ export interface FieldsResult {
 export function buildFields(
   site: Site, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[], rng: SeededRandom,
   housedLotIds?: ReadonlySet<string>,
+  reservations: Point[][] = [],
 ): FieldsResult {
   const fabricRadius = computeFabricRadius(green, lots, crofts, housedLotIds);
   const edge = builtEdgeExtent(green, lots, crofts, housedLotIds);
@@ -797,7 +799,7 @@ export function buildFields(
   const demand = Math.max(0, site.population) * FIELD_M2_PER_CAPITA;
   const region = regionHull(green, belt, demand / FIELD_REGION_EFFICIENCY, rng);
 
-  const obstacles = buildObstacles(lots, crofts, lanes, site.water);
+  const obstacles = buildObstacles(lots, crofts, lanes, site.water, reservations);
   const roads = exitRoads(green, lanes, belt);
   const leaves: Point[][] = [];
   subdivide(region, 0, belt, roads, rng, leaves);

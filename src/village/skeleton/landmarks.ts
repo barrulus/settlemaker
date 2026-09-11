@@ -1,3 +1,4 @@
+import { assertWaterQuery } from '../water-boundary.js';
 import { frontageOffsetM } from '../cross-section.js';
 import { intrudesOnLane, renderBearingFor } from '../dwellings.js';
 import { classRank } from '../route-class.js';
@@ -133,6 +134,7 @@ function obbSamplePoints(obb: Obb): Point[] {
  * a small, self-contained geometry check.
  */
 function overlapsWater(obb: Obb, water: Point[][]): boolean {
+  assertWaterQuery(water, obb.center, Math.hypot(obb.halfW, obb.halfD));
   if (water.length === 0) return false;
   // obbSamplePoints order: centre, (1,1), (1,-1), (-1,1), (-1,-1) -- reorder
   // the four corners into ring order ((1,1) -> (1,-1) -> (-1,-1) -> (-1,1))

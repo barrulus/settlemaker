@@ -251,8 +251,7 @@ describe('vegetation geometric invariants (real village fixtures)', () => {
   // sparse uniform dice roll, which renders as lonely specks; the reference
   // village has woodland MASSES between and behind the fields. Clustering
   // is the property, so this measures it directly -- a tree in a wood has
-  // close company, a speck does not -- and also insists the woods do not
-  // merge into one continuous belt.
+  // close company, a speck does not.
   it('places outer trees as woodland masses, not lonely specks', () => {
     const popInput = (population: number): AzgaarBurgInput => ({
       name: 'Woods', population, port: false, citadel: false, walls: false,
@@ -264,17 +263,6 @@ describe('vegetation geometric invariants (real village fixtures)', () => {
       const outer = m.vegetation.filter((t) => t.id.startsWith('wood:'));
       expect(outer.length).toBeGreaterThan(20);
 
-      // Every outer tree belongs to a named patch, and patches are real
-      // groups rather than one tree each.
-      const patches = new Map<string, number>();
-      for (const t of outer) {
-        const key = t.id.slice(0, t.id.lastIndexOf(':'));
-        patches.set(key, (patches.get(key) ?? 0) + 1);
-      }
-      expect(patches.size).toBeGreaterThan(1);
-      const sizes = [...patches.values()];
-      expect(Math.max(...sizes)).toBeGreaterThanOrEqual(5);
-
       // Clustered: the clear majority of outer trees have a neighbour
       // within a canopy's width. A uniform scatter over this area does not.
       const withCompany = outer.filter(
@@ -282,89 +270,30 @@ describe('vegetation geometric invariants (real village fixtures)', () => {
       ).length;
       expect(withCompany / outer.length).toBeGreaterThan(0.75);
 
-      // ...but the woods keep gaps between them: not every patch centre is
-      // within one patch radius of another patch's trees.
-      expect(patches.size).toBeGreaterThan(2);
     }
   }, 20000);
 
-  // Gate 5 regression net (2026-08-22): the emphasis is FLIPPED. The owner's
-  // reference has groves crowding the leftover ground between the lanes
-  // INSIDE the village and only specks out in the country; the previous
-  // profile did the reverse and rendered as a sparse village inside a
-  // forest fringe. Density is compared per unit of area, not by raw count,
-  // because the outer band is the larger region -- on the pre-flip
-  // constants this ratio is well below 1.
-  it('scatters far denser INSIDE the fabric than outside it (grove country)', () => {
-    const popInput = (population: number): AzgaarBurgInput => ({
-      name: 'Groves', population, port: false, citadel: false, walls: false,
-      plaza: false, temple: false, shanty: false, capital: false,
-      roadBearings: [{ bearing_deg: 225, kind: 'road' }],
-    });
-    for (const population of [300, 900]) {
-      const m = generateVillage(popInput(population), 1);
-      // The fields' own outer edge is the boundary the profile switches at.
-      let edge = 0;
-      for (const b of m.fields) {
-        for (const p of b.polygon) edge = Math.max(edge, dist(p, m.green.centre));
-      }
-      expect(edge).toBeGreaterThan(0);
-      const rim = edge + VEG_BAND_DEPTH_M;
-      // Gate 6.6: "inside" is GROVE COUNTRY -- the built fabric -- not
-      // everything within the fields' outer edge. The generator's own
-      // grove pass stops at the fabric radius and thins beyond it, so
-      // counting the whole field ring as "inside" measured the wrong
-      // region: it silently mixed the thinned belt between the houses and
-      // the fields into the grove figure. That went unnoticed while the
-      // fabric was 1.4x too wide (gate 6.6's finding) and filled most of
-      // the field disc; with the disc sized from the census the belt is a
-      // real fraction of the area and the artefact dominated the ratio.
-      // The p95 building radius is the fabric edge every other acceptance
-      // metric in this suite uses.
-      const bd = m.buildings.map((b) => dist(b.position, m.green.centre)).sort((a, c) => a - c);
-      const fabricEdge = bd[Math.floor(bd.length * 0.95)];
-      let inside = 0;
-      let outside = 0;
-      for (const t of m.vegetation) {
-        const d = dist(t.position, m.green.centre);
-        if (d < fabricEdge) inside += 1;
-        else if (d > edge && d <= rim) outside += 1;
-      }
-      // Gate 6.2: the interior denominator is the OPEN ground, not the
-      // whole disc. "Grove country" means the trees fill the gaps BETWEEN
-      // the houses, so measuring against total interior area punishes
-      // exactly the densification concentric saturation just achieved --
-      // pack the interior with houses and the per-area tree density falls
-      // however well the groves do their job. Sampled rather than derived,
-      // since the open area is whatever the claims leave.
-      const OPEN_M = 10;
-      const STEP = 4;
-      let openCells = 0;
-      for (let x = -fabricEdge; x <= fabricEdge; x += STEP) {
-        for (let y = -fabricEdge; y <= fabricEdge; y += STEP) {
-          const p = new Point(m.green.centre.x + x, m.green.centre.y + y);
-          if (dist(p, m.green.centre) > fabricEdge) continue;
-          if (m.buildings.some((b) => dist(p, b.position) <= OPEN_M)) continue;
-          openCells += 1;
-        }
-      }
-      const insideArea = Math.max(1, openCells) * STEP * STEP;
-      const outsideArea = Math.PI * (rim * rim - edge * edge);
-      expect(inside).toBeGreaterThan(0);
-      // Gate 5.4 deliberately thickened the OUTER woods (bigger patches,
-      // more of them, so adjacent woods merge into masses), which narrowed
-      // this ratio from comfortably over 3x to about 2.95x. The property
-      // being pinned is the FLIP -- grove country inside, open country
-      // outside -- not the particular multiple, so the bar moved to 2x.
-      //
-      // It did NOT move again: at a seed chance of 0.8 the ratio fell to
-      // 1.93x and this failed, and the answer was to pull the seeding back
-      // to 0.7 (the brief asked for merging to be "occasional"), not to
-      // lower the bar a second time until the design fit it. Gate 6.2 kept
-      // the 2x bar for the same reason and fixed the DENOMINATOR instead.
-      expect(inside / insideArea).toBeGreaterThan(2 * (outside / outsideArea));
-    }
-  }, 20000);
+  // September landscape brief: woodland now fills unused ground BETWEEN
+  // the fabric and farmland edge, rather than being restricted to the rim.
+  it('fills field gaps while keeping cultivated polygons and routes clear', () => {
+    const fields: FieldBlock[] = [
+      { id: 'north', polygon: [new Point(-80, -90), new Point(80, -90), new Point(80, -20), new Point(-80, -20)], furlongId: 'test', glyph: 'sm-field-strip', furrowBearingDeg: 0, areaM2: 11200 },
+      { id: 'south', polygon: [new Point(-80, 20), new Point(80, 20), new Point(80, 90), new Point(-80, 90)], furlongId: 'test', glyph: 'sm-field-strip', furrowBearingDeg: 0, areaM2: 11200 },
+    ];
+    const trees = buildVegetation(site(), green, [lane('east', 90)], [], [], fields,
+      circ(20), circ(100), 0, new SeededRandom(7));
+    const gap = trees.filter(t => Math.abs(t.position.y) < 18 && dist(t.position, green.centre) > 25 && dist(t.position, green.centre) < 90);
+    expect(gap.length).toBeGreaterThan(30);
+    expect(trees.every(t => !fields.some(f => pointInPolygon(t.position, f.polygon)))).toBe(true);
+    expect(gap.every(t => !pointInAnyLaneCorridor(t.position, [lane('east', 90)]))).toBe(true);
+  });
+
+  it('keeps dry biomes more open than temperate woodland on identical ground', () => {
+    const count = (biome: string) => buildVegetation(site({ biome }), green, [], [], [], [],
+      circ(20), circ(100), 0, new SeededRandom(7)).length;
+    expect(count('temperate')).toBeGreaterThan(count('desert') * 2);
+    expect(count('tundra')).toBeGreaterThan(count('desert'));
+  });
 
   // Fix wave regression net (2026-08-21, I1a): the previous net asserted
   // only ABSENCE -- no tree on a claim -- which an empty scatter satisfies

@@ -1,3 +1,4 @@
+import { coverageExceeded } from '../input/water-context.js';
 import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import { Point } from '../types/point.js';
 import { SeededRandom } from '../utils/random.js';
@@ -13,7 +14,7 @@ import {
   RING_SETBACK_M, SPACING_RELAX_FLOOR, SPACING_RELAX_STEP,
   WATER_STRANGLED_FIELD_RATIO
 } from './constants.js';
-import { frontageOffsetM, villageCrossSection } from './cross-section.js';
+import { frontageOffsetM, roadCrossSection, villageCrossSection } from './cross-section.js';
 import {
   buildDeck, meanOccupancy, minDwellingFrontageM, ordinaryOccupancy, tightenDeck,
   widestDwellingWidthM,
@@ -179,7 +180,7 @@ export function generateVillage(
       const raw = proposals[option];
       const candidate = raw.map(l => villageCrossSection(l, dwellingsNeeded));
       if (site.water.length && candidate.some(l => !lanes.some(old => old.id === l.id && old.points === l.points)
-        && !validWaterRoute(l.points, site.water))) { rejected++; continue; }
+        && !validWaterRoute(l.points, site.water, roadCrossSection(l).surfaceM / 2 + 1.5))) { rejected++; continue; }
       if (reservedBuildings.some(b => intrudesOnLane(b, candidate))) { rejected++; continue; }
       const result = placement(candidate);
       const gained = result.spend.housed - evaluated.spend.housed;
@@ -215,7 +216,7 @@ export function generateVillage(
         for (const raw of next) {
           const candidate = raw.map(l => villageCrossSection(l, dwellingsNeeded));
           if (site.water.length && candidate.some(l => !lanes.some(old => old.id === l.id && old.points === l.points)
-            && !validWaterRoute(l.points, site.water))) { rejected++; continue; }
+            && !validWaterRoute(l.points, site.water, roadCrossSection(l).surfaceM / 2 + 1.5))) { rejected++; continue; }
           if (reservedBuildings.some(b => intrudesOnLane(b, candidate))) { rejected++; continue; }
           const result = placement(candidate);
           const gained = result.spend.housed - evaluated.spend.housed;
@@ -263,7 +264,7 @@ export function generateVillage(
   const relaxedLanes = relaxLanes(lanes.filter((l) => !isApron(l.id)), spend.buildings)
     .map((relaxedLane) => {
       const intrudes = spend.buildings.some((b) => intrudesOnLane(b, [relaxedLane]));
-      return (intrudes || !validWaterRoute(relaxedLane.points, site.water)) ? (lanes.find((l) => l.id === relaxedLane.id) ?? relaxedLane) : relaxedLane;
+      return (intrudes || !validWaterRoute(relaxedLane.points, site.water, roadCrossSection(relaxedLane).surfaceM / 2 + 1.5)) ? (lanes.find((l) => l.id === relaxedLane.id) ?? relaxedLane) : relaxedLane;
     })
     .concat(lanes.filter((l) => isApron(l.id)));
   for (let pass = 0; pass < 4; pass++) {
@@ -282,7 +283,10 @@ export function generateVillage(
   // Trim only after occupied access has been protected. Optional shortcuts
   // preserve the accepted houses and cannot trigger another seating pass.
   const trimmed = trimTails(pruneRedundantLanes(relaxedLanes, green, spend.buildings, lots), spend.buildings, { lots });
-  const bankSafe = trimmed.map(l => validWaterRoute(l.points, site.water) ? l : relaxedLanes.find(old => old.id === l.id) ?? l);
+  // A shortened segment changes the nearest-point clearance test at its new
+  // endpoint. Keep the accepted lane if trimming would violate occupied ink.
+  const bankSafe = trimmed.map(l => validWaterRoute(l.points, site.water, roadCrossSection(l).surfaceM / 2 + 1.5)
+    && !spend.buildings.some(b => intrudesOnLane(b, [l])) ? l : relaxedLanes.find(old => old.id === l.id) ?? l);
   const relaxed = connectDeadEnds(bankSafe, green, spend.buildings, lots, site.water);
 
   diagnostics.push(...evaluated.diagnostics);
@@ -328,6 +332,9 @@ export function generateVillage(
     builtRadiusM: lotRadiusM, f0, rng,
   });
 
+  const dressedLanes = [...relaxed, ...dressing.accessLanes];
+  diagnostics.push(...dressing.diagnostics);
+
   // Tell callers when water has severely constrained the farmland.
   if (site.water.length > 0) {
     const fieldArea = dressing.fields.reduce((sum, f) => {
@@ -353,7 +360,7 @@ export function generateVillage(
   }
 
   const frame = computeFrame({
-    lanes: relaxed,
+    lanes: dressedLanes,
     buildings: spend.buildings.map((b) => b.position),
     greenCentre: green.centre,
     dressing: [
@@ -363,7 +370,16 @@ export function generateVillage(
       ...dressing.pois.map((p) => p.position),
     ],
   });
-  const framedLanes = clipApronsToFrame(relaxed, frame);
+  if (site.surveyRadiusM !== undefined) {
+    const radius = Math.max(...[frame.minX, frame.maxX].flatMap(x =>
+      [frame.minY, frame.maxY].map(y => Math.hypot(x, y))));
+    if (radius + 1000 > site.surveyRadiusM) coverageExceeded(radius + 1000);
+    if (site.flags.port && !dressing.pois.some(p => p.kind === 'boathouse')
+      && !site.waterContextResult!.issues.some(i => i.code === 'water-context-conflict')) {
+      site.waterContextResult!.issues.push({ code: 'water-context-conflict' });
+    }
+  }
+  const framedLanes = clipApronsToFrame(dressedLanes, frame);
   const droppedAprons = relaxed.filter((l) => isApron(l.id)).length
     - framedLanes.filter((l) => isApron(l.id)).length;
   if (droppedAprons > 0) {

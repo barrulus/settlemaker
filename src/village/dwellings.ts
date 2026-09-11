@@ -1,3 +1,4 @@
+import { assertWaterQuery } from './water-boundary.js';
 import { Point } from '../types/point.js';
 import { SeededRandom } from '../utils/random.js';
 import {
@@ -233,6 +234,7 @@ export function overlaps(a: Building, b: Building): boolean {
  * can pass through a footprint without wetting any corner).
  */
 export function standsInWater(b: Building, water: Point[][]): boolean {
+  assertWaterQuery(water, b.position, Math.hypot(...b.footprint) / 2);
   if (water.length === 0) return false;
   const ink = inkExtent(b.glyph, b.footprint);
   const hw = ink.width / 2;

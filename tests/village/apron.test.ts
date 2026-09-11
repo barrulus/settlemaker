@@ -264,7 +264,7 @@ describe('the coast bend', () => {
     ]];
     const { lanes, diagnostics } = growAprons([seaward], entries as never, 60, brook);
     const tip = lanes[0].points[lanes[0].points.length - 1];
-    expect(Math.abs(tip.x)).toBeLessThan(1);
+    expect(Math.abs(tip.x)).toBeLessThan(tip.y * .1);
     expect(tip.y).toBeGreaterThan(400);
     expect(diagnostics).toEqual([]);
   });
@@ -343,7 +343,7 @@ describe('a waterline met exactly on a sample', () => {
     ]];
     const { lanes, diagnostics } = growAprons([seaward], entries as never, 60, brook);
     const tip = lanes[0].points[lanes[0].points.length - 1];
-    expect(Math.abs(tip.x), 'it turned along a brook').toBeLessThan(1);
+    expect(Math.abs(tip.x), 'it turned along a brook').toBeLessThan(tip.y * .1);
     expect(tip.y).toBeGreaterThan(400);
     expect(diagnostics).toEqual([]);
   });

@@ -1,85 +1,4 @@
-settlemaker
-Copyright (C) 2025-2026 Barry Gill <b@rry.im>
-
-This program is free software: you can redistribute it and/or modify it
-under the terms of the GNU General Public License version 3 as published
-by the Free Software Foundation.
-
-This program is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License along
-with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-SPDX-License-Identifier: GPL-3.0-only
-
-
-UPSTREAM WORK
--------------
-
-settlemaker is a TypeScript reimplementation of the Medieval Fantasy City
-Generator by watabou (Oleg Dolya):
-
-    TownGeneratorOS (Haxe)
-    https://github.com/watabou/TownGeneratorOS
-    Licensed GPL-3.0
-
-    Medieval Fantasy City Generator
-    https://watabou.itch.io/medieval-fantasy-city-generator
-
-The generation core is a derivative work of TownGeneratorOS and is
-therefore licensed GPL-3.0 as well.  Upstream publishes no explicit
-"or (at your option) any later version" grant, so settlemaker is
-GPL-3.0-only rather than GPL-3.0-or-later.
-
-Files carrying directly ported algorithms mark the provenance inline
-("Port of watabou's ..."):
-
-    src/geom/geom-utils.ts        convexHull, obb, pierce
-    src/generator/model.ts        buildFarms and the generation pipeline
-    src/wards/farm.ts             splitField, round, getHousing
-    src/generator/generation-params.ts
-    src/wards/*                   ward layout and alley subdivision
-    src/geom/voronoi.ts           Voronoi/Delaunay construction
-    src/geom/polygon.ts           polygon operations
-
-
-INTERFACING WORKS (not part of this program)
---------------------------------------------
-
-Azgaar's Fantasy Map Generator
-    https://github.com/Azgaar/Fantasy-Map-Generator
-    MIT License, Copyright 2017-2024 Max Haniyeu (Azgaar)
-
-FMG consumes settlemaker at arm's length over the URL API documented in
-docs/url-api.md -- two separate programs exchanging data over a URL, not
-a combined work.  Neither license reaches into the other.
-
-
-SYMBOL LIBRARY
---------------
-
-The SVG symbol library under web/public/symbols/ is original artwork,
-licensed SEPARATELY from this program:
-
-    CC-BY-4.0, with a Rendered Output Exception
-    web/public/symbols/LICENSE
-    Per-symbol authorship: web/public/symbols/CREDITS
-
-Nothing in the GPL places that artwork under GPL terms, and nothing in
-the CC licence places any part of this program under CC terms.
-
-The exception waives attribution for rendered output: maps drawn with
-the symbols carry no obligation to anyone, because attribution cannot
-survive rasterisation and compositing into a larger map.  Attribution
-applies only to redistributing the symbol library itself as artwork.
-
-
-WATER POLYGON GEOMETRY DEPENDENCIES
------------------------------------
-
+/*!
 polygon-clipping
 The MIT License (MIT)
 
@@ -143,3 +62,65 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
 For more information, please refer to <http://unlicense.org>
+*/
+import polygonClipping from 'polygon-clipping';
+import { Point } from '../types/point.js';
+import { coverageExceeded, WaterContextError } from '../input/water-context.js';
+
+interface WaterDomain { radius: number; paths: Point[][]; rings: Point[][]; polygons: Point[][][]; segments: Array<[Point, Point]>; }
+const domains = new WeakMap<Point[][], WaterDomain>();
+const ringDomains = new WeakMap<Point[], number>();
+const same = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y) < 1e-7;
+
+/** Cache the dissolved union once per immutable site. Rings include their closing
+ * point; exposed paths can be open where the survey square cuts the water. */
+export function prepareWaterBoundary(water: Point[][], radius: number): void {
+  let union: polygonClipping.MultiPolygon;
+  try {
+    const polys = water.map(r => [r.map(p => [p.x, p.y] as [number, number])]);
+    union = polys.length ? polygonClipping.union(polys[0], ...polys.slice(1)) : [];
+  } catch {
+    throw new WaterContextError('water-context-invalid', 'Water polygon union could not be constructed.');
+  }
+  const polygons = union.map(poly => poly.map(r => r.map(([x, y]) => new Point(x, y))));
+  const rings = polygons.flat();
+  const paths: Point[][] = [];
+  const crop = (a: Point, b: Point) => [a.x, a.y].some((v, axis) =>
+    Math.abs(Math.abs(v) - radius) < 1e-6 && Math.abs(v - (axis === 0 ? b.x : b.y)) < 1e-6);
+  for (const ring of rings) {
+    const count = ring.length - 1;
+    const cut = ring.slice(0, -1).findIndex((a, i) => crop(a, ring[i + 1]));
+    if (cut < 0) { paths.push(ring); continue; }
+    let path: Point[] = [];
+    for (let k = 1; k <= count; k++) {
+      const i = (cut + k) % count, a = ring[i], b = ring[i + 1];
+      if (crop(a, b)) { if (path.length > 1) paths.push(path); path = []; }
+      else { if (!path.length) path.push(a); path.push(b); }
+    }
+    if (path.length > 1) paths.push(path);
+  }
+  for (const ring of water) ringDomains.set(ring, radius);
+  domains.set(water, { radius, paths, rings, polygons, segments: paths.flatMap(r => r.slice(1).map((b, i): [Point, Point] => [r[i], b])) });
+}
+export function waterBoundaryPaths(water: Point[][]): Point[][] {
+  return domains.get(water)?.paths ?? water.filter(r => r.length > 1).map(r => same(r[0], r.at(-1)!) ? r : [...r, r[0]]);
+}
+export function waterBoundarySegments(water: Point[][]): Array<[Point, Point]> {
+  return domains.get(water)?.segments ?? waterBoundaryPaths(water).flatMap(r => r.slice(1).map((b, i): [Point, Point] => [r[i], b]));
+}
+export function waterFillRings(water: Point[][]): Point[][] | undefined { return domains.get(water)?.rings; }
+export function assertWaterQuery(water: Point[][], point: Point, margin = 0): void {
+  const domain = domains.get(water);
+  if (domain && Math.hypot(point.x, point.y) + margin > domain.radius + 1e-7) {
+    coverageExceeded(Math.hypot(point.x, point.y) + margin);
+  }
+}
+
+export function assertWaterRingQuery(ring: Point[], point: Point, margin: number): void {
+  const radius = ringDomains.get(ring);
+  if (radius !== undefined && Math.hypot(point.x, point.y) + margin > radius) {
+    coverageExceeded(Math.hypot(point.x, point.y) + margin);
+  }
+}
+
+export function waterFillPolygons(water: Point[][]): Point[][][] | undefined { return domains.get(water)?.polygons; }

@@ -1,0 +1,45 @@
+{
+  "v": 1,
+  "burg": {
+    "name": "Gormaca",
+    "population": 10,
+    "port": false,
+    "citadel": false,
+    "walls": false,
+    "plaza": false,
+    "temple": false,
+    "shanty": false,
+    "capital": false,
+    "roadBearings": [
+      {
+        "bearing_deg": 125.1634454945609,
+        "route_id": "0",
+        "kind": "royal",
+        "group": "roads",
+        "through": true
+      },
+      {
+        "bearing_deg": 271.2825270827105,
+        "route_id": "40",
+        "kind": "trail",
+        "group": "trails",
+        "through": false
+      },
+      {
+        "bearing_deg": 304.98761520283324,
+        "route_id": "0",
+        "kind": "royal",
+        "group": "roads",
+        "through": true
+      }
+    ],
+    "oceanBearing": 67.96255335193547,
+    "harbourSize": "small",
+    "biome": "Temperate deciduous forest",
+    "culture": "Hellenic",
+    "elevation": 225,
+    "temperature": 17,
+    "urbanDensity": 10
+  },
+  "seed": 4080411970
+}

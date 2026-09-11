@@ -48,7 +48,7 @@ describe('buildSite', () => {
 
   it('carries the flags the deck gates on', () => {
     const site = buildSite({ ...base, temple: true, trade: true, port: true });
-    expect(site.flags).toEqual({ port: true, temple: true, trade: true, walls: false });
+    expect(site.flags).toEqual({ port: true, temple: true, trade: true, walls: false, capital: false, citadel: false, plaza: false, shanty: false });
   });
 
   it('drops sea routes — one road and one sea bearing yields exactly one land route (R6)', () => {
