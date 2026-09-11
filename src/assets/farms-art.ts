@@ -51,7 +51,7 @@ export const farmCatalog={
 export function fieldTile(biome,kind,{seed=11}={}){
   const spec=farmCatalog[biome]?.find(a=>a.kind===kind);if(!spec)throw Error(`Unknown field: ${biome}/${kind}`);
   const r=random(seed),t=k=>token(biome,k),f=spec.texture;
-  const bg=f==='paddy'?t('water'):['pasture','meadow','rest','sedge','fallow'].includes(f)?t('leaf'):f==='lichen'?t('ground'):t('soil');
+  const bg=f==='paddy'?'var(--sm-landscape-tropical-paddy, #a4b697)':['pasture','meadow','rest','sedge','fallow'].includes(f)?t('leaf'):f==='lichen'?t('ground'):t('soil');
   let detail='';
   const line=(d,col=t('dark'),w=.5)=>detail+=path(d,'none',w,col);
   const tuft=(x,y,dry=false)=>{line(`M${n(x-1.2)},${n(y-1.5)}l1.2,1.5l1.4,-2.2m-1.4,2.2v-3`,dry?t('dry'):t('dark'),.45);};
@@ -103,11 +103,16 @@ export function farmParcel(biome,kind,{seed=11,form='crooked',angle=0,id=`farm-$
       if(tile.texture==='paddy'||tile.texture==='paddy-dry'||form==='terrace')for(const y of [46,72,97])s+=path(`M10,${y}Q75,${y-10} 150,${y+3}`,'none',3.2,turf);
       else s+=path('M17,61Q78,55 141,65','none',4,turf);
     }
-    if(tile.irrigation){
+    if(tile.irrigation && biome === 'desert'){
       const channel='M153,32H26V95M26,32H132V95M43,32V92M116,32V93';
       s+=path(channel,'none',3.4,t('soil'))+path(channel,'none',1.55,tile.dryChannels?t('dark'):t('water'));
       // Simple plank at the central access lane. The channel remains continuous underneath.
       s+=rect(75,29,10,6,t('dry'))+path('M76,30H84M76,33H84','none',.45,t('soil'));
+    }
+    if(biome==='tropical' && tile.irrigation){
+      // One controlled inlet feeds the level bed, rather than a perimeter moat.
+      s+=path('M153,32H118','none',2.2,tile.dryChannels?t('soil'):'var(--sm-landscape-tropical-paddy, #a4b697)');
+      s+=path('M125,29V35','none',1.1,t('soil'));
     }
     if(tile.texture==='meadow'&&!tile.natural){
       for(const[x,y]of [[45,80],[109,87],[112,45]])s+=path(`M${x-5},${y}q5,-4 10,0q-4,3 -10,0Z`,t('dry'),.5,t('soil'))+path(`M${x-3},${y}h6`,'none',.4,t('soil'));

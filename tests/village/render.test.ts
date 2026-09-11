@@ -275,7 +275,7 @@ describe('renderVillage', () => {
 
   it('emits a <pattern> def with explicit width/height/patternUnits for every field strip, and the strip references it', () => {
     if (model.fields.length === 0) return;
-    const defsMatch = svg.match(/<defs>([\s\S]*?)<\/defs>/);
+    const defsMatch = svg.match(/<defs>([\s\S]*)<\/defs>/);
     const defs = defsMatch![1];
     const patternIds = new Set(
       Array.from(defs.matchAll(/<pattern id="([^"]+)"[^>]*>/g)).map((m) => m[1]),

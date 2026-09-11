@@ -134,7 +134,7 @@ describe('svg render: shadows, buildings, landmarks', () => {
       return `M${first.x.toFixed(2)},${first.y.toFixed(2)}`;
     });
 
-    const greensGroup = svg.match(/<g id="greens">([\s\S]*?)<\/g>/)?.[1] ?? '';
+    const greensGroup = svg.split('<g id="greens">')[1]?.split('<g id="roads"')[0] ?? '';
     // Every geometry path should appear painted (in greens).
     for (const start of paths) {
       expect(greensGroup).toContain(start);
@@ -147,7 +147,7 @@ describe('svg render: shadows, buildings, landmarks', () => {
       expect(shadowGroup).not.toContain(start);
       expect(buildingsGroup).not.toContain(start);
     }
-    expect(svg).toContain(`#greens path{fill:${greenFill}`);
+    expect(svg).toContain(`#greens > path{fill:${greenFill}`);
   });
 
   it('landmark wards use the landmark fill', () => {

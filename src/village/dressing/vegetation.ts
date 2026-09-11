@@ -1,4 +1,5 @@
-import { selectFlora, floraKinds, ARTWORK_MANIFEST, ARTWORK_INK } from '../../assets/artwork.js';
+import { selectFloraAt } from '../../assets/landscape-placement.js';
+import { floraKinds, ARTWORK_MANIFEST, ARTWORK_INK } from '../../assets/artwork.js';
 import { waterBoundarySegments } from '../water-boundary.js';
 import { Point } from '../../types/point.js';
 import { SeededRandom } from '../../utils/random.js';
@@ -50,7 +51,8 @@ export function buildVegetation(
   const maxRadius = Math.max(...floraKinds(site.biome, true).map(id => plantRadius(id, VEG_SCALE_MAX)));
   const rejected = floraClearance(green, lanes, lots, crofts, fields, site.water, shorefrontReachM, reservations, maxRadius);
   const banks = waterBoundarySegments(site.water);
-  const pickGlyph = (p: Point): string => selectFlora(site.biome, rng.float(),
+  const floraSeed = rng.getSeed();
+  const pickGlyph = (p: Point): string => selectFloraAt(site.biome, p.x, p.y, floraSeed, rng.float(),
     banks.some(([a,b]) => dist(p, closestPointOnSegment(p,a,b)) < 15));
   const trees: Vegetation[] = [];
   // --- Pass 1: grove country, inside the fabric. One rng.float decides

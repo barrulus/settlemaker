@@ -43,6 +43,7 @@ export interface VegetationInstance {
   rotationDeg: number;
 }
 export interface SymbolInstance {
+  materialVariant?: number;
   id: string;          // glyph id, e.g. 'sm-well'
   at: ScenePoint;
   scale: number;       // world-unit art-box width; height defaults to the same

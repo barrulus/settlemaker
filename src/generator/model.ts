@@ -1,3 +1,4 @@
+import { cityUrbanity } from './city-character.js';
 import { Point } from '../types/point.js';
 import { Polygon } from '../geom/polygon.js';
 import { Segment } from '../geom/segment.js';
@@ -1543,7 +1544,7 @@ export class Model {
     for (const [inside, budget] of [[true, coreTarget], [false, target - coreTarget]] as const) {
       const wards = this.patches.filter(p => (p.zone === 'core') === inside && p.ward instanceof CommonWard
         && !this.waterbody.includes(p)).map(p => p.ward as CommonWard);
-      const areas = wards.map(w => Math.abs(w.getCityBlock().square));
+      const areas = wards.map(w => Math.abs(w.getCityBlock().square) * (.85 + .3 * cityUrbanity(this,w.patch)));
       const total = areas.reduce((a, b) => a + b, 0);
       wards.forEach((w, i) => { w.cityBuildingTarget = total > 0 ? Math.max(0, budget - fixed(inside)) * areas[i] / total : 0; });
     }

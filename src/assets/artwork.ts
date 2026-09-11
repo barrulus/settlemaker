@@ -1,3 +1,4 @@
+import {greenGround} from './greens-art.js';
 import { flora } from './landscape-art.js';
 import { fieldTile } from './farms-art.js';
 import { henge } from './infrastructure-art.js';
@@ -15,7 +16,7 @@ export interface ArtworkMeta extends RefinedSymbolMeta {
   footprintPolygons?: number[][][]; courtyardVoids?: number[][];
   representedBuildings?: number | string | null; repeatPitch?: unknown;
 }
-/** Reviewed village art overrides the same legacy IDs; untouched greens/wells remain. */
+/** Reviewed village art overrides the same legacy IDs; commons are drawn from their surveyed outlines; wells remain. */
 export const ARTWORK_MANIFEST: Record<string, ArtworkMeta> = {...REFINED_MANIFEST,...ART_META};
 export const ARTWORK_GLYPHS: Record<string, RefinedGlyphMarkup> = {...REFINED_GLYPHS,...ART_GLYPHS};
 const generated: Record<string, RefinedGlyphMarkup> = {};
@@ -32,6 +33,18 @@ for(const [id,m] of Object.entries(ART_META)) {
 export const ARTWORK_INK = {...REFINED_INK,...ART_INK};
 export const BIOMES = ['temperate','desert','tundra','tropical','coastal'] as const;
 export function artworkBiome(b?: string): string { return BIOMES.includes(b as typeof BIOMES[number]) ? b! : 'temperate'; }
+// Commons keep their original surveyed shapes. The base IDs remain temperate
+// aliases, and every biome-specific catalogue SVG is available in the registry.
+for(const [base,g] of Object.entries(REFINED_GLYPHS)){
+  if(!base.startsWith('sm-green-'))continue;
+  const d=g.body.match(/<path[^>]* d="([^"]+)"/)?.[1];
+  if(!d)continue;
+  for(const b of BIOMES)for(const id of b==='temperate'?[base,`${base}--${b}`]:[`${base}--${b}`]){
+    ARTWORK_MANIFEST[id]={...REFINED_MANIFEST[base],biome:b,category:'green'};
+    ARTWORK_GLYPHS[id]={body:greenGround(d,b,{id,seed:base.endsWith('-b')?1:0})};
+  }
+}
+
 export function cityGlyph(family: string, biome?: string): string { const b=artworkBiome(biome);return `sm-city-${family}${b==='temperate'?'':`--${b}`}`; }
 export function floraId(kind: string, biome: string, variant=0, snow=false): string {
   const b=artworkBiome(biome);return `sm-flora-${kind}-${'abc'[Math.abs(variant)%3]}${snow&&b==='tundra'?'-snow':''}--${b}`;

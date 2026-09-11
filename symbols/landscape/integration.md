@@ -78,7 +78,9 @@ does not imply elevation. Supply a unique XML-safe `id` when embedding its body.
 Cultivated parcels have an entrance at [80, 112], with a six-unit access width.
 Headlands and internal paths are pale soil/turf, not inked building walls. Irrigated
 parcels publish their actual `waterInlet` on the outline at y=32. Connect it to a
-real water source. Resting basins and drained paddies show empty channels.
+real water source. Desert resting basins show empty channels. Tropical paddies use earth bunds
+and muted shallow beds; drained paddies expose soil, without desert-style
+perimeter water channels.
 The plot does not generate a village water network or guarantee a viable gradient.
 
 Natural tundra grazing is an unfenced land-use patch, with no plough rows or
@@ -91,7 +93,10 @@ Biome sets are regional options for a fantasy map, not a claim that every plant
 belongs everywhere in that biome. Keep `site`, `natural`, `conditional`, `fringe`,
 `smallPlot` and `irrigation` metadata when extending selection policy. The default
 runtime mix excludes conditional tundra gardens and treeline trees; wet-margin
-plants require nearby water in village scatter.
+plants require nearby water in village scatter. Species now form seeded local
+stands in both engines, with dominant canopies and occasional understory. Crown
+highlights are filled shapes without repeated dark outlines. Tropical paddy
+selection requires an explicit river supply; an ocean alone is insufficient.
 
 - Temperate: woodland canopies, orchard trees, hedgerow shrubs, damp woodland
   plants, meadow flowers and freshwater reeds; grain, fallow, gardens, orchards

@@ -1,3 +1,5 @@
+import { cityUrbanity } from './city-character.js';
+import { landscapeHash } from '../assets/landscape-placement.js';
 import { buildingIds, IdAllocator } from '../output/id-allocator.js';
 import { ARTWORK_MANIFEST as REFINED_MANIFEST, ARTWORK_INK as REFINED_INK, cityGlyph } from '../assets/artwork.js';
 import { SeededRandom } from '../utils/random.js';
@@ -139,6 +141,7 @@ export function placeCityGlyphs(model: Model): void {
     const ward = patch.ward;
     if (!ward || [WardType.Park, WardType.Market, WardType.Water, WardType.Empty].includes(ward.type)) continue;
     const lines = wardFrontages(ward);
+    const urbanity=cityUrbanity(model,patch);
     const palacePrincipal = ward.type === WardType.Administration && model.params.capitalNeeded
       ? scoreBuildings(ward.geometry,scoringReference(model)).find(b=>!semantic.has(ids.get(b)??'')) : undefined;
     for (const building of ward.geometry) {
@@ -148,6 +151,9 @@ export function placeCityGlyphs(model: Model): void {
         continue;
       }
       const use=semantic.get(ids.get(building)??'');
+      const roll=landscapeHash(Math.round(building.centroid.x*10),Math.round(building.centroid.y*10),model.params.seed);
+      const ruralHome=resolveGlyphFor(model.params.biome??'temperate',roll<.5?'sm-house':'sm-house-tiled');
+      const home=urbanity<.45 && roll>.25?ruralHome:architecture.home;
       const id = building === temple ? architecture.temple
         : building === keep ? architecture.keep
           : building === palacePrincipal ? architecture.palace
@@ -156,7 +162,7 @@ export function placeCityGlyphs(model: Model): void {
             : ward.type === WardType.Administration ? (model.params.capitalNeeded ? architecture.palaceWing : cityGlyph('guildhall',model.params.biome))
               : ward.type === WardType.Patriciate ? architecture.wealthy
               : [WardType.Military, WardType.Castle].includes(ward.type) ? architecture.barracks
-                : ward.type === WardType.Harbour ? cityGlyph('warehouse',model.params.biome) : architecture.home;
+                : ward.type === WardType.Harbour ? cityGlyph('warehouse',model.params.biome) : home;
       let best: ReturnType<typeof fitCityGlyph> = null;
       const plannedFrontage = ward.buildingFrontages.get(building);
       const candidates = frontagesFor(building, ward, plannedFrontage ? [plannedFrontage] : lines);
@@ -167,7 +173,7 @@ export function placeCityGlyphs(model: Model): void {
       // A fallback footprint remains in tight corners; do not rotate the front
       // door away from its access just to increase the number of glyphs.
       if (!best) continue;
-      model.symbols.push({ ...best, wardType: ward.type });
+      model.symbols.push({ ...best, wardType: ward.type, materialVariant:roll<.45?0:1+Math.floor((roll-.45)/.55*4) });
       model.glyphBackedBuildings.add(building);
     }
   }

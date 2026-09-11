@@ -1,4 +1,4 @@
-import { villageWall } from '../walls.js';
+import { villageWall, villageWallBoundary } from '../walls.js';
 import type { WallFeature } from '../../scene/scene.js';
 import { Point } from '../../types/point.js';
 import { SeededRandom } from '../../utils/random.js';
@@ -130,6 +130,6 @@ export function dressVillage(input: DressingInput): DressingResult {
   return {
     edgeStyle, crofts, fields, fieldEdges, vegetation, pois, accessLanes,
     diagnostics: site.flags.temple && !henge ? ['temple: no dry, accessible clearing could accommodate the requested henge'] : [],
-    ...(innerBoundary ? {wall:villageWall(innerBoundary,dressedLanes,site.water,site.biome,reservations)} : {}),
+    ...(innerBoundary ? {wall:villageWall(villageWallBoundary(buildings,pois,innerBoundary),dressedLanes,site.water,site.biome,reservations)} : {}),
   };
 }

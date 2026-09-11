@@ -61,14 +61,18 @@ export function farmDetails(ring:ScenePoint[], glyph:string, unit:number, id:str
   const edge=ring.map((a,i)=>({a,b:ring[(i+1)%ring.length]})).sort((a,b)=>(b.a.y+b.b.y)-(a.a.y+a.b.y))[0];
   const entry={x:(edge.a.x+edge.b.x)/2,y:(edge.a.y+edge.b.y)/2},c={x:ring.reduce((s,p)=>s+p.x,0)/ring.length,y:ring.reduce((s,p)=>s+p.y,0)/ring.length};
   let art=`<path d="${d}" fill="none" stroke="${soil}" stroke-width="${n(margin*2)}"/><path d="${path([entry,c])}" fill="none" stroke="${soil}" stroke-width="${n(margin)}"/>`;
-  if(meta.irrigation){
+  if(meta.irrigation && b === 'desert'){
     const near={x:c.x+(ring[0].x-c.x)*.65,y:c.y+(ring[0].y-c.y)*.65};
     const colour=meta.dryChannels?`var(--sm-landscape-${b}-dark, #626e55)`:`var(--sm-landscape-${b}-water, #94b9b4)`;
     const channels=ring.map(p=>({x:c.x+(p.x-c.x)*.8,y:c.y+(p.y-c.y)*.8}));
     art+=`<path d="${path(channels,true)} ${path([channels[0],near,c])}" fill="none" stroke="${colour}" stroke-width="${n(.7*k)}"/>`;
     // Each managed plot has an explicit well/cistern head at its supply channel.
     art+=`<circle data-irrigation-source="well" cx="${n(near.x)}" cy="${n(near.y)}" r="${n(1.2*k)}" fill="${soil}" stroke="var(--sm-ink, #33262e)" stroke-width="${n(.2*k)}"/><circle cx="${n(near.x)}" cy="${n(near.y)}" r="${n(.65*k)}" fill="${colour}"/>`;
-    if(meta.family?.includes('paddy'))art+=`<path d="M${n(x0)},${n(c.y)}H${n(x1)}" fill="none" stroke="${soil}" stroke-width="${n(margin)}"/>`;
+  }
+  if(b === 'tropical' && meta.family?.includes('paddy')) {
+    // Shallow flooded planting beds are divided by walkable earth bunds;
+    // they do not borrow the desert's well and perimeter pipe layout.
+    for(const y of [y0+h/3,y0+2*h/3])art+=`<path d="M${n(x0)},${n(y)}H${n(x1)}" fill="none" stroke="${soil}" stroke-width="${n(margin)}"/>`;
   }
   return `<defs><clipPath id="${clip}"><path d="${d}"/></clipPath></defs><g data-farm="${glyph}" clip-path="url(#${clip})">${art}</g>`;
 }

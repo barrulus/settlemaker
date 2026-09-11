@@ -22,6 +22,7 @@ export interface SiteRoute {
 
 /** Pass 1 output. Everything in metres, origin at the burg centre. */
 export interface Site {
+  freshwaterIrrigation?: boolean;
   waterContextResult?: WaterContextResult;
   surveyRadiusM?: number;
   population: number;

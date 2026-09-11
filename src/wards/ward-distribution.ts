@@ -53,9 +53,9 @@ export function buildWardDistribution(params: GenerationParams, slots: number): 
     specials.push(Cathedral);
   }
 
-  // Park: 1 if city is large enough
+  // Commons and parks scale with the number of neighbourhoods.
   if (n >= 10) {
-    specials.push(Park);
+    for(let i=0;i<Math.max(1,Math.round(n*.12));i++)specials.push(Park);
   }
 
   // Tiny settlements may not have room for every special; drop the least

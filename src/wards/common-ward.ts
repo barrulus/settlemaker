@@ -1,3 +1,6 @@
+import { cityUrbanity } from '../generator/city-character.js';
+import { Polygon } from '../geom/polygon.js';
+import { Point } from '../types/point.js';
 import { WardType } from '../types/interfaces.js';
 import { Ward, createAlleys, ALLEY } from './ward.js';
 import { rowHousing, maxLotArea, meanBuildingArea } from '../generator/generation-params.js';
@@ -14,6 +17,7 @@ export class CommonWard extends Ward {
   protected sizeChaos: number;
   protected emptyProb: number;
   cityBuildingTarget: number | null = null;
+  gardens: Array<{ring:Polygon;access:Point[]}> = [];
 
   constructor(
     model: Model, patch: Patch,
@@ -29,6 +33,7 @@ export class CommonWard extends Ward {
 
   override createGeometry(): void {
     this.lanes = [];
+    this.gardens = [];
     this.buildingFrontages.clear();
     this.streetRuns = [];
     // Village regime: dwellings are stamped along road frontages by
@@ -51,7 +56,9 @@ export class CommonWard extends Ward {
         Math.abs(block.square) * 0.85 / Math.max(1, this.cityBuildingTarget)));
       const streets = wardFrontages(this);
       let plan = planCityBlock(block, streets, area, alleyWidth);
-      const target = Math.ceil(this.cityBuildingTarget) + 1; // allow the ward's well courtyard
+      // Reserve a little supply for wells and neighbouring lots lost to access
+      // constraints. The final census pass trims whole run ends to the budget.
+      const target = Math.ceil(this.cityBuildingTarget * 1.1) + 1;
       let best = plan;
       const error = (count: number) => count >= target ? count - target : 1e6 + target - count;
       // Bounded local feedback changes the block grain before acceptance;
@@ -68,6 +75,13 @@ export class CommonWard extends Ward {
       plan = best;
       if (plan?.buildings.length) {
         coalesceCityRuns(plan, target);
+        const urbanity=cityUrbanity(this.model,this.patch);
+        const roofScale=.65+.35*Math.min(1,urbanity*1.35);
+        if(roofScale<.98)for(const b of plan.buildings){
+          const c=b.centroid,front=plan.frontages.get(b);
+          this.gardens.push({ring:new Polygon(b.vertices),access:front?[front.at,c]:[]});
+          b.vertices=b.vertices.map(p=>new Point(c.x+(p.x-c.x)*roofScale,c.y+(p.y-c.y)*roofScale));
+        }
         this.geometry = plan.buildings;
         this.lanes = plan.lanes;
         this.buildingFrontages = plan.frontages;

@@ -244,6 +244,7 @@ export function buildSite(input: AzgaarBurgInput, seed = 0): Site {
   return {
     ...(prepared.result ? { waterContextResult: prepared.result } : {}),
     ...(original.waterContext?.status === 'measured' ? { surveyRadiusM: original.waterContext.surveyRadiusM } : {}),
+    freshwaterIrrigation: (input.rivers?.length ?? 0) > 0,
     population: input.population,
     // Normalised once, here, because every per-biome table downstream (theme,
     // dwelling deck, field deck, canopy deck, plot edges) is an exact-match
