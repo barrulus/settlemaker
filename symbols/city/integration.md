@@ -4,7 +4,7 @@ An artwork-first city kit derived from the refined library's top-down pen style.
 170 building glyphs: 34 forms in each of temperate, desert, tundra, tropical and
 coastal, plus 170 matching silhouette files. The generator now selects this
 library by default; see [runtime integration](../../docs/artwork-integration.md).
-The original refined source sprites remain available.
+The earlier source sprite collections have been retired.
 
 Open `index.html` directly in a browser. It has a biome selector, shadow and
 ground controls, and individual downloads. `catalogue.svg` compares every form;
@@ -60,7 +60,7 @@ outline of its own. It does not form detached crescent shapes at roof corners.
 
 All geometry and `inkBounds` values are **SVG art units**, not metres. The
 manifest deliberately uses a city-specific format; do not feed it directly into
-the current refined-manifest extractor, which expects nominal metre footprints.
+the runtime compiler, which also supplies nominal metre footprints.
 
 Every viewBox is `[0,0,64,64]`, with anchor `[32,32]`. Place with:
 
