@@ -1,3 +1,4 @@
+import { greenGround } from '../assets/greens-art.js';
 import { bridgeArtwork, farmDetails, wallArtwork } from '../output/artwork.js';
 import { ARTWORK_GLYPHS as REFINED_GLYPHS, ARTWORK_MANIFEST, ART_TOKENS } from '../assets/artwork.js';
 import { waterFillRings, waterBoundaryPaths } from './water-boundary.js';
@@ -140,7 +141,8 @@ export function renderVillage(
   }
   if (greenGlyphAvailable) {
     // Greens are parcel-band: no -sil twin, ground casts no shadow.
-    defs.push(defBlock(greenGlyphId, REFINED_GLYPHS[greenGlyphId].body));
+    const d=REFINED_GLYPHS[greenGlyphId].body.match(/<path[^>]* d="([^"]+)"/)?.[1];
+    if(d)defs.push(defBlock(greenGlyphId, greenGround(d,model.site.biome,{id:greenGlyphId,seed:'abc'.indexOf(model.green.variant)})));
   }
 
   // --- field pattern defs: one per (glyph, quantised furrow bearing) pair
@@ -347,8 +349,10 @@ export function renderVillage(
   out.push('<g data-band="parcel">');
   const r = (model.green.diameter / 2) * pxPerMetre;
   if (model.green.outline && model.green.shape === 'sm-green-triangle') {
-    const outline = model.green.outline.map(p => `${n(X(p.x))},${n(Y(p.y))}`).join(' ');
-    out.push(`<polygon data-green="junction" points="${outline}" fill="var(--sm-common, #a8bf6d)" stroke="var(--sm-common-band, #8aa855)" stroke-width="${n(0.4 * pxPerMetre)}" stroke-linejoin="round"/>`);
+    const points=model.green.outline.map(p=>({x:X(p.x),y:Y(p.y)}));
+    const xs=points.map(p=>p.x),ys=points.map(p=>p.y);
+    const d=points.map((p,i)=>`${i?'L':'M'}${n(p.x)},${n(p.y)}`).join(' ')+'Z';
+    out.push(`<g data-green="junction">${greenGround(d,model.site.biome,{unit:pxPerMetre*.6,id:'junction',bounds:[Math.min(...xs),Math.min(...ys),Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys)]})}</g>`);
   } else if (greenGlyphAvailable) {
     out.push(
       `<use href="#${greenGlyphId}" ` +

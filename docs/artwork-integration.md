@@ -12,7 +12,10 @@ unchanged. No feature flag or asset download is required.
   measured roof and porch extents rather than generic house/hut ratios.
 - Cities fit native urban buildings to existing surveyed lots. The fitter uses
   guarded ink measurements and preserves the building polygon/GeoJSON identity.
-  Ordinary housing has one seeded row-house family. Actual POI assignments select
+  Central housing has one seeded row-house family, with five restrained biome roof
+  tones. Demand favours the centre; outer roofs sit in progressively larger gardens
+  and mix detached rural houses with urban forms. Parks scale with neighbourhood
+  count. Gardens are also exported as `layer: green`, `kind: garden` polygons. Actual POI assignments select
   inns, shops, workshops, bathhouses, guildhalls and warehouses. The principal
   religious form varies independently of biome. Castle keeps/barracks and capital
   administrative halls/wings use the dedicated kits. Court-bearing forms scale
@@ -28,17 +31,27 @@ unchanged. No feature flag or asset download is required.
   options require nearby water. Mangroves and geographically restricted cacti
   remain explicit library options rather than indiscriminate default scatter.
   Flora casts no ground shadows, and village clearance accounts for crown size.
+  Broad crown highlights have no internal outlines; conifer tiers share a light
+  outer contour. Seeded stands group dominant species over roughly 48 metres,
+  with local understory and individual saved variants in both engines.
 - Both engines fill their **actual field polygons** with native seamless tiles;
   no rectangular preset is stretched across a planner's parcel. Texture pitch
   is independent of parcel dimensions and crop angle lives on the pattern.
-  Cultivated parcels gain headlands and access strips. Irrigated plots show a
-  supply head and channels; desert irrigation uses a local well/cistern abstraction.
+  Cultivated parcels gain headlands and access strips. Desert irrigation uses
+  a local well/cistern and narrow channels. Tropical paddies use muted shallow
+  flooded beds with earth bunds, and are selected only when a river is supplied;
+  coastlines alone do not enable them. Other tropical crops use dry ground.
   This is not a groundwater-yield or hydraulic simulation. Tundra ground remains
   natural grazing/lichen/sedge, with no default arable fields or fringe gardens.
 - City walls follow existing arbitrary polylines, with actual gate gaps and
-  native towers. Walled villages use the planner's irregular inner farmland
-  boundary and cut gates where roads cross it. Wet wall segments are omitted.
+  native towers. Walled villages enclose measured roof/porch extents with a
+  3.5-metre rear clearance, including intersecting reserved henge clearings.
+  Gates are cut where roads cross that enclosure. Wet wall segments are omitted.
   Village walls and gates are included in GeoJSON.
+- Greens use biome-specific turf, sand or moss colours, a single soft earth
+  edge and sparse botanical marks. Village shapes and junction outlines keep
+  their surveyed geometry; city gardens and parks use actual parcel boundaries.
+  The 60 standalone variants are in `symbols/greens/`.
 - Bridges use planned river crossings. Village decks follow the existing
   surveyed centreline and width. City scenes publish additive `layers.bridges`
   records for bounded wet road runs between two dry banks; roads terminating in
@@ -48,7 +61,7 @@ unchanged. No feature flag or asset download is required.
   variation, preserving the POI kind and its placement clearances.
 
 Older version-2 scenes remain readable: field `glyph`, wall `material` and
-`layers.bridges` are additive optional properties. The original `REFINED_SET`
+`layers.bridges` and symbol `materialVariant` are additive optional properties. The original `REFINED_SET`
 and `SCHEMATIC_SET` remain explicit rendering alternatives. The default is
 `SETTLEMENT_SET`. `symbols: false` still exposes real city building polygons.
 
@@ -61,12 +74,16 @@ generated and cached only when requested, using the same pure functions as the
 review galleries. The generated modules have no filesystem, DOM or Node dependency.
 
 ```sh
-# After updating/regenerating the authored SVG libraries:
+# Regenerate the landscape and green sources:
+node scripts/build-landscape-symbols.mjs
+node scripts/build-green-symbols.mjs
+
+# Compile reviewed drawings into the runtime:
 npm run build:art
 npm run build
 npm run build:lib
 
-# Real public-API outputs, all five biomes plus a river crossing:
+# Public-API outputs: five biomes, large cities, river crossings and paddies:
 npm run review:art
 ```
 

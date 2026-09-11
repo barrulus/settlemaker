@@ -1,3 +1,5 @@
+import { CommonWard } from '../wards/common-ward.js';
+import { selectFloraAt } from '../assets/landscape-placement.js';
 import { fieldKinds, ARTWORK_MANIFEST } from '../assets/artwork.js';
 import { cityCrossings } from './crossings.js';
 import { Point } from '../types/point.js';
@@ -59,6 +61,7 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
       fields: [], furrows: [], greens: [], vegetation: [],
       symbols: model.symbols.map(s => ({
         id: resolveGlyphFor(model.params.biome ?? 'temperate', s.id),
+        ...(s.materialVariant?{materialVariant:s.materialVariant}:{}),
         at: sc(s.at), scale: s.scale, rotationDeg: s.rotationDeg, zBand: s.zBand,
         ...(s.scaleY !== undefined ? { scaleY: s.scaleY } : {}),
         ...(s.building && ids.has(s.building) ? { buildingId: ids.get(s.building) } : {}),
@@ -82,7 +85,7 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
       for (let i = 0; i < ward.subPlots.length; i++) {
         const plot = ward.subPlots[i];
         if (plot.length >= 3) {
-          const crops = fieldKinds(model.params.biome, model.params.biome === 'desert' || scene.layers.water.rings.length > 0);
+          const crops = fieldKinds(model.params.biome, model.params.biome === 'desert' || (model.params.riverPath?.length ?? 0) > 1);
           scene.layers.fields.push({
             ...(crops.length ? {glyph:crops[(scene.layers.fields.length+Math.abs(model.params.seed))%crops.length]} : {}),
             ring: ring(plot),
@@ -101,6 +104,7 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
       }
       continue; // groves are greens, not buildings
     }
+    if(ward instanceof CommonWard)for(const garden of ward.gardens)scene.layers.greens.push({ring:ring(garden.ring.vertices),paths:garden.access.length?[ring(garden.access)]:[],pathWidth:.3});
     for (const poly of ward.geometry) {
       scene.layers.buildings.push({
         id: ids.get(poly),
@@ -246,7 +250,7 @@ function scatterVegetation(
       for (let attempt = 0; attempt < n * 10 && placed < n; attempt++) {
         const p = new Point(minX + rng.float() * (maxX - minX), minY + rng.float() * (maxY - minY));
         if (!pointInPolygon(p, grove.vertices)) continue;
-        const kind=kinds[Math.floor(rng.float()*kinds.length)];
+        const kind=selectFloraAt(model.params.biome??'temperate',p.x*(scene.metersPerUnit??1),p.y*(scene.metersPerUnit??1),model.params.seed,rng.float());
         scene.layers.vegetation.push({
           at: sc(p), kind,
           scale: (1.6 + rng.float() * 1.2)*Math.min(1,(ARTWORK_MANIFEST[kind]?.footprint?.[0]??7)/7),

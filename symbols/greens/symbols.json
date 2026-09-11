@@ -1,0 +1,692 @@
+{
+  "format": "settlemaker-greens-v1",
+  "palettes": {
+    "temperate": {
+      "turf": "#a8bc83",
+      "light": "#c4d09e",
+      "edge": "#81906b"
+    },
+    "desert": {
+      "turf": "#cbbb94",
+      "light": "#e1d1ae",
+      "edge": "#a59577"
+    },
+    "tundra": {
+      "turf": "#bdc6bc",
+      "light": "#e4e9e2",
+      "edge": "#949f97"
+    },
+    "tropical": {
+      "turf": "#88ae79",
+      "light": "#b2c894",
+      "edge": "#698b65"
+    },
+    "coastal": {
+      "turf": "#b8c4a0",
+      "light": "#d4dcc0",
+      "edge": "#909e86"
+    }
+  },
+  "symbols": {
+    "sm-green-round-a--temperate": {
+      "biome": "temperate",
+      "base": "sm-green-round-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-round-b--temperate": {
+      "biome": "temperate",
+      "base": "sm-green-round-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-lens-a--temperate": {
+      "biome": "temperate",
+      "base": "sm-green-lens-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-lens-b--temperate": {
+      "biome": "temperate",
+      "base": "sm-green-lens-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-lens-long-a--temperate": {
+      "biome": "temperate",
+      "base": "sm-green-lens-long-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-lens-long-b--temperate": {
+      "biome": "temperate",
+      "base": "sm-green-lens-long-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-triangle-a--temperate": {
+      "biome": "temperate",
+      "base": "sm-green-triangle-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-triangle-b--temperate": {
+      "biome": "temperate",
+      "base": "sm-green-triangle-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-square-a--temperate": {
+      "biome": "temperate",
+      "base": "sm-green-square-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-square-b--temperate": {
+      "biome": "temperate",
+      "base": "sm-green-square-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-d-a--temperate": {
+      "biome": "temperate",
+      "base": "sm-green-d-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-d-b--temperate": {
+      "biome": "temperate",
+      "base": "sm-green-d-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-round-a--desert": {
+      "biome": "desert",
+      "base": "sm-green-round-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-round-b--desert": {
+      "biome": "desert",
+      "base": "sm-green-round-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-lens-a--desert": {
+      "biome": "desert",
+      "base": "sm-green-lens-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-lens-b--desert": {
+      "biome": "desert",
+      "base": "sm-green-lens-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-lens-long-a--desert": {
+      "biome": "desert",
+      "base": "sm-green-lens-long-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-lens-long-b--desert": {
+      "biome": "desert",
+      "base": "sm-green-lens-long-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-triangle-a--desert": {
+      "biome": "desert",
+      "base": "sm-green-triangle-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-triangle-b--desert": {
+      "biome": "desert",
+      "base": "sm-green-triangle-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-square-a--desert": {
+      "biome": "desert",
+      "base": "sm-green-square-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-square-b--desert": {
+      "biome": "desert",
+      "base": "sm-green-square-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-d-a--desert": {
+      "biome": "desert",
+      "base": "sm-green-d-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-d-b--desert": {
+      "biome": "desert",
+      "base": "sm-green-d-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-round-a--tundra": {
+      "biome": "tundra",
+      "base": "sm-green-round-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-round-b--tundra": {
+      "biome": "tundra",
+      "base": "sm-green-round-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-lens-a--tundra": {
+      "biome": "tundra",
+      "base": "sm-green-lens-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-lens-b--tundra": {
+      "biome": "tundra",
+      "base": "sm-green-lens-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-lens-long-a--tundra": {
+      "biome": "tundra",
+      "base": "sm-green-lens-long-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-lens-long-b--tundra": {
+      "biome": "tundra",
+      "base": "sm-green-lens-long-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-triangle-a--tundra": {
+      "biome": "tundra",
+      "base": "sm-green-triangle-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-triangle-b--tundra": {
+      "biome": "tundra",
+      "base": "sm-green-triangle-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-square-a--tundra": {
+      "biome": "tundra",
+      "base": "sm-green-square-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-square-b--tundra": {
+      "biome": "tundra",
+      "base": "sm-green-square-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-d-a--tundra": {
+      "biome": "tundra",
+      "base": "sm-green-d-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-d-b--tundra": {
+      "biome": "tundra",
+      "base": "sm-green-d-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-round-a--tropical": {
+      "biome": "tropical",
+      "base": "sm-green-round-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-round-b--tropical": {
+      "biome": "tropical",
+      "base": "sm-green-round-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-lens-a--tropical": {
+      "biome": "tropical",
+      "base": "sm-green-lens-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-lens-b--tropical": {
+      "biome": "tropical",
+      "base": "sm-green-lens-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-lens-long-a--tropical": {
+      "biome": "tropical",
+      "base": "sm-green-lens-long-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-lens-long-b--tropical": {
+      "biome": "tropical",
+      "base": "sm-green-lens-long-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-triangle-a--tropical": {
+      "biome": "tropical",
+      "base": "sm-green-triangle-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-triangle-b--tropical": {
+      "biome": "tropical",
+      "base": "sm-green-triangle-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-square-a--tropical": {
+      "biome": "tropical",
+      "base": "sm-green-square-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-square-b--tropical": {
+      "biome": "tropical",
+      "base": "sm-green-square-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-d-a--tropical": {
+      "biome": "tropical",
+      "base": "sm-green-d-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-d-b--tropical": {
+      "biome": "tropical",
+      "base": "sm-green-d-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-round-a--coastal": {
+      "biome": "coastal",
+      "base": "sm-green-round-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-round-b--coastal": {
+      "biome": "coastal",
+      "base": "sm-green-round-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-lens-a--coastal": {
+      "biome": "coastal",
+      "base": "sm-green-lens-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-lens-b--coastal": {
+      "biome": "coastal",
+      "base": "sm-green-lens-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-lens-long-a--coastal": {
+      "biome": "coastal",
+      "base": "sm-green-lens-long-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-lens-long-b--coastal": {
+      "biome": "coastal",
+      "base": "sm-green-lens-long-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-triangle-a--coastal": {
+      "biome": "coastal",
+      "base": "sm-green-triangle-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-triangle-b--coastal": {
+      "biome": "coastal",
+      "base": "sm-green-triangle-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-square-a--coastal": {
+      "biome": "coastal",
+      "base": "sm-green-square-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-square-b--coastal": {
+      "biome": "coastal",
+      "base": "sm-green-square-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-d-a--coastal": {
+      "biome": "coastal",
+      "base": "sm-green-d-a",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    },
+    "sm-green-d-b--coastal": {
+      "biome": "coastal",
+      "base": "sm-green-d-b",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "category": "green"
+    }
+  }
+}

@@ -1,9 +1,9 @@
 /** Native, top-down landscape artwork. Pure functions also power the local gallery. */
 export const biomes={
-  temperate:{ground:'#a3c98d',leaf:'#769365',light:'#afbf82',dark:'#4e7059',soil:'#b69c77',dry:'#d5be84',water:'#95b8ba',flower:'#e3cf9c'},
+  temperate:{ground:'#a3c98d',leaf:'#769365',light:'#afbf82',dark:'#607d60',soil:'#b69c77',dry:'#d5be84',water:'#95b8ba',flower:'#e3cf9c'},
   desert:{ground:'#d9c48f',leaf:'#909566',light:'#c0bd82',dark:'#626e55',soil:'#bda079',dry:'#d7c28e',water:'#94b9b4',flower:'#dfb1a0'},
   tundra:{ground:'#e6ecef',leaf:'#8c9d81',light:'#bdc4a2',dark:'#627870',soil:'#b1a793',dry:'#c9bf9c',water:'#a6bec6',flower:'#d4b8c9'},
-  tropical:{ground:'#6d9e5c',leaf:'#679568',light:'#a3b876',dark:'#3f6c56',soil:'#aa8870',dry:'#c7b681',water:'#83aaa2',flower:'#d1a28c'},
+  tropical:{ground:'#6d9e5c',leaf:'#679568',light:'#a3b876',dark:'#507b5d',soil:'#aa8870',dry:'#c7b681',water:'#83aaa2',flower:'#d1a28c'},
   coastal:{ground:'#cfd6b0',leaf:'#8eaa91',light:'#c3c9a0',dark:'#5f8076',soil:'#c0b394',dry:'#d6cda5',water:'#a0bec1',flower:'#cdb3cc'},
 };
 export const n=v=>Number(v.toFixed(2));
@@ -116,11 +116,11 @@ export function flora(biome,kind,{seed=11,winter=false}={}){
   const line=(d,w=.6,col=ink)=>body+=path(d,'none',w,col);
   const blob=(x,y,rx,ry,fill=leaf,sw=1.15,lobes=7)=>{const d=organic(x,y,rx,ry,fill===snow?snowR:r,lobes);body+=path(d,fill,sw);return d;};
   function foliage(x,y,rx,ry,detail=7){
-    blob(x,y,rx,ry,t('dark'),1.5,spec.lobes??9);
-    blob(x-1.1,y-1.2,rx*.92,ry*.9,leaf,.55,spec.lobes??9);
+    blob(x,y,rx,ry,t('dark'),.85,spec.lobes??9);
+    blob(x-1.1,y-1.2,rx*.92,ry*.9,leaf,0,spec.lobes??9);
     for(let j=0;j<detail;j++){const a=j*Math.PI*2/detail+r()*.4,rr=.4+r()*.08,X=x+Math.cos(a)*rx*rr,Y=y+Math.sin(a)*ry*rr;
-      blob(X,Y,rx*(.29+r()*.09),ry*(.3+r()*.08),j%3===0?t('light'):leaf,.55,5);
-      line(`M${n(X-2)},${n(Y)}q2,-2 4,-.4`,.45,t('dark'));
+      blob(X,Y,rx*(.29+r()*.09),ry*(.3+r()*.08),j%3===0?t('light'):leaf,0,5);
+      if(j%3===1)line(`M${n(X-2)},${n(Y)}q2,-2 4,-.4`,.25,t('dark'));
       if(winter&&j%3===0)blob(X-.5,Y-.5,rx*.25,ry*.24,snow,0,6);
       if(spec.fruit)for(let k=0;k<3;k++)body+=circle(X+(r()-.5)*rx*.3,Y+(r()-.5)*ry*.3,.85,spec.fruit,.3);
     }
@@ -143,8 +143,8 @@ export function flora(biome,kind,{seed=11,winter=false}={}){
     const count=spec.prostrate?3:1;
     for(let k=0;k<count;k++){const x=cx+(count===1?0:Math.cos(k*2.1)*10),y=cy+(count===1?0:Math.sin(k*2.1)*9),scale=count===1?1:.58;
       for(let tier=0;tier<3;tier++){const rad=(25-tier*7)*scale,branches=11-tier,pts=[];for(let j=0;j<branches;j++){const a=j*6.283/branches+r()*.2,rr=rad*(.78+r()*.2),sway=spec.wind?5*(tier+1)/3:0;pts.push([x+Math.cos(a-.18)*rr*.45+sway,y+Math.sin(a-.18)*rr*.45],[x+Math.cos(a)*rr+sway,y+Math.sin(a)*rr*(spec.wind?.67:1)],[x+Math.cos(a+.18)*rr*.45+sway,y+Math.sin(a+.18)*rr*.45]);}
-        body+=path(polygon(pts),tier===0?t('dark'):tier===1?leaf:t('light'),1.05);
-        for(let j=0;j<branches;j++){const a=j*6.283/branches;line(`M${n(x)},${n(y)}l${n(Math.cos(a)*rad*.72)},${n(Math.sin(a)*rad*.72*(spec.wind?.67:1))}`,.5,t('dark'));}
+        body+=path(polygon(pts),tier===0?t('dark'):tier===1?leaf:t('light'),tier===0?.7:0);
+        for(let j=0;j<branches;j+=3){const a=j*6.283/branches;line(`M${n(x)},${n(y)}l${n(Math.cos(a)*rad*.72)},${n(Math.sin(a)*rad*.72*(spec.wind?.67:1))}`,.25,t('dark'));}
         if(winter&&tier>0){const snowPts=pts.map(([X,Y])=>[x+(X-x)*.62,y+(Y-y)*.62]);body+=path(polygon(snowPts),snow,.3,t('light'));}
       }
     }

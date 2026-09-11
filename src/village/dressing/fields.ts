@@ -804,7 +804,7 @@ export function buildFields(
   const leaves: Point[][] = [];
   subdivide(region, 0, belt, roads, rng, leaves);
 
-  const crops = fieldKinds(site.biome, site.biome === 'desert' || site.water.length > 0);
+  const crops = fieldKinds(site.biome, site.biome === 'desert' || site.freshwaterIrrigation === true);
   if (!crops.length) return { blocks: [], edges: [], outerRadius: fabricRadius, regionPolygon: region };
 
   const blocks: FieldBlock[] = [];

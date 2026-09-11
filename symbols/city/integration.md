@@ -125,7 +125,10 @@ The city fitter uses freshly measured native ink bounds and preserves one
 placement per building and its scene/GeoJSON identity. Panel-union and court
 forms scale uniformly; court holes remain transparent. Multi-building compounds
 and joined terraces still need dedicated site planning before automatic use.
-The runtime does not relabel individual houses as aggregate courtyards.
+The runtime does not relabel individual houses as aggregate courtyards. Roof
+tones vary within the biome palette. Housing is densest near the centre;
+outer plots gain gardens and mix in detached village forms, while dedicated
+parks scale with the number of neighbourhoods.
 
 `storeys` ranges are artistic intent, not a population formula. A tenement is
 one structure with multiple households. A terrace represents three buildings;

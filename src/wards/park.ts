@@ -1,3 +1,5 @@
+import { selectFloraAt, landscapeHash } from '../assets/landscape-placement.js';
+import { cityMetersPerUnit } from '../generator/city-glyphs.js';
 import { ARTWORK_MANIFEST } from '../assets/artwork.js';
 import { WardType } from '../types/interfaces.js';
 import { Ward, ALLEY } from './ward.js';
@@ -7,7 +9,6 @@ import type { Patch } from '../generator/patch.js';
 import { Point } from '../types/point.js';
 import { pointInPolygon } from '../geom/point-in-polygon.js';
 import { nearestOnSegment, wardFrontages, segmentInside } from '../generator/city-frontage.js';
-import { canopyKindsFor } from '../assets/asset-sets.js';
 
 export class Park extends Ward {
   paths: Point[][] = [];
@@ -52,7 +53,7 @@ export class Park extends Ward {
       // Two entrances share a walk through a central clearing. Plant matching
       // rows on each side, keeping the entire canopy clear of paths and edges.
       const angle = Math.atan2(first.y - c.y, first.x - c.x), ax = Math.cos(angle), ay = Math.sin(angle);
-      const kinds = canopyKindsFor(this.model.params.biome);
+      const metres = cityMetersPerUnit(this.model);
       const radius = 1.1, spacing = 3.6;
       const extent = Math.max(...block.vertices.map(p => Point.distance(p, c)));
       for (let row = -Math.ceil(extent / spacing); row <= Math.ceil(extent / spacing); row++) {
@@ -67,7 +68,7 @@ export class Park extends Ward {
             if (Point.distance(p, nearestOnSegment(p, path[i - 1], path[i])) < radius + this.pathWidth / 2 + 0.3) clear = false;
           }
           if (clear) {
-            const kind=kinds[(Math.abs(row)*7+Math.abs(column)+Math.abs(this.model.params.seed))%kinds.length];
+            const kind=selectFloraAt(this.model.params.biome??'temperate',p.x*metres,p.y*metres,this.model.params.seed,landscapeHash(row,column,this.model.params.seed));
             const size=ARTWORK_MANIFEST[kind]?.footprint?.[0]??7;
             this.trees.push({at:p,kind,scale:radius*2*Math.min(1,size/7),rotationDeg:(Math.abs(column)*47)%360});
           }
