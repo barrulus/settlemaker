@@ -36,10 +36,10 @@ describe('vegetation visual output', () => {
     // Task 3 (canopy glyphs): trees now render as batch001 canopy glyphs in
     // #canopy, not the schematic <use href="#asset-tree"> symbol in #greens.
     // Verify a canopy glyph symbol is defined in defs
-    expect(svg).toMatch(/<g id="glyph-sm-tree-[a-z-]+">/);
+    expect(svg).toMatch(/<g id="glyph-sm-flora-[a-z-]+">/);
 
     // Verify tree instances are rendered as use elements
-    const useMatches = svg.match(/<use href="#glyph-sm-tree-/g);
+    const useMatches = svg.match(/<use href="#glyph-sm-flora-/g);
     expect(useMatches).not.toBeNull();
     expect(useMatches!.length).toBeGreaterThan(0);
 
@@ -47,7 +47,7 @@ describe('vegetation visual output', () => {
     expect(svg).toContain('#greens use{fill:');
 
     // Verify use elements have proper transform attributes
-    expect(svg).toMatch(/<use href="#glyph-sm-tree-[a-z-]+"[^>]*transform="translate/);
+    expect(svg).toMatch(/<use href="#glyph-sm-flora-[a-z-]+"[^>]*transform="translate/);
     expect(svg).toMatch(/scale\(/);
     expect(svg).toMatch(/rotate\(/);
   });
@@ -89,6 +89,6 @@ describe('vegetation visual output', () => {
     const canopyEnd = svg.indexOf('</g>', canopyStart);
     const canopyContent = svg.substring(canopyStart, canopyEnd);
 
-    expect(canopyContent).toContain('<use href="#glyph-sm-tree-');
+    expect(canopyContent).toContain('<use href="#glyph-sm-flora-');
   });
 });

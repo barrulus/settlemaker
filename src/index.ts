@@ -61,7 +61,7 @@ export type { BuildSceneOptions } from './scene/build-scene.js';
 export { assembleSvg, themeToCss } from './output/assemble-svg.js';
 export type { AssembleOptions } from './output/assemble-svg.js';
 
-export { SCHEMATIC_SET, assetSetFor } from './assets/asset-sets.js';
+export { SCHEMATIC_SET, REFINED_SET, SETTLEMENT_SET, assetSetFor } from './assets/asset-sets.js';
 export type { AssetSet } from './assets/asset-sets.js';
 
 export {
@@ -266,3 +266,5 @@ export type { Poi as VillagePoi } from './village/types.js';
 export { ROUTE_CLASS_ORDER } from './village/route-class.js';
 export type { RouteType } from './village/route-class.js';
 export type { DeckEntry } from './village/deck.js';
+
+export { ARTWORK_GLYPHS, ARTWORK_MANIFEST, ARTWORK_INK } from './assets/artwork.js';

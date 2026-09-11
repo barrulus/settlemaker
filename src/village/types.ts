@@ -227,6 +227,7 @@ export interface Frame {
 }
 
 export interface VillageModel {
+  wall?: import('../scene/scene.js').WallFeature;
   site: Site;
   green: Green;
   lanes: Lane[];

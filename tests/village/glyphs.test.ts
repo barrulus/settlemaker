@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { REFINED_MANIFEST as SYMBOL_MANIFEST } from '../../src/assets/refined-manifest.js';
+import { ARTWORK_MANIFEST as SYMBOL_MANIFEST } from '../../src/assets/artwork.js';
 import {
   HOUSE_INK_RATIO, HUT_INK_RATIO, hasGlyph, inkExtent, minScaleOf, nominalFootprint,
   rotationOf,
@@ -31,13 +31,15 @@ describe('glyph lookups', () => {
     expect(minScaleOf('sm-not-a-real-symbol')).toBeCloseTo(0.35, 5);
   });
 
-  it('shrinks a footprint to its ink extent, by family', () => {
-    expect(inkExtent('sm-house', [8, 6.6]).width).toBeCloseTo(8 * HOUSE_INK_RATIO, 5);
-    expect(inkExtent('sm-hut-straw', [6.4, 6.4]).width).toBeCloseTo(6.4 * HUT_INK_RATIO, 5);
+  it('uses the measured roof and porch extent rather than the legacy family ratio', () => {
+    const extent=inkExtent('sm-house',[8,6.6]);
+    expect(extent.width).toBeCloseTo(5.375,5);
+    expect(extent.depth).toBeGreaterThan(6.6*HOUSE_INK_RATIO);
+    expect(inkExtent('sm-hut-straw',[6.4,6.4]).width).toBeLessThan(6.4);
   });
 
   it('uses the scaled footprint it is given, not the nominal one', () => {
-    expect(inkExtent('sm-house', [12, 10]).width).toBeCloseTo(12 * HOUSE_INK_RATIO, 5);
+    expect(inkExtent('sm-house', [12, 10]).width).toBeCloseTo(inkExtent('sm-house',[8,6.6]).width*1.5, 5);
   });
 });
 

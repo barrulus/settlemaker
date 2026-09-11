@@ -182,7 +182,8 @@ describe('fidelity round 4: probe path', () => {
     // geometry and alley paths intentionally change. Village hash stays pinned.
     const { svg } = generateFromBurg(aldford(1400), { seed: 9 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('e7bb4dbeeb5dab5458821e7d725c047516ab06819d96bf4de881d6c892c8d3a1');
+    // Native biome artwork, fields and path-based walls; verified repeatable SVG output.
+    expect(sha256(svg)).toBe('5a263c585289597e10d2272fefc4f0f01977ec8cdebd40dee3d8f01ff863b083');
   });
 
   it('pins direct legacy generateFromBurg output at pop 800 (not the village engine)', () => {
@@ -287,7 +288,8 @@ describe('fidelity round 4: probe path', () => {
     // rule; this direct legacy API fixture does not use the village renderer.
     const { svg } = generateFromBurg(aldford(800), { seed: 1 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('45bc3118772b18586d79ed760281d25c9b2f91a07e968dcba9924ecd0e4a96a9');
+    // Native biome artwork, fields and path-based walls; verified repeatable SVG output.
+    expect(sha256(svg)).toBe('85bddfe2c7307ba79574ae52cc8aad0b47fb22b9e628d7d7f906713cfe43427a');
   });
 });
 

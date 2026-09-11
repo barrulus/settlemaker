@@ -1,4 +1,4 @@
-import { REFINED_MANIFEST as SYMBOL_MANIFEST } from '../assets/refined-manifest.js';
+import { ARTWORK_MANIFEST as SYMBOL_MANIFEST, ARTWORK_INK } from '../assets/artwork.js';
 
 /**
  * The ONLY module that reads SYMBOL_MANIFEST. Everything that needs a
@@ -57,6 +57,12 @@ export function minScaleOf(glyph: string): number {
 export function inkExtent(
   glyph: string, footprint: [number, number],
 ): { width: number; depth: number } {
+  const bounds = ARTWORK_INK[glyph]?.bounds;
+  if (bounds) {
+    const [ax, ay] = SYMBOL_MANIFEST[glyph].anchor;
+    const k = footprint[0] / SYMBOL_MANIFEST[glyph].viewBox[2];
+    return { width: 2 * Math.max(ax - bounds[0], bounds[2] - ax) * k, depth: 2 * Math.max(ay - bounds[1], bounds[3] - ay) * k };
+  }
   const ratio = glyph.includes('hut') ? HUT_INK_RATIO : HOUSE_INK_RATIO;
   return { width: footprint[0] * ratio, depth: footprint[1] * ratio };
 }

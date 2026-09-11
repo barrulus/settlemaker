@@ -377,7 +377,7 @@ export function generateVillage(
     site, green, lanes: framedLanes, lots: survivingLots, buildings: spend.buildings,
     edgeStyle: dressing.edgeStyle, crofts: dressing.crofts, fields: dressing.fields,
     fieldEdges: dressing.fieldEdges, vegetation: dressing.vegetation, pois: dressing.pois,
-    diagnostics,
+    diagnostics, ...(dressing.wall ? {wall:dressing.wall} : {}),
     contractRadiusM: network.contractRadiusM,
     frame,
     // Clipped approaches must not leave exported junctions outside the tile.

@@ -1,8 +1,8 @@
-import { REFINED_MANIFEST } from '../assets/refined-manifest.js';
-import { REFINED_INK } from '../assets/refined-ink.js';
+import { buildingIds, IdAllocator } from '../output/id-allocator.js';
+import { ARTWORK_MANIFEST as REFINED_MANIFEST, ARTWORK_INK as REFINED_INK, cityGlyph } from '../assets/artwork.js';
 import { SeededRandom } from '../utils/random.js';
 import { frontagesFor, wardFrontages, polygonsOverlap, drySegments, blocksAccess, overlapsWater, type CityFrontage } from './city-frontage.js';
-import { scoreBuildings, scoringReference } from '../poi/poi-selector.js';
+import { scoreBuildings, scoringReference, selectPois } from '../poi/poi-selector.js';
 import { Point } from '../types/point.js';
 import { WardType } from '../types/interfaces.js';
 import { Polygon } from '../geom/polygon.js';
@@ -46,7 +46,8 @@ export function fitCityGlyph(
   }
   for (const rotation of frontage ? [angle] : [angle, angle + Math.PI / 2]) {
     const ax = Math.cos(rotation), ay = Math.sin(rotation);
-    for (const aspect of [1, 0.8, 1.25, 0.67, 1.5]) {
+    const hasCourt = (meta.courtyardVoids?.length ?? 0) > 0 || (meta.footprintPolygons?.length ?? 0) > 1;
+    for (const aspect of hasCourt ? [1] : [1, 0.8, 1.25, 0.67, 1.5]) {
       const fw = nominalWidth * aspect, fh = nominalHeight / aspect;
       const iw = (x1 - x0) * fw / 64, ih = (y1 - y0) * fh / 64;
       let factor = Infinity;
@@ -77,16 +78,13 @@ export function fitCityGlyph(
 /** One ordinary dwelling family per city. Special forms have explicit uses. */
 export function cityArchitecture(seed: number, biome = 'temperate') {
   const rng = new SeededRandom(seed ^ 0x43495459);
-  const home = rng.bool(0.7) ? 'sm-house-tiled' : 'sm-house';
-  const native = (id: string) => {
-    const resolved = resolveGlyphFor(biome, id);
-    return biome !== 'temperate' && !resolved.includes('--') && /house|hut|inn/.test(id)
-      && REFINED_MANIFEST[`sm-house--${biome}`] ? `sm-house--${biome}` : resolved;
-  };
+  const native = (family: string) => cityGlyph(family, biome);
   return {
-    home: native(home), wealthy: native('sm-house-large-tiled'),
-    workshop: native('sm-longhouse'), poor: native('sm-hut-straw'),
-    temple: native(biome === 'temperate' ? 'sm-cathedral' : 'sm-chapel'),
+    home: native(rng.bool(.5) ? 'row-house-a' : 'row-house-b'),
+    wealthy: native('corner'), workshop: native('workshop'), poor: native('row-house-a'),
+    temple: native(['church','cathedral','temple-hall','temple-court'][Math.floor(rng.float()*4)]),
+    palace: native('palace-hall'), palaceWing: native('palace-wing'),
+    keep: native('castle-keep'), barracks: native('castle-barracks'), inn: native('inn'),
   };
 }
 
@@ -134,26 +132,36 @@ export function placeCityGlyphs(model: Model): void {
   const temple = templeWard?.principalBuilding ?? (templeWard && scoreBuildings(templeWard.geometry, scoringReference(model))[0]);
   const castleWard = model.patches.find(p => p.ward?.type === WardType.Castle)?.ward;
   const keep = castleWard && scoreBuildings(castleWard.geometry, scoringReference(model))[0];
+  const ids=buildingIds(model);
+  const semantic=new Map(selectPois(model,model.params.population,new IdAllocator(),ids).filter(p=>p.buildingId).map(p=>[p.buildingId!,p.kind]));
+  const poiForms:Record<string,string>={inn:'inn',tavern:'shop-house',smithy:'workshop',stable:'workshop',shop:'shop-house',bathhouse:'bathhouse',guildhall:'guildhall',warehouse:'warehouse',guardhouse:'castle-barracks'};
   for (const patch of model.patches) {
     const ward = patch.ward;
     if (!ward || [WardType.Park, WardType.Market, WardType.Water, WardType.Empty].includes(ward.type)) continue;
     const lines = wardFrontages(ward);
+    const palacePrincipal = ward.type === WardType.Administration && model.params.capitalNeeded
+      ? scoreBuildings(ward.geometry,scoringReference(model)).find(b=>!semantic.has(ids.get(b)??'')) : undefined;
     for (const building of ward.geometry) {
       if (building === ward.principalBuilding && ward.principalSymbol) {
         model.symbols.push(ward.principalSymbol);
         model.glyphBackedBuildings.add(building);
         continue;
       }
+      const use=semantic.get(ids.get(building)??'');
       const id = building === temple ? architecture.temple
-        : building === keep ? 'sm-kit-keep'
+        : building === keep ? architecture.keep
+          : building === palacePrincipal ? architecture.palace
+          : use && poiForms[use] ? cityGlyph(poiForms[use],model.params.biome)
           : ward.type === WardType.Slum ? architecture.poor
-            : [WardType.Patriciate, WardType.Administration].includes(ward.type) ? architecture.wealthy
-              : [WardType.Military, WardType.Harbour, WardType.Castle].includes(ward.type) ? architecture.workshop : architecture.home;
+            : ward.type === WardType.Administration ? (model.params.capitalNeeded ? architecture.palaceWing : cityGlyph('guildhall',model.params.biome))
+              : ward.type === WardType.Patriciate ? architecture.wealthy
+              : [WardType.Military, WardType.Castle].includes(ward.type) ? architecture.barracks
+                : ward.type === WardType.Harbour ? cityGlyph('warehouse',model.params.biome) : architecture.home;
       let best: ReturnType<typeof fitCityGlyph> = null;
       const plannedFrontage = ward.buildingFrontages.get(building);
       const candidates = frontagesFor(building, ward, plannedFrontage ? [plannedFrontage] : lines);
       for (const frontage of candidates) {
-        const candidate = fitCityGlyph(building, id, metersPerUnit, frontage);
+        const candidate = fitCityGlyph(building, id, metersPerUnit, frontage, use || building === keep || building === palacePrincipal ? .25 : .5);
         if (candidate && (!best || candidate.paintedArea > best.paintedArea)) best = candidate;
       }
       // A fallback footprint remains in tight corners; do not rotate the front

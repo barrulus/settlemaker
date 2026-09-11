@@ -177,6 +177,11 @@ export function generateVillageGeoJson(model: VillageModel): FeatureCollection {
     });
   }
 
+  if(model.wall){
+    model.wall.polylines.forEach((line,i)=>features.push({type:'Feature',properties:{layer:'wall',wall_id:`village-wall:${i}`,wallType:'village_wall',material:model.wall!.material},geometry:{type:'LineString',coordinates:line.map(pt)}}));
+    model.wall.gates.forEach((g,i)=>features.push({type:'Feature',properties:{layer:'gate',gate_id:`village-gate:${i}`,route_ids:g.routeIds},geometry:{type:'Point',coordinates:[(g.p1.x+g.p2.x)/2,(g.p1.y+g.p2.y)/2]}}));
+  }
+
   // 7. Junctions — where the trunk network's roads meet (spec 5.5). The
   //    model has carried these since Task 5 and `types.ts` promised this
   //    export; it was never written. `pruneJunctions` guarantees each one

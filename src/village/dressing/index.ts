@@ -1,3 +1,5 @@
+import { villageWall } from '../walls.js';
+import type { WallFeature } from '../../scene/scene.js';
 import { Point } from '../../types/point.js';
 import { SeededRandom } from '../../utils/random.js';
 import { buildCrofts } from './crofts.js';
@@ -24,6 +26,7 @@ export interface DressingInput {
 }
 
 export interface DressingResult {
+  wall?: WallFeature;
   edgeStyle: EdgeStyle;
   crofts: Croft[];
   fields: FieldBlock[];
@@ -58,7 +61,7 @@ export function dressVillage(input: DressingInput): DressingResult {
   const crofts = buildCrofts(lots, buildings, green, lanes, site.water, builtRadiusM, f0);
   const {
     blocks: fields, edges: fieldEdges, outerRadius: fieldsOuterRadius,
-    regionPolygon,
+    regionPolygon, innerBoundary,
   } = buildFields(site, green, lanes, lots, crofts, rng, housedLotIds);
 
   // THE fix-wave rule (2026-08-21): after pass 3, nothing keys off
@@ -118,5 +121,6 @@ export function dressVillage(input: DressingInput): DressingResult {
 
   return {
     edgeStyle, crofts, fields, fieldEdges, vegetation, pois,
+    ...(innerBoundary ? {wall:villageWall(innerBoundary,lanes,site.water,site.biome)} : {}),
   };
 }

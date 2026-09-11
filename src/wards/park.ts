@@ -1,3 +1,4 @@
+import { ARTWORK_MANIFEST } from '../assets/artwork.js';
 import { WardType } from '../types/interfaces.js';
 import { Ward, ALLEY } from './ward.js';
 import { radial, semiRadial } from '../geom/cutter.js';
@@ -65,7 +66,11 @@ export class Park extends Ward {
           for (const path of this.paths) for (let i = 1; i < path.length; i++) {
             if (Point.distance(p, nearestOnSegment(p, path[i - 1], path[i])) < radius + this.pathWidth / 2 + 0.3) clear = false;
           }
-          if (clear) this.trees.push({ at: p, kind: kinds[Math.abs(row) % Math.min(2, kinds.length)], scale: radius * 2, rotationDeg: 0 });
+          if (clear) {
+            const kind=kinds[(Math.abs(row)*7+Math.abs(column)+Math.abs(this.model.params.seed))%kinds.length];
+            const size=ARTWORK_MANIFEST[kind]?.footprint?.[0]??7;
+            this.trees.push({at:p,kind,scale:radius*2*Math.min(1,size/7),rotationDeg:(Math.abs(column)*47)%360});
+          }
         }
       }
       return;

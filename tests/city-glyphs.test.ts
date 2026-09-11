@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { generateSettlement, buildScene, generateGeoJson, Point, Polygon } from '../src/index.js';
 import type { AzgaarBurgInput } from '../src/index.js';
 import { placeCityGlyphs, fitCityGlyph } from '../src/generator/city-glyphs.js';
-import { REFINED_INK } from '../src/assets/refined-ink.js';
-import { REFINED_MANIFEST } from '../src/assets/refined-manifest.js';
+import { ARTWORK_INK as REFINED_INK, ARTWORK_MANIFEST as REFINED_MANIFEST } from '../src/assets/artwork.js';
 
 export const cityInput: AzgaarBurgInput = {
   name: 'City glyph baseline', population: 2500, biome: 'temperate',
@@ -21,7 +20,7 @@ function city(overrides: Partial<AzgaarBurgInput> = {}) {
   return result;
 }
 
-describe('city village-glyph starter kit', () => {
+describe('city artwork integration', () => {
   it.each([[1001, 182], [2500, 312], [10000, 953], [50000, 3902], [250000, 7777]])(
     'meets or exceeds the pre-layout building count at population %i within its budget', (population, count) => {
       const { model } = city({ population });
@@ -95,6 +94,6 @@ describe('city village-glyph starter kit', () => {
     for (const id of ['sm-mark-church', 'sm-mill-wind', 'sm-market-cross', 'sm-tree-deciduous-round']) {
       expect(svg).not.toContain(`glyph-${id}`);
     }
-    expect(svg).toContain('var(--sm-timber, #d9c39a)');
+    expect(svg).toContain('--sm-city-temperate-roof');
   });
 });

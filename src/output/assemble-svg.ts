@@ -1,3 +1,5 @@
+import { farmDetails, wallArtwork, bridgeArtwork } from './artwork.js';
+import { ARTWORK_MANIFEST, ART_TOKENS, artworkBiome, cityGlyph } from '../assets/artwork.js';
 import type { Palette } from '../types/interfaces.js';
 import type { BuildingFeature, Scene, ScenePoint } from '../scene/scene.js';
 import type { AssetSet } from '../assets/asset-sets.js';
@@ -5,7 +7,7 @@ import { assetSetFor } from '../assets/asset-sets.js';
 import { paletteForBiome } from './palette.js';
 import { themeFrom, type RenderTheme } from './render-theme.js';
 import { REFINED_MANIFEST } from '../assets/refined-manifest.js';
-import { refinedStyle } from '../assets/refined-style.js';
+import { refinedStyle, resolveVarFallbacks } from '../assets/refined-style.js';
 import { villageThemeFor } from '../village/theme.js';
 
 const NORMAL_STROKE = 0.15;
@@ -82,9 +84,9 @@ export function themeToCss(theme: RenderTheme, refined = false): string {
     `#landmarks .castle{stroke-width:${fmt(NORMAL_STROKE * 4)}}`,
     `#landmarks .cathedral{stroke-width:${fmt(NORMAL_STROKE * 2)}}`,
     `#landmarks .market{stroke-width:${fmt(NORMAL_STROKE)}}`,
-    `#walls path{fill:none;stroke:${theme.buildingStroke};stroke-width:${fmt(THICK_STROKE)};stroke-linecap:round}`,
-    `#walls circle{fill:${theme.buildingStroke}}`,
-    `#walls .gate{stroke:${theme.buildingStroke};stroke-width:${fmt(THICK_STROKE * 2)};stroke-linecap:butt}`,
+    `#walls > path{fill:none;stroke:${theme.buildingStroke};stroke-width:${fmt(THICK_STROKE)};stroke-linecap:round}`,
+    `#walls > circle{fill:${theme.buildingStroke}}`,
+    `#walls > .gate{stroke:${theme.buildingStroke};stroke-width:${fmt(THICK_STROKE * 2)};stroke-linecap:butt}`,
   ];
   return rules.filter(r => r && !(refined && r.startsWith('.sm-'))).join('\n');
 }
@@ -101,6 +103,11 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   );
   const theme: RenderTheme = { ...themeFrom(palette), ...overrides };
   const assets = options.assetSet ?? assetSetFor(scene.biome);
+  if(assets.name==='settlement' && !options.palette){
+    const b=artworkBiome(scene.biome);
+    if(!options.theme?.buildingFill)theme.buildingFill=String(ART_TOKENS[`--sm-city-${b}-roof`]);
+    if(!options.theme?.landmarkFill)theme.landmarkFill=String(ART_TOKENS[`--sm-city-${b}-light`]);
+  }
   const clipId = (options.clipId ?? 'frame-clip').replace(/[^A-Za-z0-9_-]/g, '-');
   const showSymbols = options.symbols !== false;
   const b = scene.bounds;
@@ -128,6 +135,9 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   const glyphIds = new Set<string>();
   for (const v of L.vegetation) if (assets.glyphs?.[v.kind]) glyphIds.add(v.kind);
   for (const s of visibleSymbols) if (assets.glyphs?.[s.id]) glyphIds.add(s.id);
+  for (const f of L.fields) if (f.glyph && assets.glyphs?.[f.glyph]) glyphIds.add(f.glyph);
+  const towerId = cityGlyph('castle-tower-round', scene.biome);
+  if(L.walls.length && assets.glyphs?.[towerId]) glyphIds.add(towerId);
   const glyphDefs = [...glyphIds].map(id => {
     const g = assets.glyphs![id];
     // Plain groups have no viewport: the instance transform alone sets size.
@@ -140,7 +150,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   // 15°-quantized angle buckets actually used by field plots, so we only
   // emit the pattern defs the document needs.
   const bucketOf = (a: number): number => ((Math.round(a / 15) * 15) % 180 + 180) % 180;
-  const usedBuckets = [...new Set(L.fields.map(f => bucketOf(f.angleDeg)))].sort((a, b) => a - b);
+  const usedBuckets = [...new Set(L.fields.filter(f=>!f.glyph||!assets.glyphs?.[f.glyph]).map(f => bucketOf(f.angleDeg)))].sort((a, b) => a - b);
   const fieldPattern = assets.patterns?.field;
   const patternDefs = fieldPattern
     ? usedBuckets
@@ -148,10 +158,16 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
       .join('')
     : '';
 
+  const nativePatternId = (f: Scene['layers']['fields'][number]) => `${clipId}-${f.glyph}-a${bucketOf(f.angleDeg)}`;
+  const nativeFields = L.fields.filter(f=>f.glyph && assets.glyphs?.[f.glyph]);
+  const nativePatterns = [...new Map(nativeFields.map(f=>[nativePatternId(f),f])).values()].map(f=>{
+    const g=assets.glyphs![f.glyph!], pitch=16/(scene.metersPerUnit??1), k=pitch/g.viewBox[2];
+    return `<pattern id="${nativePatternId(f)}" patternUnits="userSpaceOnUse" width="${fmt4(pitch)}" height="${fmt4(pitch)}" patternTransform="rotate(${bucketOf(f.angleDeg)})"><use href="#glyph-${f.glyph}" transform="scale(${fmt4(k)})"/></pattern>`;
+  }).join('');
   const parts: string[] = [];
   parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${b.min_x.toFixed(1)} ${b.min_y.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}">`);
-  parts.push(`<defs><clipPath id="${clipId}"><rect x="${b.min_x.toFixed(1)}" y="${b.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"/></clipPath>${patternDefs}${symbolDefs}${glyphDefs}</defs>`);
-  const tokens = { ...villageThemeFor(scene.biome ?? 'temperate').tokens };
+  parts.push(`<defs><clipPath id="${clipId}"><rect x="${b.min_x.toFixed(1)}" y="${b.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"/></clipPath>${patternDefs}${nativePatterns}${symbolDefs}${glyphDefs}</defs>`);
+  const tokens = { ...ART_TOKENS, ...villageThemeFor(scene.biome ?? 'temperate').tokens };
   if (options.palette || options.theme) Object.assign(tokens, {
     '--sm-ink': theme.smInk, '--sm-stone': theme.smStone, '--sm-timber': theme.smTimber,
     '--sm-void': theme.smVoid, '--sm-canopy-a': theme.smCanopy1, '--sm-canopy-b': theme.smCanopy2,
@@ -163,11 +179,16 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   if (L.fields.length > 0) {
     parts.push('<g id="fields">');
     for (const f of L.fields) parts.push(`<path class="plot" d="${ringPath(f.ring)}"/>`);
-    if (fieldPattern) {
+    if (fieldPattern || nativeFields.length) {
       for (const f of L.fields) {
         if (f.hatch === false) continue;
         const bucket = bucketOf(f.angleDeg);
-        parts.push(`<path class="hatch" d="${ringPath(f.ring)}" fill="url(#${clipId}-field-a${bucket})"/>`);
+        if(f.glyph && assets.glyphs?.[f.glyph]) {
+          parts.push(`<path data-field-glyph="${f.glyph}" d="${ringPath(f.ring)}" fill="url(#${nativePatternId(f)})"/>`);
+          parts.push(farmDetails(f.ring,f.glyph,1/(scene.metersPerUnit??1),`${clipId}-${L.fields.indexOf(f)}`));
+          continue;
+        }
+        if (fieldPattern) parts.push(`<path class="hatch" d="${ringPath(f.ring)}" fill="url(#${clipId}-field-a${bucket})"/>`);
       }
     }
     parts.push('</g>');
@@ -200,7 +221,9 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     // allowed to run off the settlement's frame), so they need an explicit
     // clip — don't rely on the outermost <svg>'s UA-default overflow:hidden,
     // which a consumer's CSS reset can override.
-    parts.push(`<g id="roads" clip-path="url(#${clipId})">`);
+    const landMask=`${clipId}-road-land`;
+    if(L.water.rings.length)parts.push(`<defs><mask id="${landMask}" maskUnits="userSpaceOnUse" x="${b.min_x}" y="${b.min_y}" width="${w}" height="${h}"><rect x="${b.min_x}" y="${b.min_y}" width="${w}" height="${h}" fill="white"/><path d="${L.water.rings.map(ringPath).join(' ')}" fill="black" fill-rule="evenodd"/></mask></defs>`);
+    parts.push(`<g id="roads" clip-path="url(#${clipId})"${L.water.rings.length?` mask="url(#${landMask})"`:''}>`);
     const lanes = L.roads.map(r => ({
       path: linePath(r.path),
       width: r.width ?? (r.kind === 'artery' ? theme.arteryWidth : theme.roadWidth),
@@ -215,6 +238,8 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     }
     parts.push('</g>');
   }
+
+  if(L.bridges?.length){parts.push('<g id="bridges">');for(const crossing of L.bridges)parts.push(`<g data-bridge="${crossing.id}">${bridgeArtwork(crossing.path,crossing.width,scene.biome,true)}</g>`);parts.push('</g>');}
 
   const hideBacked = (b: BuildingFeature): boolean =>
     b.glyphBacked === true && b.id !== undefined && renderedBuildings.has(b.id);
@@ -257,6 +282,16 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   if (L.walls.length > 0) {
     parts.push('<g id="walls">');
     for (const wallF of L.walls) {
+      if(assets.name==='settlement'){
+        parts.push(wallArtwork(wallF,scene.biome));
+        const g=assets.glyphs?.[towerId];
+        if(g)for(const t of wallF.towers){
+          // Leave real gate openings clear, even where a legacy tower coincides with a gate vertex.
+          if(wallF.gates.some(g=>Math.hypot(t.x-(g.p1.x+g.p2.x)/2,t.y-(g.p1.y+g.p2.y)/2)<4))continue;
+          parts.push(`<use href="#glyph-${towerId}" transform="${glyphTransform(t,wallF.large?6:4.8,0,g.viewBox,g.anchor)}"/>`);
+        }
+        continue;
+      }
       for (const pl of wallF.polylines) parts.push(`<path d="${linePath(pl)}"/>`);
       for (const gate of wallF.gates) {
         parts.push(`<line class="gate" x1="${fmt(gate.p1.x)}" y1="${fmt(gate.p1.y)}" x2="${fmt(gate.p2.x)}" y2="${fmt(gate.p2.y)}"/>`);
@@ -287,5 +322,5 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   }
 
   parts.push('</svg>');
-  return parts.join('\n');
+  return resolveVarFallbacks(parts.join('\n'),tokens);
 }

@@ -1,3 +1,4 @@
+import { BIOMES, fieldKinds, floraKinds } from '../assets/artwork.js';
 /**
  * Every tunable from the design's §11, in one place.
  *
@@ -1044,27 +1045,9 @@ export const FIELD_MIN_BLOCK_AREA_M2 = 400;
  * existed to break does not form in the first place. */
 export const FIELD_JITTER_RANGE_DEG = 30;
 export const FIELD_ORCHARD_VINE_CHANCE = 0.15;
-/**
- * Per-biome crop cycle, walked by strip ordinal (`i % length`). Keys not
- * listed fall back to `temperate` (coastal reads the same as temperate,
- * per the brief) -- this is also how the orchard/vine roll knows whether
- * it applies: it is gated on the resolved table being THIS temperate
- * array, not on the biome string itself.
- */
-export const FIELD_CROPS: Record<string, string[]> = {
-  // Gate 5.4: Maplefall's fields are mostly GREEN. Pasture appears twice
-  // in the temperate rotation, so a ring reads as grazing with ploughland
-  // among it rather than as bare earth throughout. The orchard/vine swap
-  // chance is unchanged.
-  temperate: [
-    'sm-field-plough', 'sm-field-pasture', 'sm-field-stubble',
-    'sm-field-pasture', 'sm-field-fallow',
-  ],
-  desert: ['sm-field-irrigated--desert', 'sm-field-fallow'],
-  tropical: ['sm-field-paddy--tropical', 'sm-field-fallow'],
-  tundra: ['sm-field-pasture'],
-  steppe: ['sm-field-pasture'],
-};
+/** Native crop/land-use cycle for callers with managed water available.
+ * Dressing selects a narrower pool when a site's irrigation is absent. */
+export const FIELD_CROPS: Record<string, string[]> = Object.fromEntries(BIOMES.map(b=>[b,fieldKinds(b,true)]));
 
 /**
  * Gate 5.3, RENDER ONLY: a village's minor streets are drawn at this share
@@ -1276,31 +1259,7 @@ export interface VegGlyphWeight { glyph: string; weight: number }
  * for a deterministic weighted pick. Keys not listed fall back to
  * `temperate`.
  */
-export const VEG_GLYPHS: Record<string, VegGlyphWeight[]> = {
-  temperate: [
-    { glyph: 'sm-tree-deciduous', weight: 0.5 },
-    { glyph: 'sm-tree-deciduous-small', weight: 0.3 },
-    { glyph: 'sm-tree-conifer', weight: 0.2 },
-  ],
-  desert: [
-    { glyph: 'sm-olive--desert', weight: 0.4 },
-    { glyph: 'sm-palm-date--desert', weight: 0.3 },
-    { glyph: 'sm-scrub--desert', weight: 0.3 },
-  ],
-  tundra: [
-    { glyph: 'sm-conifer--tundra', weight: 0.7 },
-    { glyph: 'sm-snag--tundra', weight: 0.3 },
-  ],
-  tropical: [
-    { glyph: 'sm-broadleaf--tropical', weight: 0.6 },
-    { glyph: 'sm-palm-fan--tropical', weight: 0.4 },
-  ],
-  coastal: [
-    { glyph: 'sm-dune-grass--coastal', weight: 0.4 },
-    { glyph: 'sm-tamarisk--coastal', weight: 0.3 },
-    { glyph: 'sm-tree-deciduous', weight: 0.3 },
-  ],
-};
+export const VEG_GLYPHS: Record<string, VegGlyphWeight[]> = Object.fromEntries(BIOMES.map(b=>[b,floraKinds(b).map(glyph=>({glyph,weight:1}))]));
 
 /**
  * GATE 8 -- THE RADIUS PROFILE. See `skeleton/profile.ts` for the whole

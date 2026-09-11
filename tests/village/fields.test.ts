@@ -360,16 +360,16 @@ describe('buildFields', () => {
     expect(() => buildFields(site(), green, [], [], [], new SeededRandom(1))).not.toThrow();
   });
 
-  it('tundra biome only ever uses pasture crops', () => {
+  it('tundra uses only its native natural grazing ground', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
     const { blocks } = buildFields(
       site({ biome: 'tundra' }), green, lanes, emptyLots, emptyCrofts, new SeededRandom(2),
     );
     expect(blocks.length).toBeGreaterThan(0);
-    for (const b of blocks) expect(b.glyph).toBe('sm-field-pasture');
+    for (const b of blocks) expect(FIELD_CROPS.tundra).toContain(b.glyph);
   });
 
-  it('temperate biome only cycles the temperate crop table (plus orchard/vine)', () => {
+  it('temperate cycles its native crop and orchard table', () => {
     const lanes = [lane('arm-090', 90), lane('arm-000', 0), lane('arm-200', 200)];
     const { blocks } = buildFields(site(), green, lanes, emptyLots, emptyCrofts, new SeededRandom(2));
     const allowed = new Set([...FIELD_CROPS.temperate, 'sm-field-orchard', 'sm-field-vine']);

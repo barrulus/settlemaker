@@ -131,7 +131,7 @@ describe('placeStoneCircle', () => {
     );
     expect(circle).not.toBeNull();
     expect(circle!.id).toBe('poi:stone-circle');
-    expect(circle!.glyph).toBe('sm-stone-circle');
+    expect(circle!.glyph).toMatch(/^sm-henge-/);
     expect(circle!.bearingDeg).toBe(0);
     expect(dist(circle!.position, green.centre))
       .toBeCloseTo(builtRadiusM * STONE_CIRCLE_RADIUS_FACTOR, 6);
@@ -432,7 +432,7 @@ describe('POIs through the full generateVillage pipeline', () => {
       if (circle) {
         placed += 1;
         expect(circle.id).toBe('poi:stone-circle');
-        expect(circle.glyph).toBe('sm-stone-circle');
+        expect(circle.glyph).toMatch(/^sm-henge-/);
       }
     }
     expect(placed).toBeGreaterThanOrEqual(3);

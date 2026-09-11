@@ -1,0 +1,120 @@
+/** Seamless field swatches and irregular parcels. No buildings or cast shadows. */
+import {biomes,token,n,random,path,circle,rect,polygon,flora} from './landscape.mjs';
+const crop=(kind,texture,site,options={})=>({kind,texture,site,...options});
+export const farmCatalog={
+  temperate:[
+    crop('grain-strips','grain','cultivated, well-drained ground'),
+    crop('harvested-stubble','stubble','post-harvest arable ground'),
+    crop('ploughed-fallow','plough','resting arable ground'),
+    crop('kitchen-garden','garden','fertile village plots'),
+    crop('apple-orchard','orchard','managed orchard',{plant:'apple'}),
+    crop('hay-meadow','meadow','managed grassland'),
+  ],
+  desert:[
+    crop('irrigated-grain','grain','reliable irrigation required',{irrigation:true}),
+    crop('basin-garden','garden','irrigated oasis / wadi cultivation',{irrigation:true}),
+    crop('date-grove','orchard','irrigated oasis',{plant:'date-palm',irrigation:true}),
+    crop('olive-grove','orchard','Mediterranean fringe / managed oasis',{plant:'olive',irrigation:true}),
+    crop('alfalfa-beds','meadow','irrigated oasis fodder',{irrigation:true}),
+    crop('resting-basin','plough','resting irrigated land; empty channels',{irrigation:true,dryChannels:true}),
+  ],
+  tundra:[
+    crop('summer-grazing','pasture','natural seasonal grazing; not tilled',{natural:true}),
+    crop('lichen-range','lichen','extensive natural grazing; not cultivated',{natural:true}),
+    crop('wet-sedge-meadow','sedge','natural wet meadow; no crop rows',{natural:true}),
+    crop('rested-grazing','rest','resting natural grazing; not tilled',{natural:true}),
+    crop('fringe-cut-meadow','meadow','managed hay only on suitable subarctic fringe',{conditional:true}),
+    crop('sheltered-fringe-garden','garden','small short-season garden on suitable subarctic fringe ONLY',{conditional:true,smallPlot:true}),
+  ],
+  tropical:[
+    crop('wet-rice-paddy','paddy','level bunded freshwater irrigation',{irrigation:true}),
+    crop('drained-paddy','paddy-dry','drained rice basin after harvest',{irrigation:true,dryChannels:true}),
+    crop('mixed-root-garden','garden','well-drained cultivated soil'),
+    crop('banana-garden','orchard','moist fertile cultivated ground',{plant:'banana'}),
+    crop('coconut-grove','orchard','warm coastal cultivated ground',{plant:'coconut-palm'}),
+    crop('resting-field','fallow','resting dryland cultivation'),
+  ],
+  coastal:[
+    crop('sheltered-grain','grain','temperate, sheltered, non-saline land'),
+    crop('coastal-pasture','pasture','non-tidal maritime grassland'),
+    crop('sheltered-garden','garden','freshwater supply / shelter from salt spray'),
+    crop('sheltered-orchard','orchard','mild coast, non-saline soil behind shelter',{plant:'sheltered-apple'}),
+    crop('cut-meadow','meadow','freshwater, non-tidal managed grassland'),
+    crop('resting-field','fallow','resting non-saline cultivated soil'),
+  ],
+};
+
+// Each object is wrapped into its neighbours. The tile has no border or edge gutter.
+export function fieldTile(biome,kind,{seed=11}={}){
+  const spec=farmCatalog[biome]?.find(a=>a.kind===kind);if(!spec)throw Error(`Unknown field: ${biome}/${kind}`);
+  const r=random(seed),t=k=>token(biome,k),f=spec.texture;
+  const bg=f==='paddy'?t('water'):['pasture','meadow','rest','sedge','fallow'].includes(f)?t('leaf'):f==='lichen'?t('ground'):t('soil');
+  let detail='';
+  const line=(d,col=t('dark'),w=.5)=>detail+=path(d,'none',w,col);
+  const tuft=(x,y,dry=false)=>{line(`M${n(x-1.2)},${n(y-1.5)}l1.2,1.5l1.4,-2.2m-1.4,2.2v-3`,dry?t('dry'):t('dark'),.45);};
+  if(['grain','stubble','plough','garden','paddy','paddy-dry'].includes(f)){
+    for(let x=4;x<32;x+=8){
+      if(f==='garden'){detail+=rect(x-2,0,4.5,32,t('dark'));for(let y=3;y<32;y+=7){const Y=y+(r()-.5);detail+=circle(x,Y,1.5,t('light'));line(`M${x-1},${n(Y)}h2m-1,-1v2`,t('leaf'),.4);}}
+      else if(f==='plough'){line(`M${x},-2v36`,t('dark'),.55);line(`M${x+1.2},-2v36`,t('dry'),1.5);}
+      else if(f==='grain'){line(`M${x},-2v36`,t('dry'),3.3);for(let y=1;y<32;y+=4)line(`M${x},${y+2}v-3m0,1l-1,-1m1,1l1,-1`,t('soil'),.45);}
+      else if(f==='paddy'){for(let y=2;y<32;y+=6)tuft(x,y);}
+      else for(let y=2;y<32;y+=5)line(`M${x-1},${y+1}l.4,-1.8m1.1,2l.3,-2`,t('dry'),.65);
+    }
+  }else if(f==='orchard'){
+    detail+=path('M0,16H32','none',1.4,t('dry'));
+    for(const[x,y,s]of [[8,8,.18],[24,24,.17]]){
+      const a=flora(biome,spec.plant,{seed:(seed+x)>>>0});
+      detail+=`<g transform="translate(${x-32*s},${y-32*s}) scale(${s})">${a.body}</g>`;
+      if(spec.irrigation)detail+=path(`M${x-5},${y+4}Q${x},${y+8} ${x+5},${y+4}`,'none',.7,t('water'));
+    }
+  }else {
+    for(let i=0;i<27;i++){const x=r()*32,y=r()*32;
+      if(f==='lichen'){detail+=path(`M${n(x-1)},${n(y)}q.5,-2 2,-1q2,0 1,2q-2,1 -3,-1Z`,i%2?t('light'):t('dry'),.18,t('dark'));}
+      else if(f==='sedge'){detail+=circle(x,y,1.8,t('water'));tuft(x,y);}
+      else if(f==='rest'||f==='fallow'){if(i%3===0)detail+=circle(x,y,1.1,t('soil'));else tuft(x,y,true);}
+      else {tuft(x,y,f==='meadow');if(i%6===0)detail+=circle(x+1,y-2,.45,t('flower'));}
+    }
+  }
+  const wrapped=Array.from({length:9},(_,i)=>`<g transform="translate(${(i%3-1)*32},${(Math.floor(i/3)-1)*32})">${detail}</g>`).join('');
+  const body=rect(0,0,32,32,bg)+`<svg x="0" y="0" width="32" height="32" viewBox="0 0 32 32" overflow="hidden">${wrapped}</svg>`;
+  return{...spec,biome,category:'field',seed,viewBox:[0,0,32,32],anchor:[0,0],cls:'pattern',zBand:'parcel',tileAxis:'xy',tileSize:[32,32],units:'SVG art units',castsShadow:false,receivesShadow:false,body};
+}
+
+export const parcelForms={
+  crooked:[[18,21],[94,12],[145,31],[137,98],[88,112],[72,112],[16,95]],
+  riverside:[[32,15],[91,18],[140,49],[123,105],[88,112],[72,112],[16,76],[21,42]],
+  terrace:[[22,34],[57,14],[135,22],[146,66],[120,106],[88,112],[72,112],[37,109],[13,77]],
+};
+export function farmParcel(biome,kind,{seed=11,form='crooked',angle=0,id=`farm-${biome}-${kind}-${form}-${seed}`}={}){
+  const tile=fieldTile(biome,kind,{seed}),t=k=>token(biome,k),points=parcelForms[form];
+  if(!points)throw Error(`Unknown parcel form: ${form}`);if(!Number.isFinite(angle))throw Error('Angle must be finite');if(!/^[a-zA-Z][\w-]*$/.test(id))throw Error('ID must be an XML-safe identifier');
+  const outline=polygon(points),pattern=`${id}-pattern`,clip=`${id}-clip`,turf=tile.natural?t('leaf'):t('dry');
+  const defs=`<defs><pattern id="${pattern}" width="32" height="32" patternUnits="userSpaceOnUse" patternTransform="rotate(${n(angle)})">${tile.body}</pattern><clipPath id="${clip}"><path d="${outline}"/></clipPath></defs>`;
+  let body=defs+path(outline,turf,0);
+  const content=()=>{
+    let s=path(outline,`url(#${pattern})`,0);
+    if(!tile.natural){
+      // Field headlands and unplanted lanes, with a clear south entrance.
+      s+=path(outline,'none',5.5,turf);
+      s+=path('M80,118Q77,96 80,65','none',7,turf);
+      if(tile.texture==='paddy'||tile.texture==='paddy-dry'||form==='terrace')for(const y of [46,72,97])s+=path(`M10,${y}Q75,${y-10} 150,${y+3}`,'none',3.2,turf);
+      else s+=path('M17,61Q78,55 141,65','none',4,turf);
+    }
+    if(tile.irrigation){
+      const channel='M153,32H26V95M26,32H132V95M43,32V92M116,32V93';
+      s+=path(channel,'none',3.4,t('soil'))+path(channel,'none',1.55,tile.dryChannels?t('dark'):t('water'));
+      // Simple plank at the central access lane. The channel remains continuous underneath.
+      s+=rect(75,29,10,6,t('dry'))+path('M76,30H84M76,33H84','none',.45,t('soil'));
+    }
+    if(tile.texture==='meadow'&&!tile.natural){
+      for(const[x,y]of [[45,80],[109,87],[112,45]])s+=path(`M${x-5},${y}q5,-4 10,0q-4,3 -10,0Z`,t('dry'),.5,t('soil'))+path(`M${x-3},${y}h6`,'none',.4,t('soil'));
+    }
+    if(tile.smallPlot){s+=path(outline,'none',9,t('soil'));for(let x=25;x<140;x+=8)s+=path(`M${x},16v9`,'none',.9,t('dry'));}
+    return s;
+  };
+  body+=`<g clip-path="url(#${clip})">${content()}</g>`;
+  if(!tile.natural){body+=path('M80,111V118','none',6,turf);body+=path('M75,113v4M85,113v4','none',1.1,t('soil'));}
+  const {body:_,...spec}=tile;
+  const inletX=Math.max(...points.flatMap((p,i)=>{const q=points[(i+1)%points.length];return(p[1]<=32&&q[1]>32)||(q[1]<=32&&p[1]>32)?[p[0]+(q[0]-p[0])*(32-p[1])/(q[1]-p[1])]:[];}));
+  return{...spec,category:'farm',cls:'fixed',viewBox:[0,0,160,128],anchor:[80,64],form,angle,units:'SVG art units',tileAxis:undefined,tileSize:undefined,nominalFootprint:tile.smallPlot?[16,12]:tile.natural?[90,70]:[60,45],entrance:tile.natural?null:[80,112],accessWidth:tile.natural?null:6,waterInlet:tile.irrigation?[n(inletX),32]:null,outline:points,body};
+}

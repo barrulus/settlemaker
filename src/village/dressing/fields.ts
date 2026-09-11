@@ -1,3 +1,4 @@
+import { fieldKinds } from '../../assets/artwork.js';
 import { frontageOffsetM } from '../cross-section.js';
 import { Point } from '../../types/point.js';
 import { pointInPolygon } from '../../geom/point-in-polygon.js';
@@ -728,24 +729,6 @@ function subdivide(
   for (const piece of pieces) subdivide(piece, depth + 1, belt, roads, rng, out);
 }
 
-/**
- * `crops[ordinal % crops.length]`, unless the roll (only made for the
- * temperate crop table -- desert/tropical/pasture tables never swap) hits:
- * then an orchard/vine tile instead, alternating by a counter shared across
- * the village so consecutive swaps read as orchard, vine, orchard, vine.
- */
-function pickCropGlyph(
-  crops: string[], ordinal: number, allowOrchardVine: boolean,
-  roll: number, toggle: { n: number; },
-): string {
-  if (allowOrchardVine && roll < FIELD_ORCHARD_VINE_CHANCE) {
-    const glyph = toggle.n % 2 === 0 ? 'sm-field-orchard' : 'sm-field-vine';
-    toggle.n += 1;
-    return glyph;
-  }
-  return crops[ordinal % crops.length];
-}
-
 /** Shortest distance from `p` to the polygon's boundary. */
 function distToBoundary(p: Point, poly: Point[]): number {
   let best = Infinity;
@@ -762,6 +745,7 @@ function distToBoundary(p: Point, poly: Point[]): number {
 }
 
 export interface FieldsResult {
+  innerBoundary?: Point[];
   blocks: FieldBlock[];
   /** Gate 5: EMPTY. Parcels carry no outline -- no hedge, wall, fence or
    * ditch anywhere on a field. Kept on the result (and threaded to
@@ -818,15 +802,14 @@ export function buildFields(
   const leaves: Point[][] = [];
   subdivide(region, 0, belt, roads, rng, leaves);
 
-  const crops = FIELD_CROPS[site.biome] ?? FIELD_CROPS.temperate;
-  const allowOrchardVine = crops === FIELD_CROPS.temperate;
-  const toggle = { n: 0 };
+  const crops = fieldKinds(site.biome, site.biome === 'desert' || site.water.length > 0);
+  if (!crops.length) return { blocks: [], edges: [], outerRadius: fabricRadius, regionPolygon: region };
 
   const blocks: FieldBlock[] = [];
   let outerRadius = fabricRadius;
   let ordinal = 0;
   for (const leaf of leaves) {
-    const cropRoll = rng.float();
+    rng.float(); // Preserve the crop draw in the independent dressing stream.
     const furrowRoll = rng.float();
     const fringeRoll = rng.float();
 
@@ -861,7 +844,7 @@ export function buildFields(
     blocks.push({
       id: `field:P${ordinal}`,
       furlongId: `furlong:${Math.floor(bearingOf(green.centre, polygonCentroid(cleared)) / 30)}`,
-      glyph: pickCropGlyph(crops, ordinal, allowOrchardVine, cropRoll, toggle),
+      glyph: crops[ordinal % crops.length],
       polygon: cleared,
       furrowBearingDeg: furrow,
       areaM2: clearArea,
@@ -871,6 +854,6 @@ export function buildFields(
   }
 
   return {
-    blocks, edges: [], outerRadius, regionPolygon: region,
+    blocks, edges: [], outerRadius, regionPolygon: region, ...(site.flags.walls ? {innerBoundary:belt}:{}),
   };
 }

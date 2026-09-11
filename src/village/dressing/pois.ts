@@ -1,3 +1,4 @@
+import { artworkBiome } from '../../assets/artwork.js';
 import { Point } from '../../types/point.js';
 import { pointInPolygon } from '../../geom/point-in-polygon.js';
 import { SeededRandom } from '../../utils/random.js';
@@ -172,10 +173,13 @@ function circleClearOfClaims(
  */
 export function placeStoneCircle(
   green: Green, dressedRadiusM: number, lanes: Lane[], lots: Lot[], crofts: Croft[],
-  fields: FieldBlock[], water: Point[][], vegetation: Vegetation[], rng: SeededRandom,
+  fields: FieldBlock[], water: Point[][], vegetation: Vegetation[], rng: SeededRandom, biome = 'temperate',
 ): Poi | null {
   if (!rng.bool(STONE_CIRCLE_CHANCE)) return null;
-  const glyph = 'sm-stone-circle';
+  const b = artworkBiome(biome);
+  const kinds = ['lintelled-ring','broken-ring','double-ring','horseshoe','oval-ring','ruined-ring'];
+  const roll = rng.float();
+  const glyph = `sm-henge-${kinds[Math.floor(roll * kinds.length)]}-${'abc'[Math.floor(roll * 18) % 3]}${b === 'temperate' ? '' : `--${b}`}`;
   if (!hasGlyph(glyph)) return null;
 
   const radius = dressedRadiusM * STONE_CIRCLE_RADIUS_FACTOR;
@@ -388,7 +392,7 @@ export function buildPois(
   }
 
   const stoneCircle = placeStoneCircle(
-    green, dressedRadiusM, lanes, lots, crofts, fields, site.water, vegetation, rng,
+    green, dressedRadiusM, lanes, lots, crofts, fields, site.water, vegetation, rng, site.biome,
   );
   if (stoneCircle) pois.push(stoneCircle);
 

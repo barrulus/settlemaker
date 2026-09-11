@@ -1,0 +1,2456 @@
+{
+  "format": "settlemaker-city-compounds-v1",
+  "units": "art units",
+  "compounds": {
+    "sm-city-palace-court": {
+      "viewBox": [
+        0,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        128
+      ],
+      "biome": "temperate",
+      "category": "palace",
+      "pieces": [
+        {
+          "instanceId": "sm-city-palace-court-1",
+          "glyph": "sm-city-palace-hall",
+          "at": [
+            128,
+            65
+          ],
+          "scale": 2.4,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court-2",
+          "glyph": "sm-city-palace-wing",
+          "at": [
+            58,
+            142
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court-3",
+          "glyph": "sm-city-palace-wing",
+          "at": [
+            198,
+            142
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court-4",
+          "glyph": "sm-city-palace-pavilion",
+          "at": [
+            58,
+            90
+          ],
+          "scale": 0.8,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court-5",
+          "glyph": "sm-city-palace-pavilion",
+          "at": [
+            198,
+            90
+          ],
+          "scale": 0.8,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court-6",
+          "glyph": "sm-city-palace-gallery",
+          "at": [
+            58,
+            194.8
+          ],
+          "scale": 0.65,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-palace-court-7",
+          "glyph": "sm-city-palace-gallery",
+          "at": [
+            198,
+            194.8
+          ],
+          "scale": 0.65,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-palace-court-8",
+          "glyph": "sm-city-palace-gallery",
+          "at": [
+            66,
+            211
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court-9",
+          "glyph": "sm-city-palace-gallery",
+          "at": [
+            190,
+            211
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court-10",
+          "glyph": "sm-city-palace-gatehouse",
+          "at": [
+            128,
+            211
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court-11",
+          "glyph": "sm-city-palace-chapel",
+          "at": [
+            233.2,
+            147
+          ],
+          "scale": 0.7,
+          "rotation": 0
+        }
+      ],
+      "accessPolyline": [
+        [
+          128,
+          256
+        ],
+        [
+          128,
+          211
+        ],
+        [
+          128,
+          145
+        ]
+      ],
+      "clearCourtyardRects": [
+        [
+          88,
+          126,
+          168,
+          192
+        ]
+      ],
+      "capacity": null,
+      "notes": "Art-unit assembly recipe; reserve the site and transform access/footprints together. Standalone preview includes a world-direction shadow."
+    },
+    "sm-city-palace-open": {
+      "viewBox": [
+        0,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        128
+      ],
+      "biome": "temperate",
+      "category": "palace",
+      "pieces": [
+        {
+          "instanceId": "sm-city-palace-open-1",
+          "glyph": "sm-city-palace-hall",
+          "at": [
+            128,
+            67
+          ],
+          "scale": 2.5,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open-2",
+          "glyph": "sm-city-palace-wing",
+          "at": [
+            57,
+            142
+          ],
+          "scale": 1.2,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open-3",
+          "glyph": "sm-city-palace-wing",
+          "at": [
+            199,
+            142
+          ],
+          "scale": 1.2,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open-4",
+          "glyph": "sm-city-palace-pavilion",
+          "at": [
+            57,
+            195
+          ],
+          "scale": 0.85,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open-5",
+          "glyph": "sm-city-palace-pavilion",
+          "at": [
+            199,
+            195
+          ],
+          "scale": 0.85,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open-6",
+          "glyph": "sm-city-palace-chapel",
+          "at": [
+            238.2,
+            140
+          ],
+          "scale": 0.65,
+          "rotation": 0
+        }
+      ],
+      "accessPolyline": [
+        [
+          128,
+          256
+        ],
+        [
+          128,
+          185
+        ],
+        [
+          128,
+          124
+        ]
+      ],
+      "clearCourtyardRects": [
+        [
+          88,
+          124,
+          168,
+          220
+        ]
+      ],
+      "capacity": null,
+      "notes": "Art-unit assembly recipe; reserve the site and transform access/footprints together. Standalone preview includes a world-direction shadow."
+    },
+    "sm-city-castle-bailey": {
+      "viewBox": [
+        0,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        128
+      ],
+      "biome": "temperate",
+      "category": "castle",
+      "pieces": [
+        {
+          "instanceId": "sm-city-castle-bailey-1",
+          "glyph": "sm-city-castle-wall",
+          "at": [
+            64,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey-2",
+          "glyph": "sm-city-castle-wall",
+          "at": [
+            128,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey-3",
+          "glyph": "sm-city-castle-wall",
+          "at": [
+            192,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey-4",
+          "glyph": "sm-city-castle-wall",
+          "at": [
+            32,
+            64
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey-5",
+          "glyph": "sm-city-castle-wall",
+          "at": [
+            224,
+            64
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey-6",
+          "glyph": "sm-city-castle-wall",
+          "at": [
+            32,
+            128
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey-7",
+          "glyph": "sm-city-castle-wall",
+          "at": [
+            224,
+            128
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey-8",
+          "glyph": "sm-city-castle-wall",
+          "at": [
+            32,
+            192
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey-9",
+          "glyph": "sm-city-castle-wall",
+          "at": [
+            224,
+            192
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey-10",
+          "glyph": "sm-city-castle-wall",
+          "at": [
+            64,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey-11",
+          "glyph": "sm-city-castle-wall",
+          "at": [
+            192,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey-12",
+          "glyph": "sm-city-castle-gatehouse",
+          "at": [
+            128,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey-13",
+          "glyph": "sm-city-castle-tower-round",
+          "at": [
+            32,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey-14",
+          "glyph": "sm-city-castle-tower-round",
+          "at": [
+            224,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey-15",
+          "glyph": "sm-city-castle-tower-round",
+          "at": [
+            32,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey-16",
+          "glyph": "sm-city-castle-tower-round",
+          "at": [
+            224,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey-17",
+          "glyph": "sm-city-castle-keep",
+          "at": [
+            128,
+            85
+          ],
+          "scale": 1.7,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey-18",
+          "glyph": "sm-city-castle-hall",
+          "at": [
+            72,
+            170
+          ],
+          "scale": 1.15,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey-19",
+          "glyph": "sm-city-castle-barracks",
+          "at": [
+            195,
+            150
+          ],
+          "scale": 0.8,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey-20",
+          "glyph": "sm-city-castle-chapel",
+          "at": [
+            192,
+            191
+          ],
+          "scale": 0.7,
+          "rotation": 0
+        }
+      ],
+      "accessPolyline": [
+        [
+          128,
+          256
+        ],
+        [
+          128,
+          224
+        ],
+        [
+          128,
+          152
+        ]
+      ],
+      "clearCourtyardRects": [
+        [
+          102,
+          145,
+          154,
+          200
+        ]
+      ],
+      "capacity": null,
+      "notes": "Art-unit assembly recipe; reserve the site and transform access/footprints together. Standalone preview includes a world-direction shadow."
+    },
+    "sm-city-palace-court--desert": {
+      "viewBox": [
+        0,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        128
+      ],
+      "biome": "desert",
+      "category": "palace",
+      "pieces": [
+        {
+          "instanceId": "sm-city-palace-court--desert-1",
+          "glyph": "sm-city-palace-hall--desert",
+          "at": [
+            128,
+            65
+          ],
+          "scale": 2.4,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--desert-2",
+          "glyph": "sm-city-palace-wing--desert",
+          "at": [
+            58,
+            142
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--desert-3",
+          "glyph": "sm-city-palace-wing--desert",
+          "at": [
+            198,
+            142
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--desert-4",
+          "glyph": "sm-city-palace-pavilion--desert",
+          "at": [
+            58,
+            90
+          ],
+          "scale": 0.8,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--desert-5",
+          "glyph": "sm-city-palace-pavilion--desert",
+          "at": [
+            198,
+            90
+          ],
+          "scale": 0.8,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--desert-6",
+          "glyph": "sm-city-palace-gallery--desert",
+          "at": [
+            58,
+            194.8
+          ],
+          "scale": 0.65,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-palace-court--desert-7",
+          "glyph": "sm-city-palace-gallery--desert",
+          "at": [
+            198,
+            194.8
+          ],
+          "scale": 0.65,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-palace-court--desert-8",
+          "glyph": "sm-city-palace-gallery--desert",
+          "at": [
+            66,
+            211
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--desert-9",
+          "glyph": "sm-city-palace-gallery--desert",
+          "at": [
+            190,
+            211
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--desert-10",
+          "glyph": "sm-city-palace-gatehouse--desert",
+          "at": [
+            128,
+            211
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--desert-11",
+          "glyph": "sm-city-palace-chapel--desert",
+          "at": [
+            233.2,
+            147
+          ],
+          "scale": 0.7,
+          "rotation": 0
+        }
+      ],
+      "accessPolyline": [
+        [
+          128,
+          256
+        ],
+        [
+          128,
+          211
+        ],
+        [
+          128,
+          145
+        ]
+      ],
+      "clearCourtyardRects": [
+        [
+          88,
+          126,
+          168,
+          192
+        ]
+      ],
+      "capacity": null,
+      "notes": "Art-unit assembly recipe; reserve the site and transform access/footprints together. Standalone preview includes a world-direction shadow."
+    },
+    "sm-city-palace-open--desert": {
+      "viewBox": [
+        0,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        128
+      ],
+      "biome": "desert",
+      "category": "palace",
+      "pieces": [
+        {
+          "instanceId": "sm-city-palace-open--desert-1",
+          "glyph": "sm-city-palace-hall--desert",
+          "at": [
+            128,
+            67
+          ],
+          "scale": 2.5,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open--desert-2",
+          "glyph": "sm-city-palace-wing--desert",
+          "at": [
+            57,
+            142
+          ],
+          "scale": 1.2,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open--desert-3",
+          "glyph": "sm-city-palace-wing--desert",
+          "at": [
+            199,
+            142
+          ],
+          "scale": 1.2,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open--desert-4",
+          "glyph": "sm-city-palace-pavilion--desert",
+          "at": [
+            57,
+            195
+          ],
+          "scale": 0.85,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open--desert-5",
+          "glyph": "sm-city-palace-pavilion--desert",
+          "at": [
+            199,
+            195
+          ],
+          "scale": 0.85,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open--desert-6",
+          "glyph": "sm-city-palace-chapel--desert",
+          "at": [
+            238.2,
+            140
+          ],
+          "scale": 0.65,
+          "rotation": 0
+        }
+      ],
+      "accessPolyline": [
+        [
+          128,
+          256
+        ],
+        [
+          128,
+          185
+        ],
+        [
+          128,
+          124
+        ]
+      ],
+      "clearCourtyardRects": [
+        [
+          88,
+          124,
+          168,
+          220
+        ]
+      ],
+      "capacity": null,
+      "notes": "Art-unit assembly recipe; reserve the site and transform access/footprints together. Standalone preview includes a world-direction shadow."
+    },
+    "sm-city-castle-bailey--desert": {
+      "viewBox": [
+        0,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        128
+      ],
+      "biome": "desert",
+      "category": "castle",
+      "pieces": [
+        {
+          "instanceId": "sm-city-castle-bailey--desert-1",
+          "glyph": "sm-city-castle-wall--desert",
+          "at": [
+            64,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--desert-2",
+          "glyph": "sm-city-castle-wall--desert",
+          "at": [
+            128,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--desert-3",
+          "glyph": "sm-city-castle-wall--desert",
+          "at": [
+            192,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--desert-4",
+          "glyph": "sm-city-castle-wall--desert",
+          "at": [
+            32,
+            64
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--desert-5",
+          "glyph": "sm-city-castle-wall--desert",
+          "at": [
+            224,
+            64
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--desert-6",
+          "glyph": "sm-city-castle-wall--desert",
+          "at": [
+            32,
+            128
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--desert-7",
+          "glyph": "sm-city-castle-wall--desert",
+          "at": [
+            224,
+            128
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--desert-8",
+          "glyph": "sm-city-castle-wall--desert",
+          "at": [
+            32,
+            192
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--desert-9",
+          "glyph": "sm-city-castle-wall--desert",
+          "at": [
+            224,
+            192
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--desert-10",
+          "glyph": "sm-city-castle-wall--desert",
+          "at": [
+            64,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--desert-11",
+          "glyph": "sm-city-castle-wall--desert",
+          "at": [
+            192,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--desert-12",
+          "glyph": "sm-city-castle-gatehouse--desert",
+          "at": [
+            128,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--desert-13",
+          "glyph": "sm-city-castle-tower-round--desert",
+          "at": [
+            32,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--desert-14",
+          "glyph": "sm-city-castle-tower-round--desert",
+          "at": [
+            224,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--desert-15",
+          "glyph": "sm-city-castle-tower-round--desert",
+          "at": [
+            32,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--desert-16",
+          "glyph": "sm-city-castle-tower-round--desert",
+          "at": [
+            224,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--desert-17",
+          "glyph": "sm-city-castle-keep--desert",
+          "at": [
+            128,
+            85
+          ],
+          "scale": 1.7,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--desert-18",
+          "glyph": "sm-city-castle-hall--desert",
+          "at": [
+            72,
+            170
+          ],
+          "scale": 1.15,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--desert-19",
+          "glyph": "sm-city-castle-barracks--desert",
+          "at": [
+            195,
+            150
+          ],
+          "scale": 0.8,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--desert-20",
+          "glyph": "sm-city-castle-chapel--desert",
+          "at": [
+            192,
+            191
+          ],
+          "scale": 0.7,
+          "rotation": 0
+        }
+      ],
+      "accessPolyline": [
+        [
+          128,
+          256
+        ],
+        [
+          128,
+          224
+        ],
+        [
+          128,
+          152
+        ]
+      ],
+      "clearCourtyardRects": [
+        [
+          102,
+          145,
+          154,
+          200
+        ]
+      ],
+      "capacity": null,
+      "notes": "Art-unit assembly recipe; reserve the site and transform access/footprints together. Standalone preview includes a world-direction shadow."
+    },
+    "sm-city-palace-court--tundra": {
+      "viewBox": [
+        0,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        128
+      ],
+      "biome": "tundra",
+      "category": "palace",
+      "pieces": [
+        {
+          "instanceId": "sm-city-palace-court--tundra-1",
+          "glyph": "sm-city-palace-hall--tundra",
+          "at": [
+            128,
+            65
+          ],
+          "scale": 2.4,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--tundra-2",
+          "glyph": "sm-city-palace-wing--tundra",
+          "at": [
+            58,
+            142
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--tundra-3",
+          "glyph": "sm-city-palace-wing--tundra",
+          "at": [
+            198,
+            142
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--tundra-4",
+          "glyph": "sm-city-palace-pavilion--tundra",
+          "at": [
+            58,
+            90
+          ],
+          "scale": 0.8,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--tundra-5",
+          "glyph": "sm-city-palace-pavilion--tundra",
+          "at": [
+            198,
+            90
+          ],
+          "scale": 0.8,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--tundra-6",
+          "glyph": "sm-city-palace-gallery--tundra",
+          "at": [
+            58,
+            194.8
+          ],
+          "scale": 0.65,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-palace-court--tundra-7",
+          "glyph": "sm-city-palace-gallery--tundra",
+          "at": [
+            198,
+            194.8
+          ],
+          "scale": 0.65,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-palace-court--tundra-8",
+          "glyph": "sm-city-palace-gallery--tundra",
+          "at": [
+            66,
+            211
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--tundra-9",
+          "glyph": "sm-city-palace-gallery--tundra",
+          "at": [
+            190,
+            211
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--tundra-10",
+          "glyph": "sm-city-palace-gatehouse--tundra",
+          "at": [
+            128,
+            211
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--tundra-11",
+          "glyph": "sm-city-palace-chapel--tundra",
+          "at": [
+            233.2,
+            147
+          ],
+          "scale": 0.7,
+          "rotation": 0
+        }
+      ],
+      "accessPolyline": [
+        [
+          128,
+          256
+        ],
+        [
+          128,
+          211
+        ],
+        [
+          128,
+          145
+        ]
+      ],
+      "clearCourtyardRects": [
+        [
+          88,
+          126,
+          168,
+          192
+        ]
+      ],
+      "capacity": null,
+      "notes": "Art-unit assembly recipe; reserve the site and transform access/footprints together. Standalone preview includes a world-direction shadow."
+    },
+    "sm-city-palace-open--tundra": {
+      "viewBox": [
+        0,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        128
+      ],
+      "biome": "tundra",
+      "category": "palace",
+      "pieces": [
+        {
+          "instanceId": "sm-city-palace-open--tundra-1",
+          "glyph": "sm-city-palace-hall--tundra",
+          "at": [
+            128,
+            67
+          ],
+          "scale": 2.5,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open--tundra-2",
+          "glyph": "sm-city-palace-wing--tundra",
+          "at": [
+            57,
+            142
+          ],
+          "scale": 1.2,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open--tundra-3",
+          "glyph": "sm-city-palace-wing--tundra",
+          "at": [
+            199,
+            142
+          ],
+          "scale": 1.2,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open--tundra-4",
+          "glyph": "sm-city-palace-pavilion--tundra",
+          "at": [
+            57,
+            195
+          ],
+          "scale": 0.85,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open--tundra-5",
+          "glyph": "sm-city-palace-pavilion--tundra",
+          "at": [
+            199,
+            195
+          ],
+          "scale": 0.85,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open--tundra-6",
+          "glyph": "sm-city-palace-chapel--tundra",
+          "at": [
+            238.2,
+            140
+          ],
+          "scale": 0.65,
+          "rotation": 0
+        }
+      ],
+      "accessPolyline": [
+        [
+          128,
+          256
+        ],
+        [
+          128,
+          185
+        ],
+        [
+          128,
+          124
+        ]
+      ],
+      "clearCourtyardRects": [
+        [
+          88,
+          124,
+          168,
+          220
+        ]
+      ],
+      "capacity": null,
+      "notes": "Art-unit assembly recipe; reserve the site and transform access/footprints together. Standalone preview includes a world-direction shadow."
+    },
+    "sm-city-castle-bailey--tundra": {
+      "viewBox": [
+        0,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        128
+      ],
+      "biome": "tundra",
+      "category": "castle",
+      "pieces": [
+        {
+          "instanceId": "sm-city-castle-bailey--tundra-1",
+          "glyph": "sm-city-castle-wall--tundra",
+          "at": [
+            64,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tundra-2",
+          "glyph": "sm-city-castle-wall--tundra",
+          "at": [
+            128,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tundra-3",
+          "glyph": "sm-city-castle-wall--tundra",
+          "at": [
+            192,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tundra-4",
+          "glyph": "sm-city-castle-wall--tundra",
+          "at": [
+            32,
+            64
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tundra-5",
+          "glyph": "sm-city-castle-wall--tundra",
+          "at": [
+            224,
+            64
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tundra-6",
+          "glyph": "sm-city-castle-wall--tundra",
+          "at": [
+            32,
+            128
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tundra-7",
+          "glyph": "sm-city-castle-wall--tundra",
+          "at": [
+            224,
+            128
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tundra-8",
+          "glyph": "sm-city-castle-wall--tundra",
+          "at": [
+            32,
+            192
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tundra-9",
+          "glyph": "sm-city-castle-wall--tundra",
+          "at": [
+            224,
+            192
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tundra-10",
+          "glyph": "sm-city-castle-wall--tundra",
+          "at": [
+            64,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tundra-11",
+          "glyph": "sm-city-castle-wall--tundra",
+          "at": [
+            192,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tundra-12",
+          "glyph": "sm-city-castle-gatehouse--tundra",
+          "at": [
+            128,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tundra-13",
+          "glyph": "sm-city-castle-tower-round--tundra",
+          "at": [
+            32,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tundra-14",
+          "glyph": "sm-city-castle-tower-round--tundra",
+          "at": [
+            224,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tundra-15",
+          "glyph": "sm-city-castle-tower-round--tundra",
+          "at": [
+            32,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tundra-16",
+          "glyph": "sm-city-castle-tower-round--tundra",
+          "at": [
+            224,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tundra-17",
+          "glyph": "sm-city-castle-keep--tundra",
+          "at": [
+            128,
+            85
+          ],
+          "scale": 1.7,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tundra-18",
+          "glyph": "sm-city-castle-hall--tundra",
+          "at": [
+            72,
+            170
+          ],
+          "scale": 1.15,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tundra-19",
+          "glyph": "sm-city-castle-barracks--tundra",
+          "at": [
+            195,
+            150
+          ],
+          "scale": 0.8,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tundra-20",
+          "glyph": "sm-city-castle-chapel--tundra",
+          "at": [
+            192,
+            191
+          ],
+          "scale": 0.7,
+          "rotation": 0
+        }
+      ],
+      "accessPolyline": [
+        [
+          128,
+          256
+        ],
+        [
+          128,
+          224
+        ],
+        [
+          128,
+          152
+        ]
+      ],
+      "clearCourtyardRects": [
+        [
+          102,
+          145,
+          154,
+          200
+        ]
+      ],
+      "capacity": null,
+      "notes": "Art-unit assembly recipe; reserve the site and transform access/footprints together. Standalone preview includes a world-direction shadow."
+    },
+    "sm-city-palace-court--tropical": {
+      "viewBox": [
+        0,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        128
+      ],
+      "biome": "tropical",
+      "category": "palace",
+      "pieces": [
+        {
+          "instanceId": "sm-city-palace-court--tropical-1",
+          "glyph": "sm-city-palace-hall--tropical",
+          "at": [
+            128,
+            65
+          ],
+          "scale": 2.4,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--tropical-2",
+          "glyph": "sm-city-palace-wing--tropical",
+          "at": [
+            58,
+            142
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--tropical-3",
+          "glyph": "sm-city-palace-wing--tropical",
+          "at": [
+            198,
+            142
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--tropical-4",
+          "glyph": "sm-city-palace-pavilion--tropical",
+          "at": [
+            58,
+            90
+          ],
+          "scale": 0.8,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--tropical-5",
+          "glyph": "sm-city-palace-pavilion--tropical",
+          "at": [
+            198,
+            90
+          ],
+          "scale": 0.8,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--tropical-6",
+          "glyph": "sm-city-palace-gallery--tropical",
+          "at": [
+            58,
+            194.8
+          ],
+          "scale": 0.65,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-palace-court--tropical-7",
+          "glyph": "sm-city-palace-gallery--tropical",
+          "at": [
+            198,
+            194.8
+          ],
+          "scale": 0.65,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-palace-court--tropical-8",
+          "glyph": "sm-city-palace-gallery--tropical",
+          "at": [
+            66,
+            211
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--tropical-9",
+          "glyph": "sm-city-palace-gallery--tropical",
+          "at": [
+            190,
+            211
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--tropical-10",
+          "glyph": "sm-city-palace-gatehouse--tropical",
+          "at": [
+            128,
+            211
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--tropical-11",
+          "glyph": "sm-city-palace-chapel--tropical",
+          "at": [
+            233.2,
+            147
+          ],
+          "scale": 0.7,
+          "rotation": 0
+        }
+      ],
+      "accessPolyline": [
+        [
+          128,
+          256
+        ],
+        [
+          128,
+          211
+        ],
+        [
+          128,
+          145
+        ]
+      ],
+      "clearCourtyardRects": [
+        [
+          88,
+          126,
+          168,
+          192
+        ]
+      ],
+      "capacity": null,
+      "notes": "Art-unit assembly recipe; reserve the site and transform access/footprints together. Standalone preview includes a world-direction shadow."
+    },
+    "sm-city-palace-open--tropical": {
+      "viewBox": [
+        0,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        128
+      ],
+      "biome": "tropical",
+      "category": "palace",
+      "pieces": [
+        {
+          "instanceId": "sm-city-palace-open--tropical-1",
+          "glyph": "sm-city-palace-hall--tropical",
+          "at": [
+            128,
+            67
+          ],
+          "scale": 2.5,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open--tropical-2",
+          "glyph": "sm-city-palace-wing--tropical",
+          "at": [
+            57,
+            142
+          ],
+          "scale": 1.2,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open--tropical-3",
+          "glyph": "sm-city-palace-wing--tropical",
+          "at": [
+            199,
+            142
+          ],
+          "scale": 1.2,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open--tropical-4",
+          "glyph": "sm-city-palace-pavilion--tropical",
+          "at": [
+            57,
+            195
+          ],
+          "scale": 0.85,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open--tropical-5",
+          "glyph": "sm-city-palace-pavilion--tropical",
+          "at": [
+            199,
+            195
+          ],
+          "scale": 0.85,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open--tropical-6",
+          "glyph": "sm-city-palace-chapel--tropical",
+          "at": [
+            238.2,
+            140
+          ],
+          "scale": 0.65,
+          "rotation": 0
+        }
+      ],
+      "accessPolyline": [
+        [
+          128,
+          256
+        ],
+        [
+          128,
+          185
+        ],
+        [
+          128,
+          124
+        ]
+      ],
+      "clearCourtyardRects": [
+        [
+          88,
+          124,
+          168,
+          220
+        ]
+      ],
+      "capacity": null,
+      "notes": "Art-unit assembly recipe; reserve the site and transform access/footprints together. Standalone preview includes a world-direction shadow."
+    },
+    "sm-city-castle-bailey--tropical": {
+      "viewBox": [
+        0,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        128
+      ],
+      "biome": "tropical",
+      "category": "castle",
+      "pieces": [
+        {
+          "instanceId": "sm-city-castle-bailey--tropical-1",
+          "glyph": "sm-city-castle-wall--tropical",
+          "at": [
+            64,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tropical-2",
+          "glyph": "sm-city-castle-wall--tropical",
+          "at": [
+            128,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tropical-3",
+          "glyph": "sm-city-castle-wall--tropical",
+          "at": [
+            192,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tropical-4",
+          "glyph": "sm-city-castle-wall--tropical",
+          "at": [
+            32,
+            64
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tropical-5",
+          "glyph": "sm-city-castle-wall--tropical",
+          "at": [
+            224,
+            64
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tropical-6",
+          "glyph": "sm-city-castle-wall--tropical",
+          "at": [
+            32,
+            128
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tropical-7",
+          "glyph": "sm-city-castle-wall--tropical",
+          "at": [
+            224,
+            128
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tropical-8",
+          "glyph": "sm-city-castle-wall--tropical",
+          "at": [
+            32,
+            192
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tropical-9",
+          "glyph": "sm-city-castle-wall--tropical",
+          "at": [
+            224,
+            192
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tropical-10",
+          "glyph": "sm-city-castle-wall--tropical",
+          "at": [
+            64,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tropical-11",
+          "glyph": "sm-city-castle-wall--tropical",
+          "at": [
+            192,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tropical-12",
+          "glyph": "sm-city-castle-gatehouse--tropical",
+          "at": [
+            128,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tropical-13",
+          "glyph": "sm-city-castle-tower-round--tropical",
+          "at": [
+            32,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tropical-14",
+          "glyph": "sm-city-castle-tower-round--tropical",
+          "at": [
+            224,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tropical-15",
+          "glyph": "sm-city-castle-tower-round--tropical",
+          "at": [
+            32,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tropical-16",
+          "glyph": "sm-city-castle-tower-round--tropical",
+          "at": [
+            224,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tropical-17",
+          "glyph": "sm-city-castle-keep--tropical",
+          "at": [
+            128,
+            85
+          ],
+          "scale": 1.7,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tropical-18",
+          "glyph": "sm-city-castle-hall--tropical",
+          "at": [
+            72,
+            170
+          ],
+          "scale": 1.15,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tropical-19",
+          "glyph": "sm-city-castle-barracks--tropical",
+          "at": [
+            195,
+            150
+          ],
+          "scale": 0.8,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--tropical-20",
+          "glyph": "sm-city-castle-chapel--tropical",
+          "at": [
+            192,
+            191
+          ],
+          "scale": 0.7,
+          "rotation": 0
+        }
+      ],
+      "accessPolyline": [
+        [
+          128,
+          256
+        ],
+        [
+          128,
+          224
+        ],
+        [
+          128,
+          152
+        ]
+      ],
+      "clearCourtyardRects": [
+        [
+          102,
+          145,
+          154,
+          200
+        ]
+      ],
+      "capacity": null,
+      "notes": "Art-unit assembly recipe; reserve the site and transform access/footprints together. Standalone preview includes a world-direction shadow."
+    },
+    "sm-city-palace-court--coastal": {
+      "viewBox": [
+        0,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        128
+      ],
+      "biome": "coastal",
+      "category": "palace",
+      "pieces": [
+        {
+          "instanceId": "sm-city-palace-court--coastal-1",
+          "glyph": "sm-city-palace-hall--coastal",
+          "at": [
+            128,
+            65
+          ],
+          "scale": 2.4,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--coastal-2",
+          "glyph": "sm-city-palace-wing--coastal",
+          "at": [
+            58,
+            142
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--coastal-3",
+          "glyph": "sm-city-palace-wing--coastal",
+          "at": [
+            198,
+            142
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--coastal-4",
+          "glyph": "sm-city-palace-pavilion--coastal",
+          "at": [
+            58,
+            90
+          ],
+          "scale": 0.8,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--coastal-5",
+          "glyph": "sm-city-palace-pavilion--coastal",
+          "at": [
+            198,
+            90
+          ],
+          "scale": 0.8,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--coastal-6",
+          "glyph": "sm-city-palace-gallery--coastal",
+          "at": [
+            58,
+            194.8
+          ],
+          "scale": 0.65,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-palace-court--coastal-7",
+          "glyph": "sm-city-palace-gallery--coastal",
+          "at": [
+            198,
+            194.8
+          ],
+          "scale": 0.65,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-palace-court--coastal-8",
+          "glyph": "sm-city-palace-gallery--coastal",
+          "at": [
+            66,
+            211
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--coastal-9",
+          "glyph": "sm-city-palace-gallery--coastal",
+          "at": [
+            190,
+            211
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--coastal-10",
+          "glyph": "sm-city-palace-gatehouse--coastal",
+          "at": [
+            128,
+            211
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-court--coastal-11",
+          "glyph": "sm-city-palace-chapel--coastal",
+          "at": [
+            233.2,
+            147
+          ],
+          "scale": 0.7,
+          "rotation": 0
+        }
+      ],
+      "accessPolyline": [
+        [
+          128,
+          256
+        ],
+        [
+          128,
+          211
+        ],
+        [
+          128,
+          145
+        ]
+      ],
+      "clearCourtyardRects": [
+        [
+          88,
+          126,
+          168,
+          192
+        ]
+      ],
+      "capacity": null,
+      "notes": "Art-unit assembly recipe; reserve the site and transform access/footprints together. Standalone preview includes a world-direction shadow."
+    },
+    "sm-city-palace-open--coastal": {
+      "viewBox": [
+        0,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        128
+      ],
+      "biome": "coastal",
+      "category": "palace",
+      "pieces": [
+        {
+          "instanceId": "sm-city-palace-open--coastal-1",
+          "glyph": "sm-city-palace-hall--coastal",
+          "at": [
+            128,
+            67
+          ],
+          "scale": 2.5,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open--coastal-2",
+          "glyph": "sm-city-palace-wing--coastal",
+          "at": [
+            57,
+            142
+          ],
+          "scale": 1.2,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open--coastal-3",
+          "glyph": "sm-city-palace-wing--coastal",
+          "at": [
+            199,
+            142
+          ],
+          "scale": 1.2,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open--coastal-4",
+          "glyph": "sm-city-palace-pavilion--coastal",
+          "at": [
+            57,
+            195
+          ],
+          "scale": 0.85,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open--coastal-5",
+          "glyph": "sm-city-palace-pavilion--coastal",
+          "at": [
+            199,
+            195
+          ],
+          "scale": 0.85,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-palace-open--coastal-6",
+          "glyph": "sm-city-palace-chapel--coastal",
+          "at": [
+            238.2,
+            140
+          ],
+          "scale": 0.65,
+          "rotation": 0
+        }
+      ],
+      "accessPolyline": [
+        [
+          128,
+          256
+        ],
+        [
+          128,
+          185
+        ],
+        [
+          128,
+          124
+        ]
+      ],
+      "clearCourtyardRects": [
+        [
+          88,
+          124,
+          168,
+          220
+        ]
+      ],
+      "capacity": null,
+      "notes": "Art-unit assembly recipe; reserve the site and transform access/footprints together. Standalone preview includes a world-direction shadow."
+    },
+    "sm-city-castle-bailey--coastal": {
+      "viewBox": [
+        0,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        128
+      ],
+      "biome": "coastal",
+      "category": "castle",
+      "pieces": [
+        {
+          "instanceId": "sm-city-castle-bailey--coastal-1",
+          "glyph": "sm-city-castle-wall--coastal",
+          "at": [
+            64,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--coastal-2",
+          "glyph": "sm-city-castle-wall--coastal",
+          "at": [
+            128,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--coastal-3",
+          "glyph": "sm-city-castle-wall--coastal",
+          "at": [
+            192,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--coastal-4",
+          "glyph": "sm-city-castle-wall--coastal",
+          "at": [
+            32,
+            64
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--coastal-5",
+          "glyph": "sm-city-castle-wall--coastal",
+          "at": [
+            224,
+            64
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--coastal-6",
+          "glyph": "sm-city-castle-wall--coastal",
+          "at": [
+            32,
+            128
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--coastal-7",
+          "glyph": "sm-city-castle-wall--coastal",
+          "at": [
+            224,
+            128
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--coastal-8",
+          "glyph": "sm-city-castle-wall--coastal",
+          "at": [
+            32,
+            192
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--coastal-9",
+          "glyph": "sm-city-castle-wall--coastal",
+          "at": [
+            224,
+            192
+          ],
+          "scale": 1,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--coastal-10",
+          "glyph": "sm-city-castle-wall--coastal",
+          "at": [
+            64,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--coastal-11",
+          "glyph": "sm-city-castle-wall--coastal",
+          "at": [
+            192,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--coastal-12",
+          "glyph": "sm-city-castle-gatehouse--coastal",
+          "at": [
+            128,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--coastal-13",
+          "glyph": "sm-city-castle-tower-round--coastal",
+          "at": [
+            32,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--coastal-14",
+          "glyph": "sm-city-castle-tower-round--coastal",
+          "at": [
+            224,
+            32
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--coastal-15",
+          "glyph": "sm-city-castle-tower-round--coastal",
+          "at": [
+            32,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--coastal-16",
+          "glyph": "sm-city-castle-tower-round--coastal",
+          "at": [
+            224,
+            224
+          ],
+          "scale": 1,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--coastal-17",
+          "glyph": "sm-city-castle-keep--coastal",
+          "at": [
+            128,
+            85
+          ],
+          "scale": 1.7,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--coastal-18",
+          "glyph": "sm-city-castle-hall--coastal",
+          "at": [
+            72,
+            170
+          ],
+          "scale": 1.15,
+          "rotation": 90
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--coastal-19",
+          "glyph": "sm-city-castle-barracks--coastal",
+          "at": [
+            195,
+            150
+          ],
+          "scale": 0.8,
+          "rotation": 0
+        },
+        {
+          "instanceId": "sm-city-castle-bailey--coastal-20",
+          "glyph": "sm-city-castle-chapel--coastal",
+          "at": [
+            192,
+            191
+          ],
+          "scale": 0.7,
+          "rotation": 0
+        }
+      ],
+      "accessPolyline": [
+        [
+          128,
+          256
+        ],
+        [
+          128,
+          224
+        ],
+        [
+          128,
+          152
+        ]
+      ],
+      "clearCourtyardRects": [
+        [
+          102,
+          145,
+          154,
+          200
+        ]
+      ],
+      "capacity": null,
+      "notes": "Art-unit assembly recipe; reserve the site and transform access/footprints together. Standalone preview includes a world-direction shadow."
+    }
+  }
+}

@@ -1,3 +1,5 @@
+import { fieldKinds, ARTWORK_MANIFEST } from '../assets/artwork.js';
+import { cityCrossings } from './crossings.js';
 import { Point } from '../types/point.js';
 import { WardType } from '../types/interfaces.js';
 import type { Model } from '../generator/model.js';
@@ -80,7 +82,9 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
       for (let i = 0; i < ward.subPlots.length; i++) {
         const plot = ward.subPlots[i];
         if (plot.length >= 3) {
+          const crops = fieldKinds(model.params.biome, model.params.biome === 'desert' || scene.layers.water.rings.length > 0);
           scene.layers.fields.push({
+            ...(crops.length ? {glyph:crops[(scene.layers.fields.length+Math.abs(model.params.seed))%crops.length]} : {}),
             ring: ring(plot),
             angleDeg: ward.plotAngles[i] ?? 0,
             ...(i === ward.millPlotIndex ? { hatch: false } : {}),
@@ -148,6 +152,7 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
     });
   }
 
+  scene.layers.bridges = cityCrossings(scene.layers.roads, scene.layers.water.rings);
   scatterVegetation(model, scene, sc);
 
   return scene;
@@ -241,10 +246,10 @@ function scatterVegetation(
       for (let attempt = 0; attempt < n * 10 && placed < n; attempt++) {
         const p = new Point(minX + rng.float() * (maxX - minX), minY + rng.float() * (maxY - minY));
         if (!pointInPolygon(p, grove.vertices)) continue;
+        const kind=kinds[Math.floor(rng.float()*kinds.length)];
         scene.layers.vegetation.push({
-          at: sc(p),
-          kind: kinds[Math.floor(rng.float() * kinds.length)],
-          scale: 1.6 + rng.float() * 1.2,
+          at: sc(p), kind,
+          scale: (1.6 + rng.float() * 1.2)*Math.min(1,(ARTWORK_MANIFEST[kind]?.footprint?.[0]??7)/7),
           rotationDeg: Math.round(rng.float() * 360),
         });
         placed++;

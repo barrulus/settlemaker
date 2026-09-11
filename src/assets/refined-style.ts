@@ -112,3 +112,16 @@ export const refinedStyle = (tokens?: Record<string, string | number>): string =
   `g[id^="sm-edge-"] path[fill^="var(--sm-"]{stroke:var(--sm-ink,#33262e);stroke-linejoin:round;stroke-linecap:round}`,
 ].join('');
 
+/** Keep fallback colours identical to the selected CSS palette for SVG rasterizers. */
+export function resolveVarFallbacks(svg: string, tokens: Record<string, string | number>): string {
+  // The separator is captured and replayed verbatim: rewriting `,` as `, `
+  // would change the bytes of every temperate village for no reason, and a
+  // consumer diffing releases would have to prove that churn was cosmetic.
+  return svg.replace(
+    /var\((--[a-z0-9-]+)(\s*,\s*)([^)]*)\)/gi,
+    (whole, name: string, sep: string, _fallback: string) => {
+      const resolved = tokens[name];
+      return resolved === undefined ? whole : `var(${name}${sep}${resolved})`;
+    },
+  );
+}

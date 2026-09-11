@@ -1,3 +1,4 @@
+import { selectFlora, ARTWORK_MANIFEST, ARTWORK_INK } from '../../assets/artwork.js';
 import { Point } from '../../types/point.js';
 import { pointInPolygon } from '../../geom/point-in-polygon.js';
 import { SeededRandom } from '../../utils/random.js';
@@ -7,7 +8,7 @@ import {
 import { lotObb, pointInObb } from '../parcels/overlap.js';
 import {
   CLUMP_RADIUS_M, SHOREFRONT_BAND_M, VEG_BAND_DEPTH_M, VEG_CELL_M,
-  VEG_CLUMP_INTERIOR, VEG_GLYPHS, VEG_INTERIOR_DENSITY, VEG_LANE_CLEAR_M,
+  VEG_CLUMP_INTERIOR, VEG_INTERIOR_DENSITY, VEG_LANE_CLEAR_M,
   VEG_PATCH_CELL_M, VEG_PATCH_CHANCE, VEG_PATCH_RADIUS_M, VEG_PATCH_RIM_FLOOR,
   VEG_PATCH_TREES,
   VEG_SCALE_MAX, VEG_SCALE_MIN,
@@ -61,14 +62,14 @@ function distToWaterEdge(p: Point, water: Point[][]): number {
  */
 function isRejected(
   p: Point, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldBlock[],
-  water: Point[][], shorefrontReachM: number,
+  water: Point[][], shorefrontReachM: number, clearance = 0,
 ): boolean {
-  if (dist(p, green.centre) < greenDrawnRadius(green)) return true;
-  if (inAnyWater(p, water)) return true;
-  for (const lane of lanes) if (withinLaneCorridor(p, lane, VEG_LANE_CLEAR_M)) return true;
-  for (const lot of lots) if (pointInObb(p, lotObb(lot))) return true;
-  for (const croft of crofts) if (pointInPolygon(p, croft.polygon)) return true;
-  for (const field of fields) if (pointInPolygon(p, field.polygon)) return true;
+  if (dist(p, green.centre) < greenDrawnRadius(green) + clearance) return true;
+  if (inAnyWater(p, water) || distToWaterEdge(p, water) < clearance) return true;
+  for (const lane of lanes) if (withinLaneCorridor(p, lane, VEG_LANE_CLEAR_M + clearance)) return true;
+  for (const lot of lots) if (pointInObb(p, lotObb(lot), clearance)) return true;
+  for (const croft of crofts) if (pointInPolygon(p, croft.polygon) || distToWaterEdge(p,[croft.polygon]) < clearance) return true;
+  for (const field of fields) if (pointInPolygon(p, field.polygon) || distToWaterEdge(p,[field.polygon]) < clearance) return true;
   if (water.length > 0 && dist(p, green.centre) <= shorefrontReachM) {
     if (distToWaterEdge(p, water) <= SHOREFRONT_BAND_M) return true;
   }
@@ -114,15 +115,13 @@ function patchChanceAt(d: number, bandInner: number, rim: number): number {
   return VEG_PATCH_CHANCE * (VEG_PATCH_RIM_FLOOR + (1 - VEG_PATCH_RIM_FLOOR) * (1 - t));
 }
 
-function pickGlyph(biome: string, rng: SeededRandom): string {
-  const entries = VEG_GLYPHS[biome] ?? VEG_GLYPHS.temperate;
-  const total = entries.reduce((s, e) => s + e.weight, 0);
-  let r = rng.float() * total;
-  for (const e of entries) {
-    r -= e.weight;
-    if (r <= 0) return e.glyph;
-  }
-  return entries[entries.length - 1].glyph;
+function plantRadius(glyph:string,scale:number):number {
+  const fp=ARTWORK_MANIFEST[glyph]?.footprint?.[0]??1, b=ARTWORK_INK[glyph]?.bounds??[8,8,56,56];
+  return Math.max(32-b[0],32-b[1],b[2]-32,b[3]-32)*fp/64*scale;
+}
+
+function pickGlyph(biome: string, rng: SeededRandom, wet=false): string {
+  return selectFlora(biome, rng.float(), wet);
 }
 
 /**
@@ -186,11 +185,11 @@ export function buildVegetation(
         cellOrigin.x + offsetX * VEG_CELL_M,
         cellOrigin.y + offsetY * VEG_CELL_M,
       );
-      const glyph = pickGlyph(site.biome, rng);
+      const glyph = pickGlyph(site.biome, rng, distToWaterEdge(position, site.water) < 15);
       const scale = VEG_SCALE_MIN + rng.float() * (VEG_SCALE_MAX - VEG_SCALE_MIN);
 
       const id = `veg:${cellX}x${cellY}`;
-      if (isRejected(position, green, lanes, lots, crofts, fields, site.water, shorefrontReachM)) {
+      if (isRejected(position, green, lanes, lots, crofts, fields, site.water, shorefrontReachM, plantRadius(glyph,scale))) {
         continue;
       }
       trees.push({
@@ -213,7 +212,7 @@ export function buildVegetation(
         const dx = r * Math.sin(theta);
         const dy = -r * Math.cos(theta);
         const neighbourPos = new Point(position.x + dx, position.y + dy);
-        if (isRejected(neighbourPos, green, lanes, lots, crofts, fields, site.water, shorefrontReachM)) {
+        if (isRejected(neighbourPos, green, lanes, lots, crofts, fields, site.water, shorefrontReachM, plantRadius(glyph,scale))) {
           continue;
         }
         trees.push({
@@ -271,11 +270,11 @@ export function buildVegetation(
           seed.x + r * Math.sin(theta),
           seed.y - r * Math.cos(theta),
         );
-        const glyph = pickGlyph(site.biome, rng);
+        const glyph = pickGlyph(site.biome, rng, distToWaterEdge(position, site.water) < 15);
         const scale = VEG_SCALE_MIN + rng.float() * (VEG_SCALE_MAX - VEG_SCALE_MIN);
         // Every rejection still applies out here -- a wood may abut a field
         // block but never stands on one, nor on a lane, claim or water.
-        if (isRejected(position, green, lanes, lots, crofts, fields, site.water, shorefrontReachM)) {
+        if (isRejected(position, green, lanes, lots, crofts, fields, site.water, shorefrontReachM, plantRadius(glyph,scale))) {
           continue;
         }
         trees.push({
