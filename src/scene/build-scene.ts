@@ -7,10 +7,14 @@ import { applyOutputShift, NO_SHIFT, type OriginShift } from '../generator/origi
 import { Farm } from '../wards/farm.js';
 import { Harbour } from '../wards/harbour.js';
 import { Castle } from '../wards/castle.js';
+import { Park } from '../wards/park.js';
 import { SeededRandom } from '../utils/random.js';
 import { pointInPolygon } from '../geom/point-in-polygon.js';
 import { Polygon } from '../geom/polygon.js';
-import { CANOPY_KINDS } from '../assets/asset-sets.js';
+import { canopyKindsFor } from '../assets/asset-sets.js';
+import { buildingIds } from '../output/id-allocator.js';
+import { cityMetersPerUnit } from '../generator/city-glyphs.js';
+import { resolveGlyphFor } from '../village/deck.js';
 import { scoreBuildings, scoringReference } from '../poi/poi-selector.js';
 import {
   SCENE_VERSION,
@@ -35,11 +39,14 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
     return { x, y };
   };
   const ring = (pts: ReadonlyArray<{ x: number; y: number }>): ScenePoint[] => pts.map(sc);
+  const ids = buildingIds(model);
 
   const scene: Scene = {
     version: SCENE_VERSION,
     seed: model.params.seed,
     population: model.params.population,
+    ...(model.params.population > 1000 ? { buildingCapacity: model.getBuildingCapacity() } : {}),
+    metersPerUnit: cityMetersPerUnit(model),
     ...(model.params.biome != null ? { biome: model.params.biome } : {}),
     bounds: computeLocalBounds(model, padding, shift),
     layers: {
@@ -49,7 +56,10 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
       },
       fields: [], furrows: [], greens: [], vegetation: [],
       symbols: model.symbols.map(s => ({
-        id: s.id, at: sc(s.at), scale: s.scale, rotationDeg: s.rotationDeg, zBand: s.zBand,
+        id: resolveGlyphFor(model.params.biome ?? 'temperate', s.id),
+        at: sc(s.at), scale: s.scale, rotationDeg: s.rotationDeg, zBand: s.zBand,
+        ...(s.scaleY !== undefined ? { scaleY: s.scaleY } : {}),
+        ...(s.building && ids.has(s.building) ? { buildingId: ids.get(s.building) } : {}),
       })),
       roads: [], buildings: [], piers: [], walls: [],
     },
@@ -65,6 +75,7 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
   for (const patch of model.patches) {
     const ward = patch.ward;
     if (!ward) continue;
+    for (const lane of ward.lanes) scene.layers.roads.push({ path: ring([lane.a, lane.b]), kind: 'alley', width: lane.width });
     if (ward instanceof Farm) {
       for (let i = 0; i < ward.subPlots.length; i++) {
         const plot = ward.subPlots[i];
@@ -81,15 +92,17 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
     }
     if (ward.type === WardType.Park) {
       for (const grove of ward.geometry) {
-        scene.layers.greens.push({ ring: ring(grove.vertices) });
+        scene.layers.greens.push({ ring: ring(grove.vertices), ...(ward instanceof Park && ward.paths.length
+          ? { paths: ward.paths.map(ring), pathWidth: ward.pathWidth } : {}) });
       }
       continue; // groves are greens, not buildings
     }
     for (const poly of ward.geometry) {
       scene.layers.buildings.push({
+        id: ids.get(poly),
         ring: ring(poly.vertices),
         kind: String(ward.type),
-        landmark: LANDMARK_TYPES.has(ward.type),
+        landmark: LANDMARK_TYPES.has(ward.type) && (ward.type !== WardType.Cathedral || !ward.principalBuilding || poly === ward.principalBuilding),
         ...(model.glyphBackedBuildings.has(poly) ? { glyphBacked: true as const } : {}),
       } as BuildingFeature);
     }
@@ -204,9 +217,14 @@ function scatterVegetation(
   sc: (p: { x: number; y: number }) => ScenePoint,
 ): void {
   const rng = new SeededRandom((model.params.seed ^ 0x5eed) >>> 0 || 1);
+  const kinds = canopyKindsFor(model.params.biome);
   for (const patch of model.patches) {
     const ward = patch.ward;
-    if (!ward || ward.type !== WardType.Park) continue;
+    if (!ward || ward.type !== WardType.Park || !ward.geometry.length) continue;
+    if (ward instanceof Park && ward.paths.length) {
+      for (const tree of ward.trees) scene.layers.vegetation.push({ ...tree, at: sc(tree.at) });
+      continue;
+    }
     for (const grove of ward.geometry) {
       const poly = new Polygon(grove.vertices);
       const area = Math.abs(poly.square);
@@ -225,7 +243,7 @@ function scatterVegetation(
         if (!pointInPolygon(p, grove.vertices)) continue;
         scene.layers.vegetation.push({
           at: sc(p),
-          kind: CANOPY_KINDS[Math.floor(rng.float() * CANOPY_KINDS.length)],
+          kind: kinds[Math.floor(rng.float() * kinds.length)],
           scale: 1.6 + rng.float() * 1.2,
           rotationDeg: Math.round(rng.float() * 360),
         });

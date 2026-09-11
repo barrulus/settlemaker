@@ -485,7 +485,7 @@ export class Polygon {
    * input) when the line failed to cross two edges — callers should detect length===1
    * and stop recursing, since bisecting the result would reproduce the same shape.
    */
-  cut(p1: Point, p2: Point, gap: number = 0): Polygon[] {
+  cut(p1: Point, p2: Point, gap: number = 0, onCut?: (a: Point, b: Point) => void): Polygon[] {
     const x1 = p1.x;
     const y1 = p1.y;
     const dx1 = p2.x - x1;
@@ -522,6 +522,7 @@ export class Polygon {
       const dir = p2.subtract(p1);
       const point1 = p1.add(dir.scale(ratio1));
       const point2 = p1.add(dir.scale(ratio2));
+      onCut?.(point1, point2);
 
       const half1 = new Polygon(this.vertices.slice(edge1 + 1, edge2 + 1));
       half1.vertices.unshift(point1);

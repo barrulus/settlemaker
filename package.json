@@ -1,6 +1,6 @@
 {
   "name": "settlemaker",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "Medieval fantasy settlement map generator — TypeScript port of watabou's Medieval Fantasy City Generator",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -10,7 +10,9 @@
     "build:lib": "esbuild src/index.ts --bundle --format=esm --target=es2022 --minify --outfile=dist/settlemaker.browser.js --banner:js=\"/* settlemaker — GPL-3.0-only. Corresponding source: https://github.com/barrulus/settlemaker */\"",
     "test": "vitest run",
     "test:watch": "vitest",
-    "review:roads": "node scripts/run-road-review.mjs"
+    "review:roads": "node scripts/run-road-review.mjs",
+    "measure:city-glyphs": "esbuild scripts/measure-city-glyphs.ts --bundle --platform=node --format=cjs --packages=external --outfile=output/measure-city-glyphs.cjs && node output/measure-city-glyphs.cjs",
+    "review:cities": "esbuild scripts/review-cities.ts --bundle --platform=node --format=cjs --packages=external --outfile=output/city-review-runner.cjs && node output/city-review-runner.cjs"
   },
   "license": "GPL-3.0-only",
   "author": "Barry Gill <b@rry.im>",

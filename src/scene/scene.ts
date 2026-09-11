@@ -1,4 +1,5 @@
 import type { LocalBounds } from '../generator/bounds.js';
+import type { BuildingCapacity } from '../generator/model.js';
 
 /**
  * Versioned semantic scene: WHAT is where, never how it looks. This is the
@@ -26,19 +27,25 @@ export interface FieldPlot {
 }
 /** @deprecated Always empty since settlemaker 0.8.0 — fields carry angleDeg instead of furrow segments. */
 export interface Furrow { start: ScenePoint; end: ScenePoint }
-export interface GreenFeature { ring: ScenePoint[] }
+export interface GreenFeature {
+  ring: ScenePoint[];
+  paths?: ScenePoint[][];
+  pathWidth?: number;
+}
 
 export interface VegetationInstance {
   at: ScenePoint;
-  /** Glyph id (batch001 canopy) or legacy unit-box kind ('tree'). */
+  /** Glyph id (refined canopy) or legacy unit-box kind ('tree'). */
   kind: string;
   scale: number;       // world-unit size of the whole glyph box
   rotationDeg: number;
 }
 export interface SymbolInstance {
-  id: string;          // batch001 id, e.g. 'sm-well'
+  id: string;          // glyph id, e.g. 'sm-well'
   at: ScenePoint;
-  scale: number;       // world-unit size of the glyph box (fixed: max footprint axis)
+  scale: number;       // world-unit art-box width; height defaults to the same
+  scaleY?: number;
+  buildingId?: string;
   rotationDeg: number;
   zBand: 'structure' | 'overlay';
 }
@@ -46,10 +53,13 @@ export interface SymbolInstance {
 export interface RoadFeature {
   path: ScenePoint[];
   /** artery = through-town trunk; road = external approach stub. */
-  kind: 'artery' | 'road';
+  kind: 'artery' | 'road' | 'alley';
+  width?: number;
 }
 
 export interface BuildingFeature {
+  /** Same deterministic identity as GeoJSON building_id. */
+  id?: string;
   ring: ScenePoint[];
   /** Ward type string (WardType value) — semantic, drives styling/symbols. */
   kind: string;
@@ -75,11 +85,14 @@ export interface WallFeature {
 }
 
 export interface Scene {
+  buildingCapacity?: BuildingCapacity;
   version: typeof SCENE_VERSION;
   name?: string;
   seed: number;
   population: number;
   biome?: string;
+  /** City scale estimate for glyph minimum sizes, not a surveyed measurement. */
+  metersPerUnit?: number;
   bounds: LocalBounds;
   layers: {
     water: WaterLayer;

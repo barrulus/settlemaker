@@ -4,6 +4,17 @@ Prepared 2026-09-10 against **v2.4.0 / b0a0613**. This is a handoff and proposed
 implementation sequence, not an implemented city change. The owner has accepted
 the village work and wants its visual quality extended to the city engine.
 
+**Owner clarification:** discard phase 1 city artwork and use the village glyph
+set for now. City-specific variations will be authored later. This supersedes
+the asset-audit suggestion below to retain city-only phase 1 glyphs. See the
+[first implementation report](2026-09-10-city-glyph-first-pass.md) for progress
+and limitations.
+
+Latest worktree state: [street-led blocks and explicit capacity](2026-09-10-city-block-layout-pass.md).
+Its review compares against the accepted neighbourhood pass; the original
+baseline numbers below are historical. Remaining large-city supply gaps are
+reported in the model, scene and GeoJSON rather than hidden by occupancy changes.
+
 ## Outcome
 
 Make ordinary urban buildings read as houses, terraces, shops, workshops and

@@ -16,7 +16,9 @@
     "src/**/*.ts",
     "scripts/review-village-roads.ts",
     "scripts/review-village-landscape.ts",
-    "tests/fixtures/village-roads.ts"
+    "tests/fixtures/village-roads.ts",
+    "scripts/review-cities.ts",
+    "scripts/measure-city-glyphs.ts"
   ],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }
