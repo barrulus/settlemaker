@@ -125,7 +125,7 @@ describe('glyph extraction', () => {
   it('glyph module carries CC-BY attribution', () => {
     const src = readFileSync(`${ROOT}src/assets/batch001.ts`, 'utf8');
     expect(src).toContain('CC-BY-4.0');
-    expect(src).toContain('Barry Gill');
+    expect(src).toContain('barrulus');
   });
 });
 ```
@@ -232,7 +232,7 @@ export function renderGlyphModule(
     entries[id] = { body, sil };
   }
   return `${GEN_HEADER}//
-// Symbol artwork © Barry Gill, licensed CC-BY-4.0 with the Rendered Output
+// Symbol artwork © barrulus, licensed CC-BY-4.0 with the Rendered Output
 // Exception — see web/public/symbols/LICENSE. Attribution is required when
 // redistributing this library, waived for rendered map output.
 

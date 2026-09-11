@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-13
 **Status:** Approved design, not yet implemented
-**Owner:** Barry
+**Owner:** barrulus
 
 ## Motivation
 
@@ -70,7 +70,7 @@ Loses (at cutover, in one commit, not before):
   verbatim.
 
 The private repo contains no GPL code — a submodule pointer and
-Barry-owned content only — so it owes nothing publicly.
+barrulus-owned content only — so it owes nothing publicly.
 
 ## Build composition
 
@@ -91,7 +91,7 @@ an explicit ref bump or site change.
 
 ## Cutover
 
-> **Revised 2026-08-13 (Barry, during execution):** no second Netlify site.
+> **Revised 2026-08-13 (barrulus, during execution):** no second Netlify site.
 > The EXISTING site is relinked to the private repo instead: lock the
 > published deploy, relink, verify the new unpublished deploy on its
 > permalink, then publish. Hostname `settlemaker.netlify.app`, the custom
@@ -100,7 +100,7 @@ an explicit ref bump or site change.
 > "publish the previous deploy". The plan file carries the authoritative
 > revised steps.
 
-The only disruptive step, executed once, at a moment Barry chooses:
+The only disruptive step, executed once, at a moment barrulus chooses:
 
 1. Create a **new** Netlify site linked to the private repo; verify the
    full site (/, /fmg, /symbols, symbol assets, redirects, analytics)

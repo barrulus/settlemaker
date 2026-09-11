@@ -1,7 +1,7 @@
 // Frozen compatibility data for existing generator APIs.
 // Current artwork is authored in scripts/art and built by scripts/build-runtime-art.mjs.
 //
-// Symbol artwork © Barry Gill, licensed CC-BY-4.0 with the Rendered Output
+// Symbol artwork © barrulus, licensed CC-BY-4.0 with the Rendered Output
 // Exception — see symbols/LICENSE. Attribution is required when
 // redistributing this library, waived for rendered map output.
 

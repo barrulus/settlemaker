@@ -166,7 +166,7 @@ with:
 In `site/fmg.html`, replace the head comment block:
 ```html
     <!--
-      settlemaker — Copyright (C) 2025-2026 Barry Gill. Free software under GPL-3.0-only.
+      settlemaker — Copyright (C) 2025-2026 barrulus. Free software under GPL-3.0-only.
       Derived from watabou's TownGeneratorOS (https://github.com/watabou/TownGeneratorOS).
       Corresponding source: https://github.com/barrulus/settlemaker
       This page is the machine image endpoint, so the source offer is metadata only —
@@ -176,7 +176,7 @@ In `site/fmg.html`, replace the head comment block:
 with:
 ```html
     <!--
-      settlemaker-web — Copyright (C) 2025-2026 Barry Gill. All rights reserved.
+      settlemaker-web — Copyright (C) 2025-2026 barrulus. All rights reserved.
       Map generation by the settlemaker library (GPL-3.0-only), loaded as a
       separate module (/lib/settlemaker.js); corresponding source:
       https://github.com/barrulus/settlemaker — also linked via rel=license.
@@ -341,13 +341,13 @@ Record the PR number — the preview URL is `https://deploy-preview-<PR#>--settl
 
 ---
 
-### Task 3: Verify the deploy preview (agent) + Barry eyeball — GATE
+### Task 3: Verify the deploy preview (agent) + barrulus eyeball — GATE
 
 **Files:** none (HTTP checks against the preview).
 
 **Interfaces:**
 - Consumes: `https://deploy-preview-<PR#>--settlemaker.netlify.app` (Task 2). Netlify needs a few minutes to build — poll until the deploy responds.
-- Produces: go/no-go for the Task 4 merge. Do not merge without Barry's eyeball OK.
+- Produces: go/no-go for the Task 4 merge. Do not merge without barrulus's eyeball OK.
 
 - [ ] **Step 1: Status + artifact checks (set `P` to the preview URL)**
 
@@ -370,7 +370,7 @@ curl -s "$P$APPJS" | wc -c   # page JS is small (tens of KB, not the ~300KB+ fus
 ```
 All present/plausible or STOP.
 
-- [ ] **Step 3 (Barry): Eyeball the preview**
+- [ ] **Step 3 (barrulus): Eyeball the preview**
 
 Open the preview URL: generate a settlement in the builder, open a direct `/fmg?...` link from it, open `/symbols`. Confirm settlements render identically to production. Report OK.
 
@@ -381,7 +381,7 @@ Open the preview URL: generate a settlement in the builder, open a direct `/fmg?
 **Files:** none (GitHub merge + HTTP checks).
 
 **Interfaces:**
-- Consumes: Barry's OK from Task 3.
+- Consumes: barrulus's OK from Task 3.
 - Produces: production served with the private pages + external library artifact.
 
 - [ ] **Step 1: Merge**

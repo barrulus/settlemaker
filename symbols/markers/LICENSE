@@ -1,5 +1,5 @@
 SettleMaker Symbol Library
-Copyright (C) 2026 Barry Gill and the SettleMaker symbol contributors
+Copyright (C) 2026 barrulus and the SettleMaker symbol contributors
 (see CREDITS for per-symbol authorship)
 
 SPDX-License-Identifier: CC-BY-4.0
@@ -57,7 +57,7 @@ the authors.
 Attribution should name the individual symbol authors listed in
 CREDITS, not only the project.  A reasonable form is:
 
-  "SettleMaker Symbol Library by Barry Gill and contributors,
+  "SettleMaker Symbol Library by barrulus and contributors,
    CC BY 4.0 -- https://github.com/barrulus/settlemaker"
 
 Per-symbol authorship is recorded in CREDITS and in the "author" field

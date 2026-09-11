@@ -126,7 +126,7 @@ describe('fidelity round 4: probe path', () => {
     // patches of which 4 are non-GateWard — real corridor sprawl, up from 3
     // (measured locally).
     // Re-pinned for round-cores-faubourgs Tasks 1-8, all eight of whose
-    // render gates Barry approved (round cores, demand-sized walls, row
+    // render gates barrulus approved (round cores, demand-sized walls, row
     // housing, per-route faubourg weights, shoreline wall circuits, piers,
     // plaza ring). This burg is a pop-1400 inland town in the same regime as
     // the approved pop1200 ladder cell. Verified non-degenerate and
