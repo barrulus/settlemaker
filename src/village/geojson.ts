@@ -1,3 +1,4 @@
+import { waterFillPolygons } from './water-boundary.js';
 import { roadSurfaceClips } from './road-surface.js';
 import { roadCrossSection } from './cross-section.js';
 /**
@@ -153,14 +154,15 @@ export function generateVillageGeoJson(model: VillageModel): FeatureCollection {
     });
   }
 
-  // 5. Water, as the model received it — echoed so a consumer draws the same
-  //    coast we clipped the village against.
-  model.site.water.forEach((poly, i) => {
-    if (poly.length < 3) return;
+  // Measured water exports the same dissolved filled union as the renderer.
+  // Each Polygon's interior rings preserve land islands for GeoJSON consumers.
+  const water = waterFillPolygons(model.site.water) ?? model.site.water.map(poly => [poly]);
+  water.forEach((polygon, i) => {
+    if (polygon[0].length < 3) return;
     features.push({
       type: 'Feature',
       properties: { layer: 'water', water_id: `w${i}` },
-      geometry: { type: 'Polygon', coordinates: [ring(poly)] },
+      geometry: { type: 'Polygon', coordinates: polygon.map(ring) },
     });
   });
 

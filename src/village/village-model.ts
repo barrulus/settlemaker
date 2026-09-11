@@ -283,7 +283,10 @@ export function generateVillage(
   // Trim only after occupied access has been protected. Optional shortcuts
   // preserve the accepted houses and cannot trigger another seating pass.
   const trimmed = trimTails(pruneRedundantLanes(relaxedLanes, green, spend.buildings, lots), spend.buildings, { lots });
-  const bankSafe = trimmed.map(l => validWaterRoute(l.points, site.water, roadCrossSection(l).surfaceM / 2 + 1.5) ? l : relaxedLanes.find(old => old.id === l.id) ?? l);
+  // A shortened segment changes the nearest-point clearance test at its new
+  // endpoint. Keep the accepted lane if trimming would violate occupied ink.
+  const bankSafe = trimmed.map(l => validWaterRoute(l.points, site.water, roadCrossSection(l).surfaceM / 2 + 1.5)
+    && !spend.buildings.some(b => intrudesOnLane(b, [l])) ? l : relaxedLanes.find(old => old.id === l.id) ?? l);
   const relaxed = connectDeadEnds(bankSafe, green, spend.buildings, lots, site.water);
 
   diagnostics.push(...evaluated.diagnostics);

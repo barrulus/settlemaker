@@ -48,13 +48,14 @@ export function checkMeasuredWater(original: AzgaarBurgInput, water: Point[][], 
   prepareWaterBoundary(water, c.surveyRadiusM);
   const conflict = () => { if (!result.issues.some(i => i.code === 'water-context-conflict')) result.issues.push({ code: 'water-context-conflict' }); };
   const origin = new Point(0, 0);
-  if (water.some(r => pointInPolygon(origin, r))) {
+  const exposed = waterBoundarySegments(water);
+  const onShore = exposed.some(([a, b]) => dist(origin, closestPointOnSegment(origin, a, b)) < 1e-7);
+  if (!onShore && water.some(r => pointInPolygon(origin, r))) {
     // Moving the village onto an invented land site would falsify the supplied
     // geography. There is no valid village map to return for a submerged burg.
     throw new WaterContextError('water-context-conflict', 'The supplied burg position is in water. Correct its location or shoreline survey.');
   }
   if (!Object.hasOwn(original, 'coastlineGeometry')) return;
-  const exposed = waterBoundarySegments(water);
   for (const b of c.bodies) {
     if (!b.polygonIndices?.length) { if (b.distanceM <= c.surveyRadiusM) conflict(); continue; }
     const own = b.polygonIndices.map(i => water[i]);

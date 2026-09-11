@@ -715,6 +715,7 @@ export function growAprons(
     let points = growApronPath(candidate.from, reachM);
     if (points.length < 2) continue;
 
+    for (const p of points) assertWaterQuery(water, p, NARROW_WATER_PROBE_M);
     const laneId = candidate.id;
 
     // The coast bend comes FIRST, so a road that turned along the shore is

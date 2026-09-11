@@ -1,10 +1,10 @@
 # Water context v1 — implementation contract
 
-**Status: specified for coordinated implementation; not implemented or deployed.**
-This document resolves the survey, precedence and units questions raised during
-review of [the Tarrimas-Ha investigation](plans/2026-09-10-water-distance-contract.md).
-It is the normative target for that follow-up, not a claim that release 2.4.0
-accepts these semantics. No generator behavior changes in this documentation PR.
+**Status: implemented in release 2.6.0; production activation requires its matching web deployment.**
+This is the normative village water contract, following
+[the Tarrimas-Ha investigation](plans/2026-09-10-water-distance-contract.md).
+The implementation includes library results and typed errors; settlemaker-web
+must deploy its visible diagnostics together with the generator pin.
 
 This revision incorporates the five findings in FMG's completed assessment,
 `docs/superpowers/specs/2026-09-10-water-context-contract-review.md`: iframe error
@@ -13,7 +13,7 @@ units, and complex coasts represented by a single ocean feature.
 
 ## Scope and wire format
 
-The first implementation serves **villages, population 1–1000**. Add `waterContext`
+This implementation serves **villages, population 1–1000**. Add `waterContext`
 to `AzgaarBurgInput` in the compressed `i=` payload. The enclosing URL payload
 version remains `1`; the new object has its own version discriminator.
 
@@ -143,7 +143,8 @@ stroke. FMG must clip at the declared square when using this cropping convention
 not at arbitrary unmarked interior edges. A body covering the entire survey can
 have no real shoreline within coverage. It still fills the region with water;
 its crop must not become an apparent nearby coast, and the burg origin must not
-be moved to manufacture a land site.
+be moved to manufacture a land site. A burg strictly inside water fails with
+`water-context-conflict`; a burg exactly on a real shore is permitted.
 
 These rules apply also where river-mouth polygons overlap ocean polygons. All
 water must be combined consistently for physical bank queries; a seam between
@@ -314,7 +315,9 @@ interface WaterContextResult {
 A geometry conflict is an issue on a geometry-backed result, not permission to
 switch modes. Coverage, required-geometry, unsupported-engine and invalid-context
 errors do not return a falsely complete rendered map. Legacy input omits this
-new result entirely. This specifies an implementation result contract; it does
+new result entirely. Fatal errors throw `WaterContextError`, carrying this result on
+`error.waterContextResult`. Successful `generateSettlement` calls expose it as
+`result.waterContextResult`; village models also expose it on the site. It does
 not introduce an iframe message protocol or an HTTP API.
 
 The host must preserve `waterContext` when building links. If compression is

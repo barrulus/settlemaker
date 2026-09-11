@@ -18,6 +18,7 @@
     "scripts/review-village-landscape.ts",
     "tests/fixtures/village-roads.ts",
     "scripts/review-cities.ts",
+    "scripts/review-water-context.ts",
     "scripts/measure-city-glyphs.ts"
   ],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]

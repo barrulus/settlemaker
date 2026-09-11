@@ -128,6 +128,10 @@ Villages are themed by biome — `villageThemeFor(biome)` selects the ground,
 vegetation and dwelling glyphs. The review gallery includes desert and tundra
 examples, with native snowy dwelling artwork for tundra villages.
 
+See the [2.6.0 release notes](docs/releases/2.6.0.md) for measured village water,
+river meanders, temple henges and woodland. The [water-context v1 contract](docs/water-context-v1.md)
+defines the coordinated FMG rollout.
+
 See the [2.5.0 release notes](docs/releases/2.5.0.md) for city layouts, capacity
 accounting and the settlemaker-web submodule update.
 

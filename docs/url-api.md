@@ -6,17 +6,16 @@ settlemaker-rendered settlement without touching this repository. It is
 self-contained: everything you need to build a working link is either quoted
 verbatim below or copy-paste runnable.
 
-**Release:** 2.5.0 (2026-09-10). URL payload version stays `1`; GeoJSON schema
-version stays `4`. See [release and integration notes](releases/2.5.0.md).
+**Release:** 2.6.0 (2026-09-11). URL payload version stays `1`; GeoJSON schema
+version stays `4`. See [release and integration notes](releases/2.6.0.md).
 
-**Upcoming water-distance contract:** [Water context v1](water-context-v1.md)
-is specified for coordinated implementation, **not supported by the deployed
-2.4.0 renderer**. It defines village survey coverage, water-input precedence,
-shared shoreline geometry, exposed water-union boundaries, physical units and
-visible iframe diagnostics. V1 does not provide automatic FMG resurvey.
-Do not send `waterContext` until a
-supporting release is explicitly deployed; the current contract below remains
-in force until then.
+**Measured water:** [Water context v1](water-context-v1.md) is supported for
+villages of 1–1000 people in 2.6.0. FMG must enable its measured sender only after
+the supporting library and web diagnostics are deployed together. It supplies
+surveyed distances and polygons in metres; an empty survey suppresses legacy
+bearing-based coastlines. V1 displays errors/warnings inside the iframe and does
+not provide automatic FMG resurvey. Cities retain the 2.5.0 engine and reject the
+new measured-water mode until their physical scaling contract is implemented.
 
 ## 1. Overview
 
@@ -179,6 +178,16 @@ export interface AzgaarBurgInput {
    * not available.
    */
   coastlineGeometry?: Array<Array<{ x: number; y: number }>>;
+  /** Compressed payload only; complete definition and precedence in water-context-v1.md. */
+  waterContext?: {
+    version: 1; status: 'measured'; coordinateSpace: 'burg-local-metres';
+    surveyRadiusM: number; geometryErrorM: number;
+    omittedRivers?: Array<{ riverId?: string; reason: 'local-width-unavailable' }>;
+    bodies: Array<{
+      featureId?: string; kind: 'ocean' | 'lake'; distanceM: number; bearingDeg: number;
+      polygonIndices?: number[]; coastApproximation?: 'simple-local-coast';
+    }>;
+  } | { version: 1; status: 'unknown-units'; sourceUnit: string };
   /** Village-only river surveys, burg-local metres; added to other water. */
   rivers?: Array<{
     centreline: Array<{ x: number; y: number }>;

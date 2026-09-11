@@ -58,6 +58,9 @@ describe('water-context v1', () => {
     expect(Math.min(...distances)).toBeCloseTo(40,6);
     expect(s.waterContextResult?.status).toBe('approximate');
   });
+  it('allows a burg exactly on a real shore', () => {
+    expect(() => buildSite(coast(0))).not.toThrow();
+  });
   it('preserves islands and removes decomposition and crop edges from all bank queries', () => {
     const pieces=[box(-3000,-3000,3000,-50),box(-3000,50,3000,3000),box(-3000,-50,-50,50),box(50,-50,3000,50)];
     const s=buildSite(burg({coastlineGeometry:pieces,waterContext:measured([{kind:'ocean',distanceM:50,bearingDeg:0,polygonIndices:[0,1,2,3]}])}));
@@ -66,6 +69,14 @@ describe('water-context v1', () => {
     const segments=waterBoundarySegments(s.water);
     expect(segments.reduce((sum,[a,b])=>sum+dist(a,b),0)).toBeCloseTo(400,6);
     expect(s.waterContextResult?.issues).toEqual([]);
+  });
+  it('exports water islands as GeoJSON holes with no internal polygon seams', () => {
+    const pieces=[box(-3000,-3000,3000,-180),box(-3000,180,3000,3000),box(-3000,-180,-180,180),box(180,-180,3000,180)];
+    const r=generateSettlement(burg({coastlineGeometry:pieces,waterContext:measured([{kind:'ocean',distanceM:180,bearingDeg:0,polygonIndices:[0,1,2,3]}])}),{seed:2});
+    const water=r.geojson.features.filter(f=>f.properties?.layer==='water');
+    expect(water).toHaveLength(1);
+    expect(water[0].geometry.type).toBe('Polygon');
+    if(water[0].geometry.type==='Polygon') expect(water[0].geometry.coordinates).toHaveLength(2);
   });
   it('dissolves an overlapping river mouth rather than exposing its ocean seam', () => {
     const water=[box(40,-3000,3000,3000),box(-100,80,100,90)];
