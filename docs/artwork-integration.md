@@ -1,8 +1,14 @@
 # Integrated settlement artwork
 
-`generateSettlement` now uses the reviewed city, village, landscape and shared
+In 3.0.x, `generateSettlement` uses the reviewed city, village, landscape and shared
 infrastructure libraries by default. The village/city population routing remains
 unchanged. No feature flag or asset download is required.
+
+See the [current gallery](gallery.md) for output from both planners, the
+[collection catalogue](current-symbol-library.md) for source drawings, and the
+[skin guide](skins.md) for replacing their appearance in your own setting. This
+page describes placement behaviour; it is not a requirement to edit generator
+code when creating a skin.
 
 ## Runtime contract
 

@@ -1,5 +1,9 @@
 # Landscape character review
 
+Historical review of the 2.7.0 artwork pass. Counts and validation below record
+that review, not the current release. See the [current gallery](gallery.md) and
+[artwork integration](artwork-integration.md) for maintained guidance.
+
 Reviewed through the public `generateSettlement` API in `output/art-integration/`.
 The river fixtures use coarse centrelines with default meandering enabled;
 straight authored polygons and the straight-channel override are not used for

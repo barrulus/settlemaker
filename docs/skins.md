@@ -1,11 +1,22 @@
 # Authoring settlement skins
 
+This is the portable **skin format 1** contract for SettleMaker 3.0.x. Start here
+to create a personalised setting; the older `AssetSet` API is for trusted city
+rendering code and is not required to distribute a skin.
+
 A skin is a versioned JSON document containing SVG artwork, material colours,
 and optional named biomes. The same skin works with villages and cities in Node
 and the browser. Load it once with `createSkin`, then pass it per request:
 
 ```ts
 import { createSkin, generateSettlement } from 'settlemaker';
+
+const burg = {
+  name: 'Moonfall', population: 300,
+  port: false, citadel: false, walls: false, plaza: true,
+  temple: true, shanty: false, capital: false,
+  roadBearings: [18, 142, 267],
+};
 
 // Browser example. Applications choose where to store/host their skin files.
 const response = await fetch('/skins/moon-glass.skin.json');
@@ -22,6 +33,9 @@ In Node, pass `JSON.parse(await readFile(path, 'utf8'))` to `createSkin`.
 There is no global registry, automatic network access, or executable plugin code.
 Keep the original JSON to save or distribute the skin; the returned skin is an
 immutable runtime handle. Invalid definitions throw an error naming the property.
+Create the handle in the same module instance that generates or renders the map.
+For a worker, another independently loaded bundle, or saved data, transfer the
+definition JSON and call `createSkin` there. There is no runtime-handle wire format.
 
 Start with [Moon Glass](examples/moon-glass.skin.json), a small working example
 that replaces snowy dwellings with crystal homes and colours their surroundings.
@@ -157,3 +171,41 @@ Skins are currently a library API. A hosting application can add a picker or loa
 its own curated files; the URL codec does not serialize skin artwork or fetch skin
 URLs. Distribute your original artwork with your chosen licence information. For
 artwork derived from the bundled symbols, consult [symbols/LICENSE](../symbols/LICENSE).
+
+## Build and review your own skin
+
+1. Choose a base biome whose terrain behaviour fits the setting. Begin with a
+   partial skin so you can evaluate the style before drawing a complete set.
+2. Inspect `SKIN_SLOTS` and the current source SVG for each replacement. Retain the
+   slot's view box, orientation and painted extents. Export the inner shapes and,
+   for structures, a matching silhouette.
+3. Put replacements under their exact IDs. Biome variants are separate entries:
+   a generic house replacement does not automatically replace every snowy or
+   desert house. Cover each category that appears in your target biomes.
+4. Add tokens and the separate `village`/`city` theme overrides. Render both engines
+   with the same loaded skin and try more than one seed and population.
+5. Validate using `createSkin`, then inspect SVG and raster output for seams,
+   clipping, shadows and overlap. Schema validation alone cannot establish visual
+   compatibility with a placement footprint.
+6. Distribute the JSON with a README, preview images and your artwork's license and
+   credits in adjacent files. Do not add unsupported executable hooks or invent
+   top-level schema fields for license text. Record the generator version used for
+   testing and the biomes/categories you intentionally cover.
+
+The [gallery](gallery.md) demonstrates real library output. Its
+[generator script](../scripts/generate-examples.mjs) shows complete inputs for both
+planners. For original alternative artwork and regeneration commands, inspect
+[Copperline](../symbols/copperline/README.md). Its GPL-3.0-only terms are separate
+from the default collections' rendered-output exception.
+
+## Common mistakes
+
+| Symptom | Check |
+| --- | --- |
+| Some default buildings remain | Replacement IDs must match exact runtime slots, including biome variants. Partial skins deliberately inherit omissions. |
+| A named biome renders as temperate | Pass the loaded skin on that generation request and use a defined key/alias. Unknown names retain the normal fallback. |
+| A replacement overlaps its neighbour | Check painted extents, not just whether the drawing fits inside the SVG view box. Placement footprints cannot be changed by skin format 1. |
+| The old shadow remains or the replacement has none | Supply a matching `sil`; an omitted silhouette means no shadow for that replaced glyph. |
+| A worker rejects a skin handle | Send the original JSON and recreate the handle inside that worker's module instance. |
+| A road or bridge ignores an SVG replacement | Some features are procedural geometry, outside the slot catalogue. Use the exposed renderer controls where available. |
+| An iframe ignores a skin URL | The URL codec has no skin parameter. Load skins through your application's library integration. |

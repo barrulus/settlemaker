@@ -1,529 +1,160 @@
-# Scene & asset contract (v2)
+# City scene and rendering contract
 
-This document is for two audiences: **Azgaar/FMG-side integrators** — FMG is
-Azgaar's Fantasy Map Generator — who consume settlemaker's output, and
-**community artists** who want to draw a new visual
-style for a settlement without touching generator code. If you only care about
-the GeoJSON layer, see `docs/schema-v3.md` instead — this document covers the
-newer `Scene` object and the SVG it renders to.
+`Scene` version **2** is the semantic rendering representation of the **city**
+planner. Villages use `VillageModel` and `renderVillage`; they do not pass through
+`buildScene`. Use [GeoJSON](geojson.md) for exported feature data from both planners,
+and [skins](skins.md) for portable artwork that works in both.
 
-Settlemaker's pipeline for a rendered image looks like this:
-
-```
-Model (internal, algorithmic)
-  → buildScene(model)        →  Scene            (WHAT is where — semantic, versioned)
-  → assembleSvg(scene)       →  SVG string        (HOW it looks — theme + assets applied)
+```text
+City:     Model → buildScene → Scene v2 → assembleSvg → SVG
+Village:  VillageModel → renderVillage → SVG
 ```
 
-The `Scene` is the seam. It contains no color, no stroke width, no asset
-markup — just geometry and semantic kind tags in a fixed coordinate frame.
-Everything about *appearance* (palette, line weights, symbol art) is supplied
-separately, at the `assembleSvg` step, via a `Palette`/`RenderTheme` and an
-`AssetSet`. This is why the doc treats them as two contracts: the `Scene`
-shape (stable, versioned, additive-only) and the SVG/asset styling contract
-(where a community artist plugs in new art).
+The scene stores geometry, semantic kinds, saved glyph selections and material
+variant indices. It does not contain SVG fragment bodies or a complete theme.
+`assembleSvg` supplies the artwork and appearance. The complete declarations live
+in [src/scene/scene.ts](../src/scene/scene.ts).
 
-## 1. The `Scene` shape
+## Render an existing city model
 
-Copied directly from `src/scene/scene.ts` — this is the real interface, not a
-paraphrase:
+This complete example uses the high-level city generator to retain its coastal
+shift and degradation behaviour, then renders the saved model in another palette:
 
-```ts
-export const SCENE_VERSION = 2 as const;
+```js
+import { generateFromBurg, buildScene, assembleSvg, PALETTES } from 'settlemaker';
 
-export interface ScenePoint { x: number; y: number }
-
-export interface WaterLayer {
-  /** Even-odd rings in output coords; holes = islands. Empty = landlocked. */
-  rings: ScenePoint[][];
-  /** True when synthesized from oceanBearing rather than caller geometry. */
-  synthetic: boolean;
-}
-
-export interface FieldPlot {
-  ring: ScenePoint[];
-  /** Furrow-hatch direction in degrees, from the plot's OBB. */
-  angleDeg: number;
-  /** false → plot ground draws but furrow hatch is suppressed (windmill plot). */
-  hatch?: boolean;
-}
-/** @deprecated Always empty since settlemaker 0.8.0 — fields carry angleDeg instead of furrow segments. */
-export interface Furrow { start: ScenePoint; end: ScenePoint }
-export interface GreenFeature {
-  ring: ScenePoint[];
-  paths?: ScenePoint[][]; // planned park walks
-  pathWidth?: number; // local units
-}
-
-export interface VegetationInstance {
-  at: ScenePoint;
-  /** Glyph id (refined canopy) or legacy unit-box kind ('tree'). */
-  kind: string;
-  /** World-unit size of the whole glyph box. */
-  scale: number;
-  rotationDeg: number;
-}
-
-export interface SymbolInstance {
-  /** Links a structure replacement to BuildingFeature.id / GeoJSON building_id. */
-  buildingId?: string;
-  /** Art-box height; omitted means the same as scale. */
-  scaleY?: number;
-  /** Glyph id, e.g. 'sm-well'. */
-  id: string;
-  at: ScenePoint;
-  /** World-unit size of the glyph box (fixed: max footprint axis). */
-  scale: number;
-  rotationDeg: number;
-  zBand: 'structure' | 'overlay';
-}
-
-export interface RoadFeature {
-  path: ScenePoint[];
-  /** artery = through-town trunk; road = external approach stub. */
-  kind: 'artery' | 'road' | 'alley';
-  width?: number; // explicit width for traced alleys, in local units
-}
-
-export interface BuildingFeature {
-  id?: string; // same identity as GeoJSON building_id
-  ring: ScenePoint[];
-  /** Ward type string (WardType value) — semantic, drives styling/symbols. */
-  kind: string;
-  landmark: boolean;
-  /** true when this building is rendered as a glyph, with the rect as a footprint fallback. */
-  glyphBacked?: true;
-}
-
-export interface PierFeature { ring: ScenePoint[] }
-
-export interface WallGate {
-  /** Endpoints of the gate bar, precomputed from wall direction. */
-  p1: ScenePoint;
-  p2: ScenePoint;
-  routeIds: string[];
-}
-
-export interface WallFeature {
-  polylines: ScenePoint[][];
-  towers: ScenePoint[];
-  gates: WallGate[];
-  /** Citadel walls render heavier towers. */
-  large: boolean;
-}
-
-export interface Scene {
-  version: typeof SCENE_VERSION;
-  name?: string;
-  seed: number;
-  population: number;
-  biome?: string;
-  metersPerUnit?: number; // estimated city scale for glyph minimum sizes
-  buildingCapacity?: {
-    basis: 'ordinary-building-budget';
-    target: number;
-    placed: number;
-    shortfall: number;
-    corePlaced: number;
-    outerPlaced: number;
-    status: 'met' | 'shortfall';
-  };
-  bounds: LocalBounds;
-  layers: {
-    water: WaterLayer;
-    fields: FieldPlot[];
-    /** @deprecated Always empty since settlemaker 0.8.0 — fields carry angleDeg instead. */
-    furrows: Furrow[];
-    greens: GreenFeature[];
-    vegetation: VegetationInstance[];
-    symbols: SymbolInstance[];
-    roads: RoadFeature[];
-    buildings: BuildingFeature[];
-    piers: PierFeature[];
-    walls: WallFeature[];
-  };
-}
-```
-
-### SCENE_VERSION 2 (generator-native symbols)
-
-`SCENE_VERSION` bumped from `1` to `2` for the glyph-wiring work: settlemaker
-now places generator-native POI symbols (wells, mills, market crosses,
-church marks, etc.) as first-class scene data instead of leaving them to a
-downstream consumer.
-
-- **`layers.symbols: SymbolInstance[]`** — glyph placements in output coordinates.
-  The default city renderer now uses the same refined artwork as villages.
-  `scale` is the art-box width; `scaleY` optionally supplies its height.
-  Transform order is translate, rotate, scale, then translate by the art anchor.
-  `buildingId` links a replacement to its exact surviving footprint. Structure
-  replacements cast their silhouette shadows; overlays do not.
-  Glyph definitions use plain `<g>` elements, not viewport-bearing `<symbol>`
-  elements, so changing the outer viewBox cannot rescale glyphs independently
-  of roads or building footprints.
-  Retired phase 1 semantic POI placements can remain in the scene for identity,
-  but unavailable artwork is omitted, without falling back to batch001.
-- **`VegetationInstance.kind` is now a string, not the literal `'tree'`.**
-  It's a lookup key that may be either a refined canopy glyph id (e.g.
-  `'sm-tree-conifer'`, `'sm-tree-deciduous'`) or the legacy schematic
-  `'tree'` kind, depending on which `AssetSet` is in effect. This is a
-  breaking narrowing removal (the type was a literal union of one), which is
-  why it forced the version bump rather than landing as additive.
-- **`FieldPlot.hatch?: boolean`** — new optional field, additive. Omitted or
-  `true` means "draw the furrow hatch as before"; `false` means the plot's
-  ground still fills and outlines normally but the furrow pattern is
-  suppressed — used for the subplot converted to a windmill's sail clearing,
-  which shouldn't show plow lines under the mill.
-- **`BuildingFeature.glyphBacked?: true`** — a replacement has been placed for
-  this footprint. The renderer suppresses the footprint and its polygon shadow
-  only when a visible **structure** placement has a matching `buildingId` and
-  passes the selected asset set's availability and minimum-size checks.
-  Missing art, filtered placements, `symbols: false`, and old scenes without
-  explicit identity retain the polygon fallback.
-- **`Scene.metersPerUnit?: number`** — the city's population-based tiling scale
-  estimate, using the canonical default frame padding. Converts refined
-  manifest metre floors to local mesh units. It does not declare a surveyed
-  physical scale, and does not change the tiling or GeoJSON coordinate contract.
-
-These city fields are additive; scene version 2 and GeoJSON version 4 remain.
-The separate village engine at population ≤1,000 is unchanged.
-
-`LocalBounds` (from `src/generator/bounds.ts`) is a plain AABB:
-
-```ts
-export interface LocalBounds {
-  min_x: number;
-  min_y: number;
-  max_x: number;
-  max_y: number;
-}
-```
-
-### Getting a `Scene`
-
-```ts
-import { generateFromBurg, buildScene, assembleSvg } from 'settlemaker';
-
-const { model, degradedFlags } = generateFromBurg(burgInput);
-const scene = buildScene(model); // buildScene(model, { shift, padding })
-const svg = assembleSvg(scene);  // string, ready to write to a file
-```
-
-`buildScene` is a **pure extraction**: `assembleSvg` (and any future
-renderer) is required to consume only the `Scene`, never the `Model`. If
-you're writing an alternative renderer (e.g. a canvas or WebGL backend, or a
-GeoJSON exporter unified onto this vocabulary later), build it against
-`Scene`, not `Model`.
-
-### Layer semantics, briefly
-
-- `water.rings` — even-odd fill rule: outer boundary plus any island holes.
-  Empty array means landlocked (no water drawn). `synthetic: true` means the
-  shoreline was invented from an `oceanBearing` rather than supplied as real
-  coastline geometry — useful if you want to visually flag or suppress
-  synthetic coastlines downstream.
-- `fields` — farmland subplots, one `FieldPlot` per bordered parcel. Each
-  plot carries `angleDeg`, the hatch direction (from the plot's OBB) that the
-  renderer feeds into a `patternTransform="rotate(...)"` on the shared field
-  pattern (see §4) — the plot is filled with that rotated pattern rather than
-  drawn as individual furrow strokes. `furrows` is a **deprecated, always-empty**
-  layer kept only for `SCENE_VERSION` additive-compatibility; a past
-  representation of farmland as loose plow-line segments (`Furrow`) was
-  replaced by the bordered/hatched `FieldPlot` shape, and no code populates
-  `furrows` anymore. Consumers should ignore it.
-- `greens` / `vegetation` — park groves (filled polygons) and the individual
-  tree instances scattered inside them. `vegetation` entries are placements,
-  not geometry: `kind` is a lookup key into an `AssetSet` (see §3), not a
-  polygon.
-- `roads` — a flat list, no graph. `kind: 'artery'` is the through-town trunk
-  road (wider); `kind: 'road'` is an external approach stub. Consumers that
-  want a road network graph must derive it themselves; the `Scene` only
-  carries polylines.
-- `buildings` — every drawable structure, ordinary and landmark alike, in one
-  flat array. `kind` is the ward-type string — the lowercase `WardType` enum
-  value (e.g. `"craftsmen"`, `"market"`, `"castle"`; see the full list in §3)
-  — verbatim, and is what group/style code switches on. `landmark: true`
-  marks castles, cathedrals, and markets, which render in a separate pass
-  with heavier strokes (see §2).
-- `piers` — harbour pier footprints, drawn in the same visual pass as
-  buildings but kept in their own array since they aren't wards.
-- `walls` — one entry per wall ring (the outer curtain wall, and — if a
-  citadel is present — a second entry for the citadel wall, `large: true`).
-  `polylines` may be more than one segment if parts of the wall are inactive
-  (e.g. absorbed into a harbour frontage); `gates` carries precomputed bar
-  endpoints plus the `routeIds` of external roads that pass through each
-  gate, for consumers that want to label or highlight specific gates.
-
-## 2. Coordinate frame
-
-All `ScenePoint`s are in **output coordinates**: a local, y-down Cartesian
-plane, arbitrary units, with no fixed relationship to real-world scale or to
-Azgaar's world map coordinates. "y-down" means increasing `y` is downward on
-the page — the same convention SVG itself uses, so `Scene` coordinates map
-directly onto an SVG `viewBox` with no flip.
-
-`scene.bounds` (a `LocalBounds`) is the axis-aligned bounding box of every
-placed feature — patches, walls, streets, harbour piers — plus a uniform
-padding (default 20 units) on all four sides. It is computed once
-(`computeLocalBounds`) and reused for both the SVG `viewBox` and, in the
-GeoJSON output, `metadata.local_bounds` — the two representations cannot
-drift apart because they share this one computation.
-
-If you pass an `OriginShift` to `buildScene`, every point in every layer
-(including `bounds`) is already shifted — there is no separate "apply the
-shift yourself" step. Consumers just read `scene.bounds` and the layer
-geometry as final output coordinates.
-
-```ts
-const b = scene.bounds;
-const viewBox = `${b.min_x} ${b.min_y} ${b.max_x - b.min_x} ${b.max_y - b.min_y}`;
-```
-
-## 3. The SVG group/style contract
-
-`assembleSvg(scene, options)` renders a `Scene` to a self-contained SVG
-string: one `<svg>` root, a `<defs>` block (clip path + any symbol/glyph defs
-used by vegetation and `layers.symbols`), one `<style>` block, and then one
-`<g id="...">` per visual layer, drawn in a fixed paint order — **fields →
-greens → water → roads → shadows → buildings → landmarks → symbols → walls →
-canopy → marks** — chosen so later layers correctly occlude earlier ones
-(buildings sit on top of fields; `#marks` — the `zBand: 'overlay'` glyphs —
-sits on top of everything, including walls, since an overlay mark like a
-church cross is meant to read above the building it decorates).
-
-### Group ids and class vocabulary
-
-| Group id     | Contents                                    | Element classes used |
-|--------------|----------------------------------------------|-----------------------|
-| `#fields`    | farm subplot fills + furrow lines            | (none — bare `path`/`line`) |
-| `#greens`    | park polygons + `<use>` vegetation instances | (none on `path`; `<use>` inherits `#greens use` fill) |
-| `#water`     | one filled path + one shore-outline path     | `.fill`, `.shore`     |
-| `#roads`     | one casing pass, one core pass, per road     | `.casing`, `.core`    |
-| `#shadows`   | offset building silhouettes                  | (none — group-level fill/opacity) |
-| `#buildings` | ordinary (non-landmark) buildings + piers    | `.<wardType>` (e.g. `.craftsmen`), `.pier` |
-| `#landmarks` | castles/cathedrals/markets                   | `.<wardType>` (`.castle`, `.cathedral`, `.market`) |
-| `#symbols`   | `SymbolInstance` glyphs with `zBand: 'structure'` (wells, mills, market crosses, ...) | (none — `<use>` per instance) |
-| `#walls`     | wall polylines, towers, gate bars            | `.gate` on gate `<line>`s |
-| `#canopy`    | `VegetationInstance` tree/canopy glyph `<use>`s | (none) |
-| `#marks`     | `SymbolInstance` glyphs with `zBand: 'overlay'` (e.g. the church mark on a cathedral building) | (none — `<use>` per instance) |
-
-`#water` and `#greens` only appear when their layer has content (e.g. no
-`#water` group at all for a landlocked settlement). `#buildings` is emitted
-if there are ordinary buildings *or* piers — the group can hold both.
-`#symbols` and `#marks` likewise only appear when `layers.symbols` has an
-entry of the matching `zBand`. A consumer that wants generator-native POI
-symbols and marks suppressed entirely — e.g. a caller layering its own
-symbol set on top — can hide both groups with plain CSS and no new
-`assembleSvg` option:
-
-```css
-#symbols, #marks { display: none; }
-```
-
-The `.<wardType>` class on every building/landmark path is the element's
-`kind` value written verbatim — the **lowercase** `WardType` enum value, not
-the TypeScript enum member name. The full enum (`src/types/interfaces.ts`):
-`craftsmen`, `merchant`, `cathedral`, `slum`, `patriciate`, `administration`,
-`military`, `gate`, `market`, `castle`, `park`, `farm`, `harbour`, `empty`,
-`water` — though `park` wards never reach `#buildings` (their geometry goes
-to `greens` instead, see §1) and `water`/`empty` patches carry no ward at
-all. A CSS rule targeting craftsmen buildings must select on `craftsmen`
-lowercase — the TypeScript enum member name (`Craftsmen`, capitalized) is
-never what ends up in the markup.
-
-### Style-block ownership
-
-All color, stroke width, and opacity live in a single `<style>` block
-generated by `themeToCss(theme)` (`src/output/assemble-svg.ts`), keyed
-entirely off the group ids and classes above — e.g.:
-
-```css
-#buildings path{fill:#a08a5a;stroke:#4a3f2a;stroke-width:0.15}
-#water .fill{fill:#85bcb2;stroke:none}
-#water .shore{fill:none;stroke:#4a3f2a;stroke-width:0.6;stroke-linejoin:round}
-```
-
-The individual `<path>`/`<line>`/`<use>`/`<circle>` elements carry **no**
-inline `fill`/`stroke` attributes (aside from the one deliberate exception
-noted below) — every visual property comes from the CSS rule matching its
-group id and class. This means a consumer who wants a different color scheme
-never edits markup: swap the `RenderTheme`/`Palette` passed to `assembleSvg`,
-or post-process the `<style>` block, and the same geometry redraws in a new
-style.
-
-The one inline-styled element is the background rect (next section) — it
-carries its paper color inline because it exists specifically for external
-cropping tools, which need the color available without parsing the
-`<style>` block.
-
-### `data-bg` and `clipId`
-
-Immediately after `<defs>`/`<style>`, `assembleSvg` emits:
-
-```html
-<rect data-bg="paper" x="..." y="..." width="..." height="..." fill="#fff2c8"/>
-```
-
-`data-bg="paper"` is a **contract**, not decoration: `settlement-tiler`'s
-`cropSvgToTile` looks for this exact attribute to find the background rect
-when cropping a full settlement SVG down to a map tile. Do not rename or
-remove this attribute in a custom renderer if tiling needs to keep working
-against your output.
-
-`clipId` (an `AssembleOptions` field, default `'frame-clip'`) names the
-`<clipPath>` id used by the `#water` group, so that flooding a giant water
-polygon doesn't paint outside the settlement frame. **Every SVG document
-that embeds more than one settlement must pass a distinct `clipId` per
-settlement** — SVG ids are global to the document, and a collision means the
-second settlement's water clips against the first settlement's frame.
-Characters outside `[A-Za-z0-9_-]` are sanitized to `'-'` inside
-`assembleSvg`, so callers don't need to pre-slugify — though
-`compare-versions.ts` still does so itself for readability, building
-`clipId: 'frame-clip-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-')`.
-
-## 4. The `AssetSet` manifest — worked example: the field pattern
-
-An `AssetSet` maps semantic kinds to raw SVG markup two ways: vegetation
-`kind`s (currently just `'tree'`, see `VegetationInstance.kind`) to `<symbol>`
-markup, and now also fill `kind`s (currently just `'field'`, see
-`FieldPlot`) to tileable `<pattern>` markup. This is the seam for a
-community artist: draw new art or a new hatch, drop it into `symbols` or
-`patterns`, and it replaces the built-in placeholder with zero
-generator-code changes.
-
-```ts
-// src/assets/asset-sets.ts
-export interface AssetSet {
-  name: string;
-  /** semantic kind → inner markup of a <symbol viewBox="-1 -1 2 2"> */
-  symbols: Record<string, string>;
-  /** semantic kind → tileable <pattern> content, unrotated (assembler applies patternTransform). */
-  patterns?: Record<string, { width: number; height: number; content: string }>;
-  glyphs?: Record<string, GlyphAsset>; // viewBox, body, sil, anchor
-  manifest?: Record<string, { footprint: [number, number] | null; minScale: number }>;
-  refined?: boolean; // use the shared village material/stroke CSS
-}
-
-export const SCHEMATIC_SET: AssetSet = {
-  name: 'schematic',
-  symbols: {
-    tree: '<circle cx="0" cy="0.12" r="0.44"/><circle cx="-0.3" cy="-0.1" r="0.32"/><circle cx="0.28" cy="-0.16" r="0.34"/><circle cx="-0.02" cy="-0.36" r="0.28"/>',
-  },
-  patterns: {
-    field: { width: 2, height: 1.3, content: '<line x1="0" y1="0.65" x2="2" y2="0.65" class="furrow"/>' },
-  },
+const burg = {
+  name: 'Thornwall', population: 5000, biome: 'temperate',
+  port: false, citadel: true, walls: true, plaza: true,
+  temple: true, shanty: false, capital: false,
+  roadBearings: [20, 145, 270],
 };
+const result = generateFromBurg(burg, { seed: 42 });
+const scene = buildScene(result.model, { shift: result.originShift, padding: 20 });
+const svg = assembleSvg(scene, { palette: PALETTES.night });
+console.log(scene.version, svg.length);
 ```
 
-The `field` pattern is the worked example for `patterns`: `width`/`height`
-are the tile size in local units (a `patternUnits="userSpaceOnUse"` tile,
-not scaled to the plot), and `content` is the unrotated inner markup of the
-`<pattern>` element — here, a single horizontal line at mid-tile-height,
-tagged `class="furrow"` so `themeToCss` can color/weight it
-(`.furrow{stroke:...}`) without the pattern markup itself carrying paint. At
-assembly time, `assembleSvg` buckets each `FieldPlot` by its `angleDeg`
-(rounded to the nearest 15° and wrapped mod 180°, since a hatch line looks
-identical rotated 180°) and emits one `<pattern>` per bucket actually used,
-each wrapping the same `content` in a `patternTransform="rotate(<bucket>)"`
-— so a field plot rotated 47° reuses the same tile art as one rotated 53°,
-both sharing the 45°-bucket pattern, rather than minting a fresh pattern per
-distinct angle.
+`generateSvg(model, options)` is a convenience wrapper around those two stages.
+When rerendering a model from `generateFromBurg`, pass its `originShift` if you
+want the same output coordinate frame. When generating SVG and GeoJSON separately,
+use the same shift and padding for both.
 
-At assembly time, `assembleSvg` wraps each used symbol's markup in a real
-`<symbol>` element once, in `<defs>`, and every `VegetationInstance` becomes
-a `<use>` referencing it:
+For direct control over city generation:
 
-```html
-<defs><symbol id="asset-tree" viewBox="-1 -1 2 2"><circle .../>...</symbol></defs>
-...
-<use href="#asset-tree" x="-1" y="-1" width="2" height="2"
-     transform="translate(142.30,88.10) scale(1.10) rotate(207)"/>
+```js
+import { mapToGenerationParams, Model, generateSvg, generateGeoJson } from 'settlemaker';
+
+// burg is the complete object from the preceding example.
+const params = mapToGenerationParams(burg, 42);
+const model = new Model(params).generate();
+const svg = generateSvg(model);
+const geojson = generateGeoJson(model);
 ```
 
-### Authoring rules
+`GenerationParams` is a TypeScript interface. It cannot be called with `new`.
+This direct path does not reproduce the two-pass coastal output translation
+performed by `generateFromBurg`; use that high-level function when you want it.
 
-1. **Unit box.** Every symbol is authored inside `viewBox="-1 -1 2 2"` — a
-   2×2 square centered on the origin. The renderer positions and scales your
-   symbol purely via the `transform` on the `<use>`; you never need to think
-   about world coordinates while drawing. Draw your tree/house/whatever
-   centered at `(0,0)`, sized to roughly fill the ±1 box.
-2. **Unstyled markup.** Do not put `fill`, `stroke`, or `class` attributes
-   inside your symbol's inner markup. Color is applied from the outside via
-   group CSS — for trees, `#greens use{fill:...}` in `themeToCss`. This is
-   what lets the same tree symbol render correctly in every palette
-   (`parchment`, `blueprint`, `ink`, `night`, ...) without per-palette art.
-   If your symbol genuinely needs two colors (e.g. a two-tone building), that
-   is new ground — coordinate a new group/class pair rather than hardcoding
-   colors inline.
-3. **Pure `<symbol>` inner markup only** — shapes (`<circle>`, `<path>`,
-   `<rect>`, `<polygon>`, ...), no `<script>`, no external references, no
-   `<style>` inside the symbol itself.
-4. **Determinism is the caller's job, not the artist's.** Placement, scale,
-   and rotation for each instance come from the `Scene`'s
-   `VegetationInstance` entries (deterministically seeded — see
-   `scatterVegetation` in `src/scene/build-scene.ts`). An `AssetSet` only
-   supplies the *shape*, never randomness of its own.
+## Scene fields
 
-### Registering a new set
+| Field | Meaning |
+| --- | --- |
+| `version` | Literal 2. |
+| `seed`, `population`, optional `name`, `biome` | Generating context. |
+| `bounds` | Local output bounds. |
+| `metersPerUnit` | Optional city scale estimate for rendering, not a survey. |
+| `buildingCapacity` | Optional ordinary-building budget accounting. |
+| `layers` | The geometry and instance arrays described below. |
 
-`assetSetFor` returns the refined village library. Placers resolve biome IDs;
-all five biome families live in this set. `SCHEMATIC_SET` remains available
-for explicit schematic rendering:
+| Layer | Contents |
+| --- | --- |
+| `water` | `{rings, synthetic}`; even-odd output rings retain islands. |
+| `fields` | Polygon `ring`, `angleDeg`, optional native `glyph` and `hatch`. Pattern pitch is independent of parcel size. |
+| `furrows` | Deprecated array; current scenes leave it empty and use field direction instead. |
+| `greens` | Polygon rings with optional planned paths and path width. |
+| `vegetation` | Position, glyph/legacy `kind`, scale and rotation. |
+| `symbols` | Glyph `id`, position, scale, optional `scaleY`, `buildingId`, `materialVariant`, rotation, and `zBand`. |
+| `roads` | Paths with `kind: 'artery' | 'road' | 'alley'` and optional width. |
+| `buildings` | Polygon, semantic ward `kind`, `landmark`, optional `id` and `glyphBacked`. |
+| `piers` | Polygon rings. |
+| `walls` | Polylines, towers, gates and `large`; optional curtain/rubble/palisade material. Gates retain route IDs. |
+| `bridges` | Optional on v2 scenes; bank-to-bank path, width and ID. |
 
-```ts
-export function assetSetFor(_biome?: string): AssetSet {
-  return REFINED_SET;
-}
-```
+An instance's scale gives its art-box size in scene units; artwork coordinates
+come from the selected glyph's view box and anchor. Preserve non-square boxes and
+`scaleY`. Native field tiles may have a 32-unit box, structure slots commonly 64,
+and downloadable authoring assets can use other dimensions. There is no universal
+2×2 authoring rule for current glyphs.
 
-To add per-biome art, add new `AssetSet` constants and extend the lookup
-table inside `assetSetFor` (mirror `paletteForBiome`'s table pattern below).
-`assembleSvg` also accepts an explicit `AssetSet` via
-`options.assetSet`, bypassing the biome lookup entirely — useful for tools
-that want to force a specific art style regardless of biome.
+## Appearance and artwork
 
-## 5. Biome hooks
+`assembleSvg(scene, options)` accepts `palette`, partial `theme`, `skin`,
+`skinBiome`, `assetSet`, `symbols` and `clipId`. `generateSvg` also accepts scene
+`padding` and `shift`.
 
-Two lookup functions key off `scene.biome` (a free-text string set from
-`GenerationParams.biome`, currently unvalidated/untyped — whatever string
-the caller supplies passes through):
+The default asset set is **`SETTLEMENT_SET`**, containing the current native biome
+artwork. `REFINED_SET` and `SCHEMATIC_SET` remain explicit lower-level alternatives.
+`assetSetFor` returns the current default. `paletteForBiome` currently supplies
+its palette fallback; the artwork and material selection provide much of the
+visible biome variation. Do not assume each biome corresponds to a different
+named city palette.
 
-```ts
-// src/output/palette.ts
-export function paletteForBiome(biome?: string): Palette { ... }
+For an artist-facing integration, prefer `createSkin` and the [skin contract](skins.md).
+It validates portable JSON, allowed SVG fragments and exact slot names without
+requiring changes to the asset lookup code. An explicit city `assetSet` overrides
+a skin's artwork. Skin colours/biomes and renderer overrides follow the precedence
+in the skin guide.
 
-// src/assets/asset-sets.ts
-export function assetSetFor(_biome?: string): AssetSet { ... }
-```
+`AssetSet` remains a lower-level API for trusted code. It has a name, legacy
+semantic `symbols`, optional `patterns`, `glyphs`, placement `manifest` and
+`refined` styling flag. Its legacy symbols use a unit box, while `glyphs` carry
+explicit view boxes and anchors. Do not apply the legacy unit-box convention to
+portable skin glyphs.
 
-Both currently fall back to a single default (`PALETTES.default` /
-`SCHEMATIC_SET`) for every biome — there is no per-biome art or color yet.
-The tables exist precisely so that adding, say, a desert palette or a
-palm-tree asset set is a **pure data addition**: add an entry to the
-`table` object inside the function, keyed by whatever biome string you want
-to target, no call sites change. `assembleSvg` calls both automatically
-unless the caller overrides with `options.palette` / `options.assetSet`.
+## SVG styling and geometry
 
-## 6. Evolution policy
+Current SVGs combine group CSS, material custom properties and presentation
+attributes inside native or procedural artwork. They are not wholly styled by
+one CSS block, and changing a group fill does not recolour every roof or tree.
+Use documented theme/token controls instead of rewriting arbitrary SVG attributes.
 
-The `Scene` shape is a long-term integration contract, not an internal
-implementation detail — a future AFMG-side assembler is expected to consume
-this exact shape. Two rules govern how it may change:
+City groups include fields, greens, water, roads, buildings, landmarks, shadows,
+placed symbols/marks, vegetation and walls. Some groups are omitted when empty;
+procedural artwork can add nested groups, masks and patterns. These group names
+are not the village renderer's DOM contract. For city building identity, emitted
+`data-building-id` attributes connect applicable polygons/symbols to GeoJSON IDs.
+Use GeoJSON for semantic feature queries rather than inferring a feature solely
+from its colour or DOM position.
 
-1. **Additive only, by default.** New optional fields, new layer arrays, new
-   `BuildingFeature`/`RoadFeature`/etc. variants may be added at any time
-   without bumping `SCENE_VERSION`. Existing consumers that only read the
-   fields they know about must keep working unmodified.
-2. **Bump `SCENE_VERSION` on any breaking change** — renaming or removing a
-   field, changing a field's type or meaning, changing the coordinate frame,
-   or changing paint-order/group-id semantics that a consumer could have
-   relied on. `SCENE_VERSION` is currently `2` (bumped from `1` for
-   generator-native symbols — see §1's "SCENE_VERSION 2" note). A consumer should check
-   `scene.version` and reject (or explicitly branch on) versions it wasn't
-   built against, the same way GeoJSON output carries
-   `metadata.schema_version` for the same purpose (see `docs/schema-v3.md`).
+`symbols: false` hides placed city symbols and overlay marks. It leaves vegetation
+and actual building polygons available. It is not a universal switch to remove
+all embedded artwork.
 
-When in doubt about whether a change is additive: if an existing, unmodified
-consumer's code — reading only the fields it already knows about — would
-silently misbehave (not just miss new data) after the change, it's breaking
-and needs a version bump.
+## Embedding SVG
+
+The `data-bg="paper"` rectangle is used by the tile cropper. Preserve it when
+post-processing. Village roots also declare `data-px-per-metre`; use it to retain
+their physical scale through tiling.
+
+Generated SVG IDs are scoped to a document. When displaying several maps, prefer
+separate `<img>` documents (including SVG Blob URLs), `<object>` elements or
+iframes. A unique city `clipId` only changes selected clipping/pattern IDs; it
+does not namespace every glyph, CSS selector or village ID. It is insufficient
+by itself to make multiple inline maps independent. A custom inline compositor
+must consistently namespace IDs, references and applicable styles.
+
+SVG output is self-contained for artwork. A browser host is responsible for
+responsive sizing, pan/zoom, downloads and visible errors. Those behaviours are
+not implemented by importing the generator alone.
+
+## Evolution and saved scenes
+
+Optional fields such as `layers.bridges`, field `glyph`, wall `material` and symbol
+`materialVariant` extend Scene v2. Consumers should handle their absence in older
+saved scenes. Breaking changes to existing field meaning or structure require a
+scene version change.
+
+A saved scene is not a complete reproduction package: retain the generator
+version, skin definition and renderer options too. A `SettlementSkin` runtime
+handle must be recreated from JSON in the module instance doing the rendering.

@@ -1,148 +1,38 @@
-# GeoJSON schema v3 — delta from v2
+# Historical GeoJSON schema v3
 
-Historical delta introduced in release `0.4.0` with `metadata.schema_version: 3`.
-The current generator emits schema **4**. The village additions documented
-below are additive fields carried by that current schema; do not downgrade
-`metadata.schema_version` when consuming them.
+This page records the city-output transition introduced in release 0.4.0.
+**Current output uses schema 4.** Use the [current GeoJSON reference](geojson.md)
+for new integrations, including village coordinates, road widths and diagnostics.
+Do not gate current output on `schema_version === 3`.
 
-## What changed
+## What changed in v3
 
-### Additions
+City output gained POI Point features, building and street IDs, ID-prefix
+metadata, and the hamlet/town POI density marker. Existing city properties such
+as `wardType` and `streetType` retained camelCase; additions such as `building_id`
+and `poi_id` used snake_case. That mixture remains deliberate in current output.
 
-- New feature layer **`poi`** (point geometry) with properties:
-  `layer`, `poi_id`, `kind`, `ward_type`, `building_id`. No `name` — settlemaker does not generate POI names in v1; consumers add them.
-- **`building_id: "b<idx>"`** added to every `layer: 'building'` feature.
-- **`street_id: "s<idx>"`** added to every `layer: 'street'` feature (arteries and roads).
-- New metadata block: `metadata.stable_ids.prefixes = { entrance: 'g', poi: 'p', street: 's', building: 'b' }`.
-- New metadata field: `metadata.poi_density` — `'hamlet'` (P < 300) or `'town'` (P >= 300).
-
-### Unchanged
-
-`wall`, `tower`, `entrance`, `ward`, `pier`, `water` layers keep their exact v2 property keysets.
-Entrance IDs continue to use the `g<wallVertexIndex>` scheme.
-
-### A note on camelCase vs snake_case
-
-Existing v2 layers (`building`, `street`, `ward`, `pier`) use **camelCase** properties (`wardType`, `streetType`). The new v3 properties use **snake_case** (`building_id`, `street_id`, `poi_id`, `ward_type`, `stable_ids`, `poi_density`). This is a deliberate compromise: the v2 properties stayed camelCase to preserve the "unchanged layers" contract, while new v3 fields follow the existing `entrance_id` / `wall_vertex_index` / `sub_kind` convention already established on entrance features.
-
-Consumers should accept both casings and not assume a uniform style across fields.
+Later city releases added symbol-backed floating wells, markets and mills, then
+capacity accounting and other optional schema-4 fields. Later village releases
+introduced a different planner and its own feature properties. The historic
+city-only POI and flat-street descriptions must not be applied to every village.
 
 ## Stable-ID contract
 
-### City building-capacity accounting (additive in schema 4)
+IDs are deterministic for identical inputs and a fixed generator version.
+They are opaque and are not guaranteed stable across upgrades. See
+[current identity and persistence](geojson.md#ids-and-persistence).
 
-For cities above population 1,000, `metadata.building_capacity` reports the final
-ordinary-building budget: `basis: 'ordinary-building-budget'`, `target`, `placed`,
-`shortfall`, `corePlaced`, `outerPlaced`, and `status: 'met' | 'shortfall'`.
-The same camelCase object is available as `Scene.buildingCapacity` and from
-`Model.getBuildingCapacity()`. `shortfall = max(0, target - placed)`; core and
-outer counts sum to `placed`. These are building counts, not a certified housed
-population or a change to `urbanDensity` occupancy semantics. Consumers should
-retain explicit shortfalls, including those caused by limited land or routes.
+## Village road cross-sections
 
-### Identity
-
-All feature IDs (`entrance_id`, `poi_id`, `street_id`, `building_id`) are stable across re-runs with the same seed and same inputs. Form: `<prefix><sequentialIdx>` where the index reflects generation order and the prefix disambiguates feature type.
-
-Consumers should treat IDs as **opaque** but may rely on them as primary keys for persistence.
-
-## Flat-LineString street contract
-
-Each `layer: 'street'` feature has exactly one `street_id`. IDs are **never shared** across features. Branches produce separate features with separate IDs. Crossings are geometric intersections only — no shared identity, no junction object. Streets stay flat LineStrings; no graph/node/edge model at the contract level.
-
-### Village route roles
-
-Village street features optionally include `route_role`: `approach` for the
-external FMG road, `street` for its village continuation or a residential lane,
-and `through` for a major road retained through a small roadside hamlet.
-`streetType` is the class of the **drawn segment**: an incoming royal road may
-continue as town streets inside the village. Internal streets use `town`,
-`local`, or `footpath`; the hamlet exception retains royal/main/market.
-`route_ids` preserves the supplied route provenance on required continuations
-and shared segments. A route ID can occur on both independently measured
-approaches and on several shared streets; it is not a street's unique ID.
-These optional properties do not change the schema version or city output.
-
-### Village road cross-sections
-
-Village street features retain `width_m` as the reserved road corridor in metres.
-Two additive properties describe the cross-section more precisely:
-
-| Property | Meaning |
-|---|---|
-| `surface_width_m` | Travelled surface, matching the SVG stroke width divided by its pixels-per-metre scale. |
-| `setback_m` | Offset from the corridor edge to the parcel frontage; total centreline offset is `width_m / 2 + setback_m`. |
-
-The model equivalents are `Lane.widthM`, optional `surfaceWidthM`, and optional
-`setbackM`. Older model objects without the optional fields keep their existing
-class-based setback and paint defaults. Collision and dressing clearance use the
-reserved corridor; parcel frontage uses the corridor plus setback. Streets remain
-flat LineStrings sampled from the same centreline used to render and place lots.
-These fields do not change the schema version or city output.
-
-At a width transition, optional `surface_clip_m` on a street contains a polygon
-in the same local metre coordinates. Intersect its ordinary centreline stroke
-with this polygon to reproduce the narrowing drawn in SVG. `surface_width_m`
-remains the nominal width; the reserved corridor is unchanged. Clips only remove
-paint, so they cannot widen a road into a parcel. A continuing main street keeps
-its width when a small path meets its side.
-
-Village road surfaces are masked against the union of water polygons. Street
-LineStrings remain continuous for connectivity, but consumers drawing surfaces
-must likewise exclude water and draw bridge decks separately. Crossing Point
-features retain `crossing_id`, `street_id`, `span_m`, `bearing_deg` and `narrow`.
-Optional `deck_m` (polygon coordinates) and `centreline_m` (polyline coordinates)
-provide the bridge shape, including one metre of dry abutment at either end.
-The renderer draws these decks when `narrow` is true. Span measurements use
-exact bank intersections, including water narrower than the old one-metre
-sampling interval. Model equivalents are `WaterCrossing.deck` and `centreline`.
-
-A triangular green may include `outline_m`, three corner coordinates lying on
-its actual approach routes. Its feature remains a Point with the same identity
-and location contract; the optional outline reproduces the road-defined shape.
-Elongated green bearings describe the world-space long axis (0 = north).
-
-Village layouts changed with the frontage-driven road policy. IDs and geometry
-remain deterministic for identical inputs **within a generator version**; they
-are not promised stable across generator upgrades. The existing
-`settlement_generation_version: "village"` metadata value identifies the engine,
-not a source revision, and remains unchanged. Consumers caching generated output
-should include their deployed package/build revision in the cache key or refresh
-that cache when upgrading.
-
-## `building_id` rule for POIs
-
-`building_id` is `null` only when `poi.kind ∈ {'pier', 'well', 'market', 'mill'}`. For all other kinds, `building_id` is non-null; if no suitable building exists, the POI is omitted entirely rather than emitted with `null`.
-
-## `ward_type` rule for POIs
-
-Non-null for every adopted POI (the ward of the adopted building) and for every ward-intrinsic floating POI (piers → `'harbour'`; placed `market`/`mill`/`well` symbols → the ward that placed them). Null only when a floating POI isn't geographically inside any ward — in practice this is just the hamlet-regime plaza/burg-center `well` fallback (`emitHamlet`) when the burg has no plaza (or the plaza patch has no ward), and only fires when the generator did NOT already place an `sm-well` symbol.
-
-Consumer predicate: `ward_type === null` iff the POI is the hamlet plaza-less well fallback.
-
-## POI semantics under settlemaker 1.1.0
-
-Since `1.1.0`, `FLOATING_POI_KINDS` (`src/poi/poi-kinds.ts`) grew from `{'pier', 'well'}` to `{'pier', 'well', 'market', 'mill'}`. `market` and `mill` are no longer adopted from ward buildings — they're sourced from generator-placed symbol sites (`sm-market-cross`, `sm-mill-wind`), the same glyphs the SVG renders, so the GeoJSON and the rendered map always agree. `well` POIs come from generator-placed sites too (`sm-well`) when the generator placed one; only the hamlet no-plaza fallback still floats independent of a symbol.
-
-- **New floating kinds:** `market`, `mill` (joining `pier`, `well`). All four always emit a `building_id: null` POI — they never consume building supply.
-- **`building_id` rule:** as above — `null` for all four floating kinds, non-null (or omitted) for everything else.
-- **`ward_type` rule:** as above — placed `well`/`mill`/`market` symbols now carry the consuming ward's type (the ward that placed the symbol knows it at placement time: a `CommonWard` subclass for wells, `Farm` for mills, `Market` for market crosses), not a hardcoded value. Only the plaza-less hamlet well fallback stays null.
-- **Deprecation caveat:** `POI_TIER` (`src/poi/poi-kinds.ts`) still assigns tiers to `market`/`mill`/`well` for type-completeness, but tiers only govern drop-off order when building supply runs out during adoption. Since these three kinds are symbol-sourced and never adopt a building, `POI_TIER` does not apply to them in practice — they always emit (or don't, per generator placement) independent of building-supply pressure.
-
-## Ribbon dwellings and ward attribution (1.2.0)
-
-Since `1.2.0`, village rows (`!rowHousing` settlements) can ribbon dwelling glyphs along roads through open countryside past the last built ward patch, not just across already-built residential wards. Those ribbon dwellings are attributed to the nearest built ward for census/POI/ward-labelling purposes (`resolveWardPatch` in `src/generator/village-rows.ts`), but the building's rect itself stands on the open-countryside patch where it was actually stamped — so a `building`/`poi` feature's `wardType`/`ward_type` may name a ward whose polygon does not spatially contain it. Consumers doing point-in-ward joins should use the feature's own coordinates against ward polygons, not trust the `wardType`/`ward_type` label as a spatial-containment guarantee.
-
-## POI regimes
-
-The selector splits at `P < 300`. The emitted `poi_density` metadata field reflects which regime ran.
-
-- **Hamlet regime (P < 300).** Ward-agnostic guaranteed-minimum set: `tavern` (P≥30), `chapel` (P≥50), `smithy` (P≥80), `mill` (water-adjacent), `inn` (P≥150 AND ≥2 gates), `stable` (if inn emitted), `well` (P≥30, floating at plaza or burg center).
-- **Town regime (P ≥ 300).** Ward-gated with `max(1, round(P/divisor))` floors. Full table in `docs/superpowers/specs/2026-04-23-poi-named-streets-design.md`.
+The documentation formerly appended here now lives in the
+[current village road section](geojson.md#village-road-cross-sections), including
+corridor widths, painted widths, setbacks, bridge decks and route provenance.
 
 ## Migration for consumers
 
-- Gate on `schema_version === 3` (or `>= 2 && <= 3` if you want to accept both).
-- Treat `building_id` and `street_id` as primary keys. They're stable across re-runs with identical inputs.
-- New POI features arrive unordered among existing features. Filter by `layer` and ignore unknown layers.
-- Settlement naming (POI names, street names) is a consumer responsibility. Settlemaker emits no `name` properties.
+For 3.0.x, check schema **4**, inspect `properties.layer` and geometry types,
+and accept optional fields your application does not need. Branch for the
+[village/city differences](geojson.md), especially POIs, greens, gate features,
+coordinates and IDs. The package version, scene version and URL envelope version
+are separate discriminators; see the [documentation index](README.md#contract-versions).

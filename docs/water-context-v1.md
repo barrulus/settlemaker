@@ -1,20 +1,18 @@
 # Water context v1 — implementation contract
 
-**Status: implemented in release 2.6.0; production activation requires its matching web deployment.**
-This is the normative village water contract, following
-[the Tarrimas-Ha investigation](plans/2026-09-10-water-distance-contract.md).
-The implementation includes library results and typed errors; settlemaker-web
-must deploy its visible diagnostics together with the generator pin.
+Supported by the **3.0.x village library**, for populations 1–1,000, through
+both direct generation and the compressed URL input. This is the normative
+contract for coverage, precision, precedence and diagnostics. City calls reject
+`waterContext`; legacy city polygons remain in city-local units.
 
-This revision incorporates the five findings in FMG's completed assessment,
-`docs/superpowers/specs/2026-09-10-water-context-contract-review.md`: iframe error
-delivery, authoritative shoreline geometry, union boundaries, river measurement
-units, and complex coasts represented by a single ocean feature.
+The hosted renderer is a separate deployment. A host must display the library's
+errors and warnings and verify the deployed version before enabling measured
+inputs. See the [URL adapter contract](url-api.md) and [library API](api.md).
 
 ## Scope and wire format
 
 This implementation serves **villages, population 1–1000**. Add `waterContext`
-to `AzgaarBurgInput` in the compressed `i=` payload. The enclosing URL payload
+to `AzgaarBurgInput` in a direct library call or the compressed `i=` payload. The enclosing URL payload
 version remains `1`; the new object has its own version discriminator.
 
 ```ts
@@ -339,7 +337,7 @@ Roll out in this order:
    and external-open URLs. Keep city and legacy paths separate during rollout.
 
 Older decoders ignore unrecognized fields; therefore merely adding this object
-to today's production URL is **not** a compatibility check. Do not enable the FMG
+to an older deployed renderer's URL is **not** a compatibility check. Do not enable the FMG
 sender before the supporting renderer is deployed.
 
 ## 5. Shared acceptance fixtures
