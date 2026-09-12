@@ -23,7 +23,12 @@ describe('preserving the best valid placement', () => {
     let first: ReturnType<typeof original> | undefined;
     evaluate.mockImplementation(input => {
       const actual = original(input);
-      if (!first) { first = actual; return actual; }
+      if (!first) {
+        // Force a shortfall independently of the selected artwork's dimensions.
+        const buildings=actual.spend.buildings.slice(0,-1),housed=buildings.reduce((n,b)=>n+b.occupancy,0);
+        first={...actual,spend:{...actual.spend,buildings,housed,unhoused:input.site.population-housed}};
+        return first;
+      }
       return { ...actual, spend: { buildings: [], housed: 0, unhoused: input.site.population } };
     });
     const m = generateVillage(roadFixture(80), 1);

@@ -1,9 +1,9 @@
 /** Original top-down vector artwork. Run: node scripts/generate-copperline.mjs */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { SKIN_SLOTS as manifest } from '../dist/index.js';
 
 const root = new URL('../', import.meta.url);
-const manifest = JSON.parse(readFileSync(new URL('symbols/refined/symbols.json', root), 'utf8')).symbols;
 const palette = {
   ink: '#293b40', steel: '#879ca0', light: '#cad4ce', dark: '#526c73',
   copper: '#bc8050', brass: '#e1b96e', glass: '#91d2d0', glassLine: '#d9efdf',
@@ -141,16 +141,49 @@ add('sm-edge-fence', 'Wire security fence', path('M0 29H64M0 35H64','none',.7,'d
 add('sm-edge-ditch', 'Storm drain', rect(0,28,64,8,'dark',0,.5)
   + [4,12,20,28,36,44,52,60].map(x=>path(`M${x} 29v6`,'none',.7,'steel')).join(''));
 
-// Every biome slot is covered, so selecting another terrain cannot leak old roofs.
+// Adapt the original drawings to current runtime slots, retaining each slot's
+// own art box. The generator now places native city, flora, field and henge IDs.
+const cityFamilies = {
+  'row-house-a': 'sm-house', 'row-house-b': 'sm-house-tiled',
+  terrace: 'sm-longhouse', tenement: 'sm-house-large-tiled',
+  corner: 'sm-house-tiled', courtyard: 'sm-house-large-tiled',
+  'courtyard-u': 'sm-house-large-tiled', 'shop-house': 'sm-house',
+  inn: 'sm-inn', warehouse: 'sm-longhouse', workshop: 'sm-house-large-tiled',
+  guildhall: 'sm-inn', bathhouse: 'sm-temple', 'market-hall': 'sm-longhouse',
+  cathedral: 'sm-cathedral', chapel: 'sm-chapel', church: 'sm-chapel',
+  cloister: 'sm-temple', 'temple-court': 'sm-temple', 'temple-hall': 'sm-temple',
+  'castle-wall': 'sm-kit-wall', 'castle-gatehouse': 'sm-kit-gate',
+  'castle-tower-round': 'sm-kit-tower-drum', 'castle-tower-square': 'sm-kit-tower-square',
+  'castle-keep': 'sm-kit-keep', 'castle-hall': 'sm-longhouse',
+  'castle-barracks': 'sm-longhouse', 'castle-chapel': 'sm-chapel',
+  'palace-hall': 'sm-house-large-tiled', 'palace-wing': 'sm-longhouse',
+  'palace-gallery': 'sm-longhouse', 'palace-pavilion': 'sm-hut-round',
+  'palace-gatehouse': 'sm-kit-gate', 'palace-chapel': 'sm-chapel',
+};
 for (const [id,meta] of Object.entries(manifest)) {
   if (art[id]) continue;
   const base = id.split('--')[0];
-  const target = art[base] ? base : base === 'sm-hut' ? 'sm-hut-straw'
-    : base === 'sm-kit-tower' ? 'sm-kit-tower-square'
-    : meta.zBand === 'canopy' ? (/conifer|snag/.test(id) ? 'sm-tree-conifer' : /scrub|grass/.test(id) ? 'sm-tree-deciduous-small' : 'sm-tree-deciduous')
-    : undefined;
-  if (!target) throw new Error(`Missing Copperline artwork: ${id}`);
-  art[id] = { ...art[target] };
+  let target = art[base] ? base : cityFamilies[meta.family]
+    ?? (base === 'sm-hut' ? 'sm-hut-straw' : base === 'sm-kit-tower' ? 'sm-kit-tower-square' : undefined);
+  if (!target && meta.category === 'henge') target = 'sm-stone-circle';
+  if (!target && meta.category === 'field') {
+    target = /grove|orchard/.test(meta.family) ? 'sm-field-orchard'
+      : /paddy/.test(meta.family) ? 'sm-field-paddy--tropical'
+      : /garden|alfalfa/.test(meta.family) ? 'sm-field-vine'
+      : meta.natural || /pasture|meadow|grazing|lichen/.test(meta.family) ? 'sm-field-pasture'
+      : /rest|fallow/.test(meta.family) ? 'sm-field-fallow'
+      : /stubble/.test(meta.family) ? 'sm-field-stubble' : 'sm-field-plough';
+  }
+  if (!target && (meta.category === 'flora' || meta.zBand === 'canopy')) {
+    target = /conifer|snag|spruce|pine/.test(id) ? 'sm-tree-conifer'
+      : /scrub|grass|fern|moss|lichen|flowers|sedge|shrub/.test(id) ? 'sm-tree-deciduous-small' : 'sm-tree-deciduous';
+  }
+  if (!target || !art[target]) throw new Error(`Missing Copperline artwork: ${id}`);
+  const [x,y,w,h] = meta.viewBox;
+  const wrap = markup => w === 64 && h === 64 && x === 0 && y === 0 ? markup
+    : `<g transform="translate(${x} ${y}) scale(${w/64} ${h/64})">${markup}</g>`;
+  art[id] = { body: wrap(art[target].body),
+    ...(meta.zBand === 'structure' && art[target].sil ? {sil: wrap(art[target].sil)} : {}) };
 }
 const tokens = Object.fromEntries(Object.entries(palette).map(([k,v])=>[`--cl-${k}`,v]));
 Object.assign(tokens, {
@@ -190,8 +223,8 @@ const definition = normalize(skin);
 mkdirSync(new URL('symbols/copperline/', root), { recursive: true });
 writeFileSync(new URL('docs/examples/copperline.skin.json', root), JSON.stringify(definition,null,2)+'\n');
 const symbols = Object.entries(definition.glyphs).map(([id,g]) =>
-  `<symbol id="${id}" viewBox="0 0 64 64">${g.body}</symbol>`
-  + (g.sil ? `\n<symbol id="${id}-sil" viewBox="0 0 64 64">${g.sil}</symbol>` : '')).join('\n');
+  `<symbol id="${id}" viewBox="${manifest[id].viewBox.join(' ')}">${g.body}</symbol>`
+  + (g.sil ? `\n<symbol id="${id}-sil" viewBox="${manifest[id].viewBox.join(' ')}">${g.sil}</symbol>` : '')).join('\n');
 writeFileSync(new URL('symbols/copperline/symbols.svg', root), `<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0">\n${symbols}\n</svg>\n`);
 
 // A self-contained contact sheet with resolved paint for SVG viewers/rasterizers.
@@ -217,6 +250,6 @@ displayIds.forEach((id,i)=>{
     + `<text x="${x+90}" y="${y+88}" text-anchor="middle" font-size="11" font-weight="700">${names[id]}</text>`
     + `<text x="${x+90}" y="${y+106}" text-anchor="middle" font-size="8.5" fill="#627570">${id}</text>`;
 });
-sheet += `<text x="40" y="${height-25}" font-size="12">${Object.keys(art).length} covered slots / ${displayIds.length} distinct drawings / 64 × 64 units / structure shadows included</text></g></svg>\n`;
+sheet += `<text x="40" y="${height-25}" font-size="12">${Object.keys(art).length} covered slots / ${displayIds.length} distinct drawings / native slot dimensions / structure shadows included</text></g></svg>\n`;
 writeFileSync(new URL('symbols/copperline/preview.svg',root),sheet);
 console.log(`Copperline: ${Object.keys(art).length} slots. Preview: ${fileURLToPath(new URL('symbols/copperline/preview.svg',root))}`);

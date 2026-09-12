@@ -1,3 +1,4 @@
+import { BIOMES, fieldKinds, floraKinds } from '../assets/artwork.js';
 /**
  * Every tunable from the design's §11, in one place.
  *
@@ -1044,27 +1045,9 @@ export const FIELD_MIN_BLOCK_AREA_M2 = 400;
  * existed to break does not form in the first place. */
 export const FIELD_JITTER_RANGE_DEG = 30;
 export const FIELD_ORCHARD_VINE_CHANCE = 0.15;
-/**
- * Per-biome crop cycle, walked by strip ordinal (`i % length`). Keys not
- * listed fall back to `temperate` (coastal reads the same as temperate,
- * per the brief) -- this is also how the orchard/vine roll knows whether
- * it applies: it is gated on the resolved table being THIS temperate
- * array, not on the biome string itself.
- */
-export const FIELD_CROPS: Record<string, string[]> = {
-  // Gate 5.4: Maplefall's fields are mostly GREEN. Pasture appears twice
-  // in the temperate rotation, so a ring reads as grazing with ploughland
-  // among it rather than as bare earth throughout. The orchard/vine swap
-  // chance is unchanged.
-  temperate: [
-    'sm-field-plough', 'sm-field-pasture', 'sm-field-stubble',
-    'sm-field-pasture', 'sm-field-fallow',
-  ],
-  desert: ['sm-field-irrigated--desert', 'sm-field-fallow'],
-  tropical: ['sm-field-paddy--tropical', 'sm-field-fallow'],
-  tundra: ['sm-field-pasture'],
-  steppe: ['sm-field-pasture'],
-};
+/** Native crop/land-use cycle for callers with managed water available.
+ * Dressing selects a narrower pool when a site's irrigation is absent. */
+export const FIELD_CROPS: Record<string, string[]> = Object.fromEntries(BIOMES.map(b=>[b,fieldKinds(b,true)]));
 
 /**
  * Gate 5.3, RENDER ONLY: a village's minor streets are drawn at this share
@@ -1111,14 +1094,6 @@ export const VEG_CELL_M = 9;
  */
 export const VEG_BAND_DEPTH_M = 70;
 /**
- * Gate 5 (2026-08-22) flips where the trees are. Owner's reference map has
- * GROVES filling the leftover ground between the lanes inside the village,
- * and only light scatter out in the country; the previous profile did the
- * opposite -- a thin interior infill and a dense fringe that read as a
- * forest ring. VEG_BASE_DENSITY, VEG_INFILL_SHARE and VEG_RAMP_PEAK_SHARE
- * are RETIRED and replaced by two plain, absolute densities.
- */
-/**
  * Survival chance for a grid cell INSIDE the fabric edge -- grove country.
  * The rejection tests (lane corridors, lot claims, croft claims, field
  * blocks, the green, water) are what confine this to genuinely unclaimed
@@ -1133,61 +1108,6 @@ export const VEG_INTERIOR_DENSITY = 0.42;
  */
 export const VEG_CLUMP_INTERIOR = [2, 6] as const;
 
-/**
- * Gate 5.3, WOODLAND MASSES. Outside the fabric the old profile was a
- * sparse uniform scatter, which reads as lonely specks; the reference
- * village has woodland BLOBS sitting between and behind the fields. So the
- * belt-and-ring zone is no longer a per-cell dice roll at all -- it is a
- * coarse grid of PATCH seeds, each of which becomes one wood.
- *
- * VEG_OUTER_DENSITY and VEG_CLUMP_OUTER are RETIRED with the scatter they
- * described: outside the fabric nothing is placed one tree at a time any
- * more.
- */
-/**
- * Pitch of the patch-seed grid, metres.
- *
- * Gate 5.4 grew the patches (radius 15 -> 22, trees 8-20 -> 10-28) and
- * raised the seed chance 0.5 -> 0.8 against this unchanged pitch, so
- * adjacent woods now OVERLAP and merge into larger masses -- Maplefall's
- * woodland reads as blobs of real size, not as a polka dot of identical
- * copses. The thinning-to-rim falloff still opens the country out, so
- * merging happens near the fields and stops further out.
- */
-export const VEG_PATCH_CELL_M = 45;
-/**
- * Chance a patch cell seeds a wood, right at the fabric edge. Thins
- * linearly to nothing at the scatter rim, so the country opens out.
- *
- * Gate 5.4: 0.5 -> 0.7. The brief asked for enough seeding that adjacent
- * patches "occasionally merge"; 0.8 merged them so thoroughly that the
- * outer woodland reached the interior's own per-area density and the
- * grove-country net -- which pins the whole inside-denser-than-outside
- * flip -- came out at 1.93x. Rather than lower that bar a second time,
- * the seeding was pulled back to where merging is occasional, which is
- * what was actually asked for.
- */
-export const VEG_PATCH_CHANCE = 0.9;
-/** How far a wood's trees spread from its seed point. */
-export const VEG_PATCH_RADIUS_M = 22;
-/**
- * GATE 8.3: the woodland band's seeding chance does not thin all the way to
- * nothing at the rim -- it thins to this FRACTION of its inner value.
- *
- * The ramp to zero was written when woods seeded across the whole country
- * beyond the houses. Now that they seed only in the fixed-depth band beyond
- * the FARMLAND (see `patchChanceAt`), a ramp to zero leaves the outer half
- * of a 70 m band nearly empty, and since a wood is a discrete mass on a
- * 45 m grid, a good half of the 15-degree bins ended up with no wood at all
- * -- which the rim metric reads, correctly, as a tree line that balloons in
- * one direction and vanishes in another. The country still opens out; it
- * just does not stop dead.
- */
-export const VEG_PATCH_RIM_FLOOR = 0.45;
-/** Trees per wood, as [min, maxExclusive] for `rng.int` -- 8 to 20. Enough
- * overlap at VEG_PATCH_RADIUS_M to read as a canopy mass rather than a
- * ring of separate trees. */
-export const VEG_PATCH_TREES = [10, 29] as const;
 /** Clearance added on top of a lane's own half-width for the vegetation
  * rejection test (flat across every lane class, unlike LANE_SETBACK_M --
  * a tree that close to any lane reads as blocking it). */
@@ -1219,8 +1139,8 @@ export const WELL_NUDGE_CAP_RATIO = 0.6;
 /** March step, metres, while searching outward for a clear nudge position. */
 export const WELL_NUDGE_STEP_M = 0.25;
 
-/** §7.4/§8.3: chance a village earns a stone circle at all -- rolled ONCE,
- * always, so the draw order never shifts on whether it lands. */
+/** Chance of an incidental stone circle. An explicit FMG temple request
+ * reserves a henge before dressing and does not use this probability. */
 export const STONE_CIRCLE_CHANCE = 0.08;
 /**
  * How far outside the DRESSED edge the stone circle sits, as a multiple of
@@ -1276,31 +1196,7 @@ export interface VegGlyphWeight { glyph: string; weight: number }
  * for a deterministic weighted pick. Keys not listed fall back to
  * `temperate`.
  */
-export const VEG_GLYPHS: Record<string, VegGlyphWeight[]> = {
-  temperate: [
-    { glyph: 'sm-tree-deciduous', weight: 0.5 },
-    { glyph: 'sm-tree-deciduous-small', weight: 0.3 },
-    { glyph: 'sm-tree-conifer', weight: 0.2 },
-  ],
-  desert: [
-    { glyph: 'sm-olive--desert', weight: 0.4 },
-    { glyph: 'sm-palm-date--desert', weight: 0.3 },
-    { glyph: 'sm-scrub--desert', weight: 0.3 },
-  ],
-  tundra: [
-    { glyph: 'sm-conifer--tundra', weight: 0.7 },
-    { glyph: 'sm-snag--tundra', weight: 0.3 },
-  ],
-  tropical: [
-    { glyph: 'sm-broadleaf--tropical', weight: 0.6 },
-    { glyph: 'sm-palm-fan--tropical', weight: 0.4 },
-  ],
-  coastal: [
-    { glyph: 'sm-dune-grass--coastal', weight: 0.4 },
-    { glyph: 'sm-tamarisk--coastal', weight: 0.3 },
-    { glyph: 'sm-tree-deciduous', weight: 0.3 },
-  ],
-};
+export const VEG_GLYPHS: Record<string, VegGlyphWeight[]> = Object.fromEntries(BIOMES.map(b=>[b,floraKinds(b).map(glyph=>({glyph,weight:1}))]));
 
 /**
  * GATE 8 -- THE RADIUS PROFILE. See `skeleton/profile.ts` for the whole

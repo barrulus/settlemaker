@@ -8,6 +8,7 @@ import type { LocalBounds } from '../generator/bounds.js';
 import { computeSettlementScale } from './settlement-tiler.js';
 import { Castle } from '../wards/castle.js';
 import { Park } from '../wards/park.js';
+import { CommonWard } from '../wards/common-ward.js';
 import { Harbour } from '../wards/harbour.js';
 import { Point } from '../types/point.js';
 import { IdAllocator, buildingIds } from './id-allocator.js';
@@ -25,7 +26,7 @@ export const GEOJSON_SCHEMA_VERSION = 4;
  * Source-of-truth library version. Kept in sync with package.json manually —
  * cheaper than a JSON import assertion and lets tests pin a deterministic value.
  */
-export const SETTLEMAKER_VERSION = '2.5.0';
+export const SETTLEMAKER_VERSION = '2.7.0';
 
 export interface GenerateGeoJsonOptions {
   /** ISO-8601 timestamp to stamp on the output. Defaults to `new Date().toISOString()`. */
@@ -94,6 +95,9 @@ export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = 
       });
     }
 
+    if(patch.ward instanceof CommonWard)for(const garden of patch.ward.gardens){
+      features.push({type:'Feature',properties:{layer:'green',kind:'garden',wardType:patch.ward.type},geometry:polygonToGeoJson(garden.ring,shift)});
+    }
     if (patch.ward instanceof Harbour) {
       for (const pier of patch.ward.piers) {
         features.push({

@@ -18,7 +18,7 @@
 - **Floats:** use `toBeCloseTo` in tests, never `toBe` (the `-0` gotcha).
 - **Test command:** `nix develop --command bash -c "npx vitest run <file>"`; full suite `nix develop --command bash -c "npx vitest run"`.
 - **Commits:** no Co-Authored-By lines. `docs/superpowers/` is gitignored — use `git add -f` for plan/spec edits (source and tests are normal).
-- **Owner render gates:** threshold constants (band boundaries, bridge counts, affinity strength) are STARTING values; they get tuned with Barry at the Task 11 render gates, not silently.
+- **Owner render gates:** threshold constants (band boundaries, bridge counts, affinity strength) are STARTING values; they get tuned with barrulus at the Task 11 render gates, not silently.
 - **Spec deviation (approved path):** the spec says corridor "unioned" with coastal water. Implementation achieves the union without boolean geometry: classification ORs two membership tests, rendering paints river rings as a second `fill-rule="nonzero"` path in `#water`. Estuary/confluence overlaps are handled by paint order, not polygon math.
 
 ## File Structure
@@ -1525,7 +1525,7 @@ git commit -m "GeoJSON river/bridge/ford features; navigability invariant enforc
 
 - [ ] **Step 2: Render the contact sheet** with `make-review-page.ts`, serve on vite 5199.
 
-- [ ] **Step 3: OWNER GATE — STOP AND ASK BARRY.** Change→render→ask; metrics have passed while renders were wrong before. Tune at this gate: band boundaries (250/1000/10000), `BRIDGE_MIN_SPACING`, bank-affinity penalty, `VILLAGE_RIVER_OFFSET`, meander amplitude, shore/deck widths. Each tuning change re-runs the full suite (the pinned constants live in tests — update test values WITH the constants, deliberately, never silently).
+- [ ] **Step 3: OWNER GATE — STOP AND ASK barrulus.** Change→render→ask; metrics have passed while renders were wrong before. Tune at this gate: band boundaries (250/1000/10000), `BRIDGE_MIN_SPACING`, bank-affinity penalty, `VILLAGE_RIVER_OFFSET`, meander amplitude, shore/deck widths. Each tuning change re-runs the full suite (the pinned constants live in tests — update test values WITH the constants, deliberately, never silently).
 
 - [ ] **Step 4: After sign-off, commit any tuning** and update the test-URL commit like e92f15d did.
 

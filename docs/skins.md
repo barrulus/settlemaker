@@ -31,7 +31,7 @@ checks artwork slots, SVG fragments, aliases, and numeric values at runtime.
 
 For a complete technological set, use [Copperline](../symbols/copperline/README.md)
 ([JSON](examples/copperline.skin.json), [SVG preview](../symbols/copperline/preview.svg)).
-It replaces all 91 slots and includes `industrial`, `steampunk`, and `modern`
+It replaces all 693 runtime slots and includes `industrial`, `steampunk`, and `modern`
 biome presets, all using the existing temperate terrain behaviour.
 
 ## Version 1 format
@@ -81,17 +81,20 @@ console.log(SKIN_SLOTS['sm-house']);
 console.log(SKIN_TOKENS);
 ```
 
-The source [symbol manifest](../symbols/refined/symbols.json) and
-[sprite sheets](../symbols/refined/) are visual references. The older integration
-notes describe the bundled artwork; this document is the skin loading contract.
+Use the [current symbol library](current-symbol-library.md) and its collection
+manifests and SVGs as visual references. `SKIN_SLOTS` describes the engine’s runtime
+placements, including compatibility IDs; downloadable drawings that are not runtime
+slots are not automatically placeable by a skin. Retired sprite sources are not
+required for skin authoring.
 
 1. Draw inside the slot's existing coordinate system, usually `0 0 64 64`
-   centred at `(32,32)`. Check the catalog: marks can have a different box.
+   centred at `(32,32)`. Check the catalog: native field tiles use a 32-unit box. Keep the slot’s
+   exact box even if a downloadable source drawing uses a different art scale.
 2. Export **inner SVG elements** into `body`; remove the outer `<svg>` or
    `<symbol>`, XML declaration, editor metadata, and embedded stylesheets.
 3. Preserve the slot's orientation and painted margins. The placement engine
-   budgets ordinary house ink to 68% of its footprint and hut ink to 85%; oversized
-   artwork can overlap neighbours even when its SVG fits the art box. Use the
+   uses the current artwork’s measured painted extents; oversized artwork can
+   overlap neighbours even when its SVG fits the art box. Use the
    original slot as the sizing template. Version 1 does not change footprints,
    anchors, occupancy, rotation rules, or placement algorithms.
 4. Use explicit presentation attributes. Material colours should use

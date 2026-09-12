@@ -1,6 +1,7 @@
+import { assertWaterQuery, waterBoundarySegments } from '../water-boundary.js';
 import { Point } from '../../types/point.js';
 import { SeededRandom } from '../../utils/random.js';
-import { bearingVector, inAnyWater, wrapDeg } from '../geometry.js';
+import { bearingVector, closestPointOnSegment, inAnyWater, wrapDeg } from '../geometry.js';
 import {
   PROFILE_HARMONIC_AMPLITUDES, PROFILE_HARMONICS, PROFILE_ROAD_ELONGATION,
   PROFILE_MAX_BOOST, PROFILE_MIN_CV,
@@ -156,6 +157,7 @@ export interface ProfileInput {
  * solved because `water` is an arbitrary set of rings.
  */
 function waterDistanceM(input: ProfileInput, bearingDeg: number): number {
+  assertWaterQuery(input.water, input.centre, input.radiusM * PROFILE_WATER_REACH_RATIO + NARROW_WATER_PROBE_M);
   if (input.water.length === 0) return Infinity;
   const dir = bearingVector(bearingDeg);
   const reach = input.radiusM * PROFILE_WATER_REACH_RATIO;
@@ -174,7 +176,30 @@ function waterDistanceM(input: ProfileInput, bearingDeg: number): number {
     for (let w = PROFILE_WATER_STEP_M; w <= NARROW_WATER_PROBE_M; w += PROFILE_WATER_STEP_M) {
       if (!inAnyWater(at(d + w), input.water)) { crossed = w; break; }
     }
-    if (crossed >= NARROW_WATER_M) return d;
+    if (crossed >= NARROW_WATER_M) {
+      // An oblique ray can travel a long way along a narrow stream. Measure
+      // across its nearest exposed bank before treating it as a boundary.
+      const p = at(d);
+      let nearest: [Point, Point] | undefined, distance = Infinity;
+      for (const [a,b] of waterBoundarySegments(input.water)) {
+        const q = closestPointOnSegment(p,a,b), delta = Math.hypot(p.x-q.x,p.y-q.y);
+        if(delta < distance){distance=delta;nearest=[a,b];}
+      }
+      let width = 0;
+      if (nearest) {
+        const [a,b] = nearest, length = Math.hypot(b.x-a.x,b.y-a.y);
+        const nx = -(b.y-a.y)/(length || 1), ny = (b.x-a.x)/(length || 1);
+        for (const side of [-1,1]) {
+          let bank = Infinity;
+          for(let w=PROFILE_WATER_STEP_M;w<NARROW_WATER_M;w+=PROFILE_WATER_STEP_M){
+            if(!inAnyWater(new Point(p.x+side*nx*w,p.y+side*ny*w),input.water)){bank=w;break;}
+          }
+          width += bank;
+        }
+      } else width = Infinity;
+      if(width >= NARROW_WATER_M)return d;
+      continue;
+    }
     d += crossed;
   }
   return Infinity;

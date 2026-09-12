@@ -1,3 +1,4 @@
+import type { WaterContextV1 } from './water-context.js';
 import { Point } from '../types/point.js';
 import type { GenerationParams, RoadEntry, RouteKind, RouteRelief } from '../generator/generation-params.js';
 import { toLegacyKind, type RouteType } from '../village/route-class.js';
@@ -30,6 +31,7 @@ export type RoadBearingInput =
  * Input data from Azgaar's Fantasy Map Generator (maps_burgs table).
  */
 export interface AzgaarBurgInput {
+  waterContext?: WaterContextV1;
   name: string;
   population: number;
   port: boolean;
@@ -76,6 +78,9 @@ export interface AzgaarBurgInput {
    * not available.
    */
   coastlineGeometry?: Array<Array<{ x: number; y: number }>>;
+  /** Village rivers in burg-local metres. Added to water polygons. The
+   * generator bends coarse centrelines unless meander is explicitly false. */
+  rivers?: Array<{ centreline: Array<{ x: number; y: number }>; widthM: number; meander?: boolean }>;
 }
 
 /** Hard footprint cap, chosen from round-4 calibration against the ≤8 s

@@ -60,7 +60,7 @@ two committed modules:
   the GPL/CC-BY boundary from `e212dba` stays clean.
 - `src/assets/batch001.ts` — markup, consumed by the **renderer**: per id
   `{body, sil}` inner content on native grids (64 / 32 for marks), plus a
-  CC-BY-4.0 attribution header naming Barry Gill.
+  CC-BY-4.0 attribution header naming barrulus.
 
 `AssetSet` is extended to carry native-grid symbols with anchors and sil
 twins alongside the existing unit-box schematic entries. Regeneration is

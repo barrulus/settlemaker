@@ -1,9 +1,11 @@
-import { REFINED_GLYPHS } from '../assets/refined-glyphs.js';
 import { resolveSkin, type SettlementSkin } from '../assets/skins.js';
+import { greenGround } from '../assets/greens-art.js';
+import { bridgeArtwork, farmDetails, wallArtwork } from '../output/artwork.js';
+import { ARTWORK_GLYPHS as REFINED_GLYPHS, ARTWORK_MANIFEST, ART_TOKENS } from '../assets/artwork.js';
+import { waterFillRings, waterBoundaryPaths } from './water-boundary.js';
 import type { Point } from '../types/point.js';
 import { FURROW_PATTERN_STEP_DEG } from './constants.js';
 import { roadCrossSection } from './cross-section.js';
-import { arcLengths, sampleAt } from './geometry.js';
 import { hasGlyph, nominalFootprint } from './glyphs.js';
 import { roadSurfaceClips } from './road-surface.js';
 import type { EdgeStamp, VillageModel } from './types.js';
@@ -22,7 +24,7 @@ const SHADOW_OFFSET: [number, number] = [2.6, 3.6];
 const SHORE_WIDTH_M = 0.6;
 
 // Shared verbatim with cities; the accepted village CSS is unchanged.
-import { refinedStyle as smStyleFor, SM_TOKENS, sanitizeVillageTokens } from '../assets/refined-style.js';
+import { refinedStyle as smStyleFor, SM_TOKENS, sanitizeVillageTokens, resolveVarFallbacks } from '../assets/refined-style.js';
 export { sanitizeVillageTokens } from '../assets/refined-style.js';
 
 
@@ -149,7 +151,12 @@ export function renderVillage(
   }
   if (greenGlyphAvailable) {
     // Greens are parcel-band: no -sil twin, ground casts no shadow.
-    defs.push(defBlock(greenGlyphId, glyphs[greenGlyphId].body));
+    if (skin?.overrides.has(greenGlyphId)) {
+      defs.push(defBlock(greenGlyphId, glyphs[greenGlyphId].body));
+    } else {
+      const d=REFINED_GLYPHS[greenGlyphId].body.match(/<path[^>]* d="([^"]+)"/)?.[1];
+      if(d)defs.push(defBlock(greenGlyphId, greenGround(d,model.site.biome,{id:greenGlyphId,seed:'abc'.indexOf(model.green.variant)})));
+    }
   }
 
   // --- field pattern defs: one per (glyph, quantised furrow bearing) pair
@@ -167,7 +174,7 @@ export function renderVillage(
     const pid = fieldPatternId(field.glyph, field.furrowBearingDeg);
     if (patternIds.has(pid)) continue;
     patternIds.add(pid);
-    const scale = tileSizePx / 64;
+    const scale = tileSizePx / ARTWORK_MANIFEST[field.glyph].viewBox[2];
     patternDefs.push(
       `<pattern id="${pid}" patternUnits="userSpaceOnUse" width="${n(tileSizePx)}" height="${n(tileSizePx)}" ` +
       `patternTransform="rotate(${n(quantiseBearing(field.furrowBearingDeg))})">` +
@@ -224,7 +231,12 @@ export function renderVillage(
     out.push(`<defs><clipPath id="v-water-clip">`
       + `<rect width="${n(w)}" height="${n(h)}"/></clipPath></defs>`);
     out.push('<g data-band="water" clip-path="url(#v-water-clip)">');
-    waterPolys.forEach((poly, i) => {
+    const union = waterFillRings(model.site.water);
+    if (union) {
+      out.push(`<path data-water="union" d="${union.map(r => polygonPath(r, X, Y)).join(' ')}" fill="${theme.water}" fill-rule="evenodd" stroke="none"/>`);
+      const shore = waterBoundaryPaths(model.site.water).map(r => r.map((p, i) => `${i ? 'L' : 'M'}${n(X(p.x))},${n(Y(p.y))}`).join(' ')).join(' ');
+      out.push(`<path data-shore="union" d="${shore}" fill="none" stroke="${theme.waterEdge}" stroke-width="${n(SHORE_WIDTH_M * pxPerMetre)}" stroke-linejoin="round"/>`);
+    } else waterPolys.forEach((poly, i) => {
       out.push(
         `<path data-water="w${i}" d="${polygonPath(poly, X, Y)}" fill="${theme.water}" `
         + `stroke="${theme.waterEdge}" stroke-width="${n(SHORE_WIDTH_M * pxPerMetre)}" `
@@ -292,6 +304,7 @@ export function renderVillage(
     if (!glyphs[field.glyph]) continue;
     const pid = fieldPatternId(field.glyph, field.furrowBearingDeg);
     out.push(`<path data-field="${field.id}" d="${polygonPath(field.polygon, X, Y)}" fill="url(#${pid})" stroke="none"/>`);
+    out.push(farmDetails(field.polygon.map(p=>({x:X(p.x),y:Y(p.y)})),field.glyph,pxPerMetre,field.id));
   }
   for (const stamp of edgeStamps) {
     if (!glyphs[stamp.glyph]) continue;
@@ -340,19 +353,8 @@ export function renderVillage(
     for (const bridge of model.bridges) {
       if (!bridge.narrow || !bridge.deck || !bridge.centreline) continue;
       const lane = model.lanes.find(l => l.id === bridge.laneId)!;
-      const halfWidth = roadCrossSection(lane).surfaceM / 2 + 0.35;
-      out.push(`<g data-bridge="${bridge.id}"><path d="${polygonPath(bridge.deck, X, Y)}" stroke-width="${n(0.22 * pxPerMetre)}"/>`);
-      const acc = arcLengths(bridge.centreline), length = acc.at(-1)!;
-      for (let at = 0.5; at < length; at += 0.8) {
-        const sample = sampleAt(bridge.centreline, acc, at);
-        const before = sampleAt(bridge.centreline, acc, Math.max(0, at - 0.1)).p;
-        const after = sampleAt(bridge.centreline, acc, Math.min(length, at + 0.1)).p;
-        const span = Math.hypot(after.x - before.x, after.y - before.y);
-        if (span < 1e-6) continue;
-        const nx = -(after.y - before.y) / span * halfWidth, ny = (after.x - before.x) / span * halfWidth;
-        out.push(`<path d="M${n(X(sample.p.x + nx))},${n(Y(sample.p.y + ny))}L${n(X(sample.p.x - nx))},${n(Y(sample.p.y - ny))}" stroke-width="${n(0.1 * pxPerMetre)}"/>`);
-      }
-      out.push('</g>');
+      out.push(`<g data-bridge="${bridge.id}">${bridgeArtwork(bridge.centreline.map(p=>({x:X(p.x),y:Y(p.y)})),(roadCrossSection(lane).surfaceM+.7)*pxPerMetre,model.site.biome,lane.type==='main')}</g>`);
+
     }
     out.push('</g>');
   }
@@ -361,8 +363,10 @@ export function renderVillage(
   out.push('<g data-band="parcel">');
   const r = (model.green.diameter / 2) * pxPerMetre;
   if (model.green.outline && model.green.shape === 'sm-green-triangle') {
-    const outline = model.green.outline.map(p => `${n(X(p.x))},${n(Y(p.y))}`).join(' ');
-    out.push(`<polygon data-green="junction" points="${outline}" fill="var(--sm-common, #a8bf6d)" stroke="var(--sm-common-band, #8aa855)" stroke-width="${n(0.4 * pxPerMetre)}" stroke-linejoin="round"/>`);
+    const points=model.green.outline.map(p=>({x:X(p.x),y:Y(p.y)}));
+    const xs=points.map(p=>p.x),ys=points.map(p=>p.y);
+    const d=points.map((p,i)=>`${i?'L':'M'}${n(p.x)},${n(p.y)}`).join(' ')+'Z';
+    out.push(`<g data-green="junction">${greenGround(d,model.site.biome,{unit:pxPerMetre*.6,id:'junction',bounds:[Math.min(...xs),Math.min(...ys),Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys)]})}</g>`);
   } else if (greenGlyphAvailable) {
     out.push(
       `<use href="#${greenGlyphId}" ` +
@@ -402,10 +406,10 @@ export function renderVillage(
   }
   out.push('</g>');
 
-  // canopy band — LAST: every tree shadow, then every tree ink, shadow
-  // offset outside the (absent — trees have no bearing) rotation, same
-  // convention as the structure band. Trees scale by their own footprint
-  // AND their per-tree `scale` jitter.
+  if(model.wall) out.push(`<g data-band="walls" transform="translate(${n(X(0))},${n(Y(0))}) scale(${n(pxPerMetre)})">${wallArtwork(model.wall,model.site.biome)}</g>`);
+
+  // Flora uses its own footprint and scale jitter. Reviewed plants have no
+  // cast shadows; legacy scene glyphs can still supply a silhouette.
   out.push('<g data-band="canopy">');
   out.push(
     `<g transform="translate(${n(SHADOW_OFFSET[0])},${n(SHADOW_OFFSET[1])})" ` +
@@ -433,41 +437,5 @@ export function renderVillage(
   out.push('</g>');
 
   out.push('</svg>');
-  return resolveVarFallbacks(out.join('\n'), { ...SM_TOKENS, ...sanitizeVillageTokens(theme.tokens) });
-}
-
-/**
- * Rewrite every `var(--name, fallback)` so the FALLBACK carries the resolved
- * value, keeping the variable reference intact.
- *
- * WHY: librsvg — sharp, and anything else rasterising server-side — does not
- * implement CSS custom properties. It paints the fallback, always. Proven:
- * `var(--c, #0000ff)` under `:root{--c:#ff0000}` renders BLUE. So every glyph
- * in the refined set, all of which paint as `fill="var(--sm-x, #hex)"`, came
- * out in the library's default colours whenever a theme was applied and the
- * result was rasterised rather than shown in a browser. Ground and water are
- * literal fills and did render, which is why it hid for so long: half of each
- * theme worked and half silently did not.
- *
- * Keeping `var()` and rewriting only the fallback gets both properties at
- * once — a renderer that ignores custom properties now takes the RIGHT
- * colour, and a host page can still re-tint by redefining the variable. The
- * alternative, emitting plain fills, would have fixed rasterisation by
- * throwing the re-tinting away.
- *
- * A temperate village is unaffected to the byte: the library's defaults ARE
- * the temperate values, so every substitution there replaces a string with
- * itself.
- */
-function resolveVarFallbacks(svg: string, tokens: Record<string, string | number>): string {
-  // The separator is captured and replayed verbatim: rewriting `,` as `, `
-  // would change the bytes of every temperate village for no reason, and a
-  // consumer diffing releases would have to prove that churn was cosmetic.
-  return svg.replace(
-    /var\((--[a-z0-9-]+)(\s*,\s*)([^)]*)\)/gi,
-    (whole, name: string, sep: string, _fallback: string) => {
-      const resolved = tokens[name];
-      return resolved === undefined ? whole : `var(${name}${sep}${resolved})`;
-    },
-  );
+  return resolveVarFallbacks(out.join('\n'), { ...SM_TOKENS, ...ART_TOKENS, ...sanitizeVillageTokens(theme.tokens) });
 }

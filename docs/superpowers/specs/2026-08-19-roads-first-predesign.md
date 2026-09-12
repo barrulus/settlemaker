@@ -1,17 +1,17 @@
 # Roads-First Generation — Pre-Design Capture
 
 **Date:** 2026-08-19
-**Status:** PRE-DESIGN. Not a spec. Captured mid-brainstorm at Barry's request; he is
+**Status:** PRE-DESIGN. Not a spec. Captured mid-brainstorm at barrulus's request; he is
 taking this away to draw wireframes, which come back as the primary input to a fresh
 design session. Nothing below authorizes implementation.
 
-## The idea (Barry's words, near enough)
+## The idea (barrulus's words, near enough)
 
 Revisit the entire mapping structure. Do not build like watabou/MFCG (polygon
 placement). Instead: **create a road network and line it with houses that fit into
 the spaces through a mix of sizing and spacing.**
 
-Supporting observation from the parked rivers work: every reference render Barry
+Supporting observation from the parked rivers work: every reference render barrulus
 picked as "what I expect" came from watabou's *Village* Generator — which is
 road-skeleton-first — while settlemaker cloned MFCG, the polygon one. The rivers
 work failed precisely where the polygon model fought network-shaped intent.
@@ -22,7 +22,7 @@ work failed precisely where the polygon model fought network-shaped intent.
    the network's enclosed faces become blocks that are lined from their edges
    inward. No second engine, no permanent seam.
 2. **Aesthetic north star: settlemaker's own look.** Neither watabou generator is
-   the yardstick. The aesthetic contract is defined by Barry from his reference
+   the yardstick. The aesthetic contract is defined by barrulus from his reference
    collection, scene by scene, at render gates. (Watabou remains reference
    material.)
 3. **Road network by demand-driven growth.** Start from what FMG gives (route
@@ -93,7 +93,7 @@ all of them.)
 - Two river-independent bug fixes worth cherry-picking regardless of engine:
   general `filterOutskirts` flat-density fix, and the farm-field water-overhang
   rescue (branch `rivers-bridges`, commit `e4fd30f`).
-- Render gates with Barry's eyes are the only accepted acceptance test; metrics
+- Render gates with barrulus's eyes are the only accepted acceptance test; metrics
   passed while renders were wrong, repeatedly.
 - Village-rows stamping (shipped v1.2.0) is already half a frontage engine — its
   ink-extent spacing lessons apply directly to parcel dressing.

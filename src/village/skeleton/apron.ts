@@ -1,3 +1,4 @@
+import { waterBoundaryPaths, assertWaterQuery } from '../water-boundary.js';
 /**
  * The APRON (spec 2026-09-07 §5): a trunk's continuation past its contract
  * entry, out to the edge of the drawn tile.
@@ -30,6 +31,9 @@ import {
   signedTurnDeg,
 } from '../geometry.js';
 import { apronLaneId, type Lane } from '../types.js';
+import { clearRiverbanks } from './riverbanks.js';
+import { roadCrossSection } from '../cross-section.js';
+import { wetRuns } from './water-routing.js';
 // Type-only, so there is no runtime cycle with `trunks.ts`, which imports
 // `growAprons` from here.
 import type { TrunkEntry, TrunkJunction } from './trunks.js';
@@ -53,8 +57,8 @@ function segBearingDeg(a: Point, b: Point): number {
  * point is untouched.
  *
  * The heading continues the lane's terminal curvature, damped and clamped:
- * a road that was bending goes on bending gently, a straight one stays
- * straight, and nothing spirals.
+ * a road that was bending goes on bending gently. A derived, broad wander
+ * also bends straight approaches without moving the entry or its tangent.
  */
 export function growApronPath(lane: Lane, reachM: number): Point[] {
   const pts = lane.points;
@@ -62,6 +66,10 @@ export function growApronPath(lane: Lane, reachM: number): Point[] {
 
   const tip = pts[pts.length - 1];
   let headingDeg = segBearingDeg(pts[pts.length - 2], tip);
+  const initialHeading = headingDeg;
+  let hash = 0;
+  for (const c of lane.id) hash = (Math.imul(hash, 31) + c.charCodeAt(0)) | 0;
+  const phase = (hash >>> 0) / 4294967296 * Math.PI * 2;
 
   // The turn the road was already making, per step, damped and clamped.
   let turnPerStepDeg = 0;
@@ -84,7 +92,10 @@ export function growApronPath(lane: Lane, reachM: number): Point[] {
       headingDeg += turnPerStepDeg;
       turnedDeg += turnPerStepDeg;
     }
-    const rad = (headingDeg * Math.PI) / 180;
+    const fade = Math.min(1, travelled / 70);
+    const wander = 13 * Math.sin(travelled * Math.PI * 2 / 420 + phase) * fade * fade;
+    const heading = initialHeading + Math.max(-30, Math.min(30, headingDeg - initialHeading + wander));
+    const rad = (heading * Math.PI) / 180;
     cursor = new Point(
       cursor.x + Math.sin(rad) * step,
       cursor.y - Math.cos(rad) * step,
@@ -177,8 +188,8 @@ function firstShoreHit(points: Point[], water: Point[][]): ShoreHit | null {
     // Every ring edge this segment crosses, in order along the segment, so
     // the outcome cannot depend on the order the rings arrived in.
     const hits: Array<{ point: Point; ring: Point[]; edge: number; d: number }> = [];
-    for (const ring of water) {
-      for (let j = 0; j < ring.length; j++) {
+    for (const ring of waterBoundaryPaths(water)) {
+      for (let j = 0; j < ring.length - 1; j++) {
         const p = segmentIntersection(a, b, ring[j], ring[(j + 1) % ring.length]);
         if (p) hits.push({ point: p, ring, edge: j, d: dist(a, p) });
       }
@@ -212,10 +223,11 @@ function firstShoreHit(points: Point[], water: Point[][]): ShoreHit | null {
  * follows the coast from there.
  */
 function nearestShore(p: Point, water: Point[][]): ShoreHit | null {
+  assertWaterQuery(water, p);
   let best: ShoreHit | null = null;
   let bestD = Infinity;
-  for (const ring of water) {
-    for (let j = 0; j < ring.length; j++) {
+  for (const ring of waterBoundaryPaths(water)) {
+    for (let j = 0; j < ring.length - 1; j++) {
       const q = closestPointOnSegment(p, ring[j], ring[(j + 1) % ring.length]);
       const d = dist(p, q);
       if (d < bestD) {
@@ -248,7 +260,8 @@ const RAW_WALK_ALLOWANCE = 4;
 function shoreWalk(
   from: Point, ring: Point[], edge: number, direction: 1 | -1, maxRunM: number,
 ): Point[] {
-  const n = ring.length;
+  const closed = dist(ring[0], ring.at(-1)!) < 1e-7;
+  const n = closed ? ring.length - 1 : ring.length;
   const at = (i: number): number => ((i % n) + n) % n;
   // Forward from edge j the next waterline vertex is ring[j + 1]; backward
   // it is ring[j] itself, the edge's own near end.
@@ -256,7 +269,9 @@ function shoreWalk(
   const walk: Point[] = [from];
   let runM = 0;
   for (let k = 0; k < n && runM < maxRunM; k++) {
-    const v = ring[at(first + direction * k)];
+    const index = first + direction * k;
+    if (!closed && (index < 0 || index >= n)) break;
+    const v = ring[at(index)];
     const step = dist(walk[walk.length - 1], v);
     if (step === 0) continue;
     runM += step;
@@ -431,6 +446,9 @@ function followShore(
       for (const side of sides) {
         const candidate = off(side, s);
         if (inAnyWater(candidate, water)) continue;
+        // Dry endpoints can still cut across a bay. A shore-following road
+        // stays on the same bank; an incidental wet chord is not a bridge.
+        if (points.length && wetRuns([points[points.length - 1], candidate], water).length) continue;
         dry = candidate;
         hand = side;
         break;
@@ -697,6 +715,7 @@ export function growAprons(
     let points = growApronPath(candidate.from, reachM);
     if (points.length < 2) continue;
 
+    for (const p of points) assertWaterQuery(water, p, NARROW_WATER_PROBE_M);
     const laneId = candidate.id;
 
     // The coast bend comes FIRST, so a road that turned along the shore is
@@ -705,7 +724,7 @@ export function growAprons(
     // it.
     if (water.length > 0) {
       const bent = bendAlongCoast(laneId, points, water, escapeRadiusM);
-      points = bent.points;
+      points = clearRiverbanks(bent.points, water, roadCrossSection(lane).surfaceM / 2);
       diagnostics.push(...bent.diagnostics);
       if (points.length < 2) continue;
     }

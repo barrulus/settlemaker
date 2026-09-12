@@ -1,3 +1,4 @@
+import { waterFillPolygons } from './water-boundary.js';
 import { roadSurfaceClips } from './road-surface.js';
 import { roadCrossSection } from './cross-section.js';
 /**
@@ -153,14 +154,15 @@ export function generateVillageGeoJson(model: VillageModel): FeatureCollection {
     });
   }
 
-  // 5. Water, as the model received it — echoed so a consumer draws the same
-  //    coast we clipped the village against.
-  model.site.water.forEach((poly, i) => {
-    if (poly.length < 3) return;
+  // Measured water exports the same dissolved filled union as the renderer.
+  // Each Polygon's interior rings preserve land islands for GeoJSON consumers.
+  const water = waterFillPolygons(model.site.water) ?? model.site.water.map(poly => [poly]);
+  water.forEach((polygon, i) => {
+    if (polygon[0].length < 3) return;
     features.push({
       type: 'Feature',
       properties: { layer: 'water', water_id: `w${i}` },
-      geometry: { type: 'Polygon', coordinates: [ring(poly)] },
+      geometry: { type: 'Polygon', coordinates: polygon.map(ring) },
     });
   });
 
@@ -175,6 +177,11 @@ export function generateVillageGeoJson(model: VillageModel): FeatureCollection {
       },
       geometry: { type: 'Point', coordinates: pt(b.position) },
     });
+  }
+
+  if(model.wall){
+    model.wall.polylines.forEach((line,i)=>features.push({type:'Feature',properties:{layer:'wall',wall_id:`village-wall:${i}`,wallType:'village_wall',material:model.wall!.material},geometry:{type:'LineString',coordinates:line.map(pt)}}));
+    model.wall.gates.forEach((g,i)=>features.push({type:'Feature',properties:{layer:'gate',gate_id:`village-gate:${i}`,route_ids:g.routeIds},geometry:{type:'Point',coordinates:[(g.p1.x+g.p2.x)/2,(g.p1.y+g.p2.y)/2]}}));
   }
 
   // 7. Junctions — where the trunk network's roads meet (spec 5.5). The

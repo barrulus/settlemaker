@@ -1,0 +1,925 @@
+{
+  "$schema": "settlemaker marker set v1",
+  "edition": "settlemaker-illustrated-v1",
+  "pin": {
+    "shape": "bubble",
+    "diameter": 30,
+    "fill": "#ffffff",
+    "stroke": "#33262e",
+    "strokeWidth": 1.6,
+    "glyphBox": "the middle 55% of the pin — place the 64u viewBox at 55% of pin diameter, centred"
+  },
+  "style": {
+    "ink": "#33262e",
+    "outline": 1.15,
+    "interiorFloor": 0.4,
+    "shadow": "none",
+    "projection": "elevation",
+    "framing": "Measured visible bounds fit a centred 54-unit square. Open water and atmospheric marks carry no rectangular background.",
+    "notes": "Hand-drawn material planes, selective fine detail and restrained accents. Player party retains the red-and-gold pennant. Filenames, marker types and the 64u viewBox match the source set; these are standalone replacement assets."
+  },
+  "tokens": {
+    "--sm-ink": "#33262e",
+    "--sm-stone": "#d6cbb4",
+    "--sm-lead": "#88959e",
+    "--sm-timber": "#bd9872",
+    "--sm-void": "#62555f",
+    "--sm-canopy-a": "#6f8b65",
+    "--sm-canopy-b": "#a5b786",
+    "--mk-stone-light": "#eee5d2",
+    "--mk-stone-dark": "#aaa799",
+    "--mk-iron": "#aab7be",
+    "--mk-steel-light": "#e1e8e6",
+    "--mk-ember": "#b86e54",
+    "--mk-lava": "#d8754c",
+    "--mk-flame": "#ecc77e",
+    "--mk-steam": "#c8d6cf",
+    "--mk-heat": "#c79378",
+    "--mk-water": "#78a6ab",
+    "--mk-water-light": "#c6dfd9",
+    "--mk-gold": "#d4ad63",
+    "--mk-brass": "#b89055",
+    "--mk-halo": "#d6bc7e",
+    "--mk-arcane": "#8e7a9f",
+    "--mk-arcane-light": "#cfbfd6",
+    "--mk-page": "#f5ecd7",
+    "--mk-board-a": "#ad6b59",
+    "--mk-board-b": "#6b8796",
+    "--mk-party": "#be493d",
+    "--mk-white": "#fcf9ed",
+    "--mk-pine": "#587869",
+    "--mk-sand": "#d8c393",
+    "--mk-hide": "#9b7d62",
+    "--mk-hide-dark": "#77685b",
+    "--mk-skin": "#a4ad85",
+    "--mk-froth": "#f8f0dc",
+    "--mk-black": "#4b454b"
+  },
+  "markers": {
+    "mk-volcanoes": {
+      "type": "volcanoes",
+      "label": "Volcano",
+      "category": "nature",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        5,
+        5.8514,
+        59,
+        58.1486
+      ]
+    },
+    "mk-hot-springs": {
+      "type": "hot-springs",
+      "label": "Hot springs",
+      "category": "nature",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        5.6279,
+        5,
+        58.3721,
+        59
+      ]
+    },
+    "mk-water-sources": {
+      "type": "water-sources",
+      "label": "Water source",
+      "category": "nature",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        8.4225,
+        5,
+        55.5775,
+        59
+      ]
+    },
+    "mk-mines": {
+      "type": "mines",
+      "label": "Mine",
+      "category": "places",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        6.8173,
+        5,
+        57.1827,
+        59
+      ]
+    },
+    "mk-bridges": {
+      "type": "bridges",
+      "label": "Bridge",
+      "category": "places",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        5,
+        11.75,
+        59,
+        52.25
+      ]
+    },
+    "mk-lighthouses": {
+      "type": "lighthouses",
+      "label": "Lighthouse",
+      "category": "places",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        5.6338,
+        5,
+        58.3662,
+        59
+      ]
+    },
+    "mk-waterfalls": {
+      "type": "waterfalls",
+      "label": "Waterfall",
+      "category": "nature",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        5,
+        5.1311,
+        59,
+        58.8689
+      ]
+    },
+    "mk-battlefields": {
+      "type": "battlefields",
+      "label": "Battlefield",
+      "category": "lore",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        11.4737,
+        5,
+        52.5263,
+        59
+      ]
+    },
+    "mk-dungeons": {
+      "type": "dungeons",
+      "label": "Dungeon",
+      "category": "places",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        5,
+        6.4009,
+        59,
+        57.5991
+      ]
+    },
+    "mk-lake-monsters": {
+      "type": "lake-monsters",
+      "label": "Lake monster",
+      "category": "creatures",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        5,
+        6.8243,
+        59,
+        57.1757
+      ]
+    },
+    "mk-sacred-forests": {
+      "type": "sacred-forests",
+      "label": "Sacred forest",
+      "category": "sacred",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        8.7895,
+        5,
+        55.2105,
+        59
+      ]
+    },
+    "mk-statues": {
+      "type": "statues",
+      "label": "Statue",
+      "category": "places",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        12.885,
+        5,
+        51.115,
+        59
+      ]
+    },
+    "mk-ruins": {
+      "type": "ruins",
+      "label": "Ruins",
+      "category": "places",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        5,
+        5.3682,
+        59,
+        58.6318
+      ]
+    },
+    "mk-libraries": {
+      "type": "libraries",
+      "label": "Library",
+      "category": "places",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        5,
+        10.3514,
+        59,
+        53.6486
+      ]
+    },
+    "mk-circuses": {
+      "type": "circuses",
+      "label": "Circus",
+      "category": "events",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        5,
+        5.6136,
+        59,
+        58.3864
+      ]
+    },
+    "mk-portals": {
+      "type": "portals",
+      "label": "Portal",
+      "category": "lore",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        6.0995,
+        5,
+        57.9005,
+        59
+      ]
+    },
+    "mk-disturbed-burials": {
+      "type": "disturbed-burials",
+      "label": "Disturbed burial",
+      "category": "lore",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        5,
+        12.8028,
+        59,
+        51.1972
+      ]
+    },
+    "mk-necropolises": {
+      "type": "necropolises",
+      "label": "Necropolis",
+      "category": "places",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        5.4737,
+        5,
+        58.5263,
+        59
+      ]
+    },
+    "mk-encounters": {
+      "type": "encounters",
+      "label": "Encounter",
+      "category": "lore",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        7.76,
+        5,
+        56.24,
+        59
+      ]
+    },
+    "mk-party": {
+      "type": "party",
+      "label": "Player party",
+      "category": "travel",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        9.6849,
+        5,
+        54.3151,
+        59
+      ]
+    },
+    "mk-inns": {
+      "type": "inns",
+      "label": "Inn",
+      "category": "places",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        6.0385,
+        5,
+        57.9615,
+        59
+      ]
+    },
+    "mk-sea-monsters": {
+      "type": "sea-monsters",
+      "label": "Sea monster",
+      "category": "creatures",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        5,
+        5.1216,
+        59,
+        58.8784
+      ]
+    },
+    "mk-hill-monsters": {
+      "type": "hill-monsters",
+      "label": "Hill monster",
+      "category": "creatures",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        7.0571,
+        5,
+        56.9429,
+        59
+      ]
+    },
+    "mk-sacred-mountains": {
+      "type": "sacred-mountains",
+      "label": "Sacred mountain",
+      "category": "sacred",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        5.9391,
+        5,
+        58.0609,
+        59
+      ]
+    },
+    "mk-sacred-pineries": {
+      "type": "sacred-pineries",
+      "label": "Sacred pinery",
+      "category": "sacred",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        9.4224,
+        5,
+        54.5776,
+        59
+      ]
+    },
+    "mk-sacred-palm-groves": {
+      "type": "sacred-palm-groves",
+      "label": "Sacred palm grove",
+      "category": "sacred",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        5,
+        6.1157,
+        59,
+        57.8843
+      ]
+    },
+    "mk-brigands": {
+      "type": "brigands",
+      "label": "Brigands",
+      "category": "lore",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        9.4059,
+        5,
+        54.5941,
+        59
+      ]
+    },
+    "mk-pirates": {
+      "type": "pirates",
+      "label": "Pirates",
+      "category": "lore",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        8.2545,
+        5,
+        55.7455,
+        59
+      ]
+    },
+    "mk-jousts": {
+      "type": "jousts",
+      "label": "Joust",
+      "category": "events",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        7.0769,
+        5,
+        56.9231,
+        59
+      ]
+    },
+    "mk-fairs": {
+      "type": "fairs",
+      "label": "Fair",
+      "category": "events",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        5,
+        7.6757,
+        59,
+        56.3243
+      ]
+    },
+    "mk-canoes": {
+      "type": "canoes",
+      "label": "Canoe",
+      "category": "travel",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        5,
+        6.2162,
+        59,
+        57.7838
+      ]
+    },
+    "mk-migration": {
+      "type": "migration",
+      "label": "Migration",
+      "category": "creatures",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        5,
+        11.9868,
+        59,
+        52.0132
+      ]
+    },
+    "mk-dances": {
+      "type": "dances",
+      "label": "Dance",
+      "category": "events",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        9.1897,
+        5,
+        54.8103,
+        59
+      ]
+    },
+    "mk-mirage": {
+      "type": "mirage",
+      "label": "Mirage",
+      "category": "nature",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        5,
+        5.7364,
+        59,
+        58.2636
+      ]
+    },
+    "mk-caves": {
+      "type": "caves",
+      "label": "Cave",
+      "category": "nature",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        5,
+        7.3108,
+        59,
+        56.6892
+      ]
+    },
+    "mk-rifts": {
+      "type": "rifts",
+      "label": "Rift",
+      "category": "lore",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "projection": "elevation",
+      "monochromeSafe": true,
+      "castsShadow": false,
+      "inkBounds": [
+        6.2385,
+        5,
+        57.7615,
+        59
+      ]
+    }
+  },
+  "coverage": "36 of 36 marker types drawn"
+}

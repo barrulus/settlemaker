@@ -19,6 +19,8 @@ export interface WaterLayer {
 }
 
 export interface FieldPlot {
+  /** Native biome field tile; pattern pitch stays independent of parcel size. */
+  glyph?: string;
   ring: ScenePoint[];
   /** Furrow-hatch direction in degrees, from the plot's OBB. */
   angleDeg: number;
@@ -41,6 +43,7 @@ export interface VegetationInstance {
   rotationDeg: number;
 }
 export interface SymbolInstance {
+  materialVariant?: number;
   id: string;          // glyph id, e.g. 'sm-well'
   at: ScenePoint;
   scale: number;       // world-unit art-box width; height defaults to the same
@@ -77,6 +80,7 @@ export interface WallGate {
 }
 
 export interface WallFeature {
+  material?: 'curtain' | 'rubble' | 'palisade';
   polylines: ScenePoint[][];
   towers: ScenePoint[];
   gates: WallGate[];
@@ -106,5 +110,7 @@ export interface Scene {
     buildings: BuildingFeature[];
     piers: PierFeature[];
     walls: WallFeature[];
+    /** Bank-to-bank crossings; absent on older version-2 scenes. */
+    bridges?: Array<{id:string;path:ScenePoint[];width:number}>;
   };
 }

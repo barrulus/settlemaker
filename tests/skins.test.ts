@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { ARTWORK_MANIFEST } from '../src/assets/artwork.js';
 import {
   createSkin, generateSettlement, generateFromBurg, renderVillage, generateSvg,
   skinBiomeFor, SKIN_SLOTS, PALETTES, themeFrom, type AzgaarBurgInput,
@@ -16,6 +17,36 @@ const stableGeoJson = (value: unknown): unknown => JSON.parse(JSON.stringify(val
   (key, value) => key === 'generated_at' ? undefined : value));
 
 describe('portable skins', () => {
+  it('covers the current runtime registry and loads the complete Copperline example', () => {
+    expect(Object.keys(SKIN_SLOTS).sort()).toEqual(Object.keys(ARTWORK_MANIFEST).sort());
+    const source = JSON.parse(readFileSync(new URL('../docs/examples/copperline.skin.json', import.meta.url), 'utf8'));
+    expect(Object.keys(source.glyphs).sort()).toEqual(Object.keys(SKIN_SLOTS).sort());
+    const skin = createSkin(source);
+    for (const population of [250, 2000]) {
+      const result = generateSettlement({ ...burg, population, biome: 'industrial' }, { seed: 42, skin });
+      expect(result.svg).toContain('var(--cl-');
+      expect(result.svg).not.toMatch(/NaN|Infinity/);
+    }
+    // Native field tiles use their current 32-unit box, not the old 64-unit grid.
+    expect(SKIN_SLOTS['sm-field-grain-strips--temperate'].viewBox).toEqual([0, 0, 32, 32]);
+    expect(source.glyphs['sm-field-grain-strips--temperate'].body).toContain('scale(0.5 0.5)');
+  });
+
+  it.each(['temperate', 'desert', 'tundra', 'tropical', 'coastal'])('preserves current default artwork with an empty skin in %s', biome => {
+    const skin = createSkin(header);
+    for (const population of [150, 1500]) {
+      const input = { ...burg, population, biome, walls: true };
+      const baseline = generateSettlement(input, { seed: 42 });
+      const skinned = generateSettlement(input, { seed: 42, skin });
+      expect(skinned.svg === baseline.svg, `${biome}, population ${population}: empty skin changed rendering`).toBe(true);
+    }
+  });
+
+  it('retains master’s city water-context validation when a skin is supplied', () => {
+    expect(() => generateFromBurg({ ...burg, population: 2000, waterContext: {} } as AzgaarBurgInput,
+      { skin: createSkin(header) })).toThrow();
+  });
+
   it('loads the documented JSON example', () => {
     const source = JSON.parse(readFileSync(new URL('../docs/examples/moon-glass.skin.json', import.meta.url), 'utf8'));
     const skin = createSkin(source);

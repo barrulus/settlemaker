@@ -117,6 +117,7 @@ const BIOME_SUFFIX: Record<string, string> = {
 /** Prefer the exact biome variant, then a native dwelling in the same
  * family, and only then the temperate fallback for an incomplete asset set. */
 export function resolveGlyphFor(biome: string, glyph: string): string {
+  if (glyph.includes('--')) return glyph;
   const suffix = BIOME_SUFFIX[biome] ?? '';
   if (suffix === '') return glyph;
   const suffixed = `${glyph}${suffix}`;

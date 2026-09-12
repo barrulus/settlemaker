@@ -34,7 +34,7 @@ must fit whatever land is left over, so only its texture is drawn.
 
 ## 2. Two extensions to the live contract
 
-Both are genuinely new. Neither exists in the refined set today, and both need Barry's
+Both are genuinely new. Neither exists in the refined set today, and both need barrulus's
 sign-off before you rely on them.
 
 ### 2.1 A third z-band: `parcel`

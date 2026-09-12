@@ -122,6 +122,14 @@ describe('radius profile (gate 8)', () => {
     expect(roadAxis([45, 225]).axisDeg).toBeCloseTo(45, 6);
   });
 
+  it('measures a narrow stream across its banks even for oblique profile rays', () => {
+    const water = [[new Point(3,-1000),new Point(7,-1000),new Point(7,1000),new Point(3,1000)]];
+    const input = {centre, radiusM:80, trunkBearingsDeg:[135]};
+    const dry = buildRadiusProfile({...input, water:[], rng:villageRng(1)});
+    const wet = buildRadiusProfile({...input, water, rng:villageRng(1)});
+    for(let bearing=0;bearing<360;bearing++)expect(wet.at(bearing)).toBeCloseTo(dry.at(bearing),8);
+  });
+
   it('never grows a lobe into the water', () => {
     // Water fills the half-plane east of x = 40; the profile must be pulled
     // in on the bearings that face it (090) and untouched to the west.

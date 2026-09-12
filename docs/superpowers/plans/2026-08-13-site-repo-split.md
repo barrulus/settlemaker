@@ -15,7 +15,7 @@
 - The public repo's master receives **zero** split-related commits until Task 6 (domains commit) and Task 7 (cleanup commit). Tasks 1–5 touch only the new private repo.
 - The submodule URL must be `https://github.com/barrulus/settlemaker.git` (not ssh) so Netlify can clone it without deploy keys.
 - Private repo local path: `/home/barrulus/dev/settlemaker-web`. GitHub: `barrulus/settlemaker-web`, private.
-- Netlify: the EXISTING site (currently serving settlemaker.com, hostname `settlemaker.netlify.app`) is relinked to the private repo — no second site is created (Barry's call, 2026-08-13, revising the original two-site design). Site name, hostname, custom domain, and Umami config are all unchanged throughout; there are no domains edits anywhere in this plan.
+- Netlify: the EXISTING site (currently serving settlemaker.com, hostname `settlemaker.netlify.app`) is relinked to the private repo — no second site is created (barrulus's call, 2026-08-13, revising the original two-site design). Site name, hostname, custom domain, and Umami config are all unchanged throughout; there are no domains edits anywhere in this plan.
 - Node 22 everywhere: `NODE_VERSION = "22"` on Netlify; locally run npm via the submodule's flake: `nix develop /home/barrulus/dev/settlemaker-web/settlemaker --command bash -c "<cmd>"`.
 - Site output must be identical before and after cutover: same pages (`/`, `/fmg`, `/symbols`), same redirects, same `/symbols/batch001/*` assets, same GPL footers.
 - Umami website id `162c6727-fc89-4425-9962-7ad4d65e71ba` and script `https://stats.barrulus.com/script.js` are unchanged throughout.
@@ -122,7 +122,7 @@ import { trackEvent } from '../../settlemaker/web/src/umami.js';
   "name": "settlemaker-site",
   "private": true,
   "version": "0.1.0",
-  "author": "Barry Gill <b@rry.im>",
+  "author": "barrulus",
   "type": "module",
   "engines": {
     "node": ">=18"
@@ -230,7 +230,7 @@ git commit -m "site/: /symbols page as its own Vite project, umami from the subm
   "name": "settlemaker-web",
   "private": true,
   "version": "0.1.0",
-  "author": "Barry Gill <b@rry.im>",
+  "author": "barrulus",
   "scripts": {
     "build:app": "npm ci --prefix settlemaker/web && npm run build --prefix settlemaker/web",
     "build:site": "npm ci --prefix site && npm run build --prefix site",
@@ -345,7 +345,7 @@ git push -u origin master
 
 ---
 
-### Task 4: Relink the existing Netlify site — HUMAN CHECKPOINT (Barry, Netlify UI)
+### Task 4: Relink the existing Netlify site — HUMAN CHECKPOINT (barrulus, Netlify UI)
 
 **Files:** none (Netlify account state).
 
@@ -355,17 +355,17 @@ git push -u origin master
 
 Relinking is the cutover trigger: the moment the repo link changes, pushes and PR previews from the PUBLIC repo stop building on this site (the glyphs draft-PR preview flow ends here — generator previews switch to submodule-bump PRs per the private repo's README). Production keeps serving the locked deploy until Task 6 publishes.
 
-No agent can do this — no Netlify CLI is installed and these are account actions. Present Barry this exact checklist and wait:
+No agent can do this — no Netlify CLI is installed and these are account actions. Present barrulus this exact checklist and wait:
 
-- [ ] **Step 1 (Barry): Lock the current deploy**
+- [ ] **Step 1 (barrulus): Lock the current deploy**
 
 Netlify app → the existing settlemaker site → **Deploys** → on the currently published deploy: **Lock to stop auto publishing** (padlock option). Production is now frozen on today's build no matter what deploys next.
 
-- [ ] **Step 2 (Barry): Grant repo access and relink**
+- [ ] **Step 2 (barrulus): Grant repo access and relink**
 
 Site configuration → **Build & deploy → Continuous deployment → Manage repository → Link to a different repository** → GitHub → `barrulus/settlemaker-web` (if not listed, use "Configure the Netlify app on GitHub" to grant it access to the private repo). Branch to deploy: `master`. Build command `npm run build` and publish dir `dist` come from the new repo's root `netlify.toml` — clear any leftover UI-level overrides from the old setup (old base `web` must NOT survive as a UI override; the base is now the repo root).
 
-- [ ] **Step 3 (Barry): Confirm the new deploy builds green (unpublished)**
+- [ ] **Step 3 (barrulus): Confirm the new deploy builds green (unpublished)**
 
 Deploys tab → a new deploy from `settlemaker-web@master` builds. Because of the lock it does NOT publish. Expected: build succeeds (Netlify clones the public https submodule automatically — no deploy key needed). Open the deploy's detail page and copy its **deploy permalink URL** (the `https://<deploy-id>--settlemaker.netlify.app` link) back into the session for Task 5. If the build fails, paste the deploy log instead.
 
@@ -379,7 +379,7 @@ Deploys tab → a new deploy from `settlemaker-web@master` builds. Because of th
 - Consumes: the unpublished deploy's permalink from Task 4 (`https://<deploy-id>--settlemaker.netlify.app`, below `$DEPLOY`) and `https://settlemaker.com` (production, still serving the locked old build) as the reference.
 - Produces: go/no-go evidence for the Task 6 publish.
 
-Set `DEPLOY=https://<deploy-id>--settlemaker.netlify.app` (the permalink Barry reported in Task 4) before running the steps.
+Set `DEPLOY=https://<deploy-id>--settlemaker.netlify.app` (the permalink barrulus reported in Task 4) before running the steps.
 
 - [ ] **Step 1: Page and redirect checks**
 
@@ -417,7 +417,7 @@ diff <(curl -s https://settlemaker.com/) <(curl -s "$DEPLOY/") && echo INDEX-IDE
 ```
 Expected: both `IDENTICAL` markers, **provided** the submodule pin equals the commit production last deployed. If master moved since, diffs show real content drift — bump the pin to current master (README flow) and re-run rather than explaining diffs away.
 
-- [ ] **Step 5 (Barry): Eyeball it**
+- [ ] **Step 5 (barrulus): Eyeball it**
 
 Visual work needs eyes: open `$DEPLOY/`, generate a settlement, open `$DEPLOY/symbols`, confirm both look right. Report OK or what's off.
 
@@ -427,7 +427,7 @@ Paste the outputs of Steps 1–4 into the session log / task notes. No commit (n
 
 ---
 
-### Task 6: Publish the cutover deploy — HUMAN-GATED (Barry picks the moment)
+### Task 6: Publish the cutover deploy — HUMAN-GATED (barrulus picks the moment)
 
 **Files:**
 - Modify: `settlemaker-web` (private repo) `README.md` (rollback wording only)
@@ -435,10 +435,10 @@ Paste the outputs of Steps 1–4 into the session log / task notes. No commit (n
 No domains edits anywhere: the site keeps its name and `settlemaker.netlify.app` hostname, so the Umami `data-domains` lists in the public repo and the private symbols.html are already correct.
 
 **Interfaces:**
-- Consumes: verified unpublished deploy (Task 5); Barry's explicit go signal — do not start this task without it.
+- Consumes: verified unpublished deploy (Task 5); barrulus's explicit go signal — do not start this task without it.
 - Produces: settlemaker.com served from the private repo. End of the transition window.
 
-- [ ] **Step 1 (Barry): Publish**
+- [ ] **Step 1 (barrulus): Publish**
 
 Netlify UI → Deploys → the verified deploy from Task 5 → **Publish deploy** (this also lifts the lock; if a separate "Unlock" toggle is shown, unlock so future master pushes auto-publish again).
 
@@ -450,7 +450,7 @@ for p in / /fmg /symbols /symbols/batch001/symbols.json; do
 done
 curl -s https://settlemaker.com/ | grep -o 'data-domains="[^"]*"'
 ```
-Expected: four `200`s; `data-domains` unchanged (`settlemaker.com,www.settlemaker.com,settlemaker.netlify.app`). Then (Barry) load settlemaker.com in a browser, generate a settlement, and check the Umami dashboard registers the pageview.
+Expected: four `200`s; `data-domains` unchanged (`settlemaker.com,www.settlemaker.com,settlemaker.netlify.app`). Then (barrulus) load settlemaker.com in a browser, generate a settlement, and check the Umami dashboard registers the pageview.
 
 - [ ] **Step 3: Correct the README's rollback note**
 

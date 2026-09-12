@@ -2,7 +2,7 @@
 
 An original top-down SVG set for technologically advanced settlements. Flat roofs,
 solar glazing, turbines, pressure vessels, rooftop ventilation and copper pipes
-replace the bundled medieval architecture. All 91 skin slots are covered, using
+replace the bundled medieval architecture. All 693 runtime skin slots are covered, using
 47 distinct drawings and shared variants for the existing terrain biomes.
 
 ![Copperline artwork contact sheet](preview.svg)
@@ -40,7 +40,8 @@ geometry. Village roads and bridges retain the renderer's default colours.
 For the illustrated open industrial city, use `walls: false` and
 `citadel: false` as in the example generator.
 
-All drawings use the existing 64 × 64 placement boxes. House ink is inset to the
+Drawings preserve the runtime slot boxes: 64 × 64 for structures and plants,
+32 × 32 for the newer field tiles. House ink is inset to the
 original frontage; structure silhouettes have no baked-in offset. Vegetation and
 parcel artwork have no silhouettes. Field tiles repeat on both axes, barriers
 and edge stamps along their local x-axis. Material colours have explicit SVG
@@ -49,12 +50,13 @@ fallbacks and can be overridden with the skin's `--cl-*` tokens.
 Edit [the vector authoring script](../../scripts/generate-copperline.mjs), then:
 
 ```sh
-node scripts/generate-copperline.mjs
 npm run build
+node scripts/generate-copperline.mjs
 node scripts/render-copperline.mjs
 ```
 
-The first command regenerates the JSON, sprite, and contact sheet; the last
+The build exposes the current runtime slot catalog. The authoring command
+regenerates the JSON, sprite, and contact sheet; the last
 validates slot/shadow coverage and renders all three presets through both engines,
 saving the industrial village and city examples. Original artwork in this folder
 and the Copperline JSON is distributed under the repository's [GPL-3.0-only licence](../../LICENSE).

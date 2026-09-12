@@ -1,11 +1,13 @@
 {
   "name": "settlemaker",
-  "version": "2.5.0",
+  "version": "2.7.0",
   "description": "Medieval fantasy settlement map generator — TypeScript port of watabou's Medieval Fantasy City Generator",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
+    "build:art": "node scripts/build-runtime-art.mjs",
+    "review:art": "npm run build && node scripts/review-artwork.mjs",
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
     "build:lib": "esbuild src/index.ts --bundle --format=esm --target=es2022 --minify --outfile=dist/settlemaker.browser.js --banner:js=\"/* settlemaker — GPL-3.0-only. Corresponding source: https://github.com/barrulus/settlemaker */\"",
     "test": "vitest run",
@@ -15,7 +17,7 @@
     "review:cities": "esbuild scripts/review-cities.ts --bundle --platform=node --format=cjs --packages=external --outfile=output/city-review-runner.cjs && node output/city-review-runner.cjs"
   },
   "license": "GPL-3.0-only",
-  "author": "Barry Gill <b@rry.im>",
+  "author": "barrulus",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/barrulus/settlemaker.git"
@@ -35,6 +37,7 @@
     "dist",
     "NOTICE",
     "docs/skins.md",
+    "docs/current-symbol-library.md",
     "docs/skins.schema.json",
     "docs/examples/moon-glass.skin.json",
     "docs/examples/copperline.skin.json",
@@ -43,6 +46,14 @@
     "symbols/copperline",
     "symbols/LICENSE",
     "symbols/CREDITS",
-    "symbols/refined"
-  ]
+    "symbols/village",
+    "symbols/city",
+    "symbols/landscape",
+    "symbols/greens",
+    "symbols/infrastructure",
+    "symbols/markers"
+  ],
+  "dependencies": {
+    "polygon-clipping": "^0.15.7"
+  }
 }

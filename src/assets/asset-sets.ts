@@ -6,6 +6,7 @@
  */
 import { REFINED_GLYPHS } from './refined-glyphs.js';
 import { REFINED_MANIFEST } from './refined-manifest.js';
+import { ARTWORK_GLYPHS, ARTWORK_MANIFEST, floraKinds } from './artwork.js';
 
 export interface AssetSet {
   name: string;
@@ -31,13 +32,7 @@ export interface GlyphAsset {
 export const CANOPY_KINDS = ['sm-tree-deciduous', 'sm-tree-deciduous-small', 'sm-tree-conifer'] as const;
 
 export function canopyKindsFor(biome?: string): readonly string[] {
-  switch (biome) {
-    case 'desert': return ['sm-palm-date--desert', 'sm-olive--desert', 'sm-scrub--desert'];
-    case 'tundra': return ['sm-conifer--tundra', 'sm-snag--tundra'];
-    case 'tropical': return ['sm-palm-fan--tropical', 'sm-broadleaf--tropical'];
-    case 'coastal': return ['sm-dune-grass--coastal', 'sm-tamarisk--coastal'];
-    default: return CANOPY_KINDS;
-  }
+  return floraKinds(biome);
 }
 
 /** Starter set: deliberately simple, proves symbol resolution end-to-end. */
@@ -51,7 +46,7 @@ export const SCHEMATIC_SET: AssetSet = {
   },
 };
 
-/** The village artwork is also the city starter kit. No batch001 fallback. */
+/** Original refined artwork, retained as an explicit rendering alternative. */
 export const REFINED_SET: AssetSet = {
   name: 'refined',
   symbols: SCHEMATIC_SET.symbols,
@@ -66,7 +61,17 @@ export const REFINED_SET: AssetSet = {
   }])),
 };
 
-/** Placers resolve biome variants; all five live in the same refined set. */
+/** Placers resolve biome variants within the shared settlement library. */
 export function assetSetFor(_biome?: string): AssetSet {
-  return REFINED_SET;
+  return SETTLEMENT_SET;
 }
+
+/** Complete reviewed art; emit only definitions actually used by a scene. */
+export const SETTLEMENT_SET: AssetSet = {
+  name: 'settlement', symbols: SCHEMATIC_SET.symbols, patterns: SCHEMATIC_SET.patterns,
+  manifest: ARTWORK_MANIFEST, refined: true,
+  glyphs: Object.fromEntries(Object.keys(ARTWORK_GLYPHS).map(id=>[id,{
+    viewBox: ARTWORK_MANIFEST[id].viewBox, anchor: ARTWORK_MANIFEST[id].anchor,
+    get body(){return ARTWORK_GLYPHS[id].body;}, get sil(){return ARTWORK_GLYPHS[id].sil??'';},
+  }])),
+};

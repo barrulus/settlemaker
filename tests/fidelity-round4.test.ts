@@ -126,7 +126,7 @@ describe('fidelity round 4: probe path', () => {
     // patches of which 4 are non-GateWard — real corridor sprawl, up from 3
     // (measured locally).
     // Re-pinned for round-cores-faubourgs Tasks 1-8, all eight of whose
-    // render gates Barry approved (round cores, demand-sized walls, row
+    // render gates barrulus approved (round cores, demand-sized walls, row
     // housing, per-route faubourg weights, shoreline wall circuits, piers,
     // plaza ring). This burg is a pop-1400 inland town in the same regime as
     // the approved pop1200 ladder cell. Verified non-degenerate and
@@ -182,7 +182,9 @@ describe('fidelity round 4: probe path', () => {
     // geometry and alley paths intentionally change. Village hash stays pinned.
     const { svg } = generateFromBurg(aldford(1400), { seed: 9 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('e7bb4dbeeb5dab5458821e7d725c047516ab06819d96bf4de881d6c892c8d3a1');
+    // Biome greens, softer flora, varied roofs and graded city gardens.
+    // Reviewed rendered output and verified exact repeatability before repinning.
+    expect(sha256(svg)).toBe('4f6060135b4cd74436846db2776b4ff7e1799e8952c2b77a32afa11de9b78727');
   });
 
   it('pins direct legacy generateFromBurg output at pop 800 (not the village engine)', () => {
@@ -287,7 +289,9 @@ describe('fidelity round 4: probe path', () => {
     // rule; this direct legacy API fixture does not use the village renderer.
     const { svg } = generateFromBurg(aldford(800), { seed: 1 });
     expect(svg.length).toBeGreaterThan(1000);
-    expect(sha256(svg)).toBe('45bc3118772b18586d79ed760281d25c9b2f91a07e968dcba9924ecd0e4a96a9');
+    // Biome greens, softer flora, varied roofs and graded city gardens.
+    // Reviewed rendered output and verified exact repeatability before repinning.
+    expect(sha256(svg)).toBe('4bab5c22c6a3e0add2dd273eaf44992cc10cddae3f6aeb7430af747728181de4');
   });
 });
 

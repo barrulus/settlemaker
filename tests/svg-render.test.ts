@@ -134,7 +134,7 @@ describe('svg render: shadows, buildings, landmarks', () => {
       return `M${first.x.toFixed(2)},${first.y.toFixed(2)}`;
     });
 
-    const greensGroup = svg.match(/<g id="greens">([\s\S]*?)<\/g>/)?.[1] ?? '';
+    const greensGroup = svg.split('<g id="greens">')[1]?.split('<g id="roads"')[0] ?? '';
     // Every geometry path should appear painted (in greens).
     for (const start of paths) {
       expect(greensGroup).toContain(start);
@@ -147,7 +147,7 @@ describe('svg render: shadows, buildings, landmarks', () => {
       expect(shadowGroup).not.toContain(start);
       expect(buildingsGroup).not.toContain(start);
     }
-    expect(svg).toContain(`#greens path{fill:${greenFill}`);
+    expect(svg).toContain(`#greens > path{fill:${greenFill}`);
   });
 
   it('landmark wards use the landmark fill', () => {
@@ -159,10 +159,8 @@ describe('svg render: shadows, buildings, landmarks', () => {
       p => p.ward && ['castle', 'cathedral', 'market'].includes(String(p.ward.type)),
     );
     if (hasLandmarkWard) {
-      // landmarkFill parchment = blend(0xd5ad6e, 0x4a3f2a, 0.3):
-      // r 213+(74-213)×0.3=171.3→171 (ab), g 173+(63-173)×0.3=140 (8c),
-      // b 110+(42-110)×0.3=89.6→90 (5a) → #ab8c5a
-      expect(svg).toContain('#landmarks path{fill:#ab8c5a');
+      // Unfitted landmark polygons match the native city's pale roof planes.
+      expect(svg).toContain('#landmarks path{fill:#aab2bd');
     }
   });
 });

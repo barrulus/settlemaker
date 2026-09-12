@@ -1,3 +1,4 @@
+import { assertWaterQuery } from '../water-boundary.js';
 import { frontageOffsetM } from '../cross-section.js';
 import { SeededRandom } from '../../utils/random.js';
 import { offsetPolyline } from './strip.js';
@@ -289,6 +290,7 @@ export function subdivideGreen(
  * is judged on the ground it actually takes.
  */
 function claimTouchesWater(lot: Lot, water: Point[][]): boolean {
+  assertWaterQuery(water, lot.front, Math.hypot(lot.frontageM / 2, lot.depthM));
   if (water.length === 0) return false;
   const obb = lotObb(lot);
   const t = obb.tangent;

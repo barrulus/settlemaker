@@ -66,7 +66,7 @@ random.
 - per curated glyph: `{ viewBox, content, silContent, footprint, minScale }`
   (native viewBoxes kept — **no re-authoring to the unit box**; `<use
   width/height>` does the fitting);
-- a CC-BY-4.0 attribution header naming the author (Barry Gill), keeping
+- a CC-BY-4.0 attribution header naming the author (barrulus), keeping
   the CC-BY/GPL licence split clean with credit intact.
 
 The generated file is committed so the library build stays self-contained

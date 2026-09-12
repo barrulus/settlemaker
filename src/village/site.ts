@@ -1,9 +1,11 @@
+import { prepareMeasuredInput, checkMeasuredWater } from './water-context.js';
 import { Point } from '../types/point.js';
 import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import type { Site, SiteRoute } from './types.js';
 import { fromLegacyKind, toLegacyKind, type RouteType, ROUTE_CLASS_ORDER } from './route-class.js';
 import { bearingVector } from './geometry.js';
 import { normaliseVillageBiome } from './theme.js';
+import { riverPolygons } from './rivers.js';
 import { SeededRandom } from '../utils/random.js';
 
 /** The seven land classes, from route-class.ts's single source of truth. */
@@ -110,6 +112,9 @@ const COAST_AMPLITUDE_SHARE = 1.15;
  */
 const COAST_WAVELENGTHS = [6.0, 2.4];
 const COAST_WAVE_WEIGHTS = [0.85, 0.15];
+/** Tiny hamlets still draw a landscape tile hundreds of metres across.
+ * Keep bays at that scale instead of shrinking them with the house count. */
+const COAST_MIN_BAY_WAVELENGTH_M = 360;
 /** Its own stream, so adding the coastline displaced no other draw. */
 const COAST_SEED_MULTIPLIER = 7919;
 const COAST_SEED_OFFSET = 104729;
@@ -121,6 +126,7 @@ function oceanBearingFallback(input: AzgaarBurgInput, seed: number): Point[][] {
   const dir = bearingVector(input.oceanBearing);
   const normal = new Point(-dir.y, dir.x);
   const standoff = COAST_STANDOFF_K * Math.sqrt(Math.max(1, input.population));
+  const coastScale = Math.max(standoff, COAST_MIN_BAY_WAVELENGTH_M / COAST_WAVELENGTHS[0]);
   const amplitude = standoff * COAST_AMPLITUDE_SHARE;
 
   const rng = new SeededRandom(seed * COAST_SEED_MULTIPLIER + COAST_SEED_OFFSET);
@@ -149,8 +155,8 @@ function oceanBearingFallback(input: AzgaarBurgInput, seed: number): Point[][] {
 
   // Sampled across the full width so the coast keeps its character all the
   // way to the corners; a straight run either side would read as a seam.
-  const wide = standoff * COAST_WIDE_MULT;
-  const shortestWavelength = standoff * Math.min(...COAST_WAVELENGTHS);
+  const wide = coastScale * COAST_WIDE_MULT;
+  const shortestWavelength = coastScale * Math.min(...COAST_WAVELENGTHS);
   const spacing = shortestWavelength / COAST_SAMPLE_PER_WAVE;
   const samples = Math.ceil((2 * wide) / spacing);
 
@@ -163,7 +169,7 @@ function oceanBearingFallback(input: AzgaarBurgInput, seed: number): Point[][] {
       // not a wavelength, and every wave comes out 2*PI too long — which is
       // exactly how the first attempt at this produced a near-straight coast.
       wobble += COAST_WAVE_WEIGHTS[w]
-        * Math.sin((2 * Math.PI * t) / (standoff * COAST_WAVELENGTHS[w]) + phases[w]);
+        * Math.sin((2 * Math.PI * t) / (coastScale * COAST_WAVELENGTHS[w]) + phases[w]);
     }
     // `standoff + amplitude` so the CLOSEST the water ever comes is the
     // standoff itself: the wobble only ever pushes the sea further out,
@@ -189,10 +195,13 @@ function oceanBearingFallback(input: AzgaarBurgInput, seed: number): Point[][] {
 }
 
 /**
- * Pass 1. Resolves FMG's input into burg-local metres. No geometry is
- * invented here — this pass only reads.
+ * Pass 1. Resolve explicit water polygons and generate hinted coasts/rivers
+ * before roads and housing use the resulting water geometry.
  */
 export function buildSite(input: AzgaarBurgInput, seed = 0): Site {
+  const original = input;
+  const prepared = prepareMeasuredInput(input);
+  input = prepared.input;
   const routes: SiteRoute[] = (input.roadBearings ?? [])
     .map((b): SiteRoute | null => {
       if (typeof b === 'number') {
@@ -229,9 +238,13 @@ export function buildSite(input: AzgaarBurgInput, seed = 0): Site {
 
   const water: Point[][] = (input.coastlineGeometry ?? [])
     .map((ring) => ring.map((p) => new Point(p.x, p.y)))
-    .concat(oceanBearingFallback(input, seed));
+    .concat(oceanBearingFallback(input, seed), riverPolygons(input, seed));
 
+  checkMeasuredWater(original, water, prepared.result);
   return {
+    ...(prepared.result ? { waterContextResult: prepared.result } : {}),
+    ...(original.waterContext?.status === 'measured' ? { surveyRadiusM: original.waterContext.surveyRadiusM } : {}),
+    freshwaterIrrigation: (input.rivers?.length ?? 0) > 0,
     population: input.population,
     // Normalised once, here, because every per-biome table downstream (theme,
     // dwelling deck, field deck, canopy deck, plot edges) is an exact-match
@@ -245,6 +258,10 @@ export function buildSite(input: AzgaarBurgInput, seed = 0): Site {
       temple: input.temple,
       trade: input.trade ?? false,
       walls: input.walls,
+      capital: input.capital ?? false,
+      citadel: input.citadel ?? false,
+      plaza: input.plaza ?? false,
+      shanty: input.shanty ?? false,
     },
   };
 }

@@ -1,3 +1,4 @@
+import type { WaterContextResult } from '../input/water-context.js';
 import { Point } from '../types/point.js';
 import type { RouteType } from './route-class.js';
 // Type-only: erased at compile time, so this does not create a runtime
@@ -21,12 +22,18 @@ export interface SiteRoute {
 
 /** Pass 1 output. Everything in metres, origin at the burg centre. */
 export interface Site {
+  freshwaterIrrigation?: boolean;
+  waterContextResult?: WaterContextResult;
+  surveyRadiusM?: number;
   population: number;
   biome: string;
   routes: SiteRoute[];
   /** Closed polygons of water in burg-local metres. */
   water: Point[][];
-  flags: { port: boolean; temple: boolean; trade: boolean; walls: boolean };
+  flags: {
+    port: boolean; temple: boolean; trade: boolean; walls: boolean;
+    capital?: boolean; citadel?: boolean; plaza?: boolean; shanty?: boolean;
+  };
 }
 
 export interface Green {
@@ -227,6 +234,7 @@ export interface Frame {
 }
 
 export interface VillageModel {
+  wall?: import('../scene/scene.js').WallFeature;
   site: Site;
   green: Green;
   lanes: Lane[];

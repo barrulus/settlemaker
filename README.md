@@ -128,6 +128,16 @@ Villages are themed by biome — `villageThemeFor(biome)` selects the ground,
 vegetation and dwelling glyphs. The review gallery includes desert and tundra
 examples, with native snowy dwelling artwork for tundra villages.
 
+Both engines now use the expanded [2.7.0 biome artwork](docs/releases/2.7.0.md) by default: rural and city
+buildings, religious and defensive forms, flora, fields, walls, bridges and
+henges. Run `npm run review:art` for a gallery generated through the public API.
+See [artwork integration](docs/artwork-integration.md) for selection rules,
+placement contracts and asset regeneration.
+
+See the [2.6.0 release notes](docs/releases/2.6.0.md) for measured village water,
+river meanders, temple henges and woodland. The [water-context v1 contract](docs/water-context-v1.md)
+defines the coordinated FMG rollout.
+
 See the [2.5.0 release notes](docs/releases/2.5.0.md) for city layouts, capacity
 accounting and the settlemaker-web submodule update.
 
@@ -182,7 +192,7 @@ See the [skin authoring specification](docs/skins.md),
 [JSON Schema](docs/skins.schema.json), and [working example](docs/examples/moon-glass.skin.json)
 for SVG replacements, placement constraints, and loading skins from JSON.
 
-For advanced technology, [Copperline](symbols/copperline/README.md) supplies 91 SVG
+For advanced technology, [Copperline](symbols/copperline/README.md) supplies 693 runtime SVG
 slot replacements with `industrial`, `steampunk`, and `modern` material presets:
 factories, rooftop machinery, solar arrays, and utility infrastructure.
 Browse the [artwork sheet](symbols/copperline/preview.svg) or load the

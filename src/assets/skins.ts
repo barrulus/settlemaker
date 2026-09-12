@@ -1,5 +1,5 @@
-import { REFINED_SET, type AssetSet } from './asset-sets.js';
-import { REFINED_MANIFEST } from './refined-manifest.js';
+import { SETTLEMENT_SET, type AssetSet } from './asset-sets.js';
+import { ARTWORK_MANIFEST, ART_TOKENS } from './artwork.js';
 import { SM_TOKENS } from './refined-style.js';
 import { skinSvg } from './skin-svg.js';
 import { normaliseVillageBiome, villageThemeFor, VILLAGE_BIOMES, TEMPERATE_THEME, type VillageTheme } from '../village/theme.js';
@@ -46,8 +46,8 @@ function freeze<T>(value: T): T {
 }
 
 /** Placement contracts for authoring replacements; never modify engine metadata. */
-export const SKIN_SLOTS = freeze(JSON.parse(JSON.stringify(REFINED_MANIFEST))) as Readonly<typeof REFINED_MANIFEST>;
-export const SKIN_TOKENS = freeze({ ...SM_TOKENS });
+export const SKIN_SLOTS = freeze(JSON.parse(JSON.stringify(ARTWORK_MANIFEST))) as Readonly<typeof ARTWORK_MANIFEST>;
+export const SKIN_TOKENS = freeze({ ...SM_TOKENS, ...ART_TOKENS });
 const definitions = new WeakMap<SettlementSkin, SkinDefinition>();
 const ID = /^[a-z][a-z0-9-]*$/;
 const COLOR = /^(?:#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})|none|transparent|currentColor)$/i;
@@ -148,18 +148,20 @@ export function skinBiomeFor(skin: SettlementSkin, biome?: string): { name: stri
 
 /** Internal render context, built without global registration or mutable defaults. */
 export function resolveSkin(skin: SettlementSkin, biome?: string): {
-  assets: AssetSet; village: VillageTheme; city: Partial<RenderTheme>; tokens: Record<string, string | number>;
+  assets: AssetSet; overrides: Set<string>; village: VillageTheme; city: Partial<RenderTheme>; tokens: Record<string, string | number>;
 } {
   const def = definition(skin);
   const { name, base } = skinBiomeFor(skin, biome);
   const preset = Object.hasOwn(def.biomes ?? {}, name) ? def.biomes![name] : undefined;
   const tokens = { ...villageThemeFor(base).tokens, ...def.tokens, ...preset?.tokens };
-  const glyphs = { ...REFINED_SET.glyphs };
-  for (const [id, art] of Object.entries({ ...def.glyphs, ...preset?.glyphs })) {
+  const glyphs = { ...SETTLEMENT_SET.glyphs };
+  const replacements = { ...def.glyphs, ...preset?.glyphs };
+  for (const [id, art] of Object.entries(replacements)) {
     glyphs[id] = { ...glyphs[id], body: art.body, sil: art.sil ?? '' };
   }
   return {
-    assets: { ...REFINED_SET, name: def.id, glyphs },
+    assets: { ...SETTLEMENT_SET, glyphs },
+    overrides: new Set(Object.keys(replacements)),
     village: { ...villageThemeFor(base), ...def.village, ...preset?.village, tokens },
     city: { ...def.city, ...preset?.city }, tokens,
   };

@@ -4,6 +4,7 @@ import type { WardType } from '../types/interfaces.js';
 import type { CityFrontage } from './city-frontage.js';
 
 export interface PlacedSymbol {
+  materialVariant?: number;
   id: string;
   at: Point;
   scale: number;        // world units, glyph box size

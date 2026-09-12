@@ -1,0 +1,1344 @@
+{
+  "shadow": {
+    "offset": [
+      2.6,
+      3.6
+    ],
+    "opacity": 0.2,
+    "color": "#46303c"
+  },
+  "symbols": {
+    "sm-house": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        8,
+        6.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        -1
+      ],
+      "orientationHint": "ridge-along-street",
+      "zBand": "structure",
+      "tags": [
+        "dwelling"
+      ],
+      "minScale": 0.35
+    },
+    "sm-house-tiled": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        8.6,
+        6.9
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        -1
+      ],
+      "orientationHint": "ridge-along-street",
+      "zBand": "structure",
+      "tags": [
+        "dwelling"
+      ],
+      "minScale": 0.35
+    },
+    "sm-house-large-tiled": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        13.5,
+        10.2
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        -1
+      ],
+      "orientationHint": "ridge-along-street",
+      "zBand": "structure",
+      "tags": [
+        "dwelling",
+        "wealthy"
+      ],
+      "minScale": 0.35
+    },
+    "sm-longhouse": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        16,
+        7.2
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        -1
+      ],
+      "orientationHint": "ridge-along-street",
+      "zBand": "structure",
+      "tags": [
+        "dwelling",
+        "rural"
+      ],
+      "minScale": 0.4
+    },
+    "sm-hut-straw": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        6.4,
+        6.4
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "zBand": "structure",
+      "tags": [
+        "dwelling",
+        "poor"
+      ],
+      "minScale": 0.4
+    },
+    "sm-hut-mud": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        6.4,
+        6.4
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "zBand": "structure",
+      "tags": [
+        "dwelling",
+        "poor"
+      ],
+      "minScale": 0.4
+    },
+    "sm-hut-round": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        6.4,
+        6.4
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "zBand": "structure",
+      "tags": [
+        "dwelling",
+        "poor"
+      ],
+      "minScale": 0.4
+    },
+    "sm-inn": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        17,
+        15
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        1
+      ],
+      "orientationHint": "yard-to-street",
+      "zBand": "structure",
+      "tags": [
+        "commerce",
+        "lodging"
+      ],
+      "requires": {
+        "adjacency": "road"
+      },
+      "minScale": 0.45
+    },
+    "sm-cathedral": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        42,
+        26
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        1,
+        0
+      ],
+      "orientationHint": "apse-to-east",
+      "parts": {
+        "spire": "invariant"
+      },
+      "zBand": "structure",
+      "tags": [
+        "faith",
+        "landmark"
+      ],
+      "minScale": 0.25
+    },
+    "sm-chapel": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        14,
+        16
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        1
+      ],
+      "orientationHint": "apse-to-east",
+      "parts": {
+        "spire": "invariant"
+      },
+      "zBand": "structure",
+      "tags": [
+        "faith"
+      ],
+      "minScale": 0.35
+    },
+    "sm-temple": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        22,
+        17
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        -1
+      ],
+      "orientationHint": "steps-to-road",
+      "zBand": "structure",
+      "tags": [
+        "faith",
+        "classical"
+      ],
+      "minScale": 0.3
+    },
+    "sm-kit-wall": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        12,
+        3.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "snap-cardinal",
+      "tileAxis": "x",
+      "zBand": "structure",
+      "tags": [
+        "fortification"
+      ],
+      "minScale": 0.3
+    },
+    "sm-kit-corner": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        12,
+        12
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "snap-cardinal",
+      "zBand": "structure",
+      "tags": [
+        "fortification"
+      ],
+      "minScale": 0.3
+    },
+    "sm-kit-gate": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        12,
+        7.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "snap-cardinal",
+      "zBand": "structure",
+      "tags": [
+        "fortification",
+        "route"
+      ],
+      "requires": {
+        "adjacency": "road"
+      },
+      "minScale": 0.35
+    },
+    "sm-kit-tower-drum": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        6.4,
+        6.4
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "zBand": "structure",
+      "tags": [
+        "fortification"
+      ],
+      "minScale": 0.35
+    },
+    "sm-kit-tower-square": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        6.6,
+        6.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "snap-cardinal",
+      "zBand": "structure",
+      "tags": [
+        "fortification"
+      ],
+      "minScale": 0.35
+    },
+    "sm-kit-keep": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        15,
+        11
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        -1
+      ],
+      "orientationHint": "ridge-along-bailey",
+      "zBand": "structure",
+      "tags": [
+        "fortification",
+        "dwelling"
+      ],
+      "minScale": 0.35
+    },
+    "sm-house--desert": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        8,
+        6.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        -1
+      ],
+      "orientationHint": "ridge-along-street",
+      "zBand": "structure",
+      "tags": [
+        "dwelling"
+      ],
+      "minScale": 0.35
+    },
+    "sm-hut--desert": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        5.8,
+        5.8
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "snap-cardinal",
+      "zBand": "structure",
+      "tags": [
+        "dwelling",
+        "poor"
+      ],
+      "minScale": 0.4
+    },
+    "sm-longhouse--desert": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        16,
+        8.4
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        -1
+      ],
+      "orientationHint": "ridge-along-street",
+      "zBand": "structure",
+      "tags": [
+        "dwelling",
+        "rural"
+      ],
+      "minScale": 0.4
+    },
+    "sm-house--tundra": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        8,
+        6.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        -1
+      ],
+      "orientationHint": "ridge-along-street",
+      "zBand": "structure",
+      "tags": [
+        "dwelling"
+      ],
+      "minScale": 0.35
+    },
+    "sm-hut--tundra": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        6.4,
+        6.4
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "zBand": "structure",
+      "tags": [
+        "dwelling",
+        "poor"
+      ],
+      "minScale": 0.4
+    },
+    "sm-longhouse--tundra": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        16,
+        7.2
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        -1
+      ],
+      "orientationHint": "ridge-along-street",
+      "zBand": "structure",
+      "tags": [
+        "dwelling",
+        "rural"
+      ],
+      "minScale": 0.4
+    },
+    "sm-house--tropical": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        9,
+        7.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        -1
+      ],
+      "orientationHint": "ridge-along-street",
+      "zBand": "structure",
+      "tags": [
+        "dwelling"
+      ],
+      "minScale": 0.35
+    },
+    "sm-hut--tropical": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        6.4,
+        6.4
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "zBand": "structure",
+      "tags": [
+        "dwelling",
+        "poor"
+      ],
+      "minScale": 0.4
+    },
+    "sm-longhouse--tropical": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        17,
+        9.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        -1
+      ],
+      "orientationHint": "ridge-along-street",
+      "zBand": "structure",
+      "tags": [
+        "dwelling",
+        "rural"
+      ],
+      "minScale": 0.4
+    },
+    "sm-house--coastal": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        8,
+        6.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        -1
+      ],
+      "orientationHint": "ridge-along-street",
+      "zBand": "structure",
+      "tags": [
+        "dwelling"
+      ],
+      "minScale": 0.35
+    },
+    "sm-hut--coastal": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        5.4,
+        4.8
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "zBand": "structure",
+      "tags": [
+        "dwelling",
+        "poor"
+      ],
+      "minScale": 0.4
+    },
+    "sm-boathouse--coastal": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        16,
+        7.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        -1
+      ],
+      "orientationHint": "mouth-to-water",
+      "zBand": "structure",
+      "tags": [
+        "dwelling",
+        "rural"
+      ],
+      "minScale": 0.4,
+      "requires": {
+        "adjacency": "water"
+      }
+    },
+    "sm-inn--desert": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        17,
+        15
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        1
+      ],
+      "orientationHint": "yard-to-street",
+      "zBand": "structure",
+      "tags": [
+        "commerce",
+        "lodging"
+      ],
+      "requires": {
+        "adjacency": "road"
+      },
+      "minScale": 0.45
+    },
+    "sm-chapel--desert": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        14,
+        14
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        -1
+      ],
+      "orientationHint": "steps-to-road",
+      "zBand": "structure",
+      "tags": [
+        "faith",
+        "landmark"
+      ],
+      "minScale": 0.3
+    },
+    "sm-inn--tundra": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        17,
+        15
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        1
+      ],
+      "orientationHint": "yard-to-street",
+      "zBand": "structure",
+      "tags": [
+        "commerce",
+        "lodging"
+      ],
+      "requires": {
+        "adjacency": "road"
+      },
+      "minScale": 0.45
+    },
+    "sm-chapel--tundra": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        7.4,
+        14.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        1
+      ],
+      "orientationHint": "apse-to-east",
+      "parts": {
+        "spire": "invariant"
+      },
+      "zBand": "structure",
+      "tags": [
+        "faith"
+      ],
+      "minScale": 0.35
+    },
+    "sm-inn--tropical": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        17,
+        15
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        1
+      ],
+      "orientationHint": "yard-to-street",
+      "zBand": "structure",
+      "tags": [
+        "commerce",
+        "lodging"
+      ],
+      "requires": {
+        "adjacency": "road"
+      },
+      "minScale": 0.45
+    },
+    "sm-chapel--tropical": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        16,
+        12
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        -1
+      ],
+      "orientationHint": "steps-to-road",
+      "zBand": "structure",
+      "tags": [
+        "faith",
+        "landmark"
+      ],
+      "minScale": 0.3
+    },
+    "sm-inn--coastal": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        17,
+        15
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        1
+      ],
+      "orientationHint": "yard-to-street",
+      "zBand": "structure",
+      "tags": [
+        "commerce",
+        "lodging"
+      ],
+      "requires": {
+        "adjacency": "road"
+      },
+      "minScale": 0.45
+    },
+    "sm-chapel--coastal": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        14,
+        10.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "free",
+      "upVector": [
+        0,
+        1
+      ],
+      "orientationHint": "apse-to-east",
+      "parts": {
+        "spire": "invariant"
+      },
+      "zBand": "structure",
+      "tags": [
+        "faith"
+      ],
+      "minScale": 0.35
+    },
+    "sm-kit-wall--desert": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        12,
+        3.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "snap-cardinal",
+      "tileAxis": "x",
+      "zBand": "structure",
+      "tags": [
+        "fortification"
+      ],
+      "minScale": 0.3
+    },
+    "sm-kit-gate--desert": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        12,
+        7.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "snap-cardinal",
+      "zBand": "structure",
+      "tags": [
+        "fortification",
+        "route"
+      ],
+      "requires": {
+        "adjacency": "road"
+      },
+      "minScale": 0.35
+    },
+    "sm-kit-tower--desert": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        6.6,
+        6.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "snap-cardinal",
+      "zBand": "structure",
+      "tags": [
+        "fortification"
+      ],
+      "minScale": 0.35
+    },
+    "sm-kit-wall--tundra": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        12,
+        3.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "snap-cardinal",
+      "tileAxis": "x",
+      "zBand": "structure",
+      "tags": [
+        "fortification"
+      ],
+      "minScale": 0.3
+    },
+    "sm-kit-gate--tundra": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        12,
+        7.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "snap-cardinal",
+      "zBand": "structure",
+      "tags": [
+        "fortification",
+        "route"
+      ],
+      "requires": {
+        "adjacency": "road"
+      },
+      "minScale": 0.35
+    },
+    "sm-kit-tower--tundra": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        6.6,
+        6.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "snap-cardinal",
+      "zBand": "structure",
+      "tags": [
+        "fortification"
+      ],
+      "minScale": 0.35
+    },
+    "sm-kit-wall--tropical": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        12,
+        3.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "snap-cardinal",
+      "tileAxis": "x",
+      "zBand": "structure",
+      "tags": [
+        "fortification"
+      ],
+      "minScale": 0.3
+    },
+    "sm-kit-gate--tropical": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        12,
+        7.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "snap-cardinal",
+      "zBand": "structure",
+      "tags": [
+        "fortification",
+        "route"
+      ],
+      "requires": {
+        "adjacency": "road"
+      },
+      "minScale": 0.35
+    },
+    "sm-kit-tower--tropical": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        6.6,
+        6.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "snap-cardinal",
+      "zBand": "structure",
+      "tags": [
+        "fortification"
+      ],
+      "minScale": 0.35
+    },
+    "sm-kit-wall--coastal": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        12,
+        3.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "snap-cardinal",
+      "tileAxis": "x",
+      "zBand": "structure",
+      "tags": [
+        "fortification"
+      ],
+      "minScale": 0.3
+    },
+    "sm-kit-gate--coastal": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        12,
+        7.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "snap-cardinal",
+      "zBand": "structure",
+      "tags": [
+        "fortification",
+        "route"
+      ],
+      "requires": {
+        "adjacency": "road"
+      },
+      "minScale": 0.35
+    },
+    "sm-kit-tower--coastal": {
+      "cls": "fixed",
+      "viewBox": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "footprint": [
+        6.6,
+        6.6
+      ],
+      "anchor": [
+        32,
+        32
+      ],
+      "rotation": "invariant",
+      "zBand": "structure",
+      "tags": [
+        "fortification",
+        "navigation",
+        "landmark"
+      ],
+      "minScale": 0.35
+    }
+  }
+}

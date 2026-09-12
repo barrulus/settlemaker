@@ -6,8 +6,16 @@ settlemaker-rendered settlement without touching this repository. It is
 self-contained: everything you need to build a working link is either quoted
 verbatim below or copy-paste runnable.
 
-**Release:** 2.5.0 (2026-09-10). URL payload version stays `1`; GeoJSON schema
-version stays `4`. See [release and integration notes](releases/2.5.0.md).
+**Release:** 2.6.0 (2026-09-11). URL payload version stays `1`; GeoJSON schema
+version stays `4`. See [release and integration notes](releases/2.6.0.md).
+
+**Measured water:** [Water context v1](water-context-v1.md) is supported for
+villages of 1–1000 people in 2.6.0. FMG must enable its measured sender only after
+the supporting library and web diagnostics are deployed together. It supplies
+surveyed distances and polygons in metres; an empty survey suppresses legacy
+bearing-based coastlines. V1 displays errors/warnings inside the iframe and does
+not provide automatic FMG resurvey. Cities retain the 2.5.0 engine and reject the
+new measured-water mode until their physical scaling contract is implemented.
 
 ## 1. Overview
 
@@ -170,6 +178,22 @@ export interface AzgaarBurgInput {
    * not available.
    */
   coastlineGeometry?: Array<Array<{ x: number; y: number }>>;
+  /** Compressed payload only; complete definition and precedence in water-context-v1.md. */
+  waterContext?: {
+    version: 1; status: 'measured'; coordinateSpace: 'burg-local-metres';
+    surveyRadiusM: number; geometryErrorM: number;
+    omittedRivers?: Array<{ riverId?: string; reason: 'local-width-unavailable' }>;
+    bodies: Array<{
+      featureId?: string; kind: 'ocean' | 'lake'; distanceM: number; bearingDeg: number;
+      polygonIndices?: number[]; coastApproximation?: 'simple-local-coast';
+    }>;
+  } | { version: 1; status: 'unknown-units'; sourceUnit: string };
+  /** Village-only river surveys, burg-local metres; added to other water. */
+  rivers?: Array<{
+    centreline: Array<{ x: number; y: number }>;
+    widthM: number;
+    meander?: boolean; // defaults true; false retains the surveyed centreline
+  }>;
 }
 ```
 
@@ -261,6 +285,35 @@ river polygons beyond the intended tile bounds so their ends do not appear as
 artificial shorelines. Include every relevant water body: a non-empty polygon
 array replaces the `oceanBearing` fallback rather than adding to it.
 
+For villages, FMG may instead supply **coarse river surveys** in the additive
+`rivers` field of the compressed `i=` payload:
+
+```json
+"rivers": [{
+  "centreline": [{"x": -900, "y": -896}, {"x": 900, "y": 904}],
+  "widthM": 2.83
+}]
+```
+
+Use at least two distinct centreline points and a positive width in metres.
+Settlemaker generates smooth seeded bends and both banks before planning roads,
+houses or fields. Survey endpoints and the nearest station to the burg anchor
+the channel. `meander: false` suppresses the generated displacement when the
+centreline already describes the intended bends. Exact bank geometry still
+belongs in `coastlineGeometry`; those polygons are never moved or stylized.
+Do not send the same river through both fields. `rivers` adds to explicit water
+polygons and any `oceanBearing` fallback, so a river can meet a generated coast.
+This field applies to settlements of 1–1000 people; city adapters should continue
+sending filled water polygons. There is no flat-query equivalent or payload
+version bump: this is an optional addition to payload version 1.
+
+Approach roads now wander gently beyond their fixed FMG contract entries.
+Road placement targets a 3 m bank verge outside bridge approaches, taking the
+visible road width into account. New and adjusted residential streets must
+retain at least 1.5 m of bank clearance. Generated bank-side junctions move with
+all connected roads; supplied entry positions remain fixed. Short bridge
+approaches are exempt so a road can meet its bridge on dry land.
+
 `oceanBearing` alone supplies a generated shore in the given direction; it
 cannot describe a river, real headland or estuary. `port` controls docks, not
 whether supplied water appears. `followsRiver` is a route hint only.
@@ -287,7 +340,7 @@ a river):
 | `group` | `'roads'` \| `'trails'` | Trails attract almost none (weight ×0.15). Absent = treated as a road. |
 | `through` | boolean | A route that continues past the burg attracts more (×1.5) than one that dead-ends there. |
 | `relief` | `'flat'`/`'valley'`/`'descent'`/`'ascent'`/`'ridge'` | Easy ground is neutral; `ascent` halves growth (×0.5); `ridge` quarters it (×0.25). |
-| `followsRiver` | boolean | A valley road along a river attracts slightly more (×1.2). This hint does not create a river; send its filled water polygon in `coastlineGeometry` to render one. |
+| `followsRiver` | boolean | A valley road along a river attracts slightly more (×1.2). This hint does not create a river; send `rivers` (villages) or a filled water polygon in `coastlineGeometry`. |
 
 Rules an adapter can rely on:
 
@@ -415,7 +468,7 @@ classes outside the village; internal streets normally use town/local/footpath.
 | `citadel` | boolean | `false` | |
 | `walls` | boolean | `false` | |
 | `plaza` | boolean | `false` | |
-| `temple` | boolean | `false` | |
+| `temple` | boolean | `false` | Villages reserve a henge clearing with footpath access; see feature flags below |
 | `shanty` | boolean | `false` | |
 | `capital` | boolean | `false` | |
 | `trade` | boolean | `false` | only present at all when true |
@@ -425,6 +478,23 @@ classes outside the village; internal streets normally use town/local/footpath.
 | `biome` | string | (unset) | data, not presentation: also picks the village dwelling/field/canopy decks. Azgaar's own biome names are accepted and normalised — see §Villages |
 | `urbanDensity` | number | (unset) | only kept if `> 0`; when unset, the generator falls back to a population-scaled default curve — see §6 |
 | `coreCapacity` | number | `10000` | only kept if `> 0`; people the walled core may hold — see §6 |
+
+Village feature flags (population 1–1000): FMG should send all seven existing
+booleans, using `shanty` for “Shanty Town”. They are preserved in `model.site.flags`.
+`temple: true` requests one `sm-stone-circle` henge, reserved on dry ground near
+an accessible street before fields and vegetation are placed. It is not subject
+to the incidental henge probability. Its approach is an internal `footpath`;
+its GeoJSON POI retains `kind: "stone-circle"`. An impossible site reports a
+`temple:` diagnostic rather than placing a henge in water or on occupied ground.
+Population-driven faith buildings may also appear. `port` enables the existing
+shore-dependent boathouse/jetty placement. `capital`, `citadel`, `walls`, `plaza`
+and `shanty` are accepted and retained, but currently have no dedicated village
+structure placement; their city-engine behavior remains unchanged.
+
+Village flora uses the normalized biome and fills unused ground around houses
+and between fields with groves and connected woodland. Roads, occupied plots,
+gardens, crops, water and requested henge clearings remain excluded. No new FMG
+field is required for either henges or woodland.
 
 That's all 16 flat data params (`src/url/params.ts`'s `FLAT_DATA_PARAMS`).
 

@@ -1,0 +1,78 @@
+{
+  "viewBox": [
+    0,
+    0,
+    280,
+    236
+  ],
+  "anchor": [
+    140,
+    118
+  ],
+  "category": "wall",
+  "biome": "desert",
+  "kind": "palisade",
+  "centreline": [
+    [
+      48,
+      33
+    ],
+    [
+      143,
+      16
+    ],
+    [
+      238,
+      61
+    ],
+    [
+      248,
+      139
+    ],
+    [
+      185,
+      210
+    ],
+    [
+      57,
+      194
+    ],
+    [
+      20,
+      119
+    ],
+    [
+      48,
+      33
+    ]
+  ],
+  "width": 12,
+  "length": 678.2570944634829,
+  "gaps": [
+    [
+      428.1855419321142,
+      451.1855419321142
+    ]
+  ],
+  "gateAnchors": [
+    {
+      "at": [
+        121,
+        202
+      ],
+      "tangent": [
+        -0.9922778767136677,
+        -0.12403473458920847
+      ],
+      "width": 23
+    }
+  ],
+  "notes": "Place along the actual boundary; no cardinal snapping. Width and detail spacing are independent of path length.",
+  "units": "SVG art units",
+  "inkBounds": [
+    14,
+    10,
+    254,
+    216
+  ]
+}

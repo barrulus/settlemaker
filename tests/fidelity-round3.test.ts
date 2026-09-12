@@ -38,20 +38,20 @@ describe('fidelity round 3: fields as assets', () => {
     }
   });
 
-  it('SVG renders parcels as bordered plots with rotated hatch patterns', () => {
+  it('SVG renders parcels with native crop textures and rotated patterns', () => {
     const { svg } = generateFromBurg(fenwick, { seed: 21 });
-    expect(svg).toMatch(/<pattern id="frame-clip-field-a\d+"/);
+    expect(svg).toMatch(/<pattern id="frame-clip-sm-field-[^"]+-a\d+"/);
     expect(svg).toMatch(/patternTransform="rotate\(\d+\)"/);
     const fields = svg.match(/<g id="fields">([\s\S]*?)<\/g>/)![1];
     expect(fields).toContain('class="plot"');
-    expect(fields).toMatch(/class="hatch" d="[^"]+" fill="url\(#frame-clip-field-a\d+\)"/);
+    expect(fields).toMatch(/data-field-glyph="sm-field-[^"]+" d="[^"]+" fill="url\(#frame-clip-sm-field-[^)]+\)"/);
     expect(fields).not.toContain('<line'); // furrow line segments are gone
   });
 
   it('pattern ids follow a custom clipId (multi-SVG documents)', () => {
     const { model } = generateFromBurg(fenwick, { seed: 21 });
     const svg = generateSvg(model, { clipId: 'zzz' });
-    expect(svg).toMatch(/<pattern id="zzz-field-a\d+"/);
+    expect(svg).toMatch(/<pattern id="zzz-sm-field-[^"]+-a\d+"/);
     expect(svg).not.toContain('frame-clip-field');
   });
 });

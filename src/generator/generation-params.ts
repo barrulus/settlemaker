@@ -302,7 +302,7 @@ export function buildingsPerCorePatch(population: number): number {
  *   pop  4000 -> 8.48 (table  8.59)
  * The table is DELIBERATELY not moved to those figures. It is a demand
  * divisor feeding `patchAreaForDemand`, so editing it resizes the walled
- * core at every population and therefore changes every render Barry
+ * core at every population and therefore changes every render barrulus
  * approved at the five task-4-to-8 gates. The drift is recorded here so the
  * next fixed-point iteration starts from measurements rather than from the
  * older ones above; it needs its own render gate.

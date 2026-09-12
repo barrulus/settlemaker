@@ -116,13 +116,13 @@ describe('renderVillage', () => {
     expect(lastShadow).toBeLessThan(firstInk);
   });
 
-  it('draws every canopy shadow before any canopy ink, after the structure band', () => {
+  it('draws foliage without cast shadows after the structure band', () => {
     const canopyBand = svg.slice(svg.indexOf('data-band="canopy"'));
     const lastShadow = canopyBand.lastIndexOf('data-shadow="1"');
     const firstInk = canopyBand.indexOf('data-ink="1"');
     if (model.vegetation.length > 0) {
-      expect(lastShadow).toBeGreaterThan(-1);
-      expect(lastShadow).toBeLessThan(firstInk);
+      expect(lastShadow).toBe(-1);
+      expect(firstInk).toBeGreaterThan(-1);
     }
   });
 
@@ -275,7 +275,7 @@ describe('renderVillage', () => {
 
   it('emits a <pattern> def with explicit width/height/patternUnits for every field strip, and the strip references it', () => {
     if (model.fields.length === 0) return;
-    const defsMatch = svg.match(/<defs>([\s\S]*?)<\/defs>/);
+    const defsMatch = svg.match(/<defs>([\s\S]*)<\/defs>/);
     const defs = defsMatch![1];
     const patternIds = new Set(
       Array.from(defs.matchAll(/<pattern id="([^"]+)"[^>]*>/g)).map((m) => m[1]),

@@ -34,8 +34,8 @@ const parky: AzgaarBurgInput = {
 describe('asset sets', () => {
   it('schematic set remains available and refined artwork is the default', () => {
     expect(SCHEMATIC_SET.symbols.tree).toContain('circle');
-    expect(assetSetFor(undefined).name).toBe('refined');
-    expect(assetSetFor('desert').name).toBe('refined');
+    expect(assetSetFor(undefined).name).toBe('settlement');
+    expect(assetSetFor('desert').name).toBe('settlement');
   });
 
   it('park groves gain deterministic canopy glyph instances rendered as <use>', () => {
@@ -50,8 +50,8 @@ describe('asset sets', () => {
     }
     // Task 3 (canopy glyphs): trees now render as batch001 canopy glyphs in
     // #canopy, not schematic <use href="#asset-tree"> in #greens.
-    expect(svg).toContain('<g id="glyph-sm-tree-');
-    expect(svg.match(/<use href="#glyph-sm-tree-/g)!.length).toBeGreaterThan(0);
+    expect(svg).toContain('<g id="glyph-sm-flora-');
+    expect(svg.match(/<use href="#glyph-sm-flora-/g)!.length).toBeGreaterThan(0);
     expect(svg).toContain('#greens use{fill:');
   });
 

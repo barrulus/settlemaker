@@ -1,3 +1,6 @@
+import {cityUrbanity} from '../src/generator/city-character.js';
+import {resolveGlyphFor} from '../src/village/deck.js';
+import { buildingIds } from '../src/output/id-allocator.js';
 import { describe, expect, it } from 'vitest';
 import { generateSettlement, buildScene, Point, Polygon, WardType } from '../src/index.js';
 import { cityArchitecture } from '../src/generator/city-glyphs.js';
@@ -16,14 +19,22 @@ function city(population: number, seed: number, biome = 'temperate', temple = tr
 
 describe('city neighbourhoods', () => {
   it.each(['temperate', 'desert', 'tundra', 'tropical', 'coastal'])(
-    '%s uses one home style and one temple with matching POI identity', biome => {
+    '%s retains its central home style, mixes rural outskirts and preserves temple identity', biome => {
       for (const seed of [1, 2, 3, 101, 102, 103]) {
         const { model, geojson } = city(10000, seed, biome);
         const architecture = cityArchitecture(model.params.seed, biome);
-        const homes = model.symbols.filter(s => s.building && [WardType.Craftsmen, WardType.Merchant, WardType.GateWard, WardType.Farm].includes(s.wardType!));
+        const ids=buildingIds(model);
+        const poiBuildings=new Set(geojson.features.filter(f=>f.properties?.layer==='poi').map(f=>f.properties?.building_id));
+        const homes = model.symbols.filter(s => s.building && !poiBuildings.has(ids.get(s.building)) && [WardType.Craftsmen, WardType.Merchant, WardType.GateWard, WardType.Farm].includes(s.wardType!));
         expect(homes.length).toBeGreaterThan(100);
-        expect(new Set(homes.map(s => s.id))).toEqual(new Set([architecture.home]));
-        const temples = model.symbols.filter(s => /cathedral|chapel|temple/.test(s.id));
+        const allowed=new Set([architecture.home,resolveGlyphFor(biome,'sm-house'),resolveGlyphFor(biome,'sm-house-tiled')]);
+        for(const home of homes){
+          expect(allowed.has(home.id)).toBe(true);
+          const patch=model.patches.find(p=>p.ward?.geometry.includes(home.building!))!;
+          if(cityUrbanity(model,patch)>=.45)expect(home.id).toBe(architecture.home);
+        }
+        expect(homes.some(s=>s.id.startsWith('sm-house'))).toBe(true);
+        const temples = model.symbols.filter(s => /cathedral|chapel|temple|church/.test(s.id));
         expect(temples, `seed ${seed}`).toHaveLength(1);
         const pois = geojson.features.filter(f => f.properties?.layer === 'poi' && ['cathedral', 'chapel', 'temple'].includes(f.properties.kind));
         expect(pois).toHaveLength(1);
@@ -36,7 +47,7 @@ describe('city neighbourhoods', () => {
 
   it('does not invent a temple in a city that did not request one', () => {
     const r = city(10000, 2, 'temperate', false);
-    expect(r.model.symbols.filter(s => /cathedral|chapel|temple/.test(s.id))).toHaveLength(0);
+    expect(r.model.symbols.filter(s => /cathedral|chapel|temple|church/.test(s.id))).toHaveLength(0);
     expect(r.geojson.features.filter(f => f.properties?.layer === 'poi' && ['cathedral', 'chapel', 'temple'].includes(f.properties.kind))).toHaveLength(0);
   });
 
@@ -99,7 +110,7 @@ describe('city neighbourhoods', () => {
     }
     const scene = buildScene(model);
     expect(scene.layers.greens.some(g => g.paths?.length === park.paths.length)).toBe(true);
-    expect(geojson.features.filter(f => f.properties?.streetType === 'park')).toHaveLength(park.paths.length);
+    expect(geojson.features.filter(f => f.properties?.streetType === 'park')).toHaveLength(model.patches.reduce((n,p)=>n+(p.ward instanceof Park?p.ward.paths.length:0),0));
   });
 
   it('detects narrow concave notches in a proposed park path', () => {
