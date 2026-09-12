@@ -1,3 +1,4 @@
+import { resolveSkin, type SettlementSkin } from '../assets/skins.js';
 import { landscapeHash } from '../assets/landscape-placement.js';
 import { recolourRoof, roofColour } from '../assets/architecture-palette.js';
 import { greenGround } from '../assets/greens-art.js';
@@ -17,6 +18,8 @@ const NORMAL_STROKE = 0.15;
 const THICK_STROKE = 1.8;
 
 export interface AssembleOptions {
+  skin?: SettlementSkin;
+  skinBiome?: string;
   palette?: Palette;
   theme?: Partial<RenderTheme>;
   assetSet?: AssetSet;
@@ -100,16 +103,17 @@ export function themeToCss(theme: RenderTheme, refined = false): string {
  * #fields #greens #water #roads #shadows #buildings #landmarks #walls.
  */
 export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string {
+  const skin = options.skin ? resolveSkin(options.skin, options.skinBiome ?? scene.biome) : undefined;
   const palette = options.palette ?? paletteForBiome(scene.biome);
   const overrides = Object.fromEntries(
     Object.entries(options.theme ?? {}).filter(([, v]) => v !== undefined),
   );
-  const theme: RenderTheme = { ...themeFrom(palette), ...overrides };
-  const assets = options.assetSet ?? assetSetFor(scene.biome);
+  const theme: RenderTheme = { ...themeFrom(palette), ...(options.palette ? {} : skin?.city), ...overrides };
+  const assets = options.assetSet ?? skin?.assets ?? assetSetFor(scene.biome);
   if(assets.name==='settlement' && !options.palette){
     const b=artworkBiome(scene.biome);
-    if(!options.theme?.buildingFill)theme.buildingFill=String(ART_TOKENS[`--sm-city-${b}-roof`]);
-    if(!options.theme?.landmarkFill)theme.landmarkFill=String(ART_TOKENS[`--sm-city-${b}-light`]);
+    if(!options.theme?.buildingFill && !skin?.city.buildingFill)theme.buildingFill=String(ART_TOKENS[`--sm-city-${b}-roof`]);
+    if(!options.theme?.landmarkFill && !skin?.city.landmarkFill)theme.landmarkFill=String(ART_TOKENS[`--sm-city-${b}-light`]);
   }
   const clipId = (options.clipId ?? 'frame-clip').replace(/[^A-Za-z0-9_-]/g, '-');
   const showSymbols = options.symbols !== false;
@@ -141,8 +145,8 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   for (const f of L.fields) if (f.glyph && assets.glyphs?.[f.glyph]) glyphIds.add(f.glyph);
   const towerId = cityGlyph('castle-tower-round', scene.biome);
   if(L.walls.length && assets.glyphs?.[towerId]) glyphIds.add(towerId);
-  const materialId = (s: typeof visibleSymbols[number]) => `glyph-${s.id}${assets.name === 'settlement' && s.materialVariant ? `-tone-${s.materialVariant}` : ''}`;
-  const materialDefs = [...new Map(visibleSymbols.filter(s => assets.name === 'settlement' && s.materialVariant).map(s => [materialId(s), s])).entries()]
+  const materialId = (s: typeof visibleSymbols[number]) => `glyph-${s.id}${assets.name === 'settlement' && !skin?.overrides.has(s.id) && s.materialVariant ? `-tone-${s.materialVariant}` : ''}`;
+  const materialDefs = [...new Map(visibleSymbols.filter(s => assets.name === 'settlement' && !skin?.overrides.has(s.id) && s.materialVariant).map(s => [materialId(s), s])).entries()]
     .map(([id, s]) => `<g id="${id}">${recolourRoof(assets.glyphs![s.id].body, scene.biome, s.materialVariant!)}</g>`).join('');
   const glyphDefs = [...glyphIds].map(id => {
     const g = assets.glyphs![id];
@@ -173,12 +177,19 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   const parts: string[] = [];
   parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${b.min_x.toFixed(1)} ${b.min_y.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}">`);
   parts.push(`<defs><clipPath id="${clipId}"><rect x="${b.min_x.toFixed(1)}" y="${b.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"/></clipPath>${patternDefs}${nativePatterns}${symbolDefs}${glyphDefs}${materialDefs}</defs>`);
-  const tokens = { ...ART_TOKENS, ...villageThemeFor(scene.biome ?? 'temperate').tokens };
-  if(options.palette || options.theme?.greenFill)tokens[`--sm-green-${artworkBiome(scene.biome)}-turf`]=theme.greenFill;
-  if (options.palette || options.theme) Object.assign(tokens, {
+  const tokens = { ...ART_TOKENS, ...(skin?.tokens ?? villageThemeFor(scene.biome ?? 'temperate').tokens) };
+  if(options.palette || options.theme?.greenFill || skin?.city.greenFill)tokens[`--sm-green-${artworkBiome(scene.biome)}-turf`]=theme.greenFill;
+  if (!skin && (options.palette || options.theme)) Object.assign(tokens, {
     '--sm-ink': theme.smInk, '--sm-stone': theme.smStone, '--sm-timber': theme.smTimber,
     '--sm-void': theme.smVoid, '--sm-canopy-a': theme.smCanopy1, '--sm-canopy-b': theme.smCanopy2,
   });
+  if (skin) {
+    for (const [key, token] of Object.entries({ smInk: '--sm-ink', smStone: '--sm-stone', smTimber: '--sm-timber', smVoid: '--sm-void', smCanopy1: '--sm-canopy-a', smCanopy2: '--sm-canopy-b' })) {
+      if (options.palette || Object.hasOwn(skin.city, key) || Object.hasOwn(overrides, key)) {
+        tokens[token] = theme[key as keyof RenderTheme] as string;
+      }
+    }
+  }
   parts.push(`<style>\n${themeToCss(theme, assets.refined)}\n${assets.refined ? refinedStyle(tokens) : ''}\n</style>`);
   // data-bg contract with cropSvgToTile: attribute markup + inline fill.
   parts.push(`<rect data-bg="paper" x="${b.min_x.toFixed(1)}" y="${b.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="${theme.paper}"/>`);
@@ -265,7 +276,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   }
 
   const roofStyle = (bld: BuildingFeature): string => {
-    if(assets.name!=='settlement'||options.palette||options.theme?.buildingFill||!bld.ring.length)return '';
+    if(assets.name!=='settlement'||options.palette||options.theme?.buildingFill||skin?.city.buildingFill||!bld.ring.length)return '';
     const p=bld.ring[0],roll=landscapeHash(Math.round(p.x*10),Math.round(p.y*10),0x524f4f46);
     return roll<.45?'':` style="fill:${roofColour(scene.biome,1+Math.floor((roll-.45)/.55*4))}"`;
   };

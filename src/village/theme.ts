@@ -183,7 +183,7 @@ export function normaliseVillageBiome(biome?: string): string {
   if (key === '') return 'temperate';
   if ((VILLAGE_BIOMES as readonly string[]).includes(key)) return key;
   if (EXTRA_CANONICAL_BIOMES.has(key)) return key;
-  return FMG_BIOME_TO_VILLAGE[key] ?? 'temperate';
+  return Object.hasOwn(FMG_BIOME_TO_VILLAGE, key) ? FMG_BIOME_TO_VILLAGE[key] : 'temperate';
 }
 
 /**

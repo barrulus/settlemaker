@@ -172,6 +172,32 @@ const result = generateFromBurg(burg, {
 
 Available palettes: `default`, `blueprint`, `bw`, `ink`, `night`, `ancient`, `colour`, `simple`.
 
+### Custom skins
+
+Use one portable skin for village and city artwork, material colours, and named
+biomes. Partial skins inherit any artwork they omit:
+
+```typescript
+import { createSkin, generateSettlement } from 'settlemaker';
+
+const skin = createSkin({
+  version: 1, id: 'moon-glass', name: 'Moon Glass',
+  tokens: { '--sm-stone': '#badcea' },
+  biomes: { lunar: { base: 'tundra', village: { ground: '#68748c' }, city: { paper: '#68748c' } } },
+});
+const result = generateSettlement({ ...burg, biome: 'lunar' }, { seed: 42, skin });
+```
+
+See the [skin authoring specification](docs/skins.md),
+[JSON Schema](docs/skins.schema.json), and [working example](docs/examples/moon-glass.skin.json)
+for SVG replacements, placement constraints, and loading skins from JSON.
+
+For advanced technology, [Copperline](symbols/copperline/README.md) supplies 693 runtime SVG
+slot replacements with `industrial`, `steampunk`, and `modern` material presets:
+factories, rooftop machinery, solar arrays, and utility infrastructure.
+Browse the [artwork sheet](symbols/copperline/preview.svg) or load the
+[skin JSON](docs/examples/copperline.skin.json) with `createSkin`.
+
 ## Lower-level API
 
 For full control over the generation pipeline:

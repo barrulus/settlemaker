@@ -1,3 +1,4 @@
+import { resolveSkin, type SettlementSkin } from '../assets/skins.js';
 import { greenGround } from '../assets/greens-art.js';
 import { bridgeArtwork, farmDetails, wallArtwork } from '../output/artwork.js';
 import { ARTWORK_GLYPHS as REFINED_GLYPHS, ARTWORK_MANIFEST, ART_TOKENS } from '../assets/artwork.js';
@@ -78,9 +79,18 @@ function fieldPatternId(glyph: string, furrowBearingDeg: number): string {
  * id the vendored artwork carries (e.g. a field tile's own <clipPath id>)
  * is never duplicated across two pattern instances of the same glyph.
  */
+export interface VillageRenderOptions {
+  skin?: SettlementSkin;
+  /** Custom skin biome name; defaults to the model's effective biome. */
+  skinBiome?: string;
+}
+
 export function renderVillage(
-  model: VillageModel, pxPerMetre = 4, theme: VillageTheme = villageThemeFor(model.site.biome),
+  model: VillageModel, pxPerMetre = 4, theme?: VillageTheme, options: VillageRenderOptions = {},
 ): string {
+  const skin = options.skin ? resolveSkin(options.skin, options.skinBiome ?? model.site.biome) : undefined;
+  const glyphs = skin?.assets.glyphs ?? REFINED_GLYPHS;
+  theme = theme ?? skin?.village ?? villageThemeFor(model.site.biome);
   // Gate 5: crofts are claims only -- never painted, so they neither
   // contribute stamps nor drive the bounds. `model.fieldEdges` is the sole
   // edge-stamp source and is empty in the current design (the ring's blocks
@@ -129,11 +139,11 @@ export function renderVillage(
   // are ingested now, so hasGlyph(greenGlyphId) is true for every shape the
   // deck can produce and the stand-in ellipse branch below never fires.
   const greenGlyphAvailable = hasGlyph(greenGlyphId)
-    && Object.prototype.hasOwnProperty.call(REFINED_GLYPHS, greenGlyphId);
+    && Object.prototype.hasOwnProperty.call(glyphs, greenGlyphId);
 
   const defs: string[] = [];
   for (const glyph of usedGlyphs) {
-    const markup = REFINED_GLYPHS[glyph];
+    const markup = glyphs[glyph];
     if (markup) {
       defs.push(defBlock(glyph, markup.body));
       if (silGlyphs.includes(glyph) && markup.sil) defs.push(defBlock(`${glyph}-sil`, markup.sil));
@@ -141,8 +151,12 @@ export function renderVillage(
   }
   if (greenGlyphAvailable) {
     // Greens are parcel-band: no -sil twin, ground casts no shadow.
-    const d=REFINED_GLYPHS[greenGlyphId].body.match(/<path[^>]* d="([^"]+)"/)?.[1];
-    if(d)defs.push(defBlock(greenGlyphId, greenGround(d,model.site.biome,{id:greenGlyphId,seed:'abc'.indexOf(model.green.variant)})));
+    if (skin?.overrides.has(greenGlyphId)) {
+      defs.push(defBlock(greenGlyphId, glyphs[greenGlyphId].body));
+    } else {
+      const d=REFINED_GLYPHS[greenGlyphId].body.match(/<path[^>]* d="([^"]+)"/)?.[1];
+      if(d)defs.push(defBlock(greenGlyphId, greenGround(d,model.site.biome,{id:greenGlyphId,seed:'abc'.indexOf(model.green.variant)})));
+    }
   }
 
   // --- field pattern defs: one per (glyph, quantised furrow bearing) pair
@@ -156,7 +170,7 @@ export function renderVillage(
   const patternDefs: string[] = [];
   const tileSizePx = 16 * pxPerMetre;
   for (const field of model.fields) {
-    if (!REFINED_GLYPHS[field.glyph]) continue;
+    if (!glyphs[field.glyph]) continue;
     const pid = fieldPatternId(field.glyph, field.furrowBearingDeg);
     if (patternIds.has(pid)) continue;
     patternIds.add(pid);
@@ -287,13 +301,13 @@ export function renderVillage(
 
   out.push('<g data-band="parcel-fields">');
   for (const field of model.fields) {
-    if (!REFINED_GLYPHS[field.glyph]) continue;
+    if (!glyphs[field.glyph]) continue;
     const pid = fieldPatternId(field.glyph, field.furrowBearingDeg);
     out.push(`<path data-field="${field.id}" d="${polygonPath(field.polygon, X, Y)}" fill="url(#${pid})" stroke="none"/>`);
     out.push(farmDetails(field.polygon.map(p=>({x:X(p.x),y:Y(p.y)})),field.glyph,pxPerMetre,field.id));
   }
   for (const stamp of edgeStamps) {
-    if (!REFINED_GLYPHS[stamp.glyph]) continue;
+    if (!glyphs[stamp.glyph]) continue;
     const fp = nominalFootprint(stamp.glyph);
     const k = (fp[0] * pxPerMetre) / 64;
     out.push(
@@ -374,7 +388,7 @@ export function renderVillage(
     `opacity="${theme.shadowOpacity}" color="${theme.shadowColor}">`,
   );
   for (const item of structureItems) {
-    if (!REFINED_GLYPHS[item.glyph]?.sil) continue;
+    if (!glyphs[item.glyph]?.sil) continue;
     const k = (item.footprint[0] * pxPerMetre) / 64;
     out.push(
       `<use data-shadow="1" data-kind="${item.kind}" href="#${item.glyph}-sil" transform="translate(${n(X(item.position.x))},` +
@@ -383,7 +397,7 @@ export function renderVillage(
   }
   out.push('</g>');
   for (const item of structureItems) {
-    if (!REFINED_GLYPHS[item.glyph]) continue;
+    if (!glyphs[item.glyph]) continue;
     const k = (item.footprint[0] * pxPerMetre) / 64;
     out.push(
       `<use data-ink="1" data-kind="${item.kind}" data-id="${item.id}" href="#${item.glyph}" transform="translate(${n(X(item.position.x))},` +
@@ -402,7 +416,7 @@ export function renderVillage(
     `opacity="${theme.shadowOpacity}" color="${theme.shadowColor}">`,
   );
   for (const veg of model.vegetation) {
-    if (!REFINED_GLYPHS[veg.glyph]?.sil) continue;
+    if (!glyphs[veg.glyph]?.sil) continue;
     const fp = nominalFootprint(veg.glyph);
     const k = ((fp[0] * pxPerMetre) / 64) * (veg.scale ?? 1);
     out.push(
@@ -412,7 +426,7 @@ export function renderVillage(
   }
   out.push('</g>');
   for (const veg of model.vegetation) {
-    if (!REFINED_GLYPHS[veg.glyph]) continue;
+    if (!glyphs[veg.glyph]) continue;
     const fp = nominalFootprint(veg.glyph);
     const k = ((fp[0] * pxPerMetre) / 64) * (veg.scale ?? 1);
     out.push(

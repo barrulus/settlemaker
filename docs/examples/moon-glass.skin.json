@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "id": "moon-glass",
+  "name": "Moon Glass",
+  "tokens": {
+    "--sm-ink": "#30354d",
+    "--sm-crystal": "#badcea",
+    "--sm-snow": "#dfe5ff",
+    "--sm-common": "#8995ae",
+    "--sm-common-band": "#77839c"
+  },
+  "biomes": {
+    "moon-wastes": {
+      "base": "tundra",
+      "aliases": [
+        "moon wastes",
+        "lunar"
+      ],
+      "village": {
+        "ground": "#68748c",
+        "water": "#96aecb",
+        "waterEdge": "#788daa"
+      },
+      "city": {
+        "paper": "#68748c",
+        "water": "#96aecb",
+        "greenFill": "#8995ae",
+        "roadCore": "#a3adc2",
+        "fieldFill": "#8995ae",
+        "fieldFurrow": "#77839c",
+        "buildingFill": "#aeb9d0",
+        "buildingStroke": "#30354d",
+        "landmarkFill": "#c3cbe0"
+      },
+      "glyphs": {
+        "sm-house--tundra": {
+          "body": "<path d=\"M12 46L32 10L52 46Z\" fill=\"var(--sm-crystal, #badcea)\" stroke=\"var(--sm-ink, #30354d)\" stroke-width=\"2\"/><path d=\"M32 10V46\" fill=\"none\" stroke=\"var(--sm-ink, #30354d)\" stroke-width=\"1\"/>",
+          "sil": "<path d=\"M12 46L32 10L52 46Z\" fill=\"currentColor\"/>"
+        },
+        "sm-hut--tundra": {
+          "body": "<path d=\"M12 46L32 10L52 46Z\" fill=\"var(--sm-crystal, #badcea)\" stroke=\"var(--sm-ink, #30354d)\" stroke-width=\"2\"/>",
+          "sil": "<path d=\"M12 46L32 10L52 46Z\" fill=\"currentColor\"/>"
+        }
+      }
+    }
+  }
+}

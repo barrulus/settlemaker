@@ -1,0 +1,456 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Settlemaker skin v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "glyphs": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/glyph"
+      }
+    },
+    "tokens": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^--[a-z0-9-]+$"
+      },
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+          },
+          {
+            "type": "number",
+            "minimum": 0
+          }
+        ]
+      }
+    },
+    "village": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ground": {
+          "type": "string",
+          "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+        },
+        "water": {
+          "type": "string",
+          "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+        },
+        "waterEdge": {
+          "type": "string",
+          "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+        },
+        "shadowColor": {
+          "type": "string",
+          "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+        },
+        "shadowOpacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "city": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "paper": {
+          "type": "string",
+          "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+        },
+        "water": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "waterEdge": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fieldFill": {
+          "type": "string",
+          "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+        },
+        "fieldFurrow": {
+          "type": "string",
+          "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+        },
+        "greenFill": {
+          "type": "string",
+          "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+        },
+        "treeFill": {
+          "type": "string",
+          "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+        },
+        "roadCasing": {
+          "type": "string",
+          "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+        },
+        "roadCore": {
+          "type": "string",
+          "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+        },
+        "buildingFill": {
+          "type": "string",
+          "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+        },
+        "buildingStroke": {
+          "type": "string",
+          "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+        },
+        "landmarkFill": {
+          "type": "string",
+          "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+        },
+        "shadowColor": {
+          "type": "string",
+          "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+        },
+        "shadowOpacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "arteryWidth": {
+          "type": "number",
+          "minimum": 0
+        },
+        "roadWidth": {
+          "type": "number",
+          "minimum": 0
+        },
+        "casingDelta": {
+          "type": "number",
+          "minimum": 0
+        },
+        "seamStroke": {
+          "type": "number",
+          "minimum": 0
+        },
+        "shoreWidth": {
+          "type": "number",
+          "minimum": 0
+        },
+        "smInk": {
+          "type": "string",
+          "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+        },
+        "smStone": {
+          "type": "string",
+          "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+        },
+        "smTimber": {
+          "type": "string",
+          "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+        },
+        "smVoid": {
+          "type": "string",
+          "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+        },
+        "smCanopy1": {
+          "type": "string",
+          "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+        },
+        "smCanopy2": {
+          "type": "string",
+          "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+        },
+        "shadowOffset": {
+          "type": "object",
+          "required": [
+            "dx",
+            "dy"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "dx": {
+              "type": "number"
+            },
+            "dy": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "biomes": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9-]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/biome"
+      }
+    }
+  },
+  "required": [
+    "version",
+    "id",
+    "name"
+  ],
+  "$defs": {
+    "glyph": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 250000
+        },
+        "sil": {
+          "type": "string",
+          "maxLength": 250000
+        }
+      },
+      "required": [
+        "body"
+      ]
+    },
+    "biome": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "glyphs": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/glyph"
+          }
+        },
+        "tokens": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^--[a-z0-9-]+$"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+              },
+              {
+                "type": "number",
+                "minimum": 0
+              }
+            ]
+          }
+        },
+        "village": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ground": {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            "water": {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            "waterEdge": {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            "shadowColor": {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            "shadowOpacity": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
+        "city": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "paper": {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            "water": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "waterEdge": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "fieldFill": {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            "fieldFurrow": {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            "greenFill": {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            "treeFill": {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            "roadCasing": {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            "roadCore": {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            "buildingFill": {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            "buildingStroke": {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            "landmarkFill": {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            "shadowColor": {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            "shadowOpacity": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "arteryWidth": {
+              "type": "number",
+              "minimum": 0
+            },
+            "roadWidth": {
+              "type": "number",
+              "minimum": 0
+            },
+            "casingDelta": {
+              "type": "number",
+              "minimum": 0
+            },
+            "seamStroke": {
+              "type": "number",
+              "minimum": 0
+            },
+            "shoreWidth": {
+              "type": "number",
+              "minimum": 0
+            },
+            "smInk": {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            "smStone": {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            "smTimber": {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            "smVoid": {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            "smCanopy1": {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            "smCanopy2": {
+              "type": "string",
+              "pattern": "^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|none|transparent|currentColor)$"
+            },
+            "shadowOffset": {
+              "type": "object",
+              "required": [
+                "dx",
+                "dy"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "dx": {
+                  "type": "number"
+                },
+                "dy": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        },
+        "base": {
+          "enum": [
+            "temperate",
+            "desert",
+            "tundra",
+            "tropical",
+            "coastal",
+            "steppe"
+          ]
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "base"
+      ]
+    }
+  }
+}
