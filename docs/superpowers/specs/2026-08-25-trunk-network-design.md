@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-25
 **Status:** Approved design, awaiting implementation plan
-**Owner:** Barry — every render gate in this work is his call
+**Owner:** barrulus — every render gate in this work is his call
 **Source material:** the owner's three sketches (through / crossroad / royal), `assets/2026-08-25-trunk-network-sketches.jpeg`. Where this spec and the sketches disagree, the sketches win.
 **Supersedes:** the arm model of `buildArms` (each FMG route drawn as a near-straight radial from the green rim); `INCOMING_ARM_MERGE_DEG` input merging; Phase 1's open "fan bare arm-tips" visual question.
 **Preserves:** all of Phase 1's interior-fabric machinery (budget-exempt seeded roads, rib/arc/coverage/void growth, weld-protected loop closure, block-aware escalation chase with faithful snapshot/restore, lot placement, census spending) and every numeric standing bar.

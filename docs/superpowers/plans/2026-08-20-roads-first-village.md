@@ -544,7 +544,7 @@ Expected: FAIL — cannot find module `src/village/route-class.js`
 ```ts
 // src/village/route-class.ts
 
-/** Barry's Bazgaar route vocabulary, highest class first. */
+/** barrulus's Bazgaar route vocabulary, highest class first. */
 export type RouteType =
   | 'royal' | 'main' | 'market' | 'town' | 'local' | 'trail' | 'footpath';
 
@@ -3442,7 +3442,7 @@ git commit -m "feat(village): minimal renderer and render-gate script"
 
 ## After Task 19: the render gate
 
-Generate a spread and put it in front of Barry before writing another line:
+Generate a spread and put it in front of barrulus before writing another line:
 
 ```bash
 nix develop --command bash -c "for p in 60 150 300 600 900; do npx tsx scripts/render-village.ts \$p 1 > /tmp/village-\$p.svg; done"
@@ -3453,7 +3453,7 @@ The sprites must be injected for the `<use>` references to resolve — the revie
 `symbols-biomes.svg`, and will need `symbols-parcel.svg` added once the batch-002 assets
 land in `dist/symbols/refined`.
 
-**Render gates with Barry's eyes are the only accepted acceptance test.** Every value in
+**Render gates with barrulus's eyes are the only accepted acceptance test.** Every value in
 the design's §11 table is expected to move here. Expect the first gate to reject something
 structural; that is what it is for.
 

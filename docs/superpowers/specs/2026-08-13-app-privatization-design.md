@@ -1,8 +1,8 @@
 # App Privatization — the whole site goes private; the public repo becomes a pure library
 
 **Date:** 2026-08-13 (late; follows the completed site/repo split)
-**Status:** Approved intent, spec awaiting Barry's review
-**Owner:** Barry
+**Status:** Approved intent, spec awaiting barrulus's review
+**Owner:** barrulus
 **Supersedes:** the boundary decision ("site wraps public code") of
 `2026-08-13-site-repo-split-design.md`. Everything else from that spec —
 private `settlemaker-web` wrapper, pinned submodule, single Netlify site —
@@ -11,7 +11,7 @@ stands.
 ## Motivation
 
 The split's original intent was that ALL site code — pages, analytics
-wiring, everything Barry regards as "the website" — lives in the private
+wiring, everything barrulus regards as "the website" — lives in the private
 repo, and the public repo is nothing but the settlemaker node library.
 The executed split instead kept `web/` (builder, /fmg, umami/analytics
 wiring) public, on the reasoning that each page ships one JS bundle
@@ -19,16 +19,16 @@ fusing app code with the GPL library, making the whole bundle's source
 conveyance-bound. That reasoning is an artifact of the build, not a
 requirement: stop fusing them, and the constraint falls away.
 
-## Licensing stance (Barry's decision, recorded 2026-08-13)
+## Licensing stance (barrulus's decision, recorded 2026-08-13)
 
 - The GPL work the site conveys is the **settlemaker library**, shipped
   as its own standalone artifact (`/lib/settlemaker.js`). Its
   corresponding source is the public repo; the visible source link on the
   site is the offer (GPLv3 §6 network-server conveyance).
-- The **page code is Barry's own work**, uses the library through its
+- The **page code is barrulus's own work**, uses the library through its
   public API, ships as separate files, and is private. This adopts the
   API-use reading of GPL linking and supersedes the conservative
-  web-is-a-derivative stance of commit e212dba. Barry owns both the page
+  web-is-a-derivative stance of commit e212dba. barrulus owns both the page
   code and this risk call; the library and the symbol art remain fully
   open regardless.
 - **Enforcement mechanism:** production builds MUST NOT bundle library
@@ -94,7 +94,7 @@ Tooling notes:
   GPL-3.0, source on GitHub. Derived from watabou's TownGeneratorOS."
   (links unchanged in target, reworded to name the library as the GPL
   work rather than the page).
-- `fmg.html` head comment: the page is settlemaker-web (© Barry Gill,
+- `fmg.html` head comment: the page is settlemaker-web (© barrulus,
   all rights reserved) loading the settlemaker library (GPL-3.0-only) as
   a separate module; `<link rel="license">` keeps pointing at the public
   repo LICENSE — it describes the library.

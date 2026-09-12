@@ -1796,7 +1796,7 @@ Populations 40 / 120 / 300 / 500 / 1000 landlocked; the coastal fixture with a s
 
 Look for: a road that stops short; a road crossing another with no junction drawn; a coast road that reads as invented rather than as a road; a field ring that got worse now that `exitRoads` cuts to the frame (spec §11.1); trees standing in a road.
 
-- [ ] **Step 3: Put them in front of Barry**
+- [ ] **Step 3: Put them in front of barrulus**
 
 Say explicitly which of the risks in spec §11 each image does or does not settle. Do not describe the work as done until he has ruled.
 
@@ -1808,7 +1808,7 @@ Update `village-arms-dont-reach.md` in the memory directory with the gate result
 
 ## Task 7: Release (gated on Task 6)
 
-Do not start this until Barry has passed the render gate.
+Do not start this until barrulus has passed the render gate.
 
 - [ ] **Step 1: Bump the five version pins**
 
@@ -1861,7 +1861,7 @@ Rucio/questables is dormant by ruling: no deploy, no cache wipe.
 
 **Spec coverage:** §5.1 apron id and predicate → Task 1 steps 2-3. §5.2 ordering inside `synthesizeTrunks` → Task 2 step 5. §5.3 straight geometry → Task 1. §5.4 coast bend, all five sub-rules → Task 4. §5.5 constants → Tasks 1 and 4 step 1. §5.6 signature → Task 2 step 3, revised in Task 4 step 5. §6 exclusion table → Task 2 steps 7-9 (the three free ones via `isTrunk` are verified by the suite staying green rather than by new code). §7 frame → Task 3. §8 no RNG → enforced by the signatures, which take no `SeededRandom`, and stated as a global constraint. §9 invariants → Task 3 steps 9-10 and Task 4 step 6. §10 GeoJSON unchanged → no task, deliberately: aprons flow through `geojson.ts`'s existing generic lane loop and `frame` is not exported. §11.5 url-api.md → Task 5. §12 render gate → Task 6.
 
-**Known gap, and the owner has now ruled on the target (2026-09-07):** the GeoJSON `bounds` helper (`src/village/geojson.ts:50`) computes its own AABB with `PAD = 20` over all lanes, so it will now extend 20 m past the frame on the axes a road exits. **Barry has ruled that `bounds` should mean THE DRAWN TILE, not the lane box** — see spec §10.1, which records it. The lane box is the status quo, NOT settled intent; do not read this gap as "no change needed".
+**Known gap, and the owner has now ruled on the target (2026-09-07):** the GeoJSON `bounds` helper (`src/village/geojson.ts:50`) computes its own AABB with `PAD = 20` over all lanes, so it will now extend 20 m past the frame on the axes a road exits. **barrulus has ruled that `bounds` should mean THE DRAWN TILE, not the lane box** — see spec §10.1, which records it. The lane box is the status quo, NOT settled intent; do not read this gap as "no change needed".
 
 What remains open is only the sequencing — bump the schema now while the frame is in hand, or later as its own release — and that is his call, because a schema version bump is a consumer-contract decision. Until he rules, the code ships unchanged, which forecloses neither option: once Task 3 puts `frame` on the model, `bounds`-as-tile is close to reading it off. If he rules "now", it slots in as a task after Task 3 and before Task 6's render gate, and Task 7 gains a `GEOJSON_SCHEMA_VERSION` bump alongside the five version pins.
 

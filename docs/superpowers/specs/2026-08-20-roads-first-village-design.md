@@ -1,11 +1,11 @@
 # Roads-First Village Generation — Design
 
 **Date:** 2026-08-20
-**Status:** DESIGN. Approved section by section in brainstorm; awaiting Barry's review of
+**Status:** DESIGN. Approved section by section in brainstorm; awaiting barrulus's review of
 this document before an implementation plan is written.
 **Scope:** hamlet and village only — population below ~1000. Towns and cities keep the
 existing engine.
-**Inputs to this design:** `2026-08-19-roads-first-predesign.md`, Barry's five-frame
+**Inputs to this design:** `2026-08-19-roads-first-predesign.md`, barrulus's five-frame
 wireframe (`wireframe.png`), the live symbol contract
 (`settlemaker-web/dist/symbols/refined/integration.md` + `symbols.json`), and the batch-002
 asset brief (`2026-08-20-asset-brief-batch002-greens-and-fields.md`).
@@ -15,7 +15,7 @@ asset brief (`2026-08-20-asset-brief-batch002-greens-and-fields.md`).
 ## 1. What this replaces and why
 
 The current engine is a port of watabou's MFCG: Voronoi patches, wards, recursive
-bisection. Every reference render Barry has approved came instead from watabou's *Village*
+bisection. Every reference render barrulus has approved came instead from watabou's *Village*
 Generator, which is road-skeleton-first. The rivers work (issue #4, parked) failed
 precisely where the polygon model fought network-shaped intent, and three render-gate
 rounds of constant-tuning did not converge.
@@ -130,7 +130,7 @@ Resolves `AzgaarBurgInput` into local metres:
 
 ### Route vocabulary change
 
-`RouteKind` grows from `road | foot | sea` to Barry's Bazgaar set:
+`RouteKind` grows from `road | foot | sea` to barrulus's Bazgaar set:
 
 ```
 royal | main | market | town | local | trail | footpath
@@ -239,7 +239,7 @@ at:
 footpath 1.2. Width feeds both the drawn line and the parcel setback.
 
 **Terrain.** FMG gives `relief` and `followsRiver` per route, and no terrain field inside
-the burg. Accepted limitation (Barry, 2026-08-20: "FMG is not granular enough to give us
+the burg. Accepted limitation (barrulus, 2026-08-20: "FMG is not granular enough to give us
 decent terrain info"): a labelled arm bends to follow its valley or river; an invented lane
 cannot seek a valley nothing told us about. Not faked, not deferred to a constant.
 
@@ -384,7 +384,7 @@ Starting temperate village deck:
 | `sm-inn` | 6 | — | `cap: one`, `requires pop ≥ 180`, adjacency `road` or `green` |
 | `sm-chapel` | 0 | — | `cap: one`, `requires` temple flag or pop ≥ 300 |
 
-Occupancy living on the deck entry is what makes Barry's later population work a **new
+Occupancy living on the deck entry is what makes barrulus's later population work a **new
 deck, not a new engine**: a nomadic culture is `{tent, occupancy 8}` or
 `{wagon, occupancy 4}` and nothing else changes.
 
@@ -419,7 +419,7 @@ gate ("it added a lane because the census overran the frontage").
 
 **Seating.** The dwelling sits at the front of its lot, centred on the frontage with a
 small jitter, set back 0–1.5 m; the remainder is yard. Bearing is the lot's inward normal —
-exactly the manifest's `ridge-along-street` hint, and Barry's wireframe rule that houses
+exactly the manifest's `ridge-along-street` hint, and barrulus's wireframe rule that houses
 face the nearest road. Glyphs marked `invariant` (the round huts) are not rotated;
 `snap-cardinal` glyphs snap. The manifest is authoritative on which is which.
 
@@ -566,7 +566,7 @@ a census, the expected lane count. These are the tests that make verdicts review
 
 **Determinism** — same seed, identical bytes, as today.
 
-**Render gates with Barry's eyes are the only accepted acceptance test.** Metrics passed
+**Render gates with barrulus's eyes are the only accepted acceptance test.** Metrics passed
 while every render was wrong, repeatedly, through the rivers work and before. No amount of
 green unit tests substitutes for looking at the picture.
 

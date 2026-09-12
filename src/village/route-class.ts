@@ -1,4 +1,4 @@
-/** Barry's Bazgaar route vocabulary, highest class first. */
+/** barrulus's Bazgaar route vocabulary, highest class first. */
 export type RouteType =
   | 'royal' | 'main' | 'market' | 'town' | 'local' | 'trail' | 'footpath';
 

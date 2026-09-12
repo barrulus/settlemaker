@@ -1,8 +1,8 @@
 # Village building redraw
 
 49 new building and fortification drawings, each paired with a silhouette.
-This is an alternative artwork series to `../refined`, using the same IDs and
-the city kit's pen style, with freestanding rural forms and materials.
+The library uses stable building IDs and the city kit’s pen style, with
+freestanding rural forms and materials.
 
 Scope is buildings only: houses, tiled homes, longhouses, huts, inns, chapels,
 the original cathedral and temple, boathouse, walls, gates, towers and keep.
@@ -14,9 +14,9 @@ the separate landscape and infrastructure kits; see
 ## Review and files
 
 Open `index.html` directly in a browser. Select a biome and building group;
-toggle the original comparison and shadows; download any drawing individually.
+toggle shadows; download any drawing individually.
 `temperate.svg`, `desert.svg`, `tundra.svg`, `tropical.svg`, and `coastal.svg`
-show old/new pairs at the same scale. `scenes.svg` shows the new buildings in
+show the current drawings at the same scale. `scenes.svg` shows the new buildings in
 rural groups without adding any new flora or field artwork. PNG previews are
 provided for these sheets too.
 
@@ -25,7 +25,8 @@ drawings and 49 silhouettes as standalone SVGs. All are editable vector shapes,
 with no embedded raster images or external references.
 
 Regenerate with `node scripts/build-village-symbols.mjs`. Drawing functions and
-palettes live in `scripts/art/village-buildings.mjs`; the builder creates the
+palettes live in `scripts/art/village-buildings.mjs`, and placement metadata in
+`scripts/art/village-footprints.json`; the builder creates the
 sprites, manifest, gallery and sheets. This document is maintained by hand.
 Refresh PNGs with `node scripts/render-symbol-previews.mjs` from the worktree.
 PNG rendering uses default colour-token fallbacks; SVGs retain their CSS tokens.
@@ -75,10 +76,6 @@ any structure ink. Use colour `#46303c`, opacity `0.2`, and offset `[2.6,3.6]`
 outside each building's rotation. The inn's yard stays transparent in body and
 silhouette. Palisades use a solid silhouette, following the original library's
 wall-shadow convention.
-
-This alternative library deliberately shares source IDs. Do not inline the
-old and new sprites into the same SVG without renaming one set. The review
-gallery embeds their drawing bodies independently to avoid duplicate IDs.
 
 The shared runtime registry now embeds these bodies and refreshes measured
 geometry with `npm run build:art`. Rural fitting and collision use the measured

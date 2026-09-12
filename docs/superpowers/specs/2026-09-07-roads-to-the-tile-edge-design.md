@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-07
 **Status:** Approved design, awaiting implementation plan
-**Owner:** Barry — the render gate at the end of this work is his call, and the two rulings in §3 are his
+**Owner:** barrulus — the render gate at the end of this work is his call, and the two rulings in §3 are his
 **Supersedes:** the reading of the contract circle as the outer limit of drawn road; `docs/url-api.md`'s "handshake where a consumer's roads meet ours" text (§11)
 **Preserves:** every trunk-network rule from `2026-08-25-trunk-network-design.md` — the contract circle, entries at exact bearings, class-aware staggered merges, the convergence-pattern palette, the no-proper-crossing invariant. Nothing in §5 of that spec is re-opened here.
 
@@ -439,7 +439,7 @@ buildings, **all lanes**, fields, vegetation and the green centre, padded by
 20 m. It therefore tracks the LANES, and this release moves it: roads now
 reach further, so the box grows on whichever axes a road exits.
 
-**Barry has ruled that `bounds` should mean THE DRAWN TILE** — the same
+**barrulus has ruled that `bounds` should mean THE DRAWN TILE** — the same
 rectangle the SVG viewBox covers — **not the lane box.** Both options were put
 to him explicitly (keep the lane AABB, no schema decision; or make it the
 rendered frame) and he chose the drawn tile.

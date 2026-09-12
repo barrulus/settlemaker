@@ -7,7 +7,7 @@ downloads of the displayed SVG. No server or network is required.
 The village and city generators now use this library through the shared runtime
 registry. Biome/habitat selection, plant size and real field polygons are wired
 in; see [runtime integration](../../docs/artwork-integration.md). The original
-`symbols/refined` remains available as reference artwork.
+The earlier source sprite collections have been retired.
 
 ## Inventory
 
