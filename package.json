@@ -1,10 +1,13 @@
 {
   "name": "settlemaker",
-  "version": "2.7.0",
+  "version": "3.0.0",
+  "type": "module",
   "description": "Medieval fantasy settlement map generator — TypeScript port of watabou's Medieval Fantasy City Generator",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
+    "clean": "node scripts/clean-dist.mjs",
+    "prepack": "npm run clean && npm run build && npm run build:lib",
     "build": "tsc",
     "build:art": "node scripts/build-runtime-art.mjs",
     "review:art": "npm run build && node scripts/review-artwork.mjs",
@@ -24,7 +27,6 @@
   },
   "homepage": "https://settlemaker.com",
   "devDependencies": {
-    "@types/geojson": "^7946.0.14",
     "@types/pg": "^8.11.0",
     "esbuild": "^0.25.0",
     "p-limit": "^6.0.0",
@@ -35,7 +37,13 @@
   },
   "files": [
     "dist",
+    "src",
+    "tsconfig.json",
+    "scripts/clean-dist.mjs",
+    "scripts/build-runtime-art.mjs",
+    "scripts/art",
     "NOTICE",
+    "docs/releases/3.0.0.md",
     "docs/skins.md",
     "docs/current-symbol-library.md",
     "docs/skins.schema.json",
@@ -54,6 +62,7 @@
     "symbols/markers"
   ],
   "dependencies": {
+    "@types/geojson": "^7946.0.14",
     "polygon-clipping": "^0.15.7"
   }
 }
