@@ -9,8 +9,9 @@ replace the bundled medieval architecture. All 693 runtime skin slots are covere
 
 - [Portable skin JSON](../../docs/examples/copperline.skin.json): load with `createSkin`.
 - [SVG sprite](symbols.svg): all engine slot IDs and structure silhouette twins.
-- [Village example](../../docs/examples/copperline-village.svg).
-- [City example](../../docs/examples/copperline-city.svg).
+- [Current village example](../../docs/examples/gallery/copperline-village.svg).
+- [Current city example](../../docs/examples/gallery/copperline-city.svg).
+- [Complete gallery and inputs](../../docs/gallery.md).
 
 Three named biomes share the same artwork and temperate terrain behaviour:
 
@@ -24,7 +25,9 @@ Three named biomes share the same artwork and temperate terrain behaviour:
 import { createSkin, generateSettlement } from 'settlemaker';
 import { readFile } from 'node:fs/promises';
 
-const skin = createSkin(JSON.parse(await readFile('docs/examples/copperline.skin.json', 'utf8')));
+const definitionUrl = import.meta.resolve('settlemaker/docs/examples/copperline.skin.json');
+const skin = createSkin(JSON.parse(await readFile(new URL(definitionUrl), 'utf8')));
+// burg is a complete AzgaarBurgInput; see the getting-started guide.
 const result = generateSettlement({ ...burg, biome: 'steampunk' }, { seed: 42, skin });
 ```
 
@@ -60,3 +63,7 @@ regenerates the JSON, sprite, and contact sheet; the last
 validates slot/shadow coverage and renders all three presets through both engines,
 saving the industrial village and city examples. Original artwork in this folder
 and the Copperline JSON is distributed under the repository's [GPL-3.0-only licence](../../LICENSE).
+
+The public documentation gallery is regenerated separately with `npm run docs:images`.
+Runtime handles must be created in the module instance doing the rendering; retain
+the JSON when saving a skin or transferring it to a worker.

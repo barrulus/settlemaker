@@ -1,8 +1,8 @@
 {
   "name": "settlemaker",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "type": "module",
-  "description": "Medieval fantasy settlement map generator — TypeScript port of watabou's Medieval Fantasy City Generator",
+  "description": "Procedural village and city map engine with SVG, local GeoJSON, biome artwork and portable skins for Node.js and browsers",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -12,12 +12,14 @@
     "build:art": "node scripts/build-runtime-art.mjs",
     "review:art": "npm run build && node scripts/review-artwork.mjs",
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
-    "build:lib": "esbuild src/index.ts --bundle --format=esm --target=es2022 --minify --outfile=dist/settlemaker.browser.js --banner:js=\"/* settlemaker — GPL-3.0-only. Corresponding source: https://github.com/barrulus/settlemaker */\"",
+    "build:lib": "esbuild src/index.ts --bundle --format=esm --target=es2022 --minify --outfile=dist/settlemaker.browser.js --banner:js=\"/* settlemaker \u2014 GPL-3.0-only. Corresponding source: https://github.com/barrulus/settlemaker */\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "review:roads": "node scripts/run-road-review.mjs",
     "measure:city-glyphs": "esbuild scripts/measure-city-glyphs.ts --bundle --platform=node --format=cjs --packages=external --outfile=output/measure-city-glyphs.cjs && node output/measure-city-glyphs.cjs",
-    "review:cities": "esbuild scripts/review-cities.ts --bundle --platform=node --format=cjs --packages=external --outfile=output/city-review-runner.cjs && node output/city-review-runner.cjs"
+    "review:cities": "esbuild scripts/review-cities.ts --bundle --platform=node --format=cjs --packages=external --outfile=output/city-review-runner.cjs && node output/city-review-runner.cjs",
+    "docs:images": "npm run build && node scripts/generate-examples.mjs",
+    "docs:check": "npm run build && npm run build:lib && node scripts/check-docs.mjs"
   },
   "license": "GPL-3.0-only",
   "author": "barrulus",
@@ -43,9 +45,6 @@
     "scripts/build-runtime-art.mjs",
     "scripts/art",
     "NOTICE",
-    "docs/releases/3.0.0.md",
-    "docs/skins.md",
-    "docs/current-symbol-library.md",
     "docs/skins.schema.json",
     "docs/examples/moon-glass.skin.json",
     "docs/examples/copperline.skin.json",
@@ -59,7 +58,15 @@
     "symbols/landscape",
     "symbols/greens",
     "symbols/infrastructure",
-    "symbols/markers"
+    "symbols/markers",
+    "docs/*.md",
+    "docs/releases/3.0.0.md",
+    "docs/releases/3.0.1.md",
+    "docs/examples/gallery",
+    "scripts/generate-examples.mjs",
+    "scripts/check-docs.mjs",
+    "scripts/generate-copperline.mjs",
+    "scripts/render-copperline.mjs"
   ],
   "dependencies": {
     "@types/geojson": "^7946.0.14",

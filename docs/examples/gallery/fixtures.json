@@ -1,0 +1,449 @@
+{
+  "generatorVersion": "3.0.1",
+  "fixtures": [
+    {
+      "id": "temperate-village",
+      "title": "Ashford — temperate village",
+      "description": "Roads, individual homes, a green and cultivated fields.",
+      "burg": {
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": true,
+        "temple": true,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 18,
+            "kind": "main",
+            "route_id": "north-road"
+          },
+          {
+            "bearing_deg": 142,
+            "kind": "town",
+            "route_id": "south-road"
+          },
+          {
+            "bearing_deg": 267,
+            "kind": "local",
+            "route_id": "west-road"
+          }
+        ],
+        "name": "Ashford",
+        "population": 300,
+        "biome": "temperate"
+      },
+      "seed": 2,
+      "engine": "village",
+      "previewUrl": "https://settlemaker.com/fmg?i=dZDLasMwEEX_5a5VSNzSBO3a3yghTKJJLCpLQhrXtCb_3nEeDg10pyvuORrNiC_YpcGuL0fYETkVgT1QqGyw90KOw5wHCqHOKQf6IVgpvQbhLge-pdpSlO-7h7Ka7p6SyL0zFR-PqvsYsbuErWMdYrk2-PTRwaIjHzH1e-Gtn26iztc-TQKczCP40sykpOGBrHr8j2xeVzMZ0l5H_YMOXOVKbgwidfpRvNX2kIrTZk65DyQ-RdjnxUKX6dO5Mi2FCwnri6jM6mpOvw"
+    },
+    {
+      "id": "temperate-city",
+      "title": "Thornwall — walled city",
+      "description": "Native city buildings, denser central wards, greener outskirts and defensive walls.",
+      "burg": {
+        "port": false,
+        "citadel": true,
+        "walls": true,
+        "plaza": true,
+        "temple": true,
+        "shanty": false,
+        "capital": true,
+        "roadBearings": [
+          {
+            "bearing_deg": 18,
+            "kind": "main",
+            "route_id": "north-road"
+          },
+          {
+            "bearing_deg": 142,
+            "kind": "town",
+            "route_id": "south-road"
+          },
+          {
+            "bearing_deg": 267,
+            "kind": "local",
+            "route_id": "west-road"
+          }
+        ],
+        "name": "Thornwall",
+        "population": 10000,
+        "biome": "temperate"
+      },
+      "seed": 2,
+      "engine": "settlement",
+      "previewUrl": "https://settlemaker.com/fmg?i=dZDBasMwEET_Zc4qNKakRcd-Q24hmE28jUVkSUjrmNbk37tqa5cGqpNGzJsd7Ywr7MbgOOYz7IwUs8C-kS9scHJCHXtYyaPKibwvi0iePmgRwkPyvKjSU5D33xRKmrOm5EjdK1N24axh-xnHb9F2rA02LwYXFzpYDOQCqn8Ubl19CVquf6gBuJl78KlZSYnTHVn0-h_ZbJ9X0seTNv2DTlzkhzwYBBr0n9j1MYe6D_WmmEZP4mLQFo96dJsuftnqXjiTsE5FYda85vYJ"
+    },
+    {
+      "id": "desert-village",
+      "title": "Qasra — desert village",
+      "description": "Desert buildings, sparse vegetation and irrigated field textures.",
+      "burg": {
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": true,
+        "temple": true,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 18,
+            "kind": "main",
+            "route_id": "north-road"
+          },
+          {
+            "bearing_deg": 142,
+            "kind": "town",
+            "route_id": "south-road"
+          },
+          {
+            "bearing_deg": 267,
+            "kind": "local",
+            "route_id": "west-road"
+          }
+        ],
+        "name": "Qasra",
+        "population": 300,
+        "biome": "desert"
+      },
+      "seed": 2,
+      "engine": "village",
+      "previewUrl": "https://settlemaker.com/fmg?i=dZDBasMwEET_Zc4KJE5oi479g55LMJtom4jKkpDWNa3xv3fdJg4N9KYR84bZGfEBuzE49OUEOyKnIrBvFCobHL2Q47DogUKoi8qBvghWSq9CuMuBr6qeKcrnLYeyJt1ySiL3zFR8PGnc64jDr2gda4nNk8G7jw4WHfmI2d8Lt37-idrvvJoDMJl7cNcspKThjqz6_I9sHh4XMqSjVv2DDlzlQu4NInV6KF6oFlJfTrkPJD5F2O16rVP69GNwXFnHnHQOZo1ppm8"
+    },
+    {
+      "id": "desert-city",
+      "title": "Qasr — desert city",
+      "description": "Urban desert architecture, religious buildings and courtyards.",
+      "burg": {
+        "port": false,
+        "citadel": true,
+        "walls": true,
+        "plaza": true,
+        "temple": true,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 18,
+            "kind": "main",
+            "route_id": "north-road"
+          },
+          {
+            "bearing_deg": 142,
+            "kind": "town",
+            "route_id": "south-road"
+          },
+          {
+            "bearing_deg": 267,
+            "kind": "local",
+            "route_id": "west-road"
+          }
+        ],
+        "name": "Qasr",
+        "population": 10000,
+        "biome": "desert"
+      },
+      "seed": 2,
+      "engine": "settlement",
+      "previewUrl": "https://settlemaker.com/fmg?i=dZBRi8IwEIT_yz5HOIt4kkf_gc8iZTV7GtwmIdlatPS_u7279jjBPGXCfMNkeriBXRo4tvkMtocUs4D9Qi5k4OQFHTFYya3KDpnLJBLjAych1CSmSZULBrn_pWDSHJ51jui2hNmHs6btezj-iNqRVlhuDFx9cGChQR9g9LdCtR9fgra7LMYAGMwruKpmUmL3Qha9viOr9edMcjxp1X9oR0V-yYOBgI1-FHZYstpSTC2j-Bi0wIceXdLHb4ejQrrloHsQaU41PAE"
+    },
+    {
+      "id": "tundra-village",
+      "title": "Snowmere — tundra village",
+      "description": "Snowy dwellings and low tundra vegetation with natural ground instead of arable fields.",
+      "burg": {
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": true,
+        "temple": true,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 18,
+            "kind": "main",
+            "route_id": "north-road"
+          },
+          {
+            "bearing_deg": 142,
+            "kind": "town",
+            "route_id": "south-road"
+          },
+          {
+            "bearing_deg": 267,
+            "kind": "local",
+            "route_id": "west-road"
+          }
+        ],
+        "name": "Snowmere",
+        "population": 300,
+        "biome": "tundra"
+      },
+      "seed": 2,
+      "engine": "village",
+      "previewUrl": "https://settlemaker.com/fmg?i=dZDRTgIxEEX_5T7XBFaDpo_8go_GkIGO0NBtm3bqRjb8u7OgSyTxrbe553SmIz5hlwbbVvawI3IqAvtBobLBzgs5DnMeKIQ6pxzoRLBSmgbhPgf-TfVAUb5uHspqunlKIrdmKj7uVfc2YnsNG8c6xPLF4Oijg0VPPmLqN-GNn26iznd4mAQ4m3vwqZtJScMdWfX4H9mtnmcypJ2O-gcduMoP-W4QqddF8RrT0HNhreaUWyDxKcI-Lhb6mz5dOtKiK6TvoTKrqTt_Aw"
+    },
+    {
+      "id": "tundra-city",
+      "title": "Frosthold — tundra city",
+      "description": "Northern roofs, fortifications and biome-specific ground.",
+      "burg": {
+        "port": false,
+        "citadel": true,
+        "walls": true,
+        "plaza": true,
+        "temple": true,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 18,
+            "kind": "main",
+            "route_id": "north-road"
+          },
+          {
+            "bearing_deg": 142,
+            "kind": "town",
+            "route_id": "south-road"
+          },
+          {
+            "bearing_deg": 267,
+            "kind": "local",
+            "route_id": "west-road"
+          }
+        ],
+        "name": "Frosthold",
+        "population": 10000,
+        "biome": "tundra"
+      },
+      "seed": 2,
+      "engine": "settlement",
+      "previewUrl": "https://settlemaker.com/fmg?i=dZDRTsMwDEX_xc9BYhUClEce-AmEJm_x1gg3jhKHCqr9O-6gnTaJPOVEPjc3meAT_MbBrpUj-AmyFAV_QK7kYB8VAzF4Lc1wROa6QGb8xgWUhsy0UO0x6dclBbPl8MpFMLwQlpiOlvY2we4XtoGswubZwUdMATwMGBPM801pG-eTZO36uzkATu5WfOhWU2W8Matt_zO7x6fVZNlb1St1pKp_5ruDhIM9FF6LVO2Fg81myY1RoyRrcW_LvjPKeUxbCgXtSqhEFtadfgA"
+    },
+    {
+      "id": "tropical-village",
+      "title": "Reedbank — tropical river village",
+      "description": "A supplied river enables tropical paddy selection; fields follow real parcels.",
+      "burg": {
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": true,
+        "temple": true,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 18,
+            "kind": "main",
+            "route_id": "north-road"
+          },
+          {
+            "bearing_deg": 142,
+            "kind": "town",
+            "route_id": "south-road"
+          },
+          {
+            "bearing_deg": 267,
+            "kind": "local",
+            "route_id": "west-road"
+          }
+        ],
+        "name": "Reedbank",
+        "population": 300,
+        "biome": "tropical",
+        "rivers": [
+          {
+            "centreline": [
+              {
+                "x": -500,
+                "y": 90
+              },
+              {
+                "x": 500,
+                "y": 90
+              }
+            ],
+            "widthM": 6
+          }
+        ]
+      },
+      "seed": 2,
+      "engine": "village",
+      "previewUrl": "https://settlemaker.com/fmg?i=dZBBT8MwDIX_i8-d1A0YkCP3XbiiaXIbs1pLkyhxV6Dqf8fdRgeTuPlZ_p6fPcARzLKAqkt7MAPEkATMO7pMBdQsaMnNukfn8qyiwy8EI6lTIdRGRz8qN-jl8-qDUZ2uPimgfSFM7Pdq9zZAdRY7Sxpi-VTAgb0FAy2yh2m-E9rx1PGar1lMBjAWt-D9aiYl9Ddk1vI_crV-nEkXao36B-0py4XcFuCx1UPhlchW6A86GkPsHAoHD-auLPWbHE4zkkLkix0fKZ2vrclLIseeTvIDzOJhovRhz-WUTTu_GrqyZyvNBsx63I76Xd2smcdv"
+    },
+    {
+      "id": "tropical-city",
+      "title": "Palmreach — tropical city",
+      "description": "Tropical architecture and vegetation in the city engine.",
+      "burg": {
+        "port": false,
+        "citadel": true,
+        "walls": true,
+        "plaza": true,
+        "temple": true,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 18,
+            "kind": "main",
+            "route_id": "north-road"
+          },
+          {
+            "bearing_deg": 142,
+            "kind": "town",
+            "route_id": "south-road"
+          },
+          {
+            "bearing_deg": 267,
+            "kind": "local",
+            "route_id": "west-road"
+          }
+        ],
+        "name": "Palmreach",
+        "population": 10000,
+        "biome": "tropical"
+      },
+      "seed": 2,
+      "engine": "settlement",
+      "previewUrl": "https://settlemaker.com/fmg?i=dZDRisIwEEX_ZZ4jaBGVPPoFvouUsZ21wWkSkqllt_Tfne5uu6xgnnLDnMPNDPAAuzFw7dIN7AAxJAH7gZzJQOUEa2KwkjqNPTLnOUTGL5yDUBuZ5pQb9PL5Z8GoHl5yClgfCZPzN7WdB7j-hLImrbA5GLg7X4OFFp2Hab4TKt304rVds5oEMJpXcFsspIT-hcx6fUcWu_1Ccqi06j-0pyy_5MWAx1Y_CifkNhFWjc7GEDtGccFri7UeXacL32OSQnSTcdS1EKmuGJ8"
+    },
+    {
+      "id": "coastal-village",
+      "title": "Dunewick — coastal village",
+      "description": "A generated coast from oceanBearing, with coastal buildings and vegetation.",
+      "burg": {
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": true,
+        "temple": true,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 210,
+            "kind": "town",
+            "route_id": "coast-road"
+          },
+          {
+            "bearing_deg": 315,
+            "kind": "local",
+            "route_id": "dune-path"
+          }
+        ],
+        "name": "Dunewick",
+        "population": 300,
+        "biome": "coastal",
+        "oceanBearing": 90
+      },
+      "seed": 2,
+      "engine": "village",
+      "previewUrl": "https://settlemaker.com/fmg?i=XY_RbsIwDEX_xc9Bapn2sDyi_cU0ITfxICLEUepQbVX_fW6BIng8lu_x9QgXsK2BrpYD2BEyFwH7g7EnAy4IeoorDxhjv1KO-IdgpVQFoXOOdKf-iEl-Hx7Manp4CqPfEZaQDqr7GqG7wt6Tlti2jYFTSB4sCA8J5kAV2od54hh72cwGmMxL8q19X5ORnV58ivqaaJNRjjB9G0h41r7wqcMhuJOuZs41ogROqmq0RBd42VluLjZ2hOlWHexHM-mvRCrfTv8"
+    },
+    {
+      "id": "coastal-city",
+      "title": "Saltmouth — port city",
+      "description": "Port infrastructure beside a generated coastline. This is a bearing-based coast, not a measured survey.",
+      "burg": {
+        "port": true,
+        "citadel": false,
+        "walls": true,
+        "plaza": true,
+        "temple": true,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          200,
+          300
+        ],
+        "name": "Saltmouth",
+        "population": 12000,
+        "biome": "coastal",
+        "harbourSize": "large",
+        "oceanBearing": 90
+      },
+      "seed": 2,
+      "engine": "settlement",
+      "previewUrl": "https://settlemaker.com/fmg?i=RY69DsIwDITfxXOGUCYy8godEYNpTRvJjaP8gGjVd8dFFMY7n7-7BR7gDgZuNQ3gFoiSCriSKhnofMGeGNwdOat-InPej5Fxxl0UmiLTrvKIobx-bx1GBf0xSbA_EyYfBqVdGmvN0dqrgYCTMqBFLpPUMoK2SKyMxUvQlZq0utTLJ9YJ5g1rYMR0k5paP28-YxpIXekIw7cH3MmuOoyoB9esbw"
+    },
+    {
+      "id": "copperline-village",
+      "title": "Copperline — industrial village",
+      "description": "The same village planner with a complete replacement skin and industrial artwork.",
+      "skin": "copperline",
+      "burg": {
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": true,
+        "temple": true,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 18,
+            "kind": "main",
+            "route_id": "north-road"
+          },
+          {
+            "bearing_deg": 142,
+            "kind": "town",
+            "route_id": "south-road"
+          },
+          {
+            "bearing_deg": 267,
+            "kind": "local",
+            "route_id": "west-road"
+          }
+        ],
+        "name": "Copperline",
+        "population": 250,
+        "biome": "industrial"
+      },
+      "seed": 2,
+      "engine": "village"
+    },
+    {
+      "id": "copperline-city",
+      "title": "Brassworks — steampunk city",
+      "description": "Copperline machinery and brass materials on the existing city layout and semantic feature types.",
+      "skin": "copperline",
+      "burg": {
+        "port": false,
+        "citadel": false,
+        "walls": false,
+        "plaza": true,
+        "temple": true,
+        "shanty": false,
+        "capital": false,
+        "roadBearings": [
+          {
+            "bearing_deg": 18,
+            "kind": "main",
+            "route_id": "north-road"
+          },
+          {
+            "bearing_deg": 142,
+            "kind": "town",
+            "route_id": "south-road"
+          },
+          {
+            "bearing_deg": 267,
+            "kind": "local",
+            "route_id": "west-road"
+          }
+        ],
+        "name": "Brassworks",
+        "population": 2000,
+        "biome": "steampunk"
+      },
+      "seed": 2,
+      "engine": "settlement"
+    }
+  ]
+}
