@@ -1,3 +1,5 @@
+import type { SettlementSkin } from '../assets/skins.js';
+import type { AssetSet } from '../assets/asset-sets.js';
 import type { Palette } from '../types/interfaces.js';
 import type { Model } from '../generator/model.js';
 import type { RenderTheme } from './render-theme.js';
@@ -6,6 +8,9 @@ import { buildScene } from '../scene/build-scene.js';
 import { assembleSvg } from './assemble-svg.js';
 
 export interface SvgOptions {
+  skin?: SettlementSkin;
+  skinBiome?: string;
+  assetSet?: AssetSet;
   palette?: Palette;
   /** Additional padding around the city bounds */
   padding?: number;
@@ -44,6 +49,9 @@ export function generateSvg(model: Model, options: SvgOptions = {}): string {
     padding: options.padding ?? 20,
   });
   return assembleSvg(scene, {
+    skin: options.skin,
+    skinBiome: options.skinBiome,
+    assetSet: options.assetSet,
     palette: options.palette,
     theme: options.theme,
     clipId: options.clipId,

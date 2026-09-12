@@ -33,6 +33,16 @@
   },
   "files": [
     "dist",
-    "NOTICE"
+    "NOTICE",
+    "docs/skins.md",
+    "docs/skins.schema.json",
+    "docs/examples/moon-glass.skin.json",
+    "docs/examples/copperline.skin.json",
+    "docs/examples/copperline-village.svg",
+    "docs/examples/copperline-city.svg",
+    "symbols/copperline",
+    "symbols/LICENSE",
+    "symbols/CREDITS",
+    "symbols/refined"
   ]
 }

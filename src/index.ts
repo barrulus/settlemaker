@@ -1,3 +1,7 @@
+import { skinBiomeFor, type SettlementSkin } from './assets/skins.js';
+export { createSkin, skinBiomeFor, SKIN_VERSION, SKIN_SLOTS, SKIN_TOKENS } from './assets/skins.js';
+export type { SkinDefinition, SkinStyle, SkinBiome, SkinBaseBiome, SkinGlyph, SettlementSkin } from './assets/skins.js';
+export type { VillageRenderOptions } from './village/render.js';
 // Public API
 export { Model } from './generator/model.js';
 export type { GenerationParams, RoadEntry, RouteKind, RouteRelief, DegradedFlag } from './generator/generation-params.js';
@@ -61,8 +65,8 @@ export type { BuildSceneOptions } from './scene/build-scene.js';
 export { assembleSvg, themeToCss } from './output/assemble-svg.js';
 export type { AssembleOptions } from './output/assemble-svg.js';
 
-export { SCHEMATIC_SET, assetSetFor } from './assets/asset-sets.js';
-export type { AssetSet } from './assets/asset-sets.js';
+export { SCHEMATIC_SET, REFINED_SET, assetSetFor } from './assets/asset-sets.js';
+export type { AssetSet, GlyphAsset } from './assets/asset-sets.js';
 
 export {
   URL_PAYLOAD_VERSION, UrlCodecError,
@@ -117,9 +121,12 @@ export interface GenerateFromBurgResult {
  */
 export function generateFromBurg(
   burg: AzgaarBurgInput,
-  options?: { seed?: number; svg?: SvgOptions; geojson?: GenerateGeoJsonOptions },
+  options?: { seed?: number; skin?: SettlementSkin; svg?: SvgOptions; geojson?: GenerateGeoJsonOptions },
 ): GenerateFromBurgResult {
-  const paramsPass1 = mapToGenerationParams(burg, options?.seed);
+  const skin = options?.skin ?? options?.svg?.skin;
+  const skinBiome = options?.svg?.skinBiome ?? burg.biome;
+  const effectiveBurg = skin ? { ...burg, biome: skinBiomeFor(skin, skinBiome).base } : burg;
+  const paramsPass1 = mapToGenerationParams(effectiveBurg, options?.seed);
 
   // Pass 1: minimal probe for wallRadius. Strip coastlineGeometry + harbourSize
   // so classifyWater and placeHarbour are skipped — neither influences the
@@ -151,7 +158,7 @@ export function generateFromBurg(
     : paramsPass1;
   const model = new Model(paramsPass2).generate();
 
-  const svg = generateSvg(model, { ...options?.svg, shift });
+  const svg = generateSvg(model, { ...options?.svg, skin, skinBiome, shift });
   const geojson = generateGeoJson(model, { ...options?.geojson, shift });
   const degradedFlags = [...model.degradedFlags].sort() as DegradedFlag[];
   return { model, svg, geojson, degradedFlags, originShift: shift };
@@ -196,6 +203,8 @@ export function generateSettlement(
   burg: AzgaarBurgInput,
   options?: {
     seed?: number;
+    /** One skin for both village and city generation/rendering. */
+    skin?: SettlementSkin;
     /** Settlement branch only — `SvgOptions` describes the city renderer's
      * palette/symbol pipeline, which the village renderer does not share. */
     svg?: SvgOptions;
@@ -215,14 +224,16 @@ export function generateSettlement(
     // change it. Derived through `mapToGenerationParams` rather than
     // re-implementing the hash, so the two branches cannot drift apart.
     const seed = options?.seed ?? mapToGenerationParams(burg).seed;
-    const model = generateVillage(burg, seed);
+    const skin = options?.skin;
+    const effectiveBurg = skin ? { ...burg, biome: skinBiomeFor(skin, burg.biome).base } : burg;
+    const model = generateVillage(effectiveBurg, seed);
     return {
       kind: 'village',
       model,
       // A caller's theme is honoured here exactly as `svg.palette`/`theme`
       // are on the settlement branch; without this the same option was
       // silently obeyed for a town and dropped for a village.
-      svg: renderVillage(model, options?.village?.pxPerMetre, options?.village?.theme),
+      svg: renderVillage(model, options?.village?.pxPerMetre, options?.village?.theme, { skin, skinBiome: burg.biome }),
       geojson: generateVillageGeoJson(model),
       // The village engine degrades nothing: it has no walls or citadel to
       // drop. Present and empty so a consumer reads it the same either way.

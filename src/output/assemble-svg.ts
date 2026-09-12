@@ -1,3 +1,4 @@
+import { resolveSkin, type SettlementSkin } from '../assets/skins.js';
 import type { Palette } from '../types/interfaces.js';
 import type { BuildingFeature, Scene, ScenePoint } from '../scene/scene.js';
 import type { AssetSet } from '../assets/asset-sets.js';
@@ -12,6 +13,8 @@ const NORMAL_STROKE = 0.15;
 const THICK_STROKE = 1.8;
 
 export interface AssembleOptions {
+  skin?: SettlementSkin;
+  skinBiome?: string;
   palette?: Palette;
   theme?: Partial<RenderTheme>;
   assetSet?: AssetSet;
@@ -95,12 +98,13 @@ export function themeToCss(theme: RenderTheme, refined = false): string {
  * #fields #greens #water #roads #shadows #buildings #landmarks #walls.
  */
 export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string {
+  const skin = options.skin ? resolveSkin(options.skin, options.skinBiome ?? scene.biome) : undefined;
   const palette = options.palette ?? paletteForBiome(scene.biome);
   const overrides = Object.fromEntries(
     Object.entries(options.theme ?? {}).filter(([, v]) => v !== undefined),
   );
-  const theme: RenderTheme = { ...themeFrom(palette), ...overrides };
-  const assets = options.assetSet ?? assetSetFor(scene.biome);
+  const theme: RenderTheme = { ...themeFrom(palette), ...(options.palette ? {} : skin?.city), ...overrides };
+  const assets = options.assetSet ?? skin?.assets ?? assetSetFor(scene.biome);
   const clipId = (options.clipId ?? 'frame-clip').replace(/[^A-Za-z0-9_-]/g, '-');
   const showSymbols = options.symbols !== false;
   const b = scene.bounds;
@@ -151,11 +155,18 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   const parts: string[] = [];
   parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${b.min_x.toFixed(1)} ${b.min_y.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}">`);
   parts.push(`<defs><clipPath id="${clipId}"><rect x="${b.min_x.toFixed(1)}" y="${b.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"/></clipPath>${patternDefs}${symbolDefs}${glyphDefs}</defs>`);
-  const tokens = { ...villageThemeFor(scene.biome ?? 'temperate').tokens };
-  if (options.palette || options.theme) Object.assign(tokens, {
+  const tokens = { ...(skin?.tokens ?? villageThemeFor(scene.biome ?? 'temperate').tokens) };
+  if (!skin && (options.palette || options.theme)) Object.assign(tokens, {
     '--sm-ink': theme.smInk, '--sm-stone': theme.smStone, '--sm-timber': theme.smTimber,
     '--sm-void': theme.smVoid, '--sm-canopy-a': theme.smCanopy1, '--sm-canopy-b': theme.smCanopy2,
   });
+  if (skin) {
+    for (const [key, token] of Object.entries({ smInk: '--sm-ink', smStone: '--sm-stone', smTimber: '--sm-timber', smVoid: '--sm-void', smCanopy1: '--sm-canopy-a', smCanopy2: '--sm-canopy-b' })) {
+      if (options.palette || Object.hasOwn(skin.city, key) || Object.hasOwn(overrides, key)) {
+        tokens[token] = theme[key as keyof RenderTheme] as string;
+      }
+    }
+  }
   parts.push(`<style>\n${themeToCss(theme, assets.refined)}\n${assets.refined ? refinedStyle(tokens) : ''}\n</style>`);
   // data-bg contract with cropSvgToTile: attribute markup + inline fill.
   parts.push(`<rect data-bg="paper" x="${b.min_x.toFixed(1)}" y="${b.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="${theme.paper}"/>`);
@@ -287,5 +298,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   }
 
   parts.push('</svg>');
-  return parts.join('\n');
+  const svg = parts.join('\n');
+  return skin ? svg.replace(/var\((--[a-z0-9-]+)(\s*,\s*)([^)]*)\)/gi, (whole, name: string, sep: string) =>
+    tokens[name] === undefined ? whole : `var(${name}${sep}${tokens[name]})`) : svg;
 }
