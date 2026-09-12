@@ -24,7 +24,7 @@ A medieval fantasy settlement map generator for Node.js. TypeScript reimplementa
 
 - **Procedural settlement generation** from hamlets (pop 10) to metropolises (pop 200k+)
 - **Deterministic output** — same seed always produces identical results
-- **Zero runtime dependencies** — all algorithms ported directly (Voronoi, A\*, polygon operations, PRNG)
+- **Lightweight runtime** — built-in Voronoi, A\*, and PRNG algorithms; polygon-clipping handles water polygon operations
 - **SVG and GeoJSON output** — render to vector graphics or geospatial features
 - **Tile-ready** — built-in SVG-to-tile slicing for map integration
 - **8 colour palettes** — default, blueprint, black & white, ink, night, ancient, colour, simple
@@ -44,6 +44,16 @@ A medieval fantasy settlement map generator for Node.js. TypeScript reimplementa
 ```bash
 npm install settlemaker
 ```
+
+Version 3.0.0 is an ES module package. Use `import` in an ES module project
+(with `"type": "module"` in your package.json), or use `await import('settlemaker')`
+from CommonJS. TypeScript declarations and their GeoJSON types are included.
+The bundled browser entry is `settlemaker/dist/settlemaker.browser.js`.
+
+See the [3.0.0 release notes](docs/releases/3.0.0.md) for skin support and packaging
+changes. The npm package includes TypeScript source, source maps, build inputs,
+and artwork attribution. From a source checkout, `npm ci` followed by `npm pack`
+cleans the generated output and builds both library formats before packaging.
 
 ## Quick start
 
