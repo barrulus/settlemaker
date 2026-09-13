@@ -3,6 +3,8 @@ import { generateSettlement, buildScene, generateGeoJson, Point, Polygon } from 
 import type { AzgaarBurgInput } from '../src/index.js';
 import { placeCityGlyphs, fitCityGlyph } from '../src/generator/city-glyphs.js';
 import { ARTWORK_INK as REFINED_INK, ARTWORK_MANIFEST as REFINED_MANIFEST } from '../src/assets/artwork.js';
+import achermers from './fixtures/achermers-oversized-temple.json';
+import { blocksAccess, polygonsOverlap } from '../src/generator/city-frontage.js';
 
 export const cityInput: AzgaarBurgInput = {
   name: 'City glyph baseline', population: 2500, biome: 'temperate',
@@ -21,6 +23,26 @@ function city(overrides: Partial<AzgaarBurgInput> = {}) {
 }
 
 describe('city artwork integration', () => {
+  it('keeps the Achermers temple within its physical size limit on the web generation path', () => {
+    const result=generateSettlement(achermers.burg as AzgaarBurgInput,{seed:achermers.seed});
+    if(result.kind!=='settlement')throw new Error('expected legacy city');
+    expect(result.model.params.development).toBeUndefined();
+    const scene=buildScene(result.model,{shift:result.originShift});
+    const temples=result.model.symbols.filter(s=>REFINED_MANIFEST[s.id]?.category==='faith');
+    expect(temples).toHaveLength(1);
+    const temple=temples[0];
+    expect(temple.id).toBe('sm-city-temple-hall');
+    const longest=Math.max(temple.scale,temple.scaleY??temple.scale)*scene.metersPerUnit!;
+    expect(longest).toBeLessThanOrEqual(20+1e-7);
+    expect(longest).toBeGreaterThan(8);
+    const ward=result.model.patches.find(p=>p.ward?.principalBuilding===temple.building)!.ward!;
+    expect(ward.principalSymbol).toBe(temple);
+    for(const building of ward.geometry)if(building!==temple.building){
+      expect(polygonsOverlap(building,temple.building!)).toBe(false);
+      expect(blocksAccess(temple.building!.centroid,temple.frontage!.at,building)).toBe(false);
+    }
+  });
+
   it.each([[1001, 182], [2500, 312], [10000, 953], [50000, 3902], [250000, 7777]])(
     'meets or exceeds the pre-layout building count at population %i within its budget', (population, count) => {
       const { model } = city({ population });

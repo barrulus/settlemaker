@@ -184,7 +184,9 @@ describe('fidelity round 4: probe path', () => {
     expect(svg.length).toBeGreaterThan(1000);
     // Shared biome ground with paved city roads; urban street corridors and lane mouths are visible.
     // Reviewed both Aldford fixtures and verified exact repeatability before repinning.
-    expect(sha256(svg)).toBe('ce297c4a505cb2e9d1f219a5aa8236b9201039821a18a1ace4acb753f086d491');
+    // Legacy temples now share the physical size cap. Reviewed the smaller
+    // temple and retained annex; other scene layers and repeatability match.
+    expect(sha256(svg)).toBe('bdae17be517a3a87878a196f7c7b1162fb85941fb7eee1e9bf4252e950e96873');
   });
 
   it('pins direct legacy generateFromBurg output at pop 800 (not the village engine)', () => {

@@ -1,0 +1,30 @@
+{
+  "burg": {
+    "name": "Achermers",
+    "population": 9553,
+    "port": true,
+    "citadel": true,
+    "walls": true,
+    "plaza": true,
+    "temple": true,
+    "shanty": false,
+    "capital": false,
+    "roadBearings": [{
+      "bearing_deg": 175.86532862626723,
+      "route_id": "23",
+      "kind": "market",
+      "group": "roads",
+      "through": false,
+      "relief": "ascent",
+      "followsRiver": false
+    }],
+    "oceanBearing": 79.3354244825473,
+    "harbourSize": "large",
+    "biome": "Temperate deciduous forest",
+    "culture": "Germanic",
+    "elevation": 324,
+    "temperature": 8,
+    "urbanDensity": 10
+  },
+  "seed": 2174506379
+}

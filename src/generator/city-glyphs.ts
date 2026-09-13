@@ -106,6 +106,7 @@ export function placeCityGlyphs(model: Model): void {
   }
   const metersPerUnit = cityMetersPerUnit(model);
   const architecture = cityArchitecture(model.params.seed, model.params.biome);
+  const templeMaxScale = architecture.temple.includes('cathedral') ? 1.75 : 1.25;
   const templeWard = model.patches.find(p => p.ward?.type === WardType.Cathedral)?.ward;
   if (templeWard && !templeWard.principalBuilding && templeWard.geometry.length) {
     // Reserve one substantial temple inside its own ward; its annexes are
@@ -116,9 +117,9 @@ export function placeCityGlyphs(model: Model): void {
       const frontage = { ...line, at: new Point((line.a.x + line.b.x) / 2, (line.a.y + line.b.y) / 2) };
       // The artwork catalogue's nominal box is in metres. A parish temple
       // may fit within its ward; it must not expand to fill that ward.
-      const physical = model.params.development !== undefined;
-      const maxScale = architecture.temple.includes('cathedral') ? 1.75 : 1.25;
-      const candidate = fitCityGlyph(site, architecture.temple, metersPerUnit, frontage, physical ? 0 : 0.2, physical ? maxScale : Infinity);
+      // Both city entry points use this cap. A capped temple may occupy only
+      // a small fraction of a large precinct, so no minimum ward coverage applies.
+      const candidate = fitCityGlyph(site, architecture.temple, metersPerUnit, frontage, 0, templeMaxScale);
       if (candidate && (!placed || candidate.paintedArea > placed.paintedArea)) placed = candidate;
     }
     if (placed) {
@@ -184,7 +185,9 @@ export function placeCityGlyphs(model: Model): void {
       const plannedFrontage = ward.buildingFrontages.get(building);
       const candidates = frontagesFor(building, ward, plannedFrontage ? [plannedFrontage] : lines);
       for (const frontage of candidates) {
-        const candidate = fitCityGlyph(building, id, metersPerUnit, frontage, use || building === keep || building === palacePrincipal ? .25 : .5);
+        const candidate = fitCityGlyph(building, id, metersPerUnit, frontage,
+          building === temple ? 0 : use || building === keep || building === palacePrincipal ? .25 : .5,
+          building === temple ? templeMaxScale : Infinity);
         // A courtyard is a site arrangement, not a miniature icon for every
         // inn. Small urban inns occupy street houses; keep their POI identity.
         if (candidate && model.params.development && REFINED_MANIFEST[id]?.courtyardVoids?.length
