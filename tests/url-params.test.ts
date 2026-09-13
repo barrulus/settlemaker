@@ -58,8 +58,8 @@ describe('parseSettlementUrl', () => {
     // The rendering path (web/main.ts) has no test harness here; its
     // Object.hasOwn guard on PALETTES is verified by review. What we can
     // test directly is the biome->palette lookup used elsewhere.
-    expect(paletteForBiome('constructor')).toBe(PALETTES.default);
-    expect(paletteForBiome('__proto__')).toBe(PALETTES.default);
+    expect(paletteForBiome('constructor')).toEqual(paletteForBiome('temperate'));
+    expect(paletteForBiome('__proto__')).toEqual(paletteForBiome('temperate'));
   });
 
   it('invalid harbourSize is dropped, not passed through', async () => {

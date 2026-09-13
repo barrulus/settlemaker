@@ -78,10 +78,15 @@ Precedence is bundled defaults → skin defaults → selected biome → explicit
 renderer overrides. Each glyph replacement is a whole artwork replacement;
 omitting `sil` removes that glyph's shadow rather than inheriting an unrelated
 silhouette. `tokens` work in both engines; use `village` and `city` to style their
-respective geometry. An explicit city palette re-derives the complete city theme
-and its six standard material colours; explicit city theme properties override
-only the named values. Material properties in `city` override the corresponding
-tokens. An explicit `VillageTheme` replaces the skin's village theme in full.
+respective geometry. An explicit shared theme or palette recolours native and custom material
+tokens in both engines. Shared `style` fields apply after that palette. Existing
+skin `city` and `village` overrides remain specific to their renderer; without
+an explicit palette they take precedence over regional defaults. A complete
+legacy `VillageTheme` applies last to village surface/shadow colours and merges
+its supplied tokens over the selected skin/theme. Omitted tokens retain their
+resolved values. Literal colours drawn directly into custom glyphs are retained;
+use material `var(--token, #fallback)` values for artwork that responds to themes.
+See [appearance precedence](appearance.md#precedence).
 
 ## SVG authoring contract
 

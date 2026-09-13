@@ -12,6 +12,8 @@ export const SCENE_VERSION = 2 as const;
 export interface ScenePoint { x: number; y: number }
 
 export interface WaterLayer {
+  /** Polygon grouping, including holes, when supplied by the physical planner. */
+  polygons?: ScenePoint[][][];
   /** Even-odd rings in output coords; holes = islands. Empty = landlocked. */
   rings: ScenePoint[][];
   /** True when synthesized from oceanBearing rather than caller geometry. */
@@ -30,6 +32,8 @@ export interface FieldPlot {
 /** @deprecated Always empty since settlemaker 0.8.0 — fields carry angleDeg instead of furrow segments. */
 export interface Furrow { start: ScenePoint; end: ScenePoint }
 export interface GreenFeature {
+  /** A civic square occupies open ground but is paved rather than grassed. */
+  surface?: 'paved';
   ring: ScenePoint[];
   paths?: ScenePoint[][];
   pathWidth?: number;
@@ -54,9 +58,11 @@ export interface SymbolInstance {
 }
 
 export interface RoadFeature {
+  routeIds?: string[];
   path: ScenePoint[];
-  /** artery = through-town trunk; road = external approach stub. */
+  /** artery = trunk; road = external approach; alley = local street or block service lane. */
   kind: 'artery' | 'road' | 'alley';
+  /** Full reserved street surface, in local mesh units. */
   width?: number;
 }
 

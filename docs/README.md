@@ -5,10 +5,14 @@ and the corresponding [source](../src/index.ts) are the complete type reference.
 
 ## Start here
 
+- [Shared physical planner](settlement-planning.md): development presets, mixed density, resident accounting, metre-based output and the expanded review (unreleased).
+
 - [Getting started](getting-started.md): install, generate a map, use TypeScript or a browser.
 - [Gallery](gallery.md): current output across five biomes and both planners, plus Copperline.
 - [Library API](api.md): input fields, engine selection, options, errors and reproducibility.
 - [GeoJSON and coordinates](geojson.md): schema 4, local units, IDs, road geometry and tiling.
+
+- [Shared appearance and engine selection](appearance.md): unreleased themes for both planners and explicit village/city controls.
 
 ## Create a setting
 

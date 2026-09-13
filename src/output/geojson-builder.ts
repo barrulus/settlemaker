@@ -1,3 +1,5 @@
+import { cityLocalStreets } from '../generator/city-streets.js';
+import { VILLAGE_POP_CEILING } from '../input/settlement-engine.js';
 import type { Feature, FeatureCollection, Polygon as GeoPolygon } from 'geojson';
 import type { Polygon } from '../geom/polygon.js';
 import type { Model, BuildingCapacity } from '../generator/model.js';
@@ -141,6 +143,12 @@ export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = 
     }
   }
 
+  // Reserved inter-block streets share geometry with the SVG scene.
+  for (const street of cityLocalStreets(model)) {
+    features.push({ type: 'Feature', properties: { layer: 'street', streetType: 'alley', width: street.width,
+      street_id: allocator.alloc('s') }, geometry: { type: 'LineString', coordinates: [sc(street.a, shift), sc(street.b, shift)] } });
+  }
+
   // 3. Walls + entrances.
   if (model.wall !== null) {
     addWallFeatures(features, model.wall, 'city_wall', shift);
@@ -211,7 +219,7 @@ function buildMetadata(
   const diameterMeters = computeSettlementScale(params.population).diameterMeters;
   const diameterLocal = computeDiameterLocal(model);
   return {
-    ...(params.population > 1000 ? { building_capacity: model.getBuildingCapacity() } : {}),
+    ...(model.usesCityLayout ? { building_capacity: model.getBuildingCapacity() } : {}),
     schema_version: GEOJSON_SCHEMA_VERSION,
     settlemaker_version: options.settlemakerVersion ?? SETTLEMAKER_VERSION,
     settlement_generation_version: computeGenerationVersion(params, shift),
@@ -245,6 +253,7 @@ function computeGenerationVersion(params: GenerationParams, shift: OriginShift):
     settlemakerVersion: SETTLEMAKER_VERSION,
     seed: params.seed,
     population: params.population,
+    ...(params.cityLayout && params.population <= VILLAGE_POP_CEILING ? { cityLayout: true } : {}),
     nPatches: params.nPatches,
     urbanDensity: params.urbanDensity ?? null,
     walls: params.wallsNeeded,

@@ -1,3 +1,4 @@
+import { resolveSettlementEngine } from '../input/settlement-engine.js';
 import { validateWaterContext } from '../input/water-context.js';
 import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 
@@ -10,7 +11,7 @@ import type { AzgaarBurgInput } from '../input/azgaar-input.js';
  */
 export const URL_PAYLOAD_VERSION = 1;
 
-export type UrlCodecFailure = 'base64' | 'inflate' | 'json' | 'version' | 'shape' | 'villageTheme' | 'roads';
+export type UrlCodecFailure = 'base64' | 'inflate' | 'json' | 'version' | 'shape' | 'villageTheme' | 'roads' | 'engine';
 
 export class UrlCodecError extends Error {
   constructor(readonly reason: UrlCodecFailure, message: string) {
@@ -85,6 +86,8 @@ export async function decodeBurgParam(value: string): Promise<{ burg: AzgaarBurg
       typeof burg.name !== 'string' || typeof burg.population !== 'number') {
     throw new UrlCodecError('shape', 'payload has no plausible burg (name + population required)');
   }
+  try { resolveSettlementEngine(burg.population, burg.engine); }
+  catch (error) { throw new UrlCodecError('engine', (error as Error).message); }
   validateWaterContext(burg);
   return { burg, ...(typeof env.seed === 'number' ? { seed: env.seed } : {}) };
 }

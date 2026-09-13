@@ -51,6 +51,8 @@ export class Ward {
   streetRuns: Polygon[][] = [];
   principalBuilding: Polygon | null = null;
   principalSymbol: PlacedSymbol | null = null;
+  /** Reserved square or temple court within a developed civic block. */
+  publicSpace: Polygon | null = null;
   type: WardType = WardType.Empty;
 
   constructor(model: Model, patch: Patch) {
@@ -69,7 +71,7 @@ export class Ward {
    * floor as population climbs toward the core-capacity default.
    */
   get insetScale(): number {
-    return edgeInsetScale(this.model.params.population);
+    return edgeInsetScale(this.model.params.development?.texturePopulation ?? this.model.params.population);
   }
 
   createGeometry(): void {
@@ -78,30 +80,28 @@ export class Ward {
 
   getCityBlock(): Polygon {
     const insetDist: number[] = [];
-    const innerPatch = this.model.wall === null || this.patch.withinWalls;
-    const scale = this.insetScale;
-
-    this.patch.shape.forEdge((v0, v1) => {
-      if (this.model.wall !== null && this.model.wall.bordersBy(this.patch, v0, v1)) {
-        insetDist.push(MAIN_STREET * scale / 2);
-      } else {
-        let onStreet = innerPatch && (this.model.plaza !== null &&
-          this.model.plaza.shape.findEdge(v1, v0) !== -1);
-        if (!onStreet) {
-          for (const street of this.model.arteries) {
-            if (street.contains(v0) && street.contains(v1)) {
-              onStreet = true;
-              break;
-            }
-          }
-        }
-        insetDist.push((onStreet ? MAIN_STREET : (innerPatch ? REGULAR_STREET : ALLEY)) * scale / 2);
-      }
-    });
+    this.patch.shape.forEdge((a, b) => insetDist.push(this.streetWidthForEdge(a, b) / 2));
 
     return this.patch.shape.isConvex()
       ? this.patch.shape.shrink(insetDist)
       : this.patch.shape.buffer(insetDist);
+  }
+
+  /** Leave an apron around a civic landmark without consuming a small chapel
+   * site entirely. The physical setback is capped at three metres. */
+  getPublicBuildingSite(): Polygon {
+    if (!this.publicSpace) return this.getCityBlock();
+    const inset=Math.min(1,Math.sqrt(Math.abs(this.publicSpace.square))*.1);
+    return this.publicSpace.shrink(this.publicSpace.vertices.map(()=>inset));
+  }
+
+  /** Full reserved corridor width; shared by inset geometry and street output. */
+  streetWidthForEdge(a: Point, b: Point): number {
+    const inner = this.model.wall === null || this.patch.withinWalls;
+    if (this.model.wall?.bordersBy(this.patch, a, b)) return MAIN_STREET * this.insetScale;
+    const plaza = inner && this.model.plaza !== null && this.model.plaza.shape.findEdge(b, a) !== -1;
+    const artery = this.model.arteries.some(street => street.contains(a) && street.contains(b));
+    return (plaza || artery ? MAIN_STREET : inner ? REGULAR_STREET : ALLEY) * this.insetScale;
   }
 
   filterOutskirts(): void {
@@ -114,7 +114,7 @@ export class Ward {
     // case `tests/density-target.test.ts` exercises: 103 core buildings
     // against a 121 floor, with no budget trim involved at all. Softening
     // it keeps the rows reading as rows at the edge and returns the census.
-    const bite = rowHousing(this.model.params.population)
+    const bite = this.model.usesCityLayout || rowHousing(this.model.params.population)
       ? ROW_OUTSKIRTS_BITE
       : 1.0;
     const populatedEdges: Array<{

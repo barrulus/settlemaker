@@ -10,6 +10,7 @@ web/dist/
 
 # local tooling artefacts
 .direnv/
+.worktrees/
 repomix-output.xml
 
 # Generated contact sheet from make-review-page.ts (throwaway review aid).

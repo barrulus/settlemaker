@@ -1,5 +1,9 @@
 # City scene and rendering contract
 
+Development preview: the [shared physical planner](settlement-planning.md) adds
+`development` presets, resident accounting and one metre-based output model.
+The legacy API and contracts documented below remain available.
+
 `Scene` version **2** is the semantic rendering representation of the **city**
 planner. Villages use `VillageModel` and `renderVillage`; they do not pass through
 `buildScene`. Use [GeoJSON](geojson.md) for exported feature data from both planners,
@@ -72,7 +76,7 @@ performed by `generateFromBurg`; use that high-level function when you want it.
 | `water` | `{rings, synthetic}`; even-odd output rings retain islands. |
 | `fields` | Polygon `ring`, `angleDeg`, optional native `glyph` and `hatch`. Pattern pitch is independent of parcel size. |
 | `furrows` | Deprecated array; current scenes leave it empty and use field direction instead. |
-| `greens` | Polygon rings with optional planned paths and path width. |
+| `greens` | Polygon rings with optional planned paths and path width. Physical city squares carry `surface: 'paved'`; other open ground retains grass or park artwork. |
 | `vegetation` | Position, glyph/legacy `kind`, scale and rotation. |
 | `symbols` | Glyph `id`, position, scale, optional `scaleY`, `buildingId`, `materialVariant`, rotation, and `zBand`. |
 | `roads` | Paths with `kind: 'artery' | 'road' | 'alley'` and optional width. |
@@ -95,10 +99,11 @@ and downloadable authoring assets can use other dimensions. There is no universa
 
 The default asset set is **`SETTLEMENT_SET`**, containing the current native biome
 artwork. `REFINED_SET` and `SCHEMATIC_SET` remain explicit lower-level alternatives.
-`assetSetFor` returns the current default. `paletteForBiome` currently supplies
-its palette fallback; the artwork and material selection provide much of the
-visible biome variation. Do not assume each biome corresponds to a different
-named city palette.
+`assetSetFor` returns the current default. `paletteForBiome` supplies the same
+natural ground/water palette used by villages. Explicit `palette` recolours
+native artwork and procedural materials as well as the scene's drawing styles.
+The shared high-level `theme` option selects a named palette for either engine;
+see [appearance controls](appearance.md).
 
 For an artist-facing integration, prefer `createSkin` and the [skin contract](skins.md).
 It validates portable JSON, allowed SVG fragments and exact slot names without
@@ -158,3 +163,13 @@ scene version change.
 A saved scene is not a complete reproduction package: retain the generator
 version, skin definition and renderer options too. A `SettlementSkin` runtime
 handle must be recreated from JSON in the module instance doing the rendering.
+
+### City street surfaces
+
+Generated urban scenes carry road widths from the planner's reserved corridors.
+The assembler paints both the casing and inner surface inside that width. Local
+streets between blocks share `kind: 'alley'` with service lanes and use the same
+centreline geometry as GeoJSON streets. Their connections are made in the model
+before city glyph placement, so repainting does not change building access.
+Explicit `arteryWidth`/`roadWidth` rendering overrides still take precedence for
+trunks and approaches when a custom presentation needs them.

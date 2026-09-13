@@ -1,3 +1,6 @@
+import { resolveAppearance, themedMaterial } from '../appearance/resolve.js';
+import type { Palette } from '../types/interfaces.js';
+import type { RenderTheme } from '../output/render-theme.js';
 import { resolveSkin, type SettlementSkin } from '../assets/skins.js';
 import { greenGround } from '../assets/greens-art.js';
 import { bridgeArtwork, farmDetails, wallArtwork } from '../output/artwork.js';
@@ -10,7 +13,7 @@ import { hasGlyph, nominalFootprint } from './glyphs.js';
 import { roadSurfaceClips } from './road-surface.js';
 import type { EdgeStamp, VillageModel } from './types.js';
 
-import { villageThemeFor, type VillageTheme } from './theme.js';
+import type { VillageTheme } from './theme.js';
 
 /** integration.md's shadow contract: one light, never rotated with the mark. */
 const SHADOW_OFFSET: [number, number] = [2.6, 3.6];
@@ -81,6 +84,10 @@ function fieldPatternId(glyph: string, furrowBearingDeg: number): string {
  */
 export interface VillageRenderOptions {
   skin?: SettlementSkin;
+  /** Shared palette, also accepted by the city renderer. */
+  palette?: Palette;
+  /** Shared colour overrides; village road widths remain physical dimensions. */
+  style?: Partial<RenderTheme>;
   /** Custom skin biome name; defaults to the model's effective biome. */
   skinBiome?: string;
 }
@@ -90,7 +97,17 @@ export function renderVillage(
 ): string {
   const skin = options.skin ? resolveSkin(options.skin, options.skinBiome ?? model.site.biome) : undefined;
   const glyphs = skin?.assets.glyphs ?? REFINED_GLYPHS;
-  theme = theme ?? skin?.village ?? villageThemeFor(model.site.biome);
+  const appearance = resolveAppearance(model.site.biome, options.palette, options.style, skin ? { ...skin, city: {} } : undefined);
+  theme = theme ? { ...appearance.village, ...theme, tokens: { ...appearance.tokens, ...theme.tokens } } : appearance.village;
+  const roadColor = options.palette || options.style?.roadCore !== undefined ? appearance.city.roadCore : '#8a6f4a';
+  const roadCasing = options.palette || options.style?.roadCasing !== undefined
+    ? appearance.city.roadCasing : roadColor;
+  const shoreWidth = options.style?.shoreWidth ?? SHORE_WIDTH_M;
+  const shadowOffset = options.style?.shadowOffset
+    ? [options.style.shadowOffset.dx * pxPerMetre, options.style.shadowOffset.dy * pxPerMetre]
+    : SHADOW_OFFSET;
+  // Legacy village overrides remain last, including infrastructure shadows.
+  theme.tokens = { ...theme.tokens, '--sm-shadow-color': theme.shadowColor, '--sm-shadow-opacity': theme.shadowOpacity };
   // Gate 5: crofts are claims only -- never painted, so they neither
   // contribute stamps nor drive the bounds. `model.fieldEdges` is the sole
   // edge-stamp source and is empty in the current design (the ring's blocks
@@ -227,7 +244,7 @@ export function renderVillage(
   // byte-identical to what it was before this band existed -- not even an
   // empty group. Pinned by a hash taken before the change.
   const waterPolys = model.site.water.filter((poly) => poly.length >= 3);
-  if (waterPolys.length > 0) {
+  if (waterPolys.length > 0 && theme.water !== 'none') {
     out.push(`<defs><clipPath id="v-water-clip">`
       + `<rect width="${n(w)}" height="${n(h)}"/></clipPath></defs>`);
     out.push('<g data-band="water" clip-path="url(#v-water-clip)">');
@@ -235,11 +252,11 @@ export function renderVillage(
     if (union) {
       out.push(`<path data-water="union" d="${union.map(r => polygonPath(r, X, Y)).join(' ')}" fill="${theme.water}" fill-rule="evenodd" stroke="none"/>`);
       const shore = waterBoundaryPaths(model.site.water).map(r => r.map((p, i) => `${i ? 'L' : 'M'}${n(X(p.x))},${n(Y(p.y))}`).join(' ')).join(' ');
-      out.push(`<path data-shore="union" d="${shore}" fill="none" stroke="${theme.waterEdge}" stroke-width="${n(SHORE_WIDTH_M * pxPerMetre)}" stroke-linejoin="round"/>`);
+      out.push(`<path data-shore="union" d="${shore}" fill="none" stroke="${theme.waterEdge}" stroke-width="${n(shoreWidth * pxPerMetre)}" stroke-linejoin="round"/>`);
     } else waterPolys.forEach((poly, i) => {
       out.push(
         `<path data-water="w${i}" d="${polygonPath(poly, X, Y)}" fill="${theme.water}" `
-        + `stroke="${theme.waterEdge}" stroke-width="${n(SHORE_WIDTH_M * pxPerMetre)}" `
+        + `stroke="${theme.waterEdge}" stroke-width="${n(shoreWidth * pxPerMetre)}" `
         + 'stroke-linejoin="round"/>',
       );
     });
@@ -329,7 +346,8 @@ export function renderVillage(
   const maskHash = waterPaths.join('').split('').reduce((h, c) => (Math.imul(h, 31) + c.charCodeAt(0)) | 0, 0) >>> 0;
   const landMask = `road-land-${maskHash.toString(36)}`;
   if (waterPaths.length) out.push(`<defs><mask id="${landMask}" maskUnits="userSpaceOnUse" x="0" y="0" width="${n(w)}" height="${n(h)}"><rect width="${n(w)}" height="${n(h)}" fill="white"/>${waterPaths.map(d => `<path d="${d}" fill="black"/>`).join('')}</mask></defs>`);
-  out.push(`<g data-band="route" ${waterPaths.length ? `mask="url(#${landMask})" ` : ''}fill="none" stroke="#8a6f4a" stroke-linecap="round" stroke-linejoin="round">`);
+  out.push(`<g data-band="route" ${waterPaths.length ? `mask="url(#${landMask})" ` : ''}fill="none" stroke="${roadCasing}" stroke-linecap="round" stroke-linejoin="round">`);
+  const roadCores: string[] = [];
   const surfaceClips = roadSurfaceClips(model.lanes);
   const byWidth = [...model.lanes].sort((a, b) => (b.widthM - a.widthM) || a.id.localeCompare(b.id));
   for (const [index, lane] of byWidth.entries()) {
@@ -345,11 +363,16 @@ export function renderVillage(
       `<path data-lane="${lane.id}" d="${d}" ${clip ? `clip-path="url(#${clipId})" ` : ''}`
       + `stroke-width="${n(roadCrossSection(lane).surfaceM * pxPerMetre)}"/>`,
     );
+    // Keep the physical road footprint; the casing is painted inside it.
+    const surface = roadCrossSection(lane).surfaceM;
+    roadCores.push(`<path data-road-core="${lane.id}" d="${d}" ${clip ? `clip-path="url(#${clipId})" ` : ''}`
+      + `stroke="${roadColor}" stroke-width="${n(Math.max(surface * .6, surface - .6) * pxPerMetre)}"/>`);
   }
+  out.push(...roadCores);
   out.push('</g>');
 
   if (model.bridges.some(b => b.narrow && b.deck && b.centreline)) {
-    out.push('<g data-band="bridge" fill="#c3aa80" stroke="#594e40" stroke-linejoin="round">');
+    out.push(`<g data-band="bridge" fill="${options.palette ? appearance.city.smTimber : '#c3aa80'}" stroke="${options.palette ? appearance.city.buildingStroke : '#594e40'}" stroke-linejoin="round">`);
     for (const bridge of model.bridges) {
       if (!bridge.narrow || !bridge.deck || !bridge.centreline) continue;
       const lane = model.lanes.find(l => l.id === bridge.laneId)!;
@@ -384,7 +407,7 @@ export function renderVillage(
   // (well, stone circle, boathouse) share this convention.
   out.push('<g data-band="structure">');
   out.push(
-    `<g transform="translate(${n(SHADOW_OFFSET[0])},${n(SHADOW_OFFSET[1])})" ` +
+    `<g transform="translate(${n(shadowOffset[0])},${n(shadowOffset[1])})" ` +
     `opacity="${theme.shadowOpacity}" color="${theme.shadowColor}">`,
   );
   for (const item of structureItems) {
@@ -412,7 +435,7 @@ export function renderVillage(
   // cast shadows; legacy scene glyphs can still supply a silhouette.
   out.push('<g data-band="canopy">');
   out.push(
-    `<g transform="translate(${n(SHADOW_OFFSET[0])},${n(SHADOW_OFFSET[1])})" ` +
+    `<g transform="translate(${n(shadowOffset[0])},${n(shadowOffset[1])})" ` +
     `opacity="${theme.shadowOpacity}" color="${theme.shadowColor}">`,
   );
   for (const veg of model.vegetation) {
@@ -437,5 +460,5 @@ export function renderVillage(
   out.push('</g>');
 
   out.push('</svg>');
-  return resolveVarFallbacks(out.join('\n'), { ...SM_TOKENS, ...ART_TOKENS, ...sanitizeVillageTokens(theme.tokens) });
+  return resolveVarFallbacks(out.join('\n'), { ...SM_TOKENS, ...ART_TOKENS, ...sanitizeVillageTokens(theme.tokens) }, options.palette ? color => themedMaterial(color, options.palette!) : undefined);
 }

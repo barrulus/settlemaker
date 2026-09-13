@@ -1,3 +1,4 @@
+import { resolveSettlementEngine, type SettlementEngine } from '../input/settlement-engine.js';
 import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import type { RenderTheme } from '../output/render-theme.js';
 import { decodeBurgParam, decodeJsonParam, UrlCodecError } from './codec.js';
@@ -15,8 +16,8 @@ export interface ParsedSettlementUrl {
    * villageTheme= an explicit village look, e.g. 'desert'. Village branch
    * only: pass it through `villageThemeFor` into `generateSettlement`'s
    * `village.theme`. Deliberately distinct from `biome=`, which also picks
-   * the dwelling/field/canopy decks, and from `theme=`, which is the city
-   * palette. Parsed for both branches so a caller need not know which engine
+   * the dwelling/field/canopy decks, and from `theme=`, which is the shared
+   * colour palette. Parsed for both branches so a caller need not know which engine
    * will run; ignored by the settlement branch. Left UNDEFINED when absent so
    * the renderer's own `villageThemeFor(site.biome)` default still applies.
    */
@@ -88,7 +89,7 @@ export function sanitizeThemeOverrides(value: unknown): Partial<RenderTheme> {
 const FLAT_DATA_PARAMS = [
   'name', 'pop', 'seed', 'port', 'citadel', 'walls', 'plaza', 'temple',
   'shanty', 'capital', 'trade', 'oceanBearing', 'harbourSize', 'biome', 'urbanDensity', 'coreCapacity',
-  'roads',
+  'roads', 'engine',
 ] as const;
 
 /**
@@ -228,6 +229,7 @@ export async function parseSettlementUrl(
     burg = {
       name,
       population: num(params, 'pop') ?? 300,
+      ...(params.has('engine') ? { engine: params.get('engine') as SettlementEngine } : {}),
       port: bool(params, 'port'),
       citadel: bool(params, 'citadel'),
       walls: bool(params, 'walls'),
@@ -250,6 +252,9 @@ export async function parseSettlementUrl(
     seedOverride = seed;
     random = true;
   }
+
+  try { resolveSettlementEngine(burg.population, burg.engine); }
+  catch (error) { throw new UrlCodecError('engine', (error as Error).message); }
 
   const style = params.get('style');
   const themeOverrides = style !== null

@@ -420,6 +420,13 @@ export function edgeInsetScale(population: number): number {
 }
 
 export interface GenerationParams {
+  /** Shared planner controls. Legacy calls keep their population-derived texture. */
+  development?: {
+    coreBuildings: number;
+    texturePopulation: number;
+    metresPerUnit: number;
+    landScale: number;
+  };
   /** Number of Voronoi patches for the inner city */
   nPatches: number;
   /**
@@ -429,6 +436,8 @@ export interface GenerationParams {
   nCore: number;
   /** Population used for scale emission in GeoJSON metadata. */
   population: number;
+  /** Explicit city selection uses urban plots/artwork even below the automatic boundary. */
+  cityLayout?: boolean;
   /** Whether to generate a central market plaza */
   plazaNeeded: boolean;
   /** Whether to generate a citadel/castle */

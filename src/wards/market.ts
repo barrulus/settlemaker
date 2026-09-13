@@ -6,6 +6,7 @@ import { Ward } from './ward.js';
 import { SYMBOL_MANIFEST } from '../assets/symbol-manifest.js';
 import type { Model } from '../generator/model.js';
 import type { Patch } from '../generator/patch.js';
+import { buildCivicBlock } from '../generator/civic-blocks.js';
 
 export class Market extends Ward {
   constructor(model: Model, patch: Patch) {
@@ -14,6 +15,10 @@ export class Market extends Ward {
   }
 
   override createGeometry(): void {
+    if (this.model.params.development) {
+      buildCivicBlock(this, false);
+      return;
+    }
     // Only the plaza becomes a true plaza with the cross; secondary Market
     // wards keep the legacy statue/fountain object. `this.model.plaza ===
     // this.patch` relies on object identity (===), which is valid because

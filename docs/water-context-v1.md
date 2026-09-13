@@ -1,6 +1,6 @@
 # Water context v1 — implementation contract
 
-Supported by the **3.0.x village library**, for populations 1–1,000, through
+Supported by the **village library**, through
 both direct generation and the compressed URL input. This is the normative
 contract for coverage, precision, precedence and diagnostics. City calls reject
 `waterContext`; legacy city polygons remain in city-local units.
@@ -11,7 +11,10 @@ inputs. See the [URL adapter contract](url-api.md) and [library API](api.md).
 
 ## Scope and wire format
 
-This implementation serves **villages, population 1–1000**. Add `waterContext`
+This implementation serves the **village engine**. Automatic selection uses it
+through population 1,000. The unreleased explicit `engine: 'village'` option also
+allows larger villages; use sufficient survey coverage for their planning area.
+The selected planner determines support and coordinate units, not population. Add `waterContext`
 to `AzgaarBurgInput` in a direct library call or the compressed `i=` payload. The enclosing URL payload
 version remains `1`; the new object has its own version discriminator.
 
@@ -271,7 +274,8 @@ publish its physical `metresPerMeshUnit`, use it consistently for water, buildin
 roads, frame and output, and define its own survey envelope. A viewBox, SVG pixel
 scale, Voronoi radius or `urbanDensity` is not that conversion.
 
-Until that work exists, `waterContext` on population >1000 returns
+Until that work exists, `waterContext` on a selected city (including an
+800-person city), or on automatic selection above population 1,000, returns
 `water-context-unsupported-engine`; it must never reinterpret metres as mesh
 units. FMG does not enable this new mode for cities yet. Legacy city URLs keep
 their existing contract and do not gain a geographic-accuracy guarantee from this
@@ -380,5 +384,6 @@ Both implementations must test:
   width. Converting kilometre-valued mouth width uses only `* 1000`; changing
   display units does not change the value. Unavailable local width is reported.
 - `port` with no accessible nearby shore: nonfatal conflict, no invented docks.
-- Population 1000 versus 1001, malformed body/polygon references, and a URL
+- Automatic population 1000 versus 1001, explicitly selected larger villages and
+  smaller cities, malformed body/polygon references, and a URL
   simplification attempt that would close a narrow land neck or water channel.

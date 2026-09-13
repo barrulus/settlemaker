@@ -3,6 +3,7 @@ import { generateSettlement, buildScene, Point, Polygon } from '../src/index.js'
 import { planCityBlock, coalesceCityRuns } from '../src/generator/city-blocks.js';
 import { blocksAccess, nearestOnSegment, overlapsWater } from '../src/generator/city-frontage.js';
 import type { WardLane } from '../src/wards/ward.js';
+import polygonClipping from 'polygon-clipping';
 
 const polygon = (xy: number[][]) => new Polygon(xy.map(([x, y]) => new Point(x, y)));
 function input(population: number) {
@@ -11,6 +12,42 @@ function input(population: number) {
 }
 
 describe('street-led city blocks', () => {
+  it('forms long attached terraces in dense quarters instead of little square compounds', () => {
+    const site=polygon([[0,0],[60,0],[60,20],[0,20]]);
+    const streets: Array<WardLane & {kind:'street'}>=[];
+    site.forEdge((a,b)=>streets.push({a,b,width:.6,kind:'street'}));
+    const plan=planCityBlock(site,streets,6,.36,true)!;
+    expect(plan.runs.filter(run=>run.length>=12).length).toBeGreaterThanOrEqual(4);
+    expect(plan.lanes.length).toBeGreaterThan(0);
+    // Service streets follow the long frontage, keeping long continuous rows.
+    for(const lane of plan.lanes)expect(Math.abs(lane.a.y-lane.b.y)).toBeLessThan(1e-7);
+    for(const run of plan.runs)for(let i=1;i<run.length;i++){
+      const gap=Math.min(...run[i].vertices.map(p=>p.x))-Math.max(...run[i-1].vertices.map(p=>p.x));
+      // Runs can be ordered in either frontage direction.
+      if(gap>=0)expect(gap).toBeLessThan(.051);
+    }
+  });
+
+  it('keeps dense street rows in a notched block and preserves the notch when joining lots', () => {
+    const site=polygon([[0,0],[40,0],[40,30],[22,30],[21.9,29.8],[21.8,30],[0,30]]);
+    const streets: Array<WardLane & {kind:'street'}>=[];
+    site.forEdge((a,b)=>streets.push({a,b,width:.6,kind:'street'}));
+    const plan=planCityBlock(site,streets,8,.36,true)!;
+    expect(plan).not.toBeNull();
+    expect(plan.buildings.length).toBeGreaterThan(80);
+    coalesceCityRuns(plan,plan.buildings.length-8);
+    expect(plan.buildings.reduce((s,b)=>s+Math.abs(b.square),0)/site.square).toBeGreaterThan(.7);
+    const ring=(p:Polygon)=>p.vertices.map(v=>[v.x,v.y] as [number,number]);
+    for(const b of plan.buildings){
+      const outside=polygonClipping.difference([ring(b)],[ring(site)]);
+      const outsideArea=outside.reduce((s,p)=>s+Math.abs(polygon(p[0]).square),0);
+      expect(outsideArea).toBeLessThan(1e-7);
+      const f=plan.frontages.get(b)!;
+      for(const other of plan.buildings)if(other!==b)expect(blocksAccess(b.centroid,f.at,other)).toBe(false);
+      for(const lane of plan.lanes)expect(blocksAccess(lane.a,lane.b,b)).toBe(false);
+    }
+  });
+
   it.each([
     [[0, 0], [40, 0], [40, 32], [0, 32]],
     [[0, 0], [31, -3], [42, 20], [21, 35], [-3, 24]],

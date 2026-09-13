@@ -4,6 +4,7 @@ import { buildingIds } from '../src/output/id-allocator.js';
 import { describe, expect, it } from 'vitest';
 import { generateSettlement, buildScene, Point, Polygon, WardType } from '../src/index.js';
 import { cityArchitecture } from '../src/generator/city-glyphs.js';
+import { ARTWORK_MANIFEST } from '../src/assets/artwork.js';
 import { blocksAccess, nearestOnSegment, segmentInside, drySegments, wardFrontages } from '../src/generator/city-frontage.js';
 import { Park } from '../src/wards/park.js';
 import { createAlleys } from '../src/wards/ward.js';
@@ -41,6 +42,10 @@ describe('city neighbourhoods', () => {
         const scene = buildScene(model);
         const temple = scene.layers.symbols.find(s => s.id === temples[0].id)!;
         expect(temple.buildingId).toBe(pois[0].properties!.building_id);
+        const nominal=ARTWORK_MANIFEST[temple.id].footprint!;
+        const limit=temple.id.includes('cathedral')?1.75:1.25;
+        expect(temple.scale*scene.metersPerUnit!/nominal[0]).toBeLessThanOrEqual(limit+1e-7);
+        expect((temple.scaleY??temple.scale)*scene.metersPerUnit!/nominal[1]).toBeLessThanOrEqual(limit+1e-7);
       }
     },
   );

@@ -3,7 +3,7 @@ import { landscapeHash } from '../assets/landscape-placement.js';
 import { buildingIds, IdAllocator } from '../output/id-allocator.js';
 import { ARTWORK_MANIFEST as REFINED_MANIFEST, ARTWORK_INK as REFINED_INK, cityGlyph } from '../assets/artwork.js';
 import { SeededRandom } from '../utils/random.js';
-import { frontagesFor, wardFrontages, polygonsOverlap, drySegments, blocksAccess, overlapsWater, type CityFrontage } from './city-frontage.js';
+import { frontagesFor, wardFrontages, polygonsOverlap, drySegments, blocksAccess, overlapsWater, nearestOnSegment, type CityFrontage } from './city-frontage.js';
 import { scoreBuildings, scoringReference, selectPois } from '../poi/poi-selector.js';
 import { Point } from '../types/point.js';
 import { WardType } from '../types/interfaces.js';
@@ -18,6 +18,7 @@ import type { PlacedSymbol } from './symbols.js';
  * This is the sole conversion for the refined manifest's metre scale floors;
  * fitting and collision remain in city mesh units. It is not a surveyed scale. */
 export function cityMetersPerUnit(model: Model): number {
+  if (model.params.development) return model.params.development.metresPerUnit;
   const b = computeLocalBounds(model);
   return computeSettlementScale(model.params.population).diameterMeters
     / Math.max(b.max_x - b.min_x, b.max_y - b.min_y);
@@ -29,6 +30,7 @@ export function cityMetersPerUnit(model: Model): number {
  * to suit frontage proportions. Inward edge half-planes also reject unsuitable concave lots. */
 export function fitCityGlyph(
   building: Polygon, id: string, metersPerUnit: number, frontage?: CityFrontage, minCoverage = 0.5,
+  maxPhysicalScale = Infinity,
 ): (PlacedSymbol & { paintedArea: number }) | null {
   const meta = REFINED_MANIFEST[id], ink = REFINED_INK[id];
   if (!meta?.footprint || !ink || building.length < 3 || Math.abs(building.square) < 1e-8) return null;
@@ -60,6 +62,7 @@ export function fitCityGlyph(
         const projection = (Math.abs(ex * ay - ey * ax) * iw + Math.abs(ex * ax + ey * ay) * ih) / (2 * length);
         factor = Math.min(factor, (distance - 0.002) / projection);
       });
+      factor = Math.min(factor, maxPhysicalScale / (metersPerUnit * Math.max(aspect, 1 / aspect)));
       if (!Number.isFinite(factor) || factor * Math.min(aspect, 1 / aspect) * metersPerUnit < meta.minScale) continue;
       const paintedArea = ink.area * fw * fh * factor * factor / (64 * 64);
       // A narrow or irregular lot stays a polygon instead of becoming a tiny
@@ -93,7 +96,7 @@ export function cityArchitecture(seed: number, biome = 'temperate') {
 /** Called once after refinement, water rejection and trimming. Re-running is
  * idempotent: retract only our linked replacements, then use surviving lots. */
 export function placeCityGlyphs(model: Model): void {
-  if (model.params.population <= 1000) return;
+  if (!model.usesCityLayout) return;
   model.symbols = model.symbols.filter(s => !s.building);
   model.glyphBackedBuildings.clear();
   const water = model.getWaterRings();
@@ -103,15 +106,20 @@ export function placeCityGlyphs(model: Model): void {
   }
   const metersPerUnit = cityMetersPerUnit(model);
   const architecture = cityArchitecture(model.params.seed, model.params.biome);
+  const templeMaxScale = architecture.temple.includes('cathedral') ? 1.75 : 1.25;
   const templeWard = model.patches.find(p => p.ward?.type === WardType.Cathedral)?.ward;
   if (templeWard && !templeWard.principalBuilding && templeWard.geometry.length) {
     // Reserve one substantial temple inside its own ward; its annexes are
     // ordinary architecture. The old ring subdivision is not several temples.
-    const site = templeWard.getCityBlock();
+    const site = templeWard.getPublicBuildingSite();
     let placed: ReturnType<typeof fitCityGlyph> = null;
     for (const line of wardFrontages(templeWard)) {
       const frontage = { ...line, at: new Point((line.a.x + line.b.x) / 2, (line.a.y + line.b.y) / 2) };
-      const candidate = fitCityGlyph(site, architecture.temple, metersPerUnit, frontage, 0.2);
+      // The artwork catalogue's nominal box is in metres. A parish temple
+      // may fit within its ward; it must not expand to fill that ward.
+      // Both city entry points use this cap. A capped temple may occupy only
+      // a small fraction of a large precinct, so no minimum ward coverage applies.
+      const candidate = fitCityGlyph(site, architecture.temple, metersPerUnit, frontage, 0, templeMaxScale);
       if (candidate && (!placed || candidate.paintedArea > placed.paintedArea)) placed = candidate;
     }
     if (placed) {
@@ -139,7 +147,8 @@ export function placeCityGlyphs(model: Model): void {
   const poiForms:Record<string,string>={inn:'inn',tavern:'shop-house',smithy:'workshop',stable:'workshop',shop:'shop-house',bathhouse:'bathhouse',guildhall:'guildhall',warehouse:'warehouse',guardhouse:'castle-barracks'};
   for (const patch of model.patches) {
     const ward = patch.ward;
-    if (!ward || [WardType.Park, WardType.Market, WardType.Water, WardType.Empty].includes(ward.type)) continue;
+    if (!ward || [WardType.Park, WardType.Water, WardType.Empty].includes(ward.type)
+      || (ward.type === WardType.Market && !model.params.development)) continue;
     const lines = wardFrontages(ward);
     const urbanity=cityUrbanity(model,patch);
     const palacePrincipal = ward.type === WardType.Administration && model.params.capitalNeeded
@@ -154,21 +163,43 @@ export function placeCityGlyphs(model: Model): void {
       const roll=landscapeHash(Math.round(building.centroid.x*10),Math.round(building.centroid.y*10),model.params.seed);
       const ruralHome=resolveGlyphFor(model.params.biome??'temperate',roll<.5?'sm-house':'sm-house-tiled');
       const home=urbanity<.45 && roll>.25?ruralHome:architecture.home;
+      let corner = !model.params.development;
+      if (model.params.development && ward.type === WardType.Patriciate) {
+        const nearby: typeof lines = lines.filter(line=>building.vertices.some(p=>Point.distance(p,nearestOnSegment(p,line.a,line.b))<=line.width/2+.15));
+        corner = nearby.some((a,i)=>nearby.slice(i+1).some(b=>{
+          const ax=a.b.x-a.a.x, ay=a.b.y-a.a.y, bx=b.b.x-b.a.x, by=b.b.y-b.a.y;
+          return Math.abs(ax*by-ay*bx)>Math.hypot(ax,ay)*Math.hypot(bx,by)*.65;
+        }));
+      }
       const id = building === temple ? architecture.temple
         : building === keep ? architecture.keep
           : building === palacePrincipal ? architecture.palace
           : use && poiForms[use] ? cityGlyph(poiForms[use],model.params.biome)
+          : ward.type === WardType.Market ? cityGlyph('shop-house',model.params.biome)
           : ward.type === WardType.Slum ? architecture.poor
-            : ward.type === WardType.Administration ? (model.params.capitalNeeded ? architecture.palaceWing : cityGlyph('guildhall',model.params.biome))
-              : ward.type === WardType.Patriciate ? architecture.wealthy
+            : ward.type === WardType.Administration ? (model.params.capitalNeeded ? architecture.palaceWing : model.params.development ? home : cityGlyph('guildhall',model.params.biome))
+              : ward.type === WardType.Patriciate ? (corner ? architecture.wealthy : home)
               : [WardType.Military, WardType.Castle].includes(ward.type) ? architecture.barracks
                 : ward.type === WardType.Harbour ? cityGlyph('warehouse',model.params.biome) : home;
       let best: ReturnType<typeof fitCityGlyph> = null;
       const plannedFrontage = ward.buildingFrontages.get(building);
       const candidates = frontagesFor(building, ward, plannedFrontage ? [plannedFrontage] : lines);
       for (const frontage of candidates) {
-        const candidate = fitCityGlyph(building, id, metersPerUnit, frontage, use || building === keep || building === palacePrincipal ? .25 : .5);
+        const candidate = fitCityGlyph(building, id, metersPerUnit, frontage,
+          building === temple ? 0 : use || building === keep || building === palacePrincipal ? .25 : .5,
+          building === temple ? templeMaxScale : Infinity);
+        // A courtyard is a site arrangement, not a miniature icon for every
+        // inn. Small urban inns occupy street houses; keep their POI identity.
+        if (candidate && model.params.development && REFINED_MANIFEST[id]?.courtyardVoids?.length
+          && Math.min(candidate.scale,candidate.scaleY??candidate.scale)*metersPerUnit<12.8) continue;
         if (candidate && (!best || candidate.paintedArea > best.paintedArea)) best = candidate;
+      }
+      if (!best && model.params.development && REFINED_MANIFEST[id]?.courtyardVoids?.length && building!==temple) {
+        const compactId = cityGlyph(use==='inn' ? 'shop-house' : 'row-house-a',model.params.biome);
+        for (const frontage of candidates) {
+          const candidate=fitCityGlyph(building,compactId,metersPerUnit,frontage);
+          if(candidate && (!best || candidate.paintedArea>best.paintedArea))best=candidate;
+        }
       }
       // A fallback footprint remains in tight corners; do not rotate the front
       // door away from its access just to increase the number of glyphs.

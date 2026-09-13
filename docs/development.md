@@ -4,6 +4,14 @@ Use a source checkout for development and review commands. The npm tarball conta
 compiled modules, source maps, TypeScript source, build inputs, public docs and
 artwork, but is not a complete clone of the development repository.
 
+## Shared appearance review
+
+`npm run review:settlements` produces the expanded density and appearance review
+at `output/appearance-review/index.html`: twelve maps at three populations and
+two seeds, shared biome/theme controls, equal-scale views and a 200,000-person
+example. Previews load as you scroll; click any map to zoom and pan through
+artwork rendered in a worker. See [shared settlement planning](settlement-planning.md).
+
 ## Build
 
 ```sh

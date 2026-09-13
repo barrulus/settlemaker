@@ -1,3 +1,4 @@
+import { BIOMES, normaliseBiome } from '../appearance/biomes.js';
 import {greenGround} from './greens-art.js';
 import { flora } from './landscape-art.js';
 import { fieldTile } from './farms-art.js';
@@ -31,8 +32,8 @@ for(const [id,m] of Object.entries(ART_META)) {
   }});
 }
 export const ARTWORK_INK = {...REFINED_INK,...ART_INK};
-export const BIOMES = ['temperate','desert','tundra','tropical','coastal'] as const;
-export function artworkBiome(b?: string): string { return BIOMES.includes(b as typeof BIOMES[number]) ? b! : 'temperate'; }
+export { BIOMES } from '../appearance/biomes.js';
+export function artworkBiome(b?: string): string { const biome = normaliseBiome(b); return biome === 'steppe' ? 'temperate' : biome; }
 // Commons keep their original surveyed shapes. The base IDs remain temperate
 // aliases, and every biome-specific catalogue SVG is available in the registry.
 for(const [base,g] of Object.entries(REFINED_GLYPHS)){

@@ -56,6 +56,9 @@ export interface SprawlArgs {
   isBuildable: (patch: Patch) => boolean;
   /** How many patches sprawl may claim (total budget minus the core). */
   budget: number;
+  /** Physical city districts grow contiguously before following distant roads. */
+  compact?: boolean;
+  seed?: number;
 }
 
 /**
@@ -98,6 +101,42 @@ export function assignSprawl(args: SprawlArgs): UrbanisationField {
   if (budget <= 0) return field;
 
   const candidates = patches.filter(p => p.zone === 'wilderness' && isBuildable(p));
+  if (args.compact) {
+    const available = new Set(candidates), built = new Set(inner);
+    const meanArea = inner.reduce((s,p)=>s+Math.abs(p.shape.square),0)/Math.max(1,inner.length);
+    const cityRadius = Math.max(coreRadius,Math.sqrt(meanArea*(inner.length+budget)/Math.PI));
+    const phase = (args.seed??0)*2.399963229728653;
+    const priority = new Map(candidates.map(p=>{
+      const c=p.shape.center, angle=Math.atan2(c.y,c.x);
+      // Road influence must reach the OUTER city, not expire near the small
+      // historic core. Broad corridors and coherent local variation shape an
+      // uneven outline while frontier growth keeps neighbourhoods connected.
+      const corridor = roads.reduce((best,road)=>{
+        const along=c.x*road.direction.x+c.y*road.direction.y;
+        const across=c.x*road.direction.y-c.y*road.direction.x;
+        return along<=0 ? best : Math.max(best,Math.sqrt(road.weight)*Math.exp(-Math.pow(across/(cityRadius*.28),2)));
+      },0);
+      const growth = .8+1.1*corridor+.06*Math.sin(2*angle+phase)+.04*Math.sin(3*angle-phase);
+      return [p,c.length/growth] as const;
+    }));
+    const frontier = new Set<Patch>();
+    const addNeighbours = (p: Patch) => {
+      for (const n of adjacency.neighboursOf(p)) if (available.has(n)) frontier.add(n);
+    };
+    inner.forEach(addNeighbours);
+    for (let claimed = 0; claimed < budget && frontier.size; claimed++) {
+      let chosen: Patch | undefined, best = Infinity;
+      for (const p of frontier) {
+        const neighbours = adjacency.neighboursOf(p).filter(n=>built.has(n)).length;
+        const score = priority.get(p)! - Math.min(3,neighbours)*cityRadius*.03;
+        if (score < best) { best = score; chosen = p; }
+      }
+      if (!chosen) break;
+      frontier.delete(chosen);available.delete(chosen);built.add(chosen);
+      chosen.zone = 'suburb';chosen.withinCity = true;addNeighbours(chosen);
+    }
+    return field;
+  }
   const base = new Map<Patch, number>();
   for (const p of candidates) base.set(p, field.scoreAt(p.shape.center));
 

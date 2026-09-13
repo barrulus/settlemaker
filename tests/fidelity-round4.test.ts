@@ -182,9 +182,11 @@ describe('fidelity round 4: probe path', () => {
     // geometry and alley paths intentionally change. Village hash stays pinned.
     const { svg } = generateFromBurg(aldford(1400), { seed: 9 });
     expect(svg.length).toBeGreaterThan(1000);
-    // Biome greens, softer flora, varied roofs and graded city gardens.
-    // Reviewed rendered output and verified exact repeatability before repinning.
-    expect(sha256(svg)).toBe('4f6060135b4cd74436846db2776b4ff7e1799e8952c2b77a32afa11de9b78727');
+    // Shared biome ground with paved city roads; urban street corridors and lane mouths are visible.
+    // Reviewed both Aldford fixtures and verified exact repeatability before repinning.
+    // Legacy temples now share the physical size cap. Reviewed the smaller
+    // temple and retained annex; other scene layers and repeatability match.
+    expect(sha256(svg)).toBe('bdae17be517a3a87878a196f7c7b1162fb85941fb7eee1e9bf4252e950e96873');
   });
 
   it('pins direct legacy generateFromBurg output at pop 800 (not the village engine)', () => {
@@ -289,9 +291,9 @@ describe('fidelity round 4: probe path', () => {
     // rule; this direct legacy API fixture does not use the village renderer.
     const { svg } = generateFromBurg(aldford(800), { seed: 1 });
     expect(svg.length).toBeGreaterThan(1000);
-    // Biome greens, softer flora, varied roofs and graded city gardens.
-    // Reviewed rendered output and verified exact repeatability before repinning.
-    expect(sha256(svg)).toBe('4bab5c22c6a3e0add2dd273eaf44992cc10cddae3f6aeb7430af747728181de4');
+    // Shared biome ground with paved city roads; urban street corridors and lane mouths are visible.
+    // Reviewed both Aldford fixtures and verified exact repeatability before repinning.
+    expect(sha256(svg)).toBe('1715e1dfd9d90439470194cd6a9892e39748a54fe6367d4fedb1d359dd398927');
   });
 });
 

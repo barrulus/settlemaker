@@ -113,7 +113,7 @@ export const refinedStyle = (tokens?: Record<string, string | number>): string =
 ].join('');
 
 /** Keep fallback colours identical to the selected CSS palette for SVG rasterizers. */
-export function resolveVarFallbacks(svg: string, tokens: Record<string, string | number>): string {
+export function resolveVarFallbacks(svg: string, tokens: Record<string, string | number>, material?: (color: string) => string): string {
   // The separator is captured and replayed verbatim: rewriting `,` as `, `
   // would change the bytes of every temperate village for no reason, and a
   // consumer diffing releases would have to prove that churn was cosmetic.
@@ -121,7 +121,8 @@ export function resolveVarFallbacks(svg: string, tokens: Record<string, string |
     /var\((--[a-z0-9-]+)(\s*,\s*)([^)]*)\)/gi,
     (whole, name: string, sep: string, _fallback: string) => {
       const resolved = tokens[name];
-      return resolved === undefined ? whole : `var(${name}${sep}${resolved})`;
+      return resolved !== undefined ? `var(${name}${sep}${resolved})`
+        : material ? `var(${name}${sep}${material(_fallback.trim())})` : whole;
     },
   );
 }

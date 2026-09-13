@@ -19,11 +19,11 @@ function makeBurg(overrides: Partial<AzgaarBurgInput> = {}): AzgaarBurgInput {
 }
 
 describe('svg render: fields and water', () => {
-  it('renders farm subplots with the pale field wash, not the loud green', () => {
+  it('renders farm subplots with the natural temperate field wash', () => {
     const { model } = generateFromBurg(makeBurg({ population: 12000 }), { seed: 42 });
     const svg = generateSvg(model);
-    // fieldFill for parchment = blend(0xfff2c8, 0x8fa26a, 0.18) = #ebe4b7
-    expect(svg).toContain('#fields .plot{fill:#ebe4b7');
+    // Shared temperate ground blended toward the regional common colour.
+    expect(svg).toContain('#fields .plot{fill:#a4c787');
   });
 
   it('renders oceanBearing water as one clipped geometry path (synthetic half-plane)', () => {
@@ -54,7 +54,7 @@ describe('svg render: fields and water', () => {
 
   it('keeps the data-bg contract for the tiler', () => {
     const { svg } = generateFromBurg(makeBurg(), { seed: 42 });
-    expect(svg).toMatch(/<rect data-bg="paper" x="[-\d.]+" y="[-\d.]+" width="[\d.]+" height="[\d.]+" fill="#fff2c8"\/>/);
+    expect(svg).toMatch(/<rect data-bg="paper" x="[-\d.]+" y="[-\d.]+" width="[\d.]+" height="[\d.]+" fill="#a3c98d"\/>/);
   });
 
   it('paints background before water before buildings', () => {
@@ -72,19 +72,11 @@ describe('svg render: fields and water', () => {
 });
 
 describe('svg render: roads', () => {
-  it('paints all casings before any core, arteries wider than roads', () => {
+  it('paints all road casings before their inner surfaces', () => {
     const { model, svg } = generateFromBurg(makeBurg({ population: 12000 }), { seed: 42 });
     expect(model.arteries.length).toBeGreaterThan(0);
-    // artery casing 2.4+0.6=3.00, artery core 2.40; road casing 1.6+0.6=2.20, core 1.60
-    const lastCasing = Math.max(
-      svg.lastIndexOf('stroke-width="3.00"'),
-      svg.lastIndexOf('stroke-width="2.20"'),
-    );
-    const firstCore = Math.min(
-      ...['stroke-width="2.40"', 'stroke-width="1.60"']
-        .map(s => svg.indexOf(s))
-        .filter(i => i >= 0),
-    );
+    const lastCasing = svg.lastIndexOf('class="casing"');
+    const firstCore = svg.indexOf('class="core"');
     expect(lastCasing).toBeGreaterThan(-1);
     expect(firstCore).toBeGreaterThan(lastCasing);
   });
@@ -127,8 +119,8 @@ describe('svg render: shadows, buildings, landmarks', () => {
     ward.type = WardType.Park;
     const svg = generateSvg(model);
 
-    // greenFill for parchment (default palette) = cssHex(0x8fa26a) = '#8fa26a'
-    const greenFill = '#8fa26a';
+    // Shared natural temperate common colour.
+    const greenFill = '#a8bf6d';
     const paths = ward.geometry.map(poly => {
       const [first] = poly.vertices;
       return `M${first.x.toFixed(2)},${first.y.toFixed(2)}`;

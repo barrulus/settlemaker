@@ -1,3 +1,4 @@
+import { biomeThemeFor } from '../appearance/biomes.js';
 import type { Palette } from '../types/interfaces.js';
 
 export const PALETTE_DEFAULT: Palette  = { paper: 0xccc5b8, light: 0x99948a, medium: 0x67635c, dark: 0x1a1917, water: 0x8fbbc9, green: 0xa5a393 };
@@ -12,7 +13,7 @@ export const PALETTE_SIMPLE: Palette    = { paper: 0xffffff, light: 0x000000, me
 /** MFCG-style warm parchment. Values sampled from watabou MFCG 0.11.5 renders. */
 export const PALETTE_PARCHMENT: Palette = { paper: 0xfff2c8, light: 0xd5ad6e, medium: 0xa08a5a, dark: 0x4a3f2a, water: 0x85bcb2, green: 0x8fa26a };
 
-export const PALETTES: Record<string, Palette> = {
+const NAMED_PALETTES = {
   default: PALETTE_PARCHMENT,
   classic: PALETTE_DEFAULT,
   parchment: PALETTE_PARCHMENT,
@@ -23,16 +24,22 @@ export const PALETTES: Record<string, Palette> = {
   ancient: PALETTE_ANCIENT,
   colour: PALETTE_COLOUR,
   simple: PALETTE_SIMPLE,
-};
+} satisfies Record<string, Palette>;
 
-/**
- * Biome → default palette. Both current palettes are temperate-ish; the
- * table is the extension point for artist-supplied biome palettes. Unknown
- * or missing biome → default.
- */
+export const PALETTES: Record<string, Palette> = NAMED_PALETTES;
+export type ThemeName = keyof typeof NAMED_PALETTES;
+
+export function paletteForTheme(name: ThemeName): Palette {
+  if (!Object.hasOwn(PALETTES, name)) throw new RangeError(`Unknown settlement theme "${String(name)}".`);
+  return PALETTES[name];
+}
+
+/** Natural regional colours shared by both engines. Explicit palettes override these. */
 export function paletteForBiome(biome?: string): Palette {
-  const table: Record<string, Palette> = {
-    // e.g. desert: PALETTES.desert — when an artist supplies one
+  const theme = biomeThemeFor(biome);
+  const color = (hex: string) => parseInt(hex.slice(1), 16);
+  return {
+    paper: color(theme.ground), light: 0xe8dcc0, medium: 0x8a6f4a, dark: 0x33262e,
+    water: color(theme.water), green: color(String(theme.tokens?.['--sm-common'] ?? '#a8bf6d')),
   };
-  return (biome != null && Object.hasOwn(table, biome) ? table[biome] : undefined) ?? PALETTES.default;
 }
