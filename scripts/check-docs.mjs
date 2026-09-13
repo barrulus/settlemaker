@@ -12,7 +12,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 const read = path => readFileSync(resolve(root, path), 'utf8');
 const pages = ['README.md', 'docs/README.md', 'docs/getting-started.md', 'docs/api.md',
-  'docs/geojson.md', 'docs/scene-schema.md', 'docs/url-api.md', 'docs/water-context-v1.md',
+  'docs/appearance.md', 'docs/settlement-planning.md', 'docs/geojson.md', 'docs/scene-schema.md', 'docs/url-api.md', 'docs/water-context-v1.md',
   'docs/skins.md', 'docs/current-symbol-library.md', 'docs/artwork-integration.md',
   'docs/fmg-embed-zoom.md', 'docs/development.md', 'docs/test-urls.md', 'docs/gallery.md',
   'docs/schema-v3.md', 'symbols/copperline/README.md', `docs/releases/${pkg.version}.md`];
@@ -77,6 +77,8 @@ function run(name, code) {
 const quick = blocks('README.md', 'js');
 run('readme', quick.join('\n') + '\nif (!result.svg.includes("<svg") || !moonVillage.svg.includes("#68748c")) throw new Error("README output missing");');
 for (const [i, code] of blocks('docs/getting-started.md', 'js').entries()) run(`getting-started-${i}`, code);
+for (const [i, code] of blocks('docs/appearance.md', 'js').entries()) run(`appearance-${i}`, code);
+run('physical-planning', blocks('docs/settlement-planning.md', 'js').join('\n'));
 const html = blocks('docs/getting-started.md', 'html')[0];
 const browser = html.match(/<script type="module">([\s\S]*?)<\/script>/)[1]
   .replace("'./assets/settlemaker.browser.js'", JSON.stringify(pathToFileURL(join(root, 'dist/settlemaker.browser.js')).href));

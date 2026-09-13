@@ -46,8 +46,8 @@ import {
   type Lane, type Lot, type VillageModel
 } from './types.js';
 
-/** The band this engine serves. Above it, the existing engine runs. */
-export const VILLAGE_POP_CEILING = 1000;
+/** Automatic selection boundary; explicitly requested villages may exceed it. */
+export { VILLAGE_POP_CEILING } from '../input/settlement-engine.js';
 
 // Bounded demand search: normally compare four roads, broaden only on failure.
 const GROWTH_STEP_LIMIT = 96;
@@ -65,6 +65,7 @@ function crossesLane(a: Point[], b: Point[]): boolean {
 
 export function generateVillage(
   input: AzgaarBurgInput, seed: number, trace?: LotTrace,
+  planning?: { landscape?: boolean; occupancy?: number },
 ): VillageModel {
   const rng = new SeededRandom(seed);
   const site = buildSite(input, seed);
@@ -73,6 +74,9 @@ export function generateVillage(
   // One dwelling family per village: the deck is built per (biome,
   // population, seed), drawing the village's single dwelling glyph here.
   const { entries: deck, dropped } = buildDeck(site.biome, site.population, rng);
+  if (planning?.occupancy !== undefined) for (const entry of deck) {
+    if (entry.occupancy > 0 && !entry.cap) entry.occupancy = planning.occupancy;
+  }
   if (dropped.length > 0) {
 
     diagnostics.push(`deck dropped (no manifest entry): ${dropped.join(', ')}`);
@@ -327,7 +331,9 @@ export function generateVillage(
     );
   }
 
-  const dressing = dressVillage({
+  const dressing: ReturnType<typeof dressVillage> = planning?.landscape === false ? {
+    edgeStyle: 'none', crofts: [], fields: [], fieldEdges: [], vegetation: [], pois: [], accessLanes: [], diagnostics: [],
+  } : dressVillage({
     site, green, lanes: relaxed, lots: survivingLots, buildings: spend.buildings,
     builtRadiusM: lotRadiusM, f0, rng,
   });

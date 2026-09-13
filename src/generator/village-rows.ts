@@ -630,7 +630,7 @@ export function materialiseWithFallback(
 
 /** Stamp dwelling rows for a !rowHousing settlement. No-op otherwise. */
 export function stampVillageRows(model: Model, allowanceBase: number): void {
-  if (rowHousing(model.params.population)) return;
+  if (model.usesCityLayout || rowHousing(model.params.population)) return;
 
   let allowance = allowanceBase - model.countOrdinaryBuildingsPublic();
 

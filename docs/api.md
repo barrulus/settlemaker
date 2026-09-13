@@ -1,16 +1,34 @@
 # Library API
 
+Development preview: the [shared physical planner](settlement-planning.md) adds
+`development` presets, resident accounting and one metre-based output model.
+The legacy API and contracts documented below remain available.
+
 The normal entry point is `generateSettlement(burg, options?)`. It returns
-synchronously and selects the planner by population. Import functions and types
+synchronously and selects the planner explicitly or, by default, by population. Import functions and types
 from `settlemaker`; the published declarations are the complete reference.
+
+> Shared appearance and explicit selection are unreleased additions after npm 3.0.1.
 
 ## Engine selection
 
 | Entry point | Planner | Result |
 | --- | --- | --- |
-| `generateSettlement(burg, options)` | Village at population ≤ `VILLAGE_POP_CEILING` (1,000); city above it | Discriminated result: `kind: 'village'` or `'settlement'`. |
+| `generateSettlement(burg, options)` | `burg.engine` or `options.engine`; automatic by default (village ≤1,000, city above) | Discriminated result: `kind: 'village'` or `'settlement'`. |
 | `generateFromBurg(burg, options)` | City, regardless of population | City result without a `kind` discriminator. |
 | `generateVillage(burg, seed)` | Village | `VillageModel`; call `renderVillage` and `generateVillageGeoJson` separately. |
+
+Set `burg.engine` to `'auto'`, `'village'` or `'city'`. `options.engine` overrides
+that saved choice for one call; `'auto'` restores population-based selection.
+For example, `{ population: 2000, engine: 'village' }` selects the village planner,
+and `{ population: 800, engine: 'city' }` selects the city planner. Population
+still drives demand. Unknown selectors throw rather than silently choosing an engine.
+The lower-level entry points always use their own planner. For compatibility,
+small direct `generateFromBurg` calls retain the earlier compact layout unless
+`burg.engine: 'city'` explicitly enables urban plots and native city building art.
+`GenerationParams.cityLayout` exposes this choice for manually constructed models.
+Keep `result.kind === 'settlement'` checks for cities; that existing discriminator
+has not changed. Coordinate units follow the selected engine, not population.
 
 Use positive populations. The high-level API is typed but is not a complete
 validator of arbitrary input JSON. Validate external data in your application;
@@ -24,7 +42,8 @@ Azgaar map or database to use it.
 | Field | Type | Contract |
 | --- | --- | --- |
 | `name` | `string` | Required; also used to derive the default seed. |
-| `population` | `number` | Required; selects the planner and drives the building budget. |
+| `population` | `number` | Required; drives the building budget and automatic planner selection. |
+| `engine` | `'auto'`, `'village'`, `'city'` | Optional saved planner choice; default `auto`. |
 | `port` | `boolean` | Required; requests harbour/jetty infrastructure. Does not supply water. |
 | `citadel` | `boolean` | Required; requests a city citadel. |
 | `walls` | `boolean` | Required; requests fortifications. Village and city wall planners differ. |
@@ -107,35 +126,44 @@ must not be guessed from the village metre convention.
 | Option | Used by | Meaning |
 | --- | --- | --- |
 | `seed` | Both | Explicit numeric seed; otherwise derived from the settlement name. |
+| `engine` | Both | Overrides `burg.engine` for `generateSettlement`. |
+| `theme` | Both | A `ThemeName` such as `night` or `blueprint`; omitted uses natural biome colours. |
+| `style` | Both | Partial `RenderTheme` colour overrides after palette/skin and `svg.theme`. |
 | `skin` | Both | A validated handle from `createSkin`; selects artwork/materials and custom biome inheritance. |
 | `village.pxPerMetre` | Village | SVG display scale; default 4. Model and GeoJSON stay in metres. |
 | `village.theme` | Village | A complete `VillageTheme`; use `villageThemeFor` to start from a preset. |
-| `svg.palette` | City | A `PALETTES` entry. |
-| `svg.theme` | City | Partial `RenderTheme` overrides. |
+| `svg.palette` | Both | A custom `Palette` or `PALETTES` entry; takes precedence over named `theme`. |
+| `svg.theme` | Both | Legacy location for shared colour overrides; city geometry style fields remain city-specific. |
 | `svg.assetSet` | City | Explicit low-level artwork set; overrides skin artwork. |
 | `svg.symbols` | City | Defaults true; false hides placed symbols/marks and exposes building polygons. Vegetation remains. |
 | `svg.padding` | City | Bounds padding in local units; default 20. |
 | `svg.clipId` | City | Frame clipping ID. Does not namespace all other SVG IDs. |
-| `svg.skin`, `svg.skinBiome` | City | Lower-level skin selection; prefer the top-level `skin` for shared generation. |
+| `svg.skin`, `svg.skinBiome` | Both | Lower-level skin selection; prefer the top-level `skin` for shared generation. |
 | `geojson.generatedAt` | City | Override the output timestamp. |
 | `geojson.padding` | City | Bounds padding; match `svg.padding` if you change it. |
 | `geojson.settlemakerVersion` | City | Metadata override for specialised consumers; normally leave it alone. |
 
-Options are grouped by renderer, but the TypeScript signature does **not** infer
-an engine from the numeric population. City options are ignored on the village
-branch and village options on the city branch. `svg.shift` is a low-level
-rendering option; `generateFromBurg` calculates and supplies its own coastal
-shift, so callers should use the returned `originShift` for subsequent renders.
+Colour controls are shared. Geometry-specific options stay with their planner:
+village road widths come from physical road classes, while city `arteryWidth`,
+`roadWidth`, `casingDelta` and `seamStroke` are drawing controls. Shared `shoreWidth`
+is interpreted in each renderer's local units; village `shadowOffset` is in metres.
+`village.theme` is a legacy complete override for village ground, water, shadows
+and any tokens it specifies; it is applied last. `svg.shift` is a low-level city
+option; high-level generation supplies its calculated `originShift`.
 
-Available city palette keys are `default`, `classic`, `parchment`, `blueprint`,
-`bw`, `ink`, `night`, `ancient`, `colour`, `simple`. Palette controls affect the
-city renderer's exposed styling; native artwork also carries material tokens.
-Use a skin when you need control across both planners and the full artwork set.
+Named themes are `default`, `classic`, `parchment`, `blueprint`, `bw`, `ink`,
+`night`, `ancient`, `colour`, `simple`. `default` explicitly selects parchment;
+omitting the theme selects natural regional colours. Named palettes recolour
+native material tokens and procedural artwork in both planners. Fine-grained
+`style` fields only affect their documented roles; they are not arbitrary CSS.
 
-The five named village themes are `temperate`, `desert`, `tundra`, `tropical`,
-`coastal`. Changing `village.theme` changes appearance without selecting a new
-building deck. Changing the input biome can change layout. Skin bases also accept
-`steppe`; it is not a sixth standalone village theme or downloadable collection.
+The shared biome API is `BIOMES`, `normaliseBiome` and `biomeThemeFor`.
+The five natural appearances are `temperate`, `desert`, `tundra`, `tropical`,
+`coastal`. The old `VILLAGE_BIOMES`, `normaliseVillageBiome` and `villageThemeFor`
+exports remain aliases. FMG names such as `hot desert` and `taiga` are normalised
+in both planners. `steppe` retains its planning meaning and uses temperate colours.
+
+See [shared appearance](appearance.md) for precedence, examples and visual review.
 
 ## Results and diagnostics
 

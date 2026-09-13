@@ -1,5 +1,9 @@
 # GeoJSON, coordinates and identity
 
+Development preview: the [shared physical planner](settlement-planning.md) adds
+`development` presets, resident accounting and one metre-based output model.
+The legacy API and contracts documented below remain available.
+
 Both planners return a `FeatureCollection` with a top-level `metadata` foreign
 member. The current `metadata.schema_version` is **4**. Filter features by
 `properties.layer`, then inspect the geometry type and the fields for that engine.
@@ -49,7 +53,8 @@ changing `village.pxPerMetre` does not change GeoJSON coordinates.
 | `degraded_flags` | Dropped city walls/citadel requests; empty for villages. |
 | `local_origin_shift` | Output translation. Do not apply it again to already generated output. |
 
-City outputs above population 1,000 also carry `building_capacity`:
+City outputs above population 1,000, and explicitly selected cities at any
+population, also carry `building_capacity`:
 `basis: 'ordinary-building-budget'`, `target`, `placed`, `shortfall`, `corePlaced`,
 `outerPlaced`, and `status: 'met' | 'shortfall'`. `corePlaced + outerPlaced = placed`;
 `shortfall = max(0, target - placed)`. These are ordinary-building counts, not a
@@ -186,3 +191,10 @@ fields and unfamiliar layers that your application does not use. A future
 breaking structure change needs a new schema version. Additive artwork or road
 fields need not change that number. The old [schema-v3 note](schema-v3.md) is a
 historical migration record, not the schema check for current output.
+
+### City local streets
+
+The city `streetType: 'alley'` layer includes reserved streets between urban
+blocks, subdivision lanes and their short connections to street centrelines.
+Their geometry matches the SVG scene; `width` describes the reserved surface in
+city-local units. These streets do not carry external route IDs of their own.

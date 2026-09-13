@@ -81,6 +81,15 @@ if (result.kind === 'village') {
 `mapToGenerationParams(burg, seed)` before `new Model(params).generate()`.
 See [lower-level rendering](scene-schema.md#render-an-existing-city-model).
 
+## Appearance and planner choice
+
+In this development source, add `engine: 'village'` or `engine: 'city'` to the
+burg to choose independently of population. The default remains `auto`.
+Pass `{ theme: 'night' }` as a generation option to theme either planner; omit it
+for shared natural biome colours. See [appearance and engine selection](appearance.md)
+for examples, compatibility details and the local visual review. These additions
+are not in the published npm 3.0.1 package yet.
+
 ## Browser applications
 
 With a bundler, use the same package import as Node:

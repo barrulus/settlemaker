@@ -100,7 +100,7 @@ export function wardFrontages(ward: Ward): Array<WardLane & { kind: 'street' | '
       if (ward.model.wall?.bordersBy(ward.patch, a, b)) return;
       const neighbour = ward.model.getNeighbour(ward.patch, a);
       if (neighbour && ward.model.waterbody.includes(neighbour)) return;
-      lines.push({ a, b, width: ward.insetScale, kind: 'street' });
+      lines.push({ a, b, width: ward.streetWidthForEdge(a, b), kind: 'street' });
     });
   }
   const water = ward.model.getWaterRings();

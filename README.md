@@ -2,10 +2,16 @@
 
 **Generate settlement maps. Bring your own world.**
 
+Development preview: the [shared physical planner](docs/settlement-planning.md),
+shared themes and explicit engine selection below are unreleased. npm 3.0.1 and the release gallery images still show the previous
+behaviour. See [appearance and engine selection](docs/appearance.md) for the new
+controls and a local visual comparison.
+
 SettleMaker is a procedural map engine for Node.js and browsers. Give it a
 settlement's population, roads, terrain and seed; get an SVG map, local GeoJSON
-and a model you can inspect. It draws small villages and large cities through
-separate planners, with shared input and output entry points.
+and a model you can inspect. The new physical planner combines dispersed village
+plots and dense city blocks with shared landscape, rendering, resident accounting
+and GeoJSON in metres. Legacy entry points remain available.
 
 The bundled artwork depicts medieval settlements. Portable **skins** can replace
 buildings, vegetation, field textures and material colours for your own setting,
@@ -59,7 +65,9 @@ await writeFile('ashford.geojson', JSON.stringify(result.geojson, null, 2));
 console.log(result.kind); // 'village'
 ```
 
-For a city, change `population` to a value above 1,000. `walls`, `citadel`,
+For a city of any size, set `engine: 'city'` on the burg. Set `engine: 'village'`
+to keep a large settlement rural. Omitting it retains automatic selection at
+1,000 people. `walls`, `citadel`,
 `plaza` and `temple` describe requested features; their treatment depends on the
 planner and available geometry. Use `generateSettlement` as your normal entry
 point. `generateFromBurg` explicitly invokes the city planner, even for a small
@@ -83,9 +91,10 @@ The engine needs no rendering service or runtime artwork downloads.
 | `originShift` | The city's optional coastal output translation; zero for villages. |
 | `waterContextResult` | Diagnostics when using the supported measured village-water contract. |
 
-At population **1–1,000**, the village planner builds roads, lots, dwellings,
-greens and landscape in metres. Above **1,000**, the city planner builds wards,
-streets, lots, fortifications and outskirts in its own local units. Both return
+With `engine: 'auto'` (the default), population **1–1,000** selects the village
+planner; larger populations select the city planner. Explicit selection removes
+that boundary: villages build roads, lots, dwellings, greens and landscape in
+metres, while cities build wards, fortifications and outskirts in mesh units. Both return
 SVG and GeoJSON, but their feature sets, IDs and model types differ.
 
 Layouts and SVGs are repeatable for the same inputs, seed, rendering options and
@@ -121,6 +130,27 @@ water is visible.
 
 [Road and water inputs](https://github.com/barrulus/settlemaker/blob/v3.0.1/docs/api.md#roads)
 · [Measured-water contract](https://github.com/barrulus/settlemaker/blob/v3.0.1/docs/water-context-v1.md)
+
+## Shared themes and independent population
+
+Using `burg` from the first example:
+
+```js
+const largeVillage = generateSettlement(
+  { ...burg, population: 2000, engine: 'village', biome: 'desert' },
+  { seed: 2, theme: 'blueprint' },
+);
+const smallCity = generateSettlement(
+  { ...burg, population: 800, engine: 'city', biome: 'desert' },
+  { seed: 2, theme: 'blueprint' },
+);
+```
+
+Both planners use the same regional ground, water and material colours. Omit
+`theme` for natural biome colours, or choose `night`, `blueprint`, `parchment`,
+`classic`, `bw`, `ink`, `ancient`, `colour` or `simple`. `default` is an alias for
+`parchment`. Themes recolour the artwork without changing settlement geometry;
+biomes can change both artwork and planning. Skins replace artwork for your setting.
 
 ## Make it your own
 

@@ -75,7 +75,7 @@ function faithSpecFor(site: Site): LandmarkSpec {
  * The catalogue, in the fixed placement order the design calls for: faith,
  * then inn, then manor. Each entry's glyph is resolved for the biome
  * (`sm-cathedral` deliberately excluded -- it is city-scale and the
- * village population ceiling is 1000, so it can never legitimately place).
+ * village landmark policy excludes cathedrals even when a large village is explicitly selected).
  */
 function specsFor(site: Site): LandmarkSpec[] {
   return [

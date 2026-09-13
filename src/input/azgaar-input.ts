@@ -1,3 +1,5 @@
+import type { SettlementEngine } from './settlement-engine.js';
+import { normaliseVillageBiome } from '../village/theme.js';
 import type { WaterContextV1 } from './water-context.js';
 import { Point } from '../types/point.js';
 import type { GenerationParams, RoadEntry, RouteKind, RouteRelief } from '../generator/generation-params.js';
@@ -34,6 +36,8 @@ export interface AzgaarBurgInput {
   waterContext?: WaterContextV1;
   name: string;
   population: number;
+  /** Defaults to auto: village through 1000 people, city above it. */
+  engine?: SettlementEngine;
   port: boolean;
   citadel: boolean;
   walls: boolean;
@@ -261,7 +265,8 @@ export function mapToGenerationParams(
     ...(burg.oceanBearing != null ? { oceanBearing: burg.oceanBearing } : {}),
     ...(burg.port === true && burg.harbourSize != null ? { harbourSize: burg.harbourSize } : {}),
     ...(burg.urbanDensity != null ? { urbanDensity: burg.urbanDensity } : {}),
-    ...(burg.biome != null ? { biome: burg.biome } : {}),
+    ...(burg.engine === 'city' ? { cityLayout: true } : {}),
+    ...(burg.biome != null ? { biome: normaliseVillageBiome(burg.biome) } : {}),
     ...(burg.coastlineGeometry != null
       ? { coastlineGeometry: burg.coastlineGeometry.map(ring => ring.map(p => new Point(p.x, p.y))) }
       : {}),

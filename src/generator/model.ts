@@ -1,3 +1,5 @@
+import { connectCityLanes } from './city-streets.js';
+import { VILLAGE_POP_CEILING } from '../input/settlement-engine.js';
 import { cityUrbanity } from './city-character.js';
 import { Point } from '../types/point.js';
 import { Polygon } from '../geom/polygon.js';
@@ -125,6 +127,11 @@ function rescueDetachedPier(pier: Polygon, inWater: (p: Point) => boolean): Poly
 }
 
 export class Model {
+  /** Legacy low-population direct calls keep their original layout unless explicitly selected as cities. */
+  get usesCityLayout(): boolean {
+    return this.params.cityLayout === true || this.params.population > VILLAGE_POP_CEILING;
+  }
+
   rng: SeededRandom;
 
   private nPatches: number;
@@ -245,7 +252,7 @@ export class Model {
     this.plazaNeeded = params.plazaNeeded;
     this.citadelNeeded = params.citadelNeeded;
     this.wallsNeeded = params.wallsNeeded;
-    this.baseMinSqScale = params.textureScaleOverride ?? baseScaleForYield(perPatchDensity(params.population));
+    this.baseMinSqScale = params.textureScaleOverride ?? baseScaleForYield(perPatchDensity(params.development?.texturePopulation ?? params.population));
     this.minSqScale = this.baseMinSqScale;
 
     if (this.wallsNeeded && params.population < MIN_POPULATION_FOR_WALLS) {
@@ -441,7 +448,7 @@ export class Model {
     // (lots are emitted whole instead of shrunk to an inscribed rectangle).
     // Measured, seeds 1-5, pop 1200/4000/10000: radius 39.60/55.33/78.87 ->
     // 28.95/39.98/56.92, coverage 0.433/0.507/0.523 -> 0.578/0.695/0.689.
-    const s0 = Math.sqrt(patchAreaForDemand(this.params.population));
+    const s0 = Math.sqrt(patchAreaForDemand(this.params.development?.texturePopulation ?? this.params.population)) * (this.params.development?.landScale ?? 1);
     this.cellSize = s0;
     const coreR = s0 * Math.sqrt(this.nCore / Math.PI);
     // Classify water against the estimated core radius before core
@@ -451,8 +458,9 @@ export class Model {
     // the synthetic ring's radius is chosen for this pass; classifyWater
     // just reads the cached rings back.
     this.ensureWaterRings(coreR);
-    const uniformR = 4 * coreR;
-    const maxR = 12 * coreR;
+    const uniformR = this.params.development
+      ? Math.max(4 * coreR, s0 * Math.sqrt(this.nPatches / Math.PI) * 1.3) : 4 * coreR;
+    const maxR = Math.max(12 * coreR, uniformR * 2);
     const points: Point[] = [new Point(0, 0)];
     let r = s0 * 0.6;
     for (let i = 1; r < maxR && i < 20000; i++) {
@@ -689,7 +697,7 @@ export class Model {
     // which is what the constant always meant; villages keep the literal 8
     // (their cell size is unchanged, and their output must stay byte-
     // stable).
-    const mergeDist = rowHousing(this.params.population)
+    const mergeDist = this.usesCityLayout || rowHousing(this.params.population)
       ? JUNCTION_MERGE_FRACTION * this.cellSize
       : 8;
     const patchesToOptimize = this.citadel === null
@@ -1241,6 +1249,8 @@ export class Model {
       // so core (inner.length) + citadel (1) + sprawl claimed up to this
       // budget never exceeds nPatches (and so MAX_PATCHES).
       budget: Math.max(0, this.nPatches - this.inner.length - (this.citadel !== null ? 1 : 0)),
+      compact: this.params.development !== undefined,
+      seed: this.params.seed,
     });
 
     // The citadel patch sits outside `this.inner` (buildPatches selects it
@@ -1499,7 +1509,7 @@ export class Model {
 
   // Phase 6: Build geometry
   private buildGeometry(): void {
-    const city = this.params.population > 1000;
+    const city = this.usesCityLayout;
     for (const patch of this.patches) {
       if (patch.ward && !this.waterbody.includes(patch)) {
         if (city && patch.ward instanceof CommonWard) continue;
@@ -1523,6 +1533,7 @@ export class Model {
     // runtime import would close a cycle. village-rows.ts subtracts the
     // survivor count itself via `countOrdinaryBuildingsPublic()`.
     stampVillageRows(this, buildingBudget(this.params.population, this.params.urbanDensity));
+    connectCityLanes(this);
     placeCityGlyphs(this);
   }
 
@@ -1538,8 +1549,8 @@ export class Model {
     const hasOuter = this.patches.some(p => p.zone !== 'core' && p.ward instanceof CommonWard);
     const maximumCore = this.params.population <= 10000 ? Infinity
       : core.filter(p => p.ward instanceof CommonWard).length * perPatchDensity(this.params.population) * 1.05 + fixed(true);
-    const coreTarget = hasOuter ? Math.min(target * core.length / this.nPatches,
-      maximumCore) : target;
+    const coreTarget = this.params.development ? Math.min(target, this.params.development.coreBuildings)
+      : hasOuter ? Math.min(target * core.length / this.nPatches, maximumCore) : target;
     this.cityCoreBuildingTarget = Math.ceil(coreTarget);
     for (const [inside, budget] of [[true, coreTarget], [false, target - coreTarget]] as const) {
       const wards = this.patches.filter(p => (p.zone === 'core') === inside && p.ward instanceof CommonWard
@@ -1589,7 +1600,7 @@ export class Model {
    * approximate on coasts).
    */
   private refineDensity(): void {
-    if (this.params.population > 1000) return; // city rows already use explicit ward demand and a legibility floor
+    if (this.usesCityLayout) return; // city rows already use explicit ward demand and a legibility floor
     if (!rowHousing(this.params.population)) return; // village dwellings are stamped, not subdivided — see village-rows.ts
     const target = buildingBudget(this.params.population, this.params.urbanDensity);
     // The pass exists to make a settlement house its people, and
@@ -1768,7 +1779,7 @@ export class Model {
     if (this.getWaterRings().length === 0) return;
 
     const inWater = (p: Point): boolean => this.isWaterAt(p);
-    const drowned = (poly: Polygon): boolean => this.params.population > 1000
+    const drowned = (poly: Polygon): boolean => this.usesCityLayout
       ? overlapsWater(poly, this.getWaterRings())
       : inWater(poly.center) || poly.vertices.some(v => inWater(v));
 
@@ -1820,6 +1831,12 @@ export class Model {
    */
   private applyBuildingBudget(): void {
     const budget = buildingBudget(this.params.population, this.params.urbanDensity);
+    if (this.params.development) {
+      // Physical demand has already chosen the block grain. Preserve every
+      // house in its street row; the resident allocator can leave spare
+      // capacity instead of merging roofs or deleting houses to fit a census.
+      return;
+    }
 
     // Sprawl (suburb/satellite, plus the much larger farm ring now kept by
     // buildWalls' radius*12 cull) shares this.patches with the walled core.

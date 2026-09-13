@@ -241,6 +241,7 @@ export function beltPolygon(
  */
 export function regionHull(
   green: Green, belt: Point[], targetAreaM2: number, rng: SeededRandom,
+  maxDepthM = FIELD_REGION_DEPTH_MAX_M,
 ): Point[] {
   const n = FIELD_REGION_OUTER_VERTICES;
   const bearings: number[] = [];
@@ -269,7 +270,7 @@ export function regionHull(
     return new Point(green.centre.x + d.x * rad, green.centre.y + d.y * rad);
   }));
   let lo = FIELD_REGION_DEPTH_MIN_M;
-  let hi = FIELD_REGION_DEPTH_MAX_M;
+  let hi = maxDepthM;
   if (polygonArea(hullAt(hi)) - beltArea <= targetAreaM2) return hullAt(hi);
   if (polygonArea(hullAt(lo)) - beltArea >= targetAreaM2) return hullAt(lo);
   for (let i = 0; i < 40; i++) {
@@ -362,10 +363,11 @@ interface LaneSeg {
   clearanceM: number;
 }
 interface Obstacles {
-  claims: Obstacle[];
-  segs: LaneSeg[];
+  cells: Map<string, { claims: Obstacle[]; segs: LaneSeg[] }>;
   water: Point[][];
 }
+
+const OBSTACLE_CELL_M = 64;
 
 function buildObstacles(lots: Lot[], crofts: Croft[], lanes: Lane[], water: Point[][], reservations: Point[][] = []): Obstacles {
   const claims: Obstacle[] = [];
@@ -386,7 +388,24 @@ function buildObstacles(lots: Lot[], crofts: Croft[], lanes: Lane[], water: Poin
       segs.push({ a: lane.points[i - 1], b: lane.points[i], clearanceM });
     }
   }
-  return { claims, segs, water };
+  const cells: Obstacles['cells'] = new Map();
+  const insert = (points: Point[], margin: number, add: (cell: { claims: Obstacle[]; segs: LaneSeg[] }) => void) => {
+    const minX = Math.floor((Math.min(...points.map(p => p.x)) - margin) / OBSTACLE_CELL_M);
+    const maxX = Math.floor((Math.max(...points.map(p => p.x)) + margin) / OBSTACLE_CELL_M);
+    const minY = Math.floor((Math.min(...points.map(p => p.y)) - margin) / OBSTACLE_CELL_M);
+    const maxY = Math.floor((Math.max(...points.map(p => p.y)) + margin) / OBSTACLE_CELL_M);
+    for (let x = minX; x <= maxX; x++) for (let y = minY; y <= maxY; y++) {
+      const key = `${x},${y}`;
+      let cell = cells.get(key);
+      if (!cell) { cell = { claims: [], segs: [] }; cells.set(key, cell); }
+      add(cell);
+    }
+  };
+  // Keep original order within each bucket: the first blocker controls the
+  // clipping plane, so indexing must not change geometry or random draws.
+  for (const claim of claims) insert(claim.poly, FIELD_CLAIM_MARGIN_M, cell => cell.claims.push(claim));
+  for (const seg of segs) insert([seg.a, seg.b], seg.clearanceM, cell => cell.segs.push(seg));
+  return { cells, water };
 }
 
 /**
@@ -398,7 +417,9 @@ function blockerAt(
   p: Point, obs: Obstacles,
 ): { kind: 'claim'; obstacle: Obstacle; } | { kind: 'lane'; seg: LaneSeg; } | { kind: 'water'; } | null {
   if (inAnyWater(p, obs.water)) return { kind: 'water' };
-  for (const claim of obs.claims) {
+  const cell = obs.cells.get(`${Math.floor(p.x / OBSTACLE_CELL_M)},${Math.floor(p.y / OBSTACLE_CELL_M)}`);
+  if (!cell) return null;
+  for (const claim of cell.claims) {
     if (dist(p, claim.centre) > claim.radiusM + FIELD_CLAIM_MARGIN_M) continue;
     // Inside, or close enough to it that §5.7's 0.25 m overlap slack would
     // call it inside. The test margin is HALF the cut margin, so the edge a
@@ -409,7 +430,7 @@ function blockerAt(
       return { kind: 'claim', obstacle: claim };
     }
   }
-  for (const seg of obs.segs) {
+  for (const seg of cell.segs) {
     if (dist(p, closestPointOnSegment(p, seg.a, seg.b)) <= seg.clearanceM) {
       return { kind: 'lane', seg };
     }
@@ -658,6 +679,7 @@ function orientDelta(a: number, b: number): number {
 function subdivide(
   cell0: Point[], depth: number, belt: Point[], roads: RoadLine[],
   rng: SeededRandom, out: Point[][],
+  parcelArea = FIELD_PARCEL_TARGET_M2, maxDepth = FIELD_CUT_MAX_DEPTH,
 ): void {
   const jitterRoll = rng.float();
   const offsetRoll = rng.float();
@@ -682,27 +704,27 @@ function subdivide(
   // back empty, so the village drew no fields at all. Above the threshold
   // the cell is left alone and simply subdivided; nothing is lost, because
   // every descendant passes through here.
-  const cell = area0 <= FIELD_PARCEL_TARGET_M2 * FIELD_BELT_CLIP_FACTOR
+  const cell = area0 <= parcelArea * FIELD_BELT_CLIP_FACTOR
     ? clipOutsideBelt(cell0, belt)
     : cell0;
   if (cell.length < 3) return;
   const area = polygonArea(cell);
   if (area < 1e-6) return;
 
-  if (depth < FIELD_CUT_MAX_DEPTH) {
+  if (depth < maxDepth) {
     for (const road of roads) {
       if (!roadCrosses(cell, road)) continue;
       const pieces = cutCorridor(cell, road.p, road.dirDeg, road.halfWidthM);
       // A corridor that swallows the cell whole leaves nothing, and that is
       // correct: the cell WAS the road.
       const rest = roads.filter((r) => r !== road);
-      for (const piece of pieces) subdivide(piece, depth + 1, belt, rest, rng, out);
+      for (const piece of pieces) subdivide(piece, depth + 1, belt, rest, rng, out, parcelArea, maxDepth);
       return;
     }
   }
 
-  const target = FIELD_PARCEL_TARGET_M2 * (1 + (sizeRoll * 2 - 1) * FIELD_PARCEL_AREA_SPREAD);
-  if (area <= target * FIELD_PARCEL_LEAF_FACTOR || depth >= FIELD_CUT_MAX_DEPTH) {
+  const target = parcelArea * (1 + (sizeRoll * 2 - 1) * FIELD_PARCEL_AREA_SPREAD);
+  if (area <= target * FIELD_PARCEL_LEAF_FACTOR || depth >= maxDepth) {
     out.push(cell);
     return;
   }
@@ -727,7 +749,7 @@ function subdivide(
     out.push(cell);
     return;
   }
-  for (const piece of pieces) subdivide(piece, depth + 1, belt, roads, rng, out);
+  for (const piece of pieces) subdivide(piece, depth + 1, belt, roads, rng, out, parcelArea, maxDepth);
 }
 
 /** Shortest distance from `p` to the polygon's boundary. */
@@ -791,18 +813,19 @@ export function buildFields(
   site: Site, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[], rng: SeededRandom,
   housedLotIds?: ReadonlySet<string>,
   reservations: Point[][] = [],
+  options: { maxRegionDepthM?: number; parcelAreaM2?: number; maxCutDepth?: number; approachLaneIds?: ReadonlySet<string> } = {},
 ): FieldsResult {
   const fabricRadius = computeFabricRadius(green, lots, crofts, housedLotIds);
   const edge = builtEdgeExtent(green, lots, crofts, housedLotIds);
 
   const belt = beltPolygon(green, edge, rng);
   const demand = Math.max(0, site.population) * FIELD_M2_PER_CAPITA;
-  const region = regionHull(green, belt, demand / FIELD_REGION_EFFICIENCY, rng);
+  const region = regionHull(green, belt, demand / FIELD_REGION_EFFICIENCY, rng, options.maxRegionDepthM);
 
   const obstacles = buildObstacles(lots, crofts, lanes, site.water, reservations);
-  const roads = exitRoads(green, lanes, belt);
+  const roads = exitRoads(green, options.approachLaneIds ? lanes.filter(l=>options.approachLaneIds!.has(l.id)) : lanes, belt);
   const leaves: Point[][] = [];
-  subdivide(region, 0, belt, roads, rng, leaves);
+  subdivide(region, 0, belt, roads, rng, leaves, options.parcelAreaM2, options.maxCutDepth);
 
   const crops = fieldKinds(site.biome, site.biome === 'desert' || site.freshwaterIrrigation === true);
   if (!crops.length) return { blocks: [], edges: [], outerRadius: fabricRadius, regionPolygon: region };

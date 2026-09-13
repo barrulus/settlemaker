@@ -1,3 +1,6 @@
+import { cityLocalStreets } from '../generator/city-streets.js';
+import { MAIN_STREET } from '../wards/ward.js';
+import { edgeInsetScale } from '../generator/generation-params.js';
 import { CommonWard } from '../wards/common-ward.js';
 import { selectFloraAt } from '../assets/landscape-placement.js';
 import { fieldKinds, ARTWORK_MANIFEST } from '../assets/artwork.js';
@@ -49,7 +52,7 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
     version: SCENE_VERSION,
     seed: model.params.seed,
     population: model.params.population,
-    ...(model.params.population > 1000 ? { buildingCapacity: model.getBuildingCapacity() } : {}),
+    ...(model.usesCityLayout ? { buildingCapacity: model.getBuildingCapacity() } : {}),
     metersPerUnit: cityMetersPerUnit(model),
     ...(model.params.biome != null ? { biome: model.params.biome } : {}),
     bounds: computeLocalBounds(model, padding, shift),
@@ -71,10 +74,18 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
   };
 
   for (const artery of model.arteries) {
-    scene.layers.roads.push({ path: ring(artery.vertices), kind: 'artery' } as RoadFeature);
+    scene.layers.roads.push({ path: ring(artery.vertices), kind: 'artery',
+      ...(model.usesCityLayout ? { width: MAIN_STREET * edgeInsetScale(model.params.development?.texturePopulation ?? model.params.population) } : {}),
+    } as RoadFeature);
   }
   for (const road of model.roads) {
-    scene.layers.roads.push({ path: ring(road.vertices), kind: 'road' } as RoadFeature);
+    scene.layers.roads.push({ path: ring(road.vertices), kind: 'road',
+      ...(model.usesCityLayout ? { width: MAIN_STREET * edgeInsetScale(model.params.development?.texturePopulation ?? model.params.population) } : {}),
+    } as RoadFeature);
+  }
+
+  for (const street of cityLocalStreets(model)) {
+    scene.layers.roads.push({ path: ring([street.a, street.b]), kind: 'alley', width: street.width });
   }
 
   for (const patch of model.patches) {
@@ -110,7 +121,8 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
         id: ids.get(poly),
         ring: ring(poly.vertices),
         kind: String(ward.type),
-        landmark: LANDMARK_TYPES.has(ward.type) && (ward.type !== WardType.Cathedral || !ward.principalBuilding || poly === ward.principalBuilding),
+        landmark: LANDMARK_TYPES.has(ward.type) && !(ward.type === WardType.Market && model.params.development)
+          && (ward.type !== WardType.Cathedral || !ward.principalBuilding || poly === ward.principalBuilding),
         ...(model.glyphBackedBuildings.has(poly) ? { glyphBacked: true as const } : {}),
       } as BuildingFeature);
     }

@@ -19,7 +19,9 @@
     "measure:city-glyphs": "esbuild scripts/measure-city-glyphs.ts --bundle --platform=node --format=cjs --packages=external --outfile=output/measure-city-glyphs.cjs && node output/measure-city-glyphs.cjs",
     "review:cities": "esbuild scripts/review-cities.ts --bundle --platform=node --format=cjs --packages=external --outfile=output/city-review-runner.cjs && node output/city-review-runner.cjs",
     "docs:images": "npm run build && node scripts/generate-examples.mjs",
-    "docs:check": "npm run build && npm run build:lib && node scripts/check-docs.mjs"
+    "docs:check": "npm run build && npm run build:lib && node scripts/check-docs.mjs",
+    "review:settlements": "npm run build && node scripts/review-settlements.mjs",
+    "generate": "npm run build && node scripts/settlemaker.mjs"
   },
   "license": "GPL-3.0-only",
   "author": "barrulus",
@@ -66,10 +68,14 @@
     "scripts/generate-examples.mjs",
     "scripts/check-docs.mjs",
     "scripts/generate-copperline.mjs",
-    "scripts/render-copperline.mjs"
+    "scripts/render-copperline.mjs",
+    "scripts/settlemaker.mjs"
   ],
   "dependencies": {
     "@types/geojson": "^7946.0.14",
     "polygon-clipping": "^0.15.7"
+  },
+  "bin": {
+    "settlemaker": "scripts/settlemaker.mjs"
   }
 }

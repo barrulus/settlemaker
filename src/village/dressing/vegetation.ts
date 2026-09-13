@@ -44,6 +44,7 @@ export function buildVegetation(
   site: Site, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[], fields: FieldBlock[],
   groveEdge: RadialExtent, innerEdge: RadialExtent, shorefrontReachM: number, rng: SeededRandom,
   reservations: Point[][] = [],
+  samplingScale = 1,
 ): Vegetation[] {
   const rimExtent = innerEdge.plus(VEG_BAND_DEPTH_M);
   const rimMaxM = rimExtent.maxM;
@@ -59,16 +60,17 @@ export function buildVegetation(
   // every cell's survival, so the draw count never depends on how many
   // trees land. The grid only spans the interior now: outside it, pass 2
   // does the placing.
-  const halfCells = Math.max(0, Math.ceil(groveEdge.maxM / VEG_CELL_M));
+  const cellSize = VEG_CELL_M * samplingScale;
+  const halfCells = Math.max(0, Math.ceil(groveEdge.maxM / cellSize));
   for (let cellX = -halfCells; cellX <= halfCells; cellX++) {
     for (let cellY = -halfCells; cellY <= halfCells; cellY++) {
       const cellOrigin = new Point(
-        green.centre.x + cellX * VEG_CELL_M,
-        green.centre.y + cellY * VEG_CELL_M,
+        green.centre.x + cellX * cellSize,
+        green.centre.y + cellY * cellSize,
       );
       const cellCentre = new Point(
-        cellOrigin.x + VEG_CELL_M / 2,
-        cellOrigin.y + VEG_CELL_M / 2,
+        cellOrigin.x + cellSize / 2,
+        cellOrigin.y + cellSize / 2,
       );
       const density = interiorDensityAt(
         dist(cellCentre, green.centre), groveEdge.at(cellCentre),
@@ -80,8 +82,8 @@ export function buildVegetation(
       const offsetX = rng.float();
       const offsetY = rng.float();
       const position = new Point(
-        cellOrigin.x + offsetX * VEG_CELL_M,
-        cellOrigin.y + offsetY * VEG_CELL_M,
+        cellOrigin.x + offsetX * cellSize,
+        cellOrigin.y + offsetY * cellSize,
       );
       const glyph = pickGlyph(position);
       const scale = VEG_SCALE_MIN + rng.float() * (VEG_SCALE_MAX - VEG_SCALE_MIN);
@@ -122,7 +124,7 @@ export function buildVegetation(
 
   // Close stems make overlapping crowns; broad correlated cover leaves
   // organic clearings. Arid and exposed biomes retain more open ground.
-  const spacing = site.biome === 'desert' ? 6 : site.biome === 'tundra' ? 4.8 : 3.8;
+  const spacing = (site.biome === 'desert' ? 6 : site.biome === 'tundra' ? 4.8 : 3.8) * samplingScale;
   const threshold = site.biome === 'desert' ? .64 : site.biome === 'coastal' ? .56
     : site.biome === 'tundra' ? .46 : site.biome === 'tropical' ? .30 : .36;
   const seed = Math.floor(rng.float() * 4294967296);

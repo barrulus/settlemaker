@@ -46,7 +46,7 @@ export function buildWardDistribution(params: GenerationParams, slots: number): 
   for (let i = 0; i < adminCount; i++) specials.push(AdministrationWard);
 
   // Military: 1
-  specials.push(MilitaryWard);
+  if (!params.development || params.citadelNeeded) specials.push(MilitaryWard);
 
   // Cathedral/Temple: add if templeNeeded
   if (params.templeNeeded) {
@@ -54,8 +54,8 @@ export function buildWardDistribution(params: GenerationParams, slots: number): 
   }
 
   // Commons and parks scale with the number of neighbourhoods.
-  if (n >= 10) {
-    for(let i=0;i<Math.max(1,Math.round(n*.12));i++)specials.push(Park);
+  if (n >= (params.development ? 24 : 10)) {
+    for(let i=0;i<Math.max(1,Math.round(n*(params.development ? .03 : .12)));i++)specials.push(Park);
   }
 
   // Tiny settlements may not have room for every special; drop the least
@@ -83,7 +83,7 @@ export function buildWardDistribution(params: GenerationParams, slots: number): 
   for (let i = 0; i < patriciateCount; i++) commons.push(PatriciateWard);
 
   // Market: ~6%
-  const marketCount = Math.max(0, Math.round(n * 0.06));
+  const marketCount = params.development ? 0 : Math.max(0, Math.round(n * 0.06));
   for (let i = 0; i < marketCount; i++) commons.push(Market);
 
   // Trim from the end (Market first) if the fixed commons alone overflow

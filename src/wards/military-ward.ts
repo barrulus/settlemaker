@@ -17,7 +17,7 @@ export class MilitaryWard extends Ward {
     // it — a barracks jumble rendered even in villages. Mirror CommonWard's
     // early return: village dwellings are stamped by stampVillageRows
     // instead (WardType.Military is in ROW_WARDS — see village-rows.ts).
-    if (!rowHousing(this.model.params.population)) {
+    if (!this.model.usesCityLayout && !rowHousing(this.model.params.population)) {
       this.geometry = [];
       return;
     }

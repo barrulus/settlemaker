@@ -7,6 +7,7 @@ import { rowHousing, maxLotArea, meanBuildingArea } from '../generator/generatio
 import { planCityBlock, coalesceCityRuns } from '../generator/city-blocks.js';
 import { wardFrontages } from '../generator/city-frontage.js';
 import { SYMBOL_MANIFEST } from '../assets/symbol-manifest.js';
+import { ARTWORK_MANIFEST } from '../assets/artwork.js';
 import type { PlacedSymbol, ClaimedSite } from '../generator/symbols.js';
 import type { Model } from '../generator/model.js';
 import type { Patch } from '../generator/patch.js';
@@ -40,25 +41,27 @@ export class CommonWard extends Ward {
     // stampVillageRows (see village-rows.ts) — this ward contributes no
     // subdivided lots, draws nothing from the stream, and places no well
     // (the stamper reserves the village well site).
-    if (!rowHousing(this.model.params.population)) {
+    if (!this.model.usesCityLayout && !rowHousing(this.model.params.population)) {
       this.geometry = [];
       return;
     }
 
     const block = this.getCityBlock();
     const alleyWidth = ALLEY * this.insetScale;
-    if (this.model.params.population > 1000 && this.cityBuildingTarget !== null) {
+    if (this.model.usesCityLayout && this.cityBuildingTarget !== null) {
       // Demand chooses the grain, with a fixed lower bound: extra population
       // cannot make arbitrarily small buildings or erase access/courtyards.
-      const meanArea = meanBuildingArea(this.model.params.population) * this.model.minSqScale / 0.6;
+      const meanArea = meanBuildingArea(this.model.params.development?.texturePopulation ?? this.model.params.population) * this.model.minSqScale / 0.6;
       const minimum = meanArea * 0.45;
       let area = Math.max(minimum, Math.min(meanArea * 2,
         Math.abs(block.square) * 0.85 / Math.max(1, this.cityBuildingTarget)));
       const streets = wardFrontages(this);
-      let plan = planCityBlock(block, streets, area, alleyWidth);
+      const compact = !!this.model.params.development && cityUrbanity(this.model, this.patch) >= .75;
+      let plan = planCityBlock(block, streets, area, alleyWidth, compact, !!this.model.params.development);
       // Reserve a little supply for wells and neighbouring lots lost to access
       // constraints. The final census pass trims whole run ends to the budget.
-      const target = Math.ceil(this.cityBuildingTarget * 1.1) + 1;
+      const target = this.model.params.development ? Math.ceil(this.cityBuildingTarget)
+        : Math.ceil(this.cityBuildingTarget * 1.1) + 1;
       let best = plan;
       const error = (count: number) => count >= target ? count - target : 1e6 + target - count;
       // Bounded local feedback changes the block grain before acceptance;
@@ -69,14 +72,14 @@ export class CommonWard extends Ward {
         const next = Math.max(minimum, Math.min(meanArea * 2, area * ratio));
         if (Math.abs(next - area) < 0.001) break;
         area = next;
-        plan = planCityBlock(block, streets, area, alleyWidth);
+        plan = planCityBlock(block, streets, area, alleyWidth, compact, !!this.model.params.development);
         if (plan && (!best || error(plan.buildings.length) < error(best.buildings.length))) best = plan;
       }
       plan = best;
       if (plan?.buildings.length) {
-        coalesceCityRuns(plan, target);
+        if (!this.model.params.development) coalesceCityRuns(plan, target);
         const urbanity=cityUrbanity(this.model,this.patch);
-        const roofScale=.65+.35*Math.min(1,urbanity*1.35);
+        const roofScale=this.model.params.development ? .48+.52*Math.min(1,urbanity*1.35) : .65+.35*Math.min(1,urbanity*1.35);
         if(roofScale<.98)for(const b of plan.buildings){
           const c=b.centroid,front=plan.frontages.get(b);
           this.gardens.push({ring:new Polygon(b.vertices),access:front?[front.at,c]:[]});
@@ -93,9 +96,9 @@ export class CommonWard extends Ward {
     this.geometry = createAlleys(
       block, this.rng, this.minSq * this.model.minSqScale, this.gridChaos, this.sizeChaos,
       this.emptyProb, true, alleyWidth,
-      rowHousing(this.model.params.population),
+      this.model.usesCityLayout || rowHousing(this.model.params.population),
       maxLotArea(this.model.params.population),
-      this.model.params.population > 1000 ? this.lanes : undefined,
+      this.model.usesCityLayout ? this.lanes : undefined,
     );
 
     if (!this.model.isEnclosed(this.patch)) {
@@ -161,14 +164,15 @@ export class CommonWard extends Ward {
     }
     const lot = this.geometry.splice(bestIdx, 1)[0];
     const at = lot.centroid;
-    const meta = SYMBOL_MANIFEST['sm-well'];
-    const size = Math.max(...(meta.footprint ?? [3.2, 3.2]));
+    const metres = m.params.development?.metresPerUnit;
+    const meta = metres ? ARTWORK_MANIFEST['sm-well'] : SYMBOL_MANIFEST['sm-well'];
+    const size = Math.max(...(meta.footprint ?? [3.2, 3.2])) / (metres ?? 1);
     const symbol: PlacedSymbol = {
       id: 'sm-well', at, scale: size,
       rotationDeg: Math.round(this.rng.float() * 360), zBand: 'structure',
       wardType: this.type,
     };
-    const site: ClaimedSite = { at, radius: size };
+    const site: ClaimedSite = { at, radius: metres ? size / 2 : size };
     m.symbols.push(symbol);
     m.claimedSites.push(site);
     this.wellSymbol = symbol;

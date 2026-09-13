@@ -6,7 +6,7 @@ import { bearingVector, closestPointOnSegment, dist } from './geometry.js';
 import { prepareWaterBoundary, waterBoundarySegments } from './water-boundary.js';
 
 export function prepareMeasuredInput(input: AzgaarBurgInput): { input: AzgaarBurgInput; result?: WaterContextResult } {
-  validateWaterContext(input);
+  validateWaterContext(input, 'village');
   const c = input.waterContext;
   if (!c) return { input };
   const result: WaterContextResult = { version: 1, status: c.status, issues: [] };

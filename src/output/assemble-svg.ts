@@ -1,3 +1,4 @@
+import { resolveAppearance, themedMaterial } from '../appearance/resolve.js';
 import { resolveSkin, type SettlementSkin } from '../assets/skins.js';
 import { landscapeHash } from '../assets/landscape-placement.js';
 import { recolourRoof, roofColour } from '../assets/architecture-palette.js';
@@ -8,11 +9,9 @@ import type { Palette } from '../types/interfaces.js';
 import type { BuildingFeature, Scene, ScenePoint } from '../scene/scene.js';
 import type { AssetSet } from '../assets/asset-sets.js';
 import { assetSetFor } from '../assets/asset-sets.js';
-import { paletteForBiome } from './palette.js';
-import { themeFrom, type RenderTheme } from './render-theme.js';
+import type { RenderTheme } from './render-theme.js';
 import { REFINED_MANIFEST } from '../assets/refined-manifest.js';
 import { refinedStyle, resolveVarFallbacks } from '../assets/refined-style.js';
-import { villageThemeFor } from '../village/theme.js';
 
 const NORMAL_STROKE = 0.15;
 const THICK_STROKE = 1.8;
@@ -25,6 +24,8 @@ export interface AssembleOptions {
   assetSet?: AssetSet;
   clipId?: string;
   symbols?: boolean;
+  /** Display pixels per scene unit. Omitted requests all artwork detail. */
+  pixelsPerUnit?: number;
 }
 
 function fmt(n: number): string { return n.toFixed(2); }
@@ -104,11 +105,7 @@ export function themeToCss(theme: RenderTheme, refined = false): string {
  */
 export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string {
   const skin = options.skin ? resolveSkin(options.skin, options.skinBiome ?? scene.biome) : undefined;
-  const palette = options.palette ?? paletteForBiome(scene.biome);
-  const overrides = Object.fromEntries(
-    Object.entries(options.theme ?? {}).filter(([, v]) => v !== undefined),
-  );
-  const theme: RenderTheme = { ...themeFrom(palette), ...(options.palette ? {} : skin?.city), ...overrides };
+  const { city: theme, tokens } = resolveAppearance(scene.biome, options.palette, options.theme, skin);
   const assets = options.assetSet ?? skin?.assets ?? assetSetFor(scene.biome);
   if(assets.name==='settlement' && !options.palette){
     const b=artworkBiome(scene.biome);
@@ -120,8 +117,12 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   const b = scene.bounds;
   const w = b.max_x - b.min_x, h = b.max_y - b.min_y;
   const L = scene.layers;
+  const pixels = options.pixelsPerUnit;
+  const detailedTree = (scale: number) => pixels === undefined || scale * pixels >= 16;
+  const fieldDetail = pixels === undefined || 16 / (scene.metersPerUnit ?? 1) * pixels >= 12;
 
   const visibleSymbols = (showSymbols ? L.symbols : []).filter(s => {
+    if (pixels !== undefined && Math.min(s.scale, s.scaleY ?? s.scale) * pixels < 12) return false;
     const meta = (assets.manifest ?? REFINED_MANIFEST)[s.id];
     if (!meta) return false;
     if (!assets.glyphs?.[s.id]) return false;            // no glyph asset for this id
@@ -133,21 +134,24 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   const renderedBuildings = new Set(structureSymbols.map(s => s.buildingId).filter(Boolean));
   const markSymbols = visibleSymbols.filter(s => s.zBand === 'overlay');
 
-  const usedKinds = [...new Set(L.vegetation.map(v => v.kind))];
+  const usedKinds = [...new Set(L.vegetation.filter(v => detailedTree(v.scale)).map(v => v.kind))];
   const symbolDefs = usedKinds
     .filter(k => assets.symbols[k] !== undefined)
     .map(k => `<symbol id="asset-${k}" viewBox="-1 -1 2 2">${assets.symbols[k]}</symbol>`)
     .join('');
 
   const glyphIds = new Set<string>();
-  for (const v of L.vegetation) if (assets.glyphs?.[v.kind]) glyphIds.add(v.kind);
+  for (const v of L.vegetation) if (detailedTree(v.scale) && assets.glyphs?.[v.kind]) glyphIds.add(v.kind);
   for (const s of visibleSymbols) if (assets.glyphs?.[s.id]) glyphIds.add(s.id);
-  for (const f of L.fields) if (f.glyph && assets.glyphs?.[f.glyph]) glyphIds.add(f.glyph);
+  for (const f of L.fields) if (fieldDetail && f.glyph && assets.glyphs?.[f.glyph]) glyphIds.add(f.glyph);
   const towerId = cityGlyph('castle-tower-round', scene.biome);
   if(L.walls.length && assets.glyphs?.[towerId]) glyphIds.add(towerId);
   const materialId = (s: typeof visibleSymbols[number]) => `glyph-${s.id}${assets.name === 'settlement' && !skin?.overrides.has(s.id) && s.materialVariant ? `-tone-${s.materialVariant}` : ''}`;
+  const fixedRoof = options.theme?.buildingFill !== undefined
+    || (!options.palette && (skin?.city.buildingFill !== undefined
+      || skin?.tokens[`--sm-city-${artworkBiome(scene.biome)}-roof`] !== undefined));
   const materialDefs = [...new Map(visibleSymbols.filter(s => assets.name === 'settlement' && !skin?.overrides.has(s.id) && s.materialVariant).map(s => [materialId(s), s])).entries()]
-    .map(([id, s]) => `<g id="${id}">${recolourRoof(assets.glyphs![s.id].body, scene.biome, s.materialVariant!)}</g>`).join('');
+    .map(([id, s]) => `<g id="${id}">${fixedRoof ? assets.glyphs![s.id].body : recolourRoof(assets.glyphs![s.id].body, scene.biome, s.materialVariant!)}</g>`).join('');
   const glyphDefs = [...glyphIds].map(id => {
     const g = assets.glyphs![id];
     // Plain groups have no viewport: the instance transform alone sets size.
@@ -161,7 +165,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   // emit the pattern defs the document needs.
   const bucketOf = (a: number): number => ((Math.round(a / 15) * 15) % 180 + 180) % 180;
   const usedBuckets = [...new Set(L.fields.filter(f=>!f.glyph||!assets.glyphs?.[f.glyph]).map(f => bucketOf(f.angleDeg)))].sort((a, b) => a - b);
-  const fieldPattern = assets.patterns?.field;
+  const fieldPattern = fieldDetail ? assets.patterns?.field : undefined;
   const patternDefs = fieldPattern
     ? usedBuckets
       .map(bucket => `<pattern id="${clipId}-field-a${bucket}" patternUnits="userSpaceOnUse" width="${fieldPattern.width}" height="${fieldPattern.height}" patternTransform="rotate(${bucket})">${fieldPattern.content}</pattern>`)
@@ -169,7 +173,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     : '';
 
   const nativePatternId = (f: Scene['layers']['fields'][number]) => `${clipId}-${f.glyph}-a${bucketOf(f.angleDeg)}`;
-  const nativeFields = L.fields.filter(f=>f.glyph && assets.glyphs?.[f.glyph]);
+  const nativeFields = fieldDetail ? L.fields.filter(f=>f.glyph && assets.glyphs?.[f.glyph]) : [];
   const nativePatterns = [...new Map(nativeFields.map(f=>[nativePatternId(f),f])).values()].map(f=>{
     const g=assets.glyphs![f.glyph!], pitch=16/(scene.metersPerUnit??1), k=pitch/g.viewBox[2];
     return `<pattern id="${nativePatternId(f)}" patternUnits="userSpaceOnUse" width="${fmt4(pitch)}" height="${fmt4(pitch)}" patternTransform="rotate(${bucketOf(f.angleDeg)})"><use href="#glyph-${f.glyph}" transform="scale(${fmt4(k)})"/></pattern>`;
@@ -177,33 +181,29 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   const parts: string[] = [];
   parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${b.min_x.toFixed(1)} ${b.min_y.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}">`);
   parts.push(`<defs><clipPath id="${clipId}"><rect x="${b.min_x.toFixed(1)}" y="${b.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"/></clipPath>${patternDefs}${nativePatterns}${symbolDefs}${glyphDefs}${materialDefs}</defs>`);
-  const tokens = { ...ART_TOKENS, ...(skin?.tokens ?? villageThemeFor(scene.biome ?? 'temperate').tokens) };
-  if(options.palette || options.theme?.greenFill || skin?.city.greenFill)tokens[`--sm-green-${artworkBiome(scene.biome)}-turf`]=theme.greenFill;
-  if (!skin && (options.palette || options.theme)) Object.assign(tokens, {
-    '--sm-ink': theme.smInk, '--sm-stone': theme.smStone, '--sm-timber': theme.smTimber,
-    '--sm-void': theme.smVoid, '--sm-canopy-a': theme.smCanopy1, '--sm-canopy-b': theme.smCanopy2,
-  });
-  if (skin) {
-    for (const [key, token] of Object.entries({ smInk: '--sm-ink', smStone: '--sm-stone', smTimber: '--sm-timber', smVoid: '--sm-void', smCanopy1: '--sm-canopy-a', smCanopy2: '--sm-canopy-b' })) {
-      if (options.palette || Object.hasOwn(skin.city, key) || Object.hasOwn(overrides, key)) {
-        tokens[token] = theme[key as keyof RenderTheme] as string;
-      }
-    }
-  }
   parts.push(`<style>\n${themeToCss(theme, assets.refined)}\n${assets.refined ? refinedStyle(tokens) : ''}\n</style>`);
   // data-bg contract with cropSvgToTile: attribute markup + inline fill.
   parts.push(`<rect data-bg="paper" x="${b.min_x.toFixed(1)}" y="${b.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="${theme.paper}"/>`);
 
   if (L.fields.length > 0) {
     parts.push('<g id="fields">');
-    for (const f of L.fields) parts.push(`<path class="plot" d="${ringPath(f.ring)}"/>`);
+    for (const f of L.fields) {
+      // Even when furrows are subpixel, farmland must remain recognisable.
+      // Reuse biome/skin material colours rather than the almost-paper wash.
+      const material = options.theme?.fieldFill !== undefined || skin?.city.fieldFill !== undefined ? 'soil'
+        : /grain|stubble/.test(f.glyph??'') ? 'dry'
+          : /fallow|rest|drained/.test(f.glyph??'') ? 'soil'
+            : /garden|orchard|grove|paddy/.test(f.glyph??'') ? 'leaf' : 'light';
+      const overviewStyle = fieldDetail ? '' : ` style="fill:var(--sm-landscape-${artworkBiome(scene.biome)}-${material}, ${theme.fieldFill});stroke-width:${fmt(Math.max(.2,.6/(pixels??1)))}"`;
+      parts.push(`<path class="plot"${overviewStyle} d="${ringPath(f.ring)}"/>`);
+    }
     if (fieldPattern || nativeFields.length) {
-      for (const f of L.fields) {
+      for (const [fieldIndex, f] of L.fields.entries()) {
         if (f.hatch === false) continue;
         const bucket = bucketOf(f.angleDeg);
         if(f.glyph && assets.glyphs?.[f.glyph]) {
           parts.push(`<path data-field-glyph="${f.glyph}" d="${ringPath(f.ring)}" fill="url(#${nativePatternId(f)})"/>`);
-          parts.push(farmDetails(f.ring,f.glyph,1/(scene.metersPerUnit??1),`${clipId}-${L.fields.indexOf(f)}`));
+          parts.push(farmDetails(f.ring,f.glyph,1/(scene.metersPerUnit??1),`${clipId}-${fieldIndex}`));
           continue;
         }
         if (fieldPattern) parts.push(`<path class="hatch" d="${ringPath(f.ring)}" fill="url(#${clipId}-field-a${bucket})"/>`);
@@ -214,12 +214,16 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
 
   if (L.greens.length > 0 || L.vegetation.length > 0) {
     parts.push('<g id="greens">');
-    for (const g of L.greens) {
+    for (const [greenIndex, g] of L.greens.entries()) {
       const xs=g.ring.map(p=>p.x),ys=g.ring.map(p=>p.y);
-      parts.push(greenGround(ringPath(g.ring),scene.biome,{unit:.6,id:`${clipId}-${L.greens.indexOf(g)}`,bounds:[Math.min(...xs),Math.min(...ys),Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys)]}));
+      const width = Math.max(...xs)-Math.min(...xs), height = Math.max(...ys)-Math.min(...ys);
+      if (g.surface === 'paved') parts.push(`<path data-surface="paved" style="fill:${theme.roadCore}" d="${ringPath(g.ring)}"/>`);
+      else if (pixels !== undefined && Math.min(width, height) * pixels < 48) parts.push(`<path d="${ringPath(g.ring)}"/>`);
+      else parts.push(greenGround(ringPath(g.ring),scene.biome,{unit:.6,id:`${clipId}-${greenIndex}`,bounds:[Math.min(...xs),Math.min(...ys),width,height]}));
       for (const path of g.paths ?? []) parts.push(`<path class="park-path" d="${linePath(path)}" stroke-width="${fmt(g.pathWidth ?? 0.7)}"/>`);
     }
     for (const v of L.vegetation) {
+      if (!detailedTree(v.scale)) continue;
       if (assets.glyphs?.[v.kind] || !assets.symbols[v.kind]) continue; // canopy, or unavailable
       const s = v.scale;
       parts.push(`<use href="#asset-${v.kind}" x="${fmt(-1)}" y="${fmt(-1)}" width="2" height="2" transform="translate(${fmt(v.at.x)},${fmt(v.at.y)}) scale(${fmt(s / 2)}) rotate(${v.rotationDeg})"/>`);
@@ -243,17 +247,20 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     const landMask=`${clipId}-road-land`;
     if(L.water.rings.length)parts.push(`<defs><mask id="${landMask}" maskUnits="userSpaceOnUse" x="${b.min_x}" y="${b.min_y}" width="${w}" height="${h}"><rect x="${b.min_x}" y="${b.min_y}" width="${w}" height="${h}" fill="white"/><path d="${L.water.rings.map(ringPath).join(' ')}" fill="black" fill-rule="evenodd"/></mask></defs>`);
     parts.push(`<g id="roads" clip-path="url(#${clipId})"${L.water.rings.length?` mask="url(#${landMask})"`:''}>`);
-    const lanes = L.roads.map(r => ({
-      path: linePath(r.path),
-      width: r.width ?? (r.kind === 'artery' ? theme.arteryWidth : theme.roadWidth),
-      alley: r.kind === 'alley',
-    }));
+    const lanes = L.roads.map(r => {
+      const key = r.kind === 'artery' ? 'arteryWidth' : r.kind === 'road' ? 'roadWidth' : undefined;
+      const explicitWidth = key ? options.theme?.[key] ?? (!options.palette ? skin?.city[key] : undefined) : undefined;
+      return {
+        path: linePath(r.path),
+        width: explicitWidth ?? r.width ?? (r.kind === 'artery' ? theme.arteryWidth : theme.roadWidth),
+        reserved: r.width !== undefined && explicitWidth === undefined,
+      };
+    });
     for (const lane of lanes) {
-      if (lane.alley) continue;
-      parts.push(`<path class="casing" d="${lane.path}" stroke-width="${fmt(lane.width + theme.casingDelta * 2)}"/>`);
+      parts.push(`<path class="casing" d="${lane.path}" stroke-width="${fmt(lane.reserved ? lane.width : lane.width + theme.casingDelta * 2)}"/>`);
     }
     for (const lane of lanes) {
-      parts.push(`<path class="core" d="${lane.path}" stroke-width="${fmt(lane.width)}"/>`);
+      parts.push(`<path class="core" d="${lane.path}" stroke-width="${fmt(lane.reserved ? Math.max(lane.width * .7, lane.width - theme.casingDelta * 2) : lane.width)}"/>`);
     }
     parts.push('</g>');
   }
@@ -328,7 +335,17 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     parts.push('</g>');
   }
 
-  const canopy = L.vegetation.filter(v => assets.glyphs?.[v.kind] !== undefined);
+  const simpleCanopy = L.vegetation.filter(v => !detailedTree(v.scale));
+  if (simpleCanopy.length) {
+    // One path instead of thousands of expanded SVG glyph subtrees. Positions
+    // and canopy sizes are retained; only invisible botanical detail is omitted.
+    const dots = simpleCanopy.map(v => {
+      const r = v.scale * .32;
+      return `M${fmt(v.at.x-r)},${fmt(v.at.y)}a${fmt(r)},${fmt(r)} 0 1 0 ${fmt(r*2)},0a${fmt(r)},${fmt(r)} 0 1 0 ${fmt(-r*2)},0`;
+    }).join('');
+    parts.push(`<path id="canopy-overview" d="${dots}" fill="${theme.treeFill}" opacity="0.7"/>`);
+  }
+  const canopy = L.vegetation.filter(v => detailedTree(v.scale) && assets.glyphs?.[v.kind] !== undefined);
   if (canopy.length > 0) {
     parts.push('<g id="canopy">');
     for (const v of [...canopy].sort((a, b) => a.at.y - b.at.y)) {
@@ -346,5 +363,5 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   }
 
   parts.push('</svg>');
-  return resolveVarFallbacks(parts.join('\n'),tokens);
+  return resolveVarFallbacks(parts.join('\n'), tokens, options.palette ? color => themedMaterial(color, options.palette!) : undefined);
 }

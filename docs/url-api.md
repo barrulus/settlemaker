@@ -1,9 +1,12 @@
 # URL adapter contract
 
-This guide describes the **3.0.x library's URL codec** and the hosting contract
+This guide describes the **library's URL codec** and the hosting contract
 for a renderer at `https://settlemaker.com/fmg`. The URL envelope version remains
 **1**. The npm library and hosted website have separate release cycles; a package
 publication alone does not establish which generator a website is running.
+
+**Development addition:** `engine` and shared village themes require a renderer
+built from this unreleased source; npm 3.0.1 and older hosts do not implement them.
 
 Use the [library API](api.md) when your application generates maps itself. Use a
 URL adapter when a host such as Azgaar's Fantasy Map Generator embeds a separately
@@ -77,11 +80,11 @@ zlib/gzip header. `encodeBurgParam` and `decodeBurgParam` implement this envelop
 presentation overrides.
 
 `v` must equal 1. `seed` is optional; otherwise generation derives it from the
-burg name. The decoder checks the envelope, a plausible name/population and any
+burg name. The decoder checks the envelope, a plausible name/population, the optional engine choice and any
 water context. It is not complete validation of every burg field. Validate
 untrusted integration data before calling generation.
 
-`i=` takes precedence over **all flat data fields**, including a flat `seed`.
+`i=` takes precedence over **all flat data fields**, including a flat `seed` or `engine`.
 A malformed `i=` is an error, not permission to retry with flat fields.
 Presentation parameters remain separate and apply after input decoding.
 
@@ -117,7 +120,8 @@ fallback when the field is absent.
 ## Water and physical units
 
 The full [water-context v1 specification](water-context-v1.md) remains the
-normative contract for measured **villages, population 1–1,000**. A city input with
+normative contract for the **village engine**, including explicitly selected
+villages above 1,000 people. A city input with
 `waterContext` is rejected with `water-context-unsupported-engine`; the host must
 not strip the object and silently reinterpret its metre geometry as city units.
 
@@ -156,6 +160,7 @@ https://settlemaker.com/fmg?name=Ashford&pop=300&seed=2&biome=temperate&plaza=1&
 | --- | --- |
 | `name` | Name; default derived from seed/population if omitted. |
 | `pop` | Finite population; defaults to 300. |
+| `engine` | `auto` (default), `village` or `city`; saved as `burg.engine` in compressed inputs. Invalid values throw an `engine` error. |
 | `seed` | Optional numeric seed. |
 | `port`, `citadel`, `walls`, `plaza`, `temple`, `shanty`, `capital`, `trade` | True for `1` or `true`; otherwise false. |
 | `biome` | Input biome name. |
@@ -179,11 +184,11 @@ bare demo URL intentionally is not.
 
 | Parameter | Used by | Meaning |
 | --- | --- | --- |
-| `theme` | City | Named palette. |
-| `style` | City | Compressed JSON with partial `RenderTheme` overrides. |
+| `theme` | Both | Named palette; omitted retains natural biome colours. |
+| `style` | Both | Compressed JSON with partial `RenderTheme` overrides. |
 | `villageTheme` | Village | One of `temperate`, `desert`, `tundra`, `tropical`, `coastal`. |
 
-City palette keys are `default`, `classic`, `parchment`, `blueprint`, `bw`, `ink`,
+Shared palette keys are `default`, `classic`, `parchment`, `blueprint`, `bw`, `ink`,
 `night`, `ancient`, `colour`, `simple`. `default` aliases `parchment`; `classic` selects the
 original classic palette. The parser returns the name; a renderer must validate it against
 `PALETTES` and display an unknown-palette error itself.
@@ -197,7 +202,9 @@ by `sanitizeThemeOverrides`. Accepted material keys include `smInk`, `smStone`,
 `villageTheme` changes ground, water, shadows and material tokens without changing
 the input biome's dwelling/landscape selection. An invalid name is a
 `UrlCodecError` with reason `villageTheme`, even when the city engine would run.
-The city presentation fields have no effect on the village renderer, and vice versa.
+`theme` and colour `style` fields now affect both engines. Legacy `villageTheme`
+applies last on villages; it remains ignored on cities. Physical village roads
+keep their road-class widths; city drawing widths do not change those dimensions.
 
 **Skins are a direct library feature.** There is no `skin=` URL option, remote skin
 fetch, or embedded skin definition in this protocol. A host that offers a skin
@@ -228,7 +235,7 @@ const result = generateSettlement(parsed.burg, {
 ```
 
 Wrap parsing/generation in your page's error handler. `UrlCodecError.reason` can
-be `base64`, `inflate`, `json`, `version`, `shape`, `villageTheme` or `roads`.
+be `base64`, `inflate`, `json`, `version`, `shape`, `villageTheme`, `roads` or `engine`.
 Fatal water errors use `WaterContextError.waterContextResult`; successful measured
 results can still contain warnings. Keep errors and warnings visible without
 hover or interaction, including inside pointer-disabled previews.

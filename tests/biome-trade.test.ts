@@ -30,7 +30,7 @@ describe('biome and trade inputs', () => {
   });
 
   it('paletteForBiome returns a defined palette and defaults sanely', () => {
-    expect(paletteForBiome(undefined)).toBe(PALETTES.default);
+    expect(paletteForBiome(undefined)).toEqual(paletteForBiome('temperate'));
     expect(paletteForBiome('desert')).toBeDefined();
   });
 
@@ -39,7 +39,7 @@ describe('biome and trade inputs', () => {
     const classicPaper = themeFrom(PALETTES.classic).paper;
     expect(a.svg).toContain(`fill="${classicPaper}"`); // data-bg rect carries inline paper fill
     const b = generateFromBurg({ ...base, biome: 'desert' });
-    const defaultPaper = themeFrom(PALETTES.default).paper;
+    const defaultPaper = themeFrom(paletteForBiome('desert')).paper;
     expect(b.svg).toContain(`fill="${defaultPaper}"`);
   });
 });

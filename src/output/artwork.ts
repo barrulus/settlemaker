@@ -4,7 +4,7 @@ import type { ScenePoint, WallFeature } from '../scene/scene.js';
 
 const n=(v:number)=>Number(v.toFixed(4));
 const path=(pts:ScenePoint[],close=false)=>pts.map((p,i)=>`${i?'L':'M'}${n(p.x)},${n(p.y)}`).join(' ')+(close?'Z':'');
-const light=(s:string)=>`<g transform="translate(0.3,0.4)" color="#46303c" opacity=".2">${s}</g>`;
+const light=(s:string)=>`<g transform="translate(0.3,0.4)" color="var(--sm-shadow-color, #46303c)" opacity="var(--sm-shadow-opacity, .2)">${s}</g>`;
 
 /** Draw along real centreline geometry, in a constant art-to-world scale. */
 export function wallArtwork(w: WallFeature, biome?: string): string {

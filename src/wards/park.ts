@@ -34,7 +34,7 @@ export class Park extends Ward {
     const block = this.getCityBlock();
     this.paths = [];
     this.trees = [];
-    if (this.model.params.population > 1000 && Math.abs(block.square) >= 30) {
+    if (this.model.usesCityLayout && Math.abs(block.square) >= 30) {
       this.geometry = [block];
       let c = block.centroid;
       if (!pointInPolygon(c, block.vertices)) {

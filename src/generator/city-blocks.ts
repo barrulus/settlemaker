@@ -1,9 +1,10 @@
 import { Point } from '../types/point.js';
 import { Polygon } from '../geom/polygon.js';
-import { nearestOnSegment, type CityFrontage } from './city-frontage.js';
+import { drySegments, nearestOnSegment, overlapsWater, type CityFrontage } from './city-frontage.js';
 import type { WardLane } from '../wards/ward.js';
 import { intersectLines } from '../geom/geom-utils.js';
 import { convexHull } from '../village/dressing/parcel-cut.js';
+import polygonClipping from 'polygon-clipping';
 
 /** Convex clipping by nx*x + ny*y <= limit. Shared vertices stay in mesh units. */
 export function clipBlock(poly: Polygon, nx: number, ny: number, limit: number): Polygon {
@@ -25,6 +26,8 @@ export interface CityBlockPlan {
   frontages: Map<Polygon, CityFrontage>;
   /** Buildings are ordered by street run, so quota trimming removes run ends. */
   runs: Polygon[][];
+  /** Concave boundary cutouts that must also survive quota coalescing. */
+  exclusions?: Point[][];
 }
 
 /** Meet a smaller quota by joining neighbours on the same street, preserving
@@ -38,6 +41,7 @@ export function coalesceCityRuns(plan: CityBlockPlan, target: number): void {
       if (best && area >= best.area) continue;
       const joined = new Polygon(convexHull([...a.vertices, ...b.vertices]));
       if (joined.length < 3 || Math.abs(joined.square) < area - 1e-7 || Math.abs(joined.square) > area * 1.05) continue;
+      if (plan.exclusions && overlapsWater(joined, plan.exclusions)) continue;
       if (joined.square < 0) joined.vertices.reverse();
       best = { run, index: i - 1, joined, area };
     }
@@ -58,8 +62,42 @@ export function coalesceCityRuns(plan: CityBlockPlan, target: number): void {
 export function planCityBlock(
   site: Polygon, streets: Array<WardLane & { kind: 'street' | 'alley' }>,
   areaPerHouse: number, alleyWidth: number,
+  compact = false,
+  clipConcave = compact,
 ): CityBlockPlan | null {
-  if (!site.isConvex() || site.length < 3 || Math.abs(site.square) < 1) return null;
+  if (site.length < 3 || Math.abs(site.square) < 1) return null;
+  if (!site.isConvex()) {
+    if (!clipConcave) return null;
+    // Wall insets can introduce tiny reflex notches. They must not send an
+    // otherwise ordinary block back to the sparse estate subdivision.
+    const hull=new Polygon(convexHull(site.vertices));
+    const plan=planCityBlock(hull,streets,areaPerHouse,alleyWidth,compact,clipConcave);
+    if(!plan)return null;
+    // Shared near-collinear wall vertices need a common precision grid for
+    // the Boolean sweep; raw floating-point drift can leave an unclosed ring.
+    const ring=(p:Polygon)=>p.vertices.map(v=>[Math.round(v.x*1e8)/1e8,Math.round(v.y*1e8)/1e8] as [number,number]);
+    const notches=polygonClipping.difference([ring(hull)],[ring(site)]).flatMap(p=>p.map(r=>r.slice(0,-1).map(([x,y])=>new Point(x,y))));
+    const frontages=new Map<Polygon,CityFrontage>();
+    plan.runs=plan.runs.map(run=>run.flatMap(lot=>{
+      const f=plan.frontages.get(lot)!;
+      return polygonClipping.intersection([ring(lot)],[ring(site)]).flatMap(p=>{
+        if(p.length!==1)return [];
+        const b=new Polygon(p[0].slice(0,-1).map(([x,y])=>new Point(x,y)));
+        if(b.square<0)b.vertices.reverse();
+        if(b.square<areaPerHouse*.32 || b.compactness<.35)return [];
+        const at=nearestOnSegment(b.centroid,f.a,f.b), c=b.centroid;
+        const dry=drySegments(c,at,notches);
+        if(dry.length!==1 || dry[0][0]!==c || dry[0][1]!==at)return [];
+        frontages.set(b,{...f,at});
+        return [b];
+      });
+    })).filter(run=>run.length);
+    plan.buildings=plan.runs.flat();
+    plan.frontages=frontages;
+    plan.exclusions=notches;
+    plan.lanes=plan.lanes.flatMap(l=>drySegments(l.a,l.b,notches).map(([a,b])=>({...l,a,b})));
+    return plan;
+  }
   const depth = Math.sqrt(areaPerHouse * 1.15), frontage = areaPerHouse / depth;
   const plan: CityBlockPlan = { buildings: [], lanes: [], frontages: new Map(), runs: [] };
   const lines = [...streets];
@@ -76,10 +114,15 @@ export function planCityBlock(
       const length = Point.distance(a, b);
       perimeter += length;
     });
-    if (Math.abs(polygon.square) / perimeter <= depth * 0.85 || level >= 8) { blocks.push(polygon); continue; }
     const xs = polygon.vertices.map(p => axisX * p.x + axisY * p.y);
     const ys = polygon.vertices.map(p => -axisY * p.x + axisX * p.y);
-    const along = Math.max(...xs) - Math.min(...xs) >= Math.max(...ys) - Math.min(...ys);
+    // Dense quarters form long back-to-back terraces. Repeatedly bisecting
+    // the longest dimension made little square compounds with roads on all
+    // sides; cut parallel to the main frontage until two house rows fit.
+    const shallow = compact ? Math.max(...ys)-Math.min(...ys) <= depth*2.1
+      : Math.abs(polygon.square)/perimeter <= depth*.85;
+    if (shallow || level >= 8) { blocks.push(polygon); continue; }
+    const along = !compact && Math.max(...xs) - Math.min(...xs) >= Math.max(...ys) - Math.min(...ys);
     const dx = along ? axisX : -axisY, dy = along ? axisY : axisX;
     const c = polygon.centroid, at = dx * c.x + dy * c.y;
     const left = clipBlock(polygon, dx, dy, at - alleyWidth / 2);
