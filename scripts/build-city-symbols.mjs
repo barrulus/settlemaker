@@ -41,7 +41,8 @@ function glyph(f,biome) {
   if (f.category) return drawLandmark(f, biome, { ink, path, rect, token, points, roof });
   const cover=['row-house-b','guildhall','market-hall'].includes(f.key)?'full'
     :['row-house-a','warehouse','courtyard-u','inn'].includes(f.key)?'plane':'eaves';
-  let body=f.panels.map((p,i)=>roof(p,biome,i,cover)).join('\n');
+  const detailScale=['inn','courtyard-u'].includes(f.key)?.4:1;
+  let body=f.panels.map((p,i)=>roof(p,biome,i,cover,detailScale)).join('\n');
   const snow='var(--sm-snow, #f2f6f8)';
   const [x0,y0,x1,y1]=f.bounds, cx=(x0+x1)/2;
   if(['house','shop','tenement','terrace'].includes(f.detail)) {
@@ -50,9 +51,10 @@ function glyph(f,biome) {
     for(const x of entrances) body+=rect(x-2,y1-3,4,1.5,'var(--sm-void, #6b5460)',.6);
   }
   if(f.detail==='shop'||f.detail==='inn') {
-    const x=f.detail==='shop'?19:6, y=f.detail==='shop'?49:55, w=f.detail==='shop'?26:17;
-    body+=rect(x,y,w,4.5,token(biome,'accent'),.85);
-    for(let dx=4;dx<w;dx+=5) body+=path(`M${x+dx},${y+.5}v3.5`,token(biome,'light'),.7);
+    const x=f.detail==='shop'?19:6, y=f.detail==='shop'?49:58, w=f.detail==='shop'?26:17;
+    body+=rect(x,y,w,4.5*detailScale,token(biome,'accent'),.85*detailScale);
+    for(let dx=4*detailScale;dx<w;dx+=5*detailScale)
+      body+=path(`M${x+dx},${y+.5*detailScale}v${3.5*detailScale}`,token(biome,'light'),.7*detailScale);
   }
   if(f.detail==='workshop') {
     if(biome==='tundra') body+=path('M12,12L15,10L23,11L24,20L22,23L13,22Z',snow,0)
@@ -85,7 +87,8 @@ function glyph(f,biome) {
     }
   }
   // Shadow panels use the same geometry and stroke as the body. Court voids stay empty.
-  const sil=f.panels.map(([a,b,c,d])=>`<path d="M${a+1.1},${b+1.1}H${c-1.1}V${d-1.1}H${a+1.1}Z" fill="currentColor" stroke="currentColor" stroke-width="2.2"/>`).join('');
+  const inset=1.1*detailScale;
+  const sil=f.panels.map(([a,b,c,d])=>`<path d="M${a+inset},${b+inset}H${c-inset}V${d-inset}H${a+inset}Z" fill="currentColor" stroke="currentColor" stroke-width="${2.2*detailScale}"/>`).join('');
   return {body:`<g stroke-linejoin="round" stroke-linecap="round">${body}</g>`,sil:`<g stroke-linejoin="round">${sil}</g>`};
 }
 
@@ -98,7 +101,7 @@ for(const biome of Object.keys(biomes)) for(const f of families) {
     biome,family:f.key,category:f.category??'urban',tags:f.tags,inkBounds:f.bounds,footprintPolygons:f.panels.map(([a,b,c,d])=>[[a,b],[c,b],[c,d],[a,d]]),
     courtyardVoids:f.holes??[],frontVector:[0,1],frontageEdge:[[x0,y1],[x1,y1]],
     joins:f.join??f.joins??[],repeatPitch:(f.join??f.joins)?.includes('west')?[x1-x0,0]:(f.join??f.joins)?.includes('north')?[0,y1-y0]:null,storeys:f.floors,
-    representedBuildings:f.bays??(f.tags.includes('aggregate')?null:1),
+    representedBuildings:['inn','courtyard-u'].includes(f.key)?f.panels.length:f.bays??(f.tags.includes('aggregate')?null:1),
     requires:{adjacency:['road']},silhouette:`${id}-sil`,
   };
 }

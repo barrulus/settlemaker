@@ -99,6 +99,8 @@ export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = 
     for(const garden of patch.ward.gardens){
       features.push({type:'Feature',properties:{layer:'green',kind:'garden',wardType:patch.ward.type},geometry:polygonToGeoJson(garden.ring,shift)});
     }
+    for(const compound of patch.ward.compounds)for(const court of compound.courts)
+      features.push({type:'Feature',properties:{layer:'green',kind:'court',purpose:'private',surface:'paved',wardType:patch.ward.type},geometry:polygonToGeoJson(court,shift)});
     if(patch.ward.publicSpace)features.push({type:'Feature',properties:{layer:'green',kind:'court',purpose:'civic',surface:'paved',wardType:patch.ward.type},geometry:polygonToGeoJson(patch.ward.publicSpace,shift)});
     if (patch.ward instanceof Harbour) {
       for (const pier of patch.ward.piers) {

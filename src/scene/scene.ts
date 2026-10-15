@@ -54,6 +54,8 @@ export interface SymbolInstance {
   scale: number;       // world-unit art-box width; height defaults to the same
   scaleY?: number;
   buildingId?: string;
+  /** Actual compound wing identities, including the primary buildingId. */
+  buildingIds?: string[];
   rotationDeg: number;
   zBand: 'structure' | 'overlay';
 }

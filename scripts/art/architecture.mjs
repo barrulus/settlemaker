@@ -7,21 +7,26 @@ const rect = (x,y,w,h,fill,sw=1) => path(`M${x},${y}h${w}v${h}h-${w}Z`,fill,sw);
 const token = (biome, role) => `var(--sm-${namespace}-${biome}-${role}, ${biomes[biome][role]})`;
 const points = p => p.map(([x,y],i)=>`${i?'L':'M'}${fmt(x)},${fmt(y)}`).join(' ')+'Z';
 
-function roof(panel, biome, index, snowCover='eaves') {
+function roof(panel, biome, index, snowCover='eaves', detailScale=1) {
+  // Compound wings occupy a much larger world-space canvas than one house.
+  // Author their roof detail on a finer grid, then emit physical SVG
+  // coordinates directly: roof envelopes stay fixed while pen widths,
+  // hatch pitch, eaves and chimney dimensions retain a house-sized grain.
   let [x0,y0,x1,y1,axis='y'] = panel;
+  [x0,y0,x1,y1]=[x0,y0,x1,y1].map(value=>value/detailScale);
   const bx=x0+1.1, by=y0+1.1, ex=x1-1.1, ey=y1-1.1;
-  const local=(u,v)=>axis==='y'?[bx+u,by+v]:[bx+v,by+u];
+  const local=(u,v)=>(axis==='y'?[bx+u,by+v]:[bx+v,by+u]).map(value=>value*detailScale);
   const w=axis==='y'?ex-bx:ey-by, h=axis==='y'?ey-by:ex-bx;
-  const poly=(p,fill,sw=0)=>path(points(p.map(([u,v])=>local(u,v))),fill,sw);
-  const line=(p,sw=.6,extra='')=>path(p.map(([u,v],i)=>`${i?'L':'M'}${local(u,v).map(fmt).join(',')}`).join(' '),'none',sw,extra);
-  let body=rect(bx,by,ex-bx,ey-by,token(biome,'roof'),2.2);
+  const poly=(p,fill,sw=0)=>path(points(p.map(([u,v])=>local(u,v))),fill,sw*detailScale);
+  const line=(p,sw=.6,extra='')=>path(p.map(([u,v],i)=>`${i?'L':'M'}${local(u,v).map(fmt).join(',')}`).join(' '),'none',sw*detailScale,extra);
+  let body=rect(bx*detailScale,by*detailScale,(ex-bx)*detailScale,(ey-by)*detailScale,token(biome,'roof'),2.2*detailScale);
   if (biome==='desert') {
-    body+=rect(bx+2.1,by+2.1,ex-bx-4.2,ey-by-4.2,token(biome,'light'),.8);
+    body+=rect((bx+2.1)*detailScale,(by+2.1)*detailScale,(ex-bx-4.2)*detailScale,(ey-by-4.2)*detailScale,token(biome,'light'),.8*detailScale);
     for(let v=6;v<h-4;v+=6) body+=line([[4,v],[w-4,v+.13]],.45,'opacity=".42"');
     // Roof access hatch plus a small glazed water jar; both fully inset.
     if(w>=8&&h>=8) body+=poly([[w-8,h-8],[w-3,h-8],[w-3,h-3],[w-8,h-3]],token(biome,'wall'),.8);
     const [cx,cy]=local(6,6);
-    if(w>=8&&h>=8) body+=`<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="1.6" fill="${token(biome,'accent')}" stroke="${ink}" stroke-width=".7"/>`;
+    if(w>=8&&h>=8) body+=`<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="${1.6*detailScale}" fill="${token(biome,'accent')}" stroke="${ink}" stroke-width="${detailScale===1?'.7':.7*detailScale}"/>`;
     return body;
   }
   const hip=biome==='tropical'?Math.min(7,h*.22):Math.min(3,h*.13);

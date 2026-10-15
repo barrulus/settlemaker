@@ -741,7 +741,7 @@
         2,
         4
       ],
-      "representedBuildings": 1,
+      "representedBuildings": 3,
       "requires": {
         "adjacency": [
           "road"
@@ -1065,7 +1065,7 @@
         2,
         4
       ],
-      "representedBuildings": 1,
+      "representedBuildings": 5,
       "requires": {
         "adjacency": [
           "road"
@@ -4251,7 +4251,7 @@
         2,
         4
       ],
-      "representedBuildings": 1,
+      "representedBuildings": 3,
       "requires": {
         "adjacency": [
           "road"
@@ -4575,7 +4575,7 @@
         2,
         4
       ],
-      "representedBuildings": 1,
+      "representedBuildings": 5,
       "requires": {
         "adjacency": [
           "road"
@@ -7761,7 +7761,7 @@
         2,
         4
       ],
-      "representedBuildings": 1,
+      "representedBuildings": 3,
       "requires": {
         "adjacency": [
           "road"
@@ -8085,7 +8085,7 @@
         2,
         4
       ],
-      "representedBuildings": 1,
+      "representedBuildings": 5,
       "requires": {
         "adjacency": [
           "road"
@@ -11271,7 +11271,7 @@
         2,
         4
       ],
-      "representedBuildings": 1,
+      "representedBuildings": 3,
       "requires": {
         "adjacency": [
           "road"
@@ -11595,7 +11595,7 @@
         2,
         4
       ],
-      "representedBuildings": 1,
+      "representedBuildings": 5,
       "requires": {
         "adjacency": [
           "road"
@@ -14781,7 +14781,7 @@
         2,
         4
       ],
-      "representedBuildings": 1,
+      "representedBuildings": 3,
       "requires": {
         "adjacency": [
           "road"
@@ -15105,7 +15105,7 @@
         2,
         4
       ],
-      "representedBuildings": 1,
+      "representedBuildings": 5,
       "requires": {
         "adjacency": [
           "road"

@@ -99,7 +99,7 @@ describe('biome landscape character',()=>{
     // include every ward's private ground, not just residential gardens.
     const gardens=r.model.patches.reduce((n,p)=>n+(p.ward?.gardens.length??0),0);
     expect(r.geojson.features.filter(f=>f.properties?.kind==='garden').length).toBe(gardens);
-    expect(scene.layers.greens.filter(g=>g.purpose==='private').length).toBe(gardens);
+    expect(scene.layers.greens.filter(g=>g.purpose==='private'&&g.surface!=='paved').length).toBe(gardens);
     expect(r.model.symbols.filter(s=>s.id.startsWith('sm-house')).length).toBeGreaterThan(10);
     expect(new Set(r.model.symbols.map(s=>s.materialVariant??0)).size).toBe(5);
     expect(r.svg).toContain('roof-tone-4');

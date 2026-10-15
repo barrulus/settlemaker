@@ -61,9 +61,11 @@ describe('physical settlement planning', () => {
     expect(market.length).toBeGreaterThan(4);
     expect(temple.length).toBeGreaterThan(4);
     expect(market.every(b=>!b.landmark)).toBe(true);
-    const plaza=L.greens.filter(g=>g.surface==='paved');
+    // Compound courtyards are private paved spaces, not civic plazas.
+    const paved=L.greens.filter(g=>g.surface==='paved');
+    expect(paved.every(p=>p.purpose==='civic'||p.purpose==='private')).toBe(true);
+    const plaza=paved.filter(g=>g.purpose==='civic');
     expect(plaza.length).toBeGreaterThanOrEqual(1);
-    expect(plaza.every(p=>p.purpose==='civic')).toBe(true);
     expect(plaza.some(p=>area(p.ring)<=324.000001)).toBe(true);
     for(const p of plaza)expect(area(p.ring)).toBeLessThanOrEqual(576.000001); // 24m temple court maximum
     for(const b of [...market,...temple]){

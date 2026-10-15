@@ -190,7 +190,11 @@ describe('fidelity round 4: probe path', () => {
     // dense glyphs intentionally change this city; the village pin remains.
     // Translated contained artwork and rectangular end-lot houses with explicit
     // yards replace polygon filler; both reported legacy crops were reviewed.
-    expect(sha256(svg)).toBe('252db4ebfac471ba4cc3ba25e67794df1c4c05d8ac5310ffdcdd6f9571ec8a2a');
+    // Wells now use final-frame physical scale. Planned compound wings
+    // retain their own footprints and reviewed house-scale vector detail.
+    // Compound entrances now meet the street network; low well shadows stay
+    // attached at the corrected scale. Final artwork and repeatability reviewed.
+    expect(sha256(svg)).toBe('37762c706e78f46a04ae37c1f4309f8695ec639fc83da8111c72781cb84adb21');
   });
 
   it('pins direct legacy generateFromBurg output at pop 800 (not the village engine)', () => {
@@ -297,7 +301,9 @@ describe('fidelity round 4: probe path', () => {
     expect(svg.length).toBeGreaterThan(1000);
     // Shared biome ground with paved city roads; urban street corridors and lane mouths are visible.
     // Reviewed both Aldford fixtures and verified exact repeatability before repinning.
-    expect(sha256(svg)).toBe('1715e1dfd9d90439470194cd6a9892e39748a54fe6367d4fedb1d359dd398927');
+    // Only well-shadow offsets changed here; removing the corrective transform
+    // restores byte identity with the preceding reviewed SVG.
+    expect(sha256(svg)).toBe('163185665983d82cb21f0c3cb09a47a0ab83bbaf9f1cf1c5b6422625e4424c3d');
   });
 });
 

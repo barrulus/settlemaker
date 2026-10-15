@@ -156,3 +156,42 @@ errors, diagnostic strip or rendering fallback. Vite was restarted to clear
 retained engine modules. Final browser bundle: `source-7b24fd0b46b8dac5ac748a44`.
 Local fixed-frame comparisons and browser evidence are in
 `output/city-filler-review/` (ignored).
+
+
+## Follow-up: wells and full-sized compound wings
+
+City wells now convert their artwork dimensions using the completed city scale.
+Their painted diameter in both Aldford cases is approximately 2.29 metres,
+previously 7.2–7.4 metres. The existing courtyard reservation stays in place;
+containment checks prevent a well from crossing its lot.
+
+Inns and U-shaped houses now reserve a street-facing compound before ordinary
+plots are subdivided. Their five or three wings are actual building footprints,
+each with normal census capacity, access and identity. In the reported legacy
+cities the wings are approximately seven metres wide, instead of fitting an
+entire compound into a single-house plot with roughly 2.3-metre wings. Sites
+that cannot accommodate the compound retain ordinary houses. If census trimming
+removes a wing, the remaining buildings receive individual artwork.
+
+The shared scene supports one symbol linked to several building IDs. SVG,
+viewport queries, shadows and GeoJSON use those links; hiding compound artwork
+restores all its underlying footprints. Authored compound vectors use the shared
+roof helper with finer outlines, hatching and chimney details at this larger
+scale. Other artwork is unchanged. Private paved courts are explicit ground,
+and undersized remainder strips become yards rather than miniature houses.
+The physical generator revision is `physical-layout-5`.
+
+
+The final fixed-frame review retains exact legacy residential budgets of
+203 and 417, and the physical case retains all 10,000 residents with core
+5,000/rural 1,000. Full-detail plain footprint counts are 6, 18 and 153 for
+Aldford 1,200, Aldford 3,400 and physical 10,000 respectively. Courtyard access
+has explicit connected junctions; optional physical compounds are rejected
+when they cannot preserve their district's housing request. This prevents
+whole-city expansion merely to make room for a constrained courtyard. Wells
+also receive a size-bounded shadow offset so their smaller shadow stays attached.
+
+The reproducible review includes component-to-neighbour width ratios,
+separate glyph-instance and represented-building counts, and fixed comparison
+frames. Final bundle: `source-08b0d4f291576f7db8888b3a`. Local images and metrics
+are saved under `output/city-scale-review/` (ignored).

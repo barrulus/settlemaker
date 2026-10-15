@@ -6,6 +6,7 @@ import { resolveSkin } from '../assets/skins.js';
 import { assetSetFor, SETTLEMENT_SET } from '../assets/asset-sets.js';
 import { ARTWORK_INK } from '../assets/artwork.js';
 import { boundsOfPoints as pointsBounds } from '../geom/bounds.js';
+import { linkedBuildingIds } from './symbol-buildings.js';
 
 const overlaps = (a: LocalBounds, b: LocalBounds) => a.min_x <= b.max_x && a.max_x >= b.min_x && a.min_y <= b.max_y && a.max_y >= b.min_y;
 const expand = (b: LocalBounds, n: number): LocalBounds => ({ min_x: b.min_x-n, min_y: b.min_y-n, max_x: b.max_x+n, max_y: b.max_y+n });
@@ -73,7 +74,7 @@ function prepareSceneQuery(scene: Scene, indexed: boolean): SceneIndex {
   };
   const symbolBoxes=L.symbols.map(s=>glyphBounds(s.id,s.at,s.scale,s.rotationDeg,s.scaleY));
   const linked=new Map<string,LocalBounds[]>();
-  L.symbols.forEach((s,i)=>{if(s.buildingId&&symbolBoxes[i])linked.set(s.buildingId,[...(linked.get(s.buildingId)??[]),symbolBoxes[i]!]);});
+  L.symbols.forEach((s,i)=>{if(symbolBoxes[i])for(const id of linkedBuildingIds(s))linked.set(id,[...(linked.get(id)??[]),symbolBoxes[i]!]);});
   const index=<T>(values:T[],bounds:(v:T,i:number)=>LocalBounds|null)=>{
     if(!indexed)return (view:LocalBounds)=>values.filter((value,i)=>{const b=bounds(value,i);return !b||overlaps(b,view);});
     const always:T[]=[], entries:Array<{bounds:LocalBounds;value:T}>=[];

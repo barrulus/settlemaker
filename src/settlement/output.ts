@@ -81,7 +81,8 @@ export function exportSettlement(model: SettlementModel): SettlementGeoJson {
   for (const d of model.districts) polygon(d.id, d.boundary, { layer: 'district', district_id: d.id, urbanity: d.urbanity, inside_walls: d.insideWalls,
     ...(d.settlementRole ? {settlement_role:d.settlementRole} : {}), ...(d.character ? {character:d.character} : {}),
     ...(d.occupiedAreaM2 !== undefined ? {occupied_area_m2:d.occupiedAreaM2} : {}), ...(d.areaM2 !== undefined ? {area_m2:d.areaM2} : {}) });
-  for (const [i, s] of L.symbols.entries()) point(`symbol:${i}`, s.at, { layer: 'symbol', glyph: s.id, building_id: s.buildingId, width_m: s.scale, height_m: s.scaleY ?? s.scale, bearing_deg: s.rotationDeg });
+  for (const [i, s] of L.symbols.entries()) point(`symbol:${i}`, s.at, { layer: 'symbol', glyph: s.id, building_id: s.buildingId,
+    ...(s.buildingIds ? { building_ids: s.buildingIds } : {}), width_m: s.scale, height_m: s.scaleY ?? s.scale, bearing_deg: s.rotationDeg });
   for (const b of L.bridges ?? []) line(b.id, b.path, { layer: 'bridge', width: b.width });
   return { type: 'FeatureCollection', features, metadata: { schema: 'settlemaker/physical-plan', schema_version: 1, coordinate_system: 'local_metres_y_down', coordinate_units: 'metres',
     local_bounds: { ...model.scene.bounds }, scale: { meters_per_unit: 1, source: 'physical_layout_v1' }, residents: structuredClone(model.residents),

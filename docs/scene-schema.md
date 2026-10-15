@@ -78,7 +78,7 @@ performed by `generateFromBurg`; use that high-level function when you want it.
 | `furrows` | Deprecated array; current scenes leave it empty and use field direction instead. |
 | `greens` | Polygon rings with optional planned paths and path width. Physical city squares carry `surface: 'paved'`; other open ground retains grass or park artwork. |
 | `vegetation` | Position, glyph/legacy `kind`, scale and rotation. |
-| `symbols` | Glyph `id`, position, scale, optional `scaleY`, `buildingId`, `materialVariant`, rotation, and `zBand`. |
+| `symbols` | Glyph `id`, position, scale, optional `scaleY`, `buildingId`, `buildingIds`, `materialVariant`, rotation, and `zBand`. |
 | `roads` | Paths with `kind: 'artery' | 'road' | 'alley'` and optional width. |
 | `buildings` | Polygon, semantic ward `kind`, `landmark`, optional `id` and `glyphBacked`. |
 | `piers` | Polygon rings. |
@@ -129,6 +129,11 @@ placed symbols/marks, vegetation and walls. Some groups are omitted when empty;
 procedural artwork can add nested groups, masks and patterns. These group names
 are not the village renderer's DOM contract. For city building identity, emitted
 `data-building-id` attributes connect applicable polygons/symbols to GeoJSON IDs.
+Compound symbols also carry `buildingIds` (SVG `data-building-ids`): all real
+wing identities, including the primary `buildingId`. Their wings remain separate
+building features and population records. Rendering a compound hides every
+linked footprint; disabling or omitting its artwork restores those footprints.
+Viewport queries retain the entire linked group when its artwork enters view.
 Use GeoJSON for semantic feature queries rather than inferring a feature solely
 from its colour or DOM position.
 

@@ -8,6 +8,7 @@ import { scoreBuildings, scoringReference, selectPois } from '../poi/poi-selecto
 import { Point } from '../types/point.js';
 import { WardType } from '../types/interfaces.js';
 import { Polygon } from '../geom/polygon.js';
+import { CommonWard } from '../wards/common-ward.js';
 import { fitInscribedRectangle } from '../geom/inscribed-rectangle.js';
 import { resolveGlyphFor } from '../village/deck.js';
 import { computeLocalBounds } from './bounds.js';
@@ -134,6 +135,7 @@ export function placeCityGlyphs(model: Model): void {
       .map(([a, b]) => ({ a, b, width: lane.width })));
   }
   const metersPerUnit = cityMetersPerUnit(model);
+  for (const patch of model.patches) if (patch.ward instanceof CommonWard) patch.ward.finalizeWellScale(metersPerUnit);
   const architecture = cityArchitecture(model.params.seed, model.params.biome);
   const templeMaxScale = architecture.temple.includes('cathedral') ? 1.75 : 1.25;
   const templeWard = model.patches.find(p => p.ward?.type === WardType.Cathedral)?.ward;
@@ -173,7 +175,9 @@ export function placeCityGlyphs(model: Model): void {
   const keep = castleWard && scoreBuildings(castleWard.geometry, scoringReference(model))[0];
   const ids=buildingIds(model);
   const semantic=new Map(selectPois(model,model.params.population,new IdAllocator(),ids).filter(p=>p.buildingId).map(p=>[p.buildingId!,p.kind]));
-  const poiForms:Record<string,string>={inn:'inn',tavern:'shop-house',smithy:'workshop',stable:'workshop',shop:'shop-house',bathhouse:'bathhouse',guildhall:'guildhall',warehouse:'warehouse',guardhouse:'castle-barracks'};
+  // A single adopted inn is a street house. Multi-wing inn artwork belongs
+  // only to a complete planned compound and keeps its separate building IDs.
+  const poiForms:Record<string,string>={inn:'shop-house',tavern:'shop-house',smithy:'workshop',stable:'workshop',shop:'shop-house',bathhouse:'bathhouse',guildhall:'guildhall',warehouse:'warehouse',guardhouse:'castle-barracks'};
   for (const patch of model.patches) {
     const ward = patch.ward;
     if (!ward || [WardType.Park, WardType.Water, WardType.Empty].includes(ward.type)
@@ -182,7 +186,33 @@ export function placeCityGlyphs(model: Model): void {
     const urbanity=cityUrbanity(model,patch);
     const palacePrincipal = ward.type === WardType.Administration && model.params.capitalNeeded
       ? scoreBuildings(ward.geometry,scoringReference(model)).find(b=>!semantic.has(ids.get(b)??'')) : undefined;
+    // Compound artwork replaces the actual planned wings as one group.
+    // Its scale was earned by reserving a multi-building site before census,
+    // never by squeezing the full arrangement onto one surviving house lot.
+    const grouped = new Set<Polygon>();
+    for (const compound of ward.compounds) {
+      if (!compound.buildings.length || !compound.buildings.every(b=>ward.geometry.includes(b))) continue;
+      const dry = drySegments(compound.at,compound.frontage.at,water);
+      if (overlapsWater(compound.site,water)
+        || dry.length!==1 || dry[0][0]!==compound.at || dry[0][1]!==compound.frontage.at
+        || !segmentInside(compound.at,compound.frontage.at,ward.patch.shape)
+        || ward.geometry.some(b=>!compound.buildings.includes(b) && blocksAccess(compound.at,compound.frontage.at,b))) continue;
+      const id = cityGlyph(compound.family,model.params.biome);
+      const ink = REFINED_INK[id];
+      if (!ink) continue;
+      const roll = landscapeHash(Math.round(compound.at.x*10),Math.round(compound.at.y*10),model.params.seed);
+      model.symbols.push({id,building:compound.buildings[0],buildings:[...compound.buildings],
+        at:compound.at,scale:compound.canvas,scaleY:compound.canvas,rotationDeg:compound.rotationDeg,
+        frontage:compound.frontage,zBand:'structure',wardType:ward.type,
+        paintedArea:ink.area*compound.canvas**2/(64*64),
+        materialVariant:roll<.45?0:1+Math.floor((roll-.45)/.55*4)});
+      for (const building of compound.buildings) {
+        grouped.add(building);
+        model.glyphBackedBuildings.add(building);
+      }
+    }
     for (const building of ward.geometry) {
+      if (grouped.has(building)) continue;
       if (building === ward.principalBuilding && ward.principalSymbol) {
         model.symbols.push(ward.principalSymbol);
         model.glyphBackedBuildings.add(building);
@@ -212,7 +242,7 @@ export function placeCityGlyphs(model: Model): void {
           : ward.type === WardType.Market ? cityGlyph('shop-house',model.params.biome)
           : ward.type === WardType.Slum ? architecture.poor
             : ward.type === WardType.Administration ? (model.params.capitalNeeded ? architecture.palaceWing : model.params.development ? home : cityGlyph('guildhall',model.params.biome))
-              : ward.type === WardType.Patriciate ? (corner ? architecture.wealthy : dense && roll < .3 ? architecture.court : home)
+              : ward.type === WardType.Patriciate ? (corner ? architecture.wealthy : home)
               : [WardType.Military, WardType.Castle].includes(ward.type) ? architecture.barracks
                 : ward.type === WardType.Harbour ? cityGlyph('warehouse',model.params.biome) : home;
       let best: ReturnType<typeof fitCityGlyph> = null;

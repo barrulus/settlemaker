@@ -23,14 +23,14 @@ code when creating a skin.
   It uses the same contained-rectangle helper as corner-site planning; it never
   expands across a concave boundary or stretches artwork to match a wedge.
   Central housing mixes one seeded row-house family with substantial tenements;
-  wealthy blocks can use single-building courtyard forms where the site fits.
+  selected wealthy blocks reserve full-sized courtyard compounds.
   The physical planner reserves wider tenement sites among narrow attached street
   houses, keeping real frontage access and the same capacity per building.
   Ordinary houses keep their usual depth with rear gardens; only the wider
   tenement sites need deeper footprints. Dense
   art is never shrunk to a tiny cluster to fit a cottage plot: tenements require
   a nominal canvas of at least 10.4 metres (about eight metres of painted frontage),
-  and courts require 12.8 metres. A corner house needs an actual street corner;
+  while compound wings are sized to the surrounding house frontage. A corner house needs an actual street corner;
   unsuitable forms fall back to the city's row-house family before plain polygons.
   Five restrained biome roof tones preserve a coherent neighbourhood.
   Demand favours the centre; outer roofs sit in progressively larger gardens
@@ -50,10 +50,18 @@ code when creating a skin.
   40% of the parcel, 16 square metres of footprint and a three-metre short side,
   with clear access. Regular footprints remain unchanged. Residential and civic
   yards appear consistently in the scene and GeoJSON.
-- Multi-building terrace and complete compound presets are available in the
-  artwork registry/catalogue but are not substituted for individual household
-  lots. Compound planning must retain constituent identities and real capacities;
-  this integration does not invent households to fill an aggregate illustration.
+- A rare merchant inn or patrician courtyard reserves a larger site before
+  ordinary rows are subdivided. Its five or three wings are real building
+  footprints with individual identities and normal per-building capacity.
+  Courtyard space and connecting access remain open. One compound illustration
+  covers the complete group at its planned scale. If later trimming removes a
+  wing, surviving wings receive individual artwork instead. An ordinary inn on
+  a small plot uses a street-house form; it never miniaturizes the compound.
+  Aggregate terrace presets remain available in the catalogue.
+- City wells use the reviewed artwork's metre dimensions after the complete
+  city scale is known. Their painted diameter is about 2.3 metres on a suitable
+  site, rather than interpreting the nominal size as legacy mesh units. Their
+  complete painted bounds must fit within the reserved well courtyard.
 - Vegetation uses native seeded variants, with separate metre footprints for
   trees, shrubs and low plants. Tundra defaults to low vegetation, including snow
   variants; treeline trees are not scattered across open tundra. Wet-margin

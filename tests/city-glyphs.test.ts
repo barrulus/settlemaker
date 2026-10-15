@@ -58,7 +58,9 @@ describe('city artwork integration', () => {
       const placements = model.symbols.filter(s => s.building);
       expect(placements.length).toBeGreaterThan(100);
       for (const s of placements) {
-        const polygon = s.building!, [x0, y0, x1, y1] = REFINED_INK[s.id].bounds;
+        const compound = s.buildings && model.patches.flatMap(p=>p.ward?.compounds??[])
+          .find(compound=>compound.buildings[0]===s.building);
+        const polygon = compound?.site ?? s.building!, [x0, y0, x1, y1] = REFINED_INK[s.id].bounds;
         const anchor = REFINED_MANIFEST[s.id].anchor;
         const angle = s.rotationDeg * Math.PI / 180;
         for (const [x, y] of [[x0, y0], [x0, y1], [x1, y0], [x1, y1]]) {

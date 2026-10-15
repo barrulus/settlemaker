@@ -57,7 +57,10 @@ describe('reviewed artwork is the generator default',()=>{
       if(!p.buildingId||!families[p.kind])continue;
       const s=scene.layers.symbols.find(s=>s.buildingId===p.buildingId);
       if(!s)continue; // An unsuitable small lot retains its real polygon.
-      expect(ARTWORK_MANIFEST[s.id].family).toBe(families[p.kind]);checked++;
+      const family=p.kind==='inn' && !s.buildingIds?.length?'shop-house':families[p.kind];
+      expect(ARTWORK_MANIFEST[s.id].family).toBe(family);
+      if(p.kind==='inn' && s.buildingIds?.length)expect(s.buildingIds).toHaveLength(5);
+      checked++;
     }
     expect(checked).toBeGreaterThan(4);
     expect(r.svg).toContain('--sm-city-temperate-roof');

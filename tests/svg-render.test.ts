@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { generateFromBurg, themeFrom, type AzgaarBurgInput } from '../src/index.js';
 import { generateSvg } from '../src/output/svg-builder.js';
 import { WardType } from '../src/types/interfaces.js';
+import { buildScene } from '../src/scene/build-scene.js';
+import { linkedBuildingIds } from '../src/scene/symbol-buildings.js';
+import { assembleSvg } from '../src/output/assemble-svg.js';
 
 function makeBurg(overrides: Partial<AzgaarBurgInput> = {}): AzgaarBurgInput {
   return {
@@ -97,18 +100,43 @@ describe('svg render: shadows, buildings, landmarks', () => {
     expect(firstBuilding).toBeGreaterThan(shadow);
   });
 
-  it('shadow count matches building count', () => {
+  it('shadows represent every building exactly once, including compound wings', () => {
     const { model, svg } = generateFromBurg(makeBurg({ population: 12000 }), { seed: 42 });
     const shadowGroup = svg.match(/<g id="shadows"[^>]*>([\s\S]*?)<\/g>/)![1];
-    const buildingShadows = (shadowGroup.match(/data-building-id=/g) ?? []).length;
-    let buildings = 0;
-    for (const patch of model.patches) {
-      if (!patch.ward) continue;
-      // Park geometry (groves) is painted by paintGreens, not shadowed.
-      if (patch.ward.type === WardType.Park) continue;
-      buildings += patch.ward.geometry.length;
+    const shadowIds = [...shadowGroup.matchAll(/<(?:path|use)\b[^>]*>/g)].flatMap(([tag]) => {
+      const buildingId = tag.match(/data-building-id="([^"]+)"/)?.[1];
+      const buildingIds = tag.match(/data-building-ids="([^"]+)"/)?.[1].split(' ');
+      return [...linkedBuildingIds({ buildingId, buildingIds })];
+    });
+    // A compound has one silhouette but several real wing footprints. Parks
+    // are absent from the scene's buildings and must not acquire shadows.
+    expect(new Set(shadowIds).size).toBe(shadowIds.length);
+    expect(shadowIds.sort()).toEqual(buildScene(model).layers.buildings.map(b => b.id).sort());
+  });
+
+  it('keeps well shadows attached at legacy and metre scales without changing building shadows', () => {
+    const { model } = generateFromBurg(makeBurg({ population: 1200 }), { seed: 42 });
+    const scene = buildScene(model);
+    const house = scene.layers.symbols.find(s => s.buildingId)!;
+    expect(house).toBeDefined();
+    house.materialVariant = undefined;
+    // The same renderer handles both legacy mesh units and physical metres.
+    for (const scale of [0.99, 3.6]) for (const offset of [
+      undefined, { dx: -4, dy: 3 }, { dx: 0.01, dy: -0.02 }, { dx: 0, dy: 0 },
+    ]) {
+      scene.layers.symbols = [house, { id: 'sm-well', at: { x: 0, y: 0 }, scale, rotationDeg: 0, zBand: 'structure' }];
+      const svg = assembleSvg(scene, offset ? { theme: { shadowOffset: offset } } : {});
+      const parent = svg.match(/<g id="shadows" transform="translate\(([-\d.]+),([-\d.]+)\)">/)!.slice(1).map(Number);
+      const transform = (id: string) => svg.match(new RegExp(`<use href="#glyph-${id}"[^>]*transform="([^"]+)"`))![1];
+      const body = transform('sm-well'), shadow = transform('sm-well-sil');
+      expect(shadow.endsWith(body)).toBe(true); // artwork size/rotation are unchanged
+      const correction = shadow.slice(0, shadow.length - body.length).match(/translate\(([-\d.]+),([-\d.]+)\)/)?.slice(1).map(Number) ?? [0, 0];
+      const actual = parent.map((value, i) => value + correction[i]);
+      const factor = Math.hypot(...parent) === 0 ? 1 : Math.min(1, scale * 0.1 / Math.hypot(...parent));
+      actual.forEach((value, i) => expect(value).toBeCloseTo(parent[i] * factor, 3));
+      expect(Math.hypot(...actual)).toBeLessThanOrEqual(scale * 0.1 + 0.0001);
+      expect(transform(`${house.id}-sil`)).toBe(transform(house.id));
     }
-    expect(buildingShadows).toBe(buildings);
   });
 
   it('does not shadow or repaint Park ward geometry (park overpaint regression)', () => {

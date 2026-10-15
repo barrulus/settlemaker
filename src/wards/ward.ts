@@ -9,6 +9,7 @@ import type { Model } from '../generator/model.js';
 import type { Patch } from '../generator/patch.js';
 import type { PlacedSymbol } from '../generator/symbols.js';
 import type { CityFrontage } from '../generator/city-frontage.js';
+import type { CityCompound } from '../generator/city-compounds.js';
 import { edgeInsetScale, rowHousing, ROW_OUTSKIRTS_BITE } from '../generator/generation-params.js';
 
 /**
@@ -55,6 +56,7 @@ export class Ward {
   publicSpace: Polygon | null = null;
   /** Explicit unbuilt portions of occupied residential or civic parcels. */
   gardens: Array<{ring:Polygon;access:Point[]}> = [];
+  compounds: CityCompound[] = [];
   type: WardType = WardType.Empty;
 
   constructor(model: Model, patch: Patch) {

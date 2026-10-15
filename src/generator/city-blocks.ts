@@ -5,6 +5,7 @@ import type { WardLane } from '../wards/ward.js';
 import { intersectLines } from '../geom/geom-utils.js';
 import { convexHull } from '../village/dressing/parcel-cut.js';
 import polygonClipping from 'polygon-clipping';
+import { reserveCityCompound, retainUsefulCompoundNeighbours, retainConnectedCompoundLanes, type CityCompound, type CityCompoundFamily } from './city-compounds.js';
 
 /** Convex clipping by nx*x + ny*y <= limit. Shared vertices stay in mesh units. */
 export function clipBlock(poly: Polygon, nx: number, ny: number, limit: number): Polygon {
@@ -30,6 +31,7 @@ export interface CityBlockPlan {
   exclusions?: Point[][];
   /** Unbuilt strips beside detached plots or behind narrow terraces, reserved as private gardens. */
   gardens?: Polygon[];
+  compounds?: CityCompound[];
 }
 
 export interface CityBlockSpacing {
@@ -75,9 +77,44 @@ export function planCityBlock(
   clipConcave = compact,
   spacing?: CityBlockSpacing,
   mixedDenseSites = false,
+  compound?: {family:CityCompoundFamily;biome?:string},
 ): CityBlockPlan | null {
   if (site.length < 3 || Math.abs(site.square) < 1) return null;
-  if (!site.isConvex()) {
+  if (compound) {
+    let best:CityBlockPlan|undefined;
+    for(const fraction of [.5,.25,.75]){
+    const reserved=reserveCityCompound(site,streets,areaPerHouse,compound.family,compound.biome,fraction);
+    if(reserved){
+      const plan:CityBlockPlan={buildings:[...reserved.compound.buildings],lanes:[...reserved.lanes],frontages:new Map(reserved.frontages),runs:reserved.compound.buildings.map(b=>[b]),gardens:[],compounds:[reserved.compound]};
+      const exclusions:Point[][]=[reserved.compound.site.vertices];
+      for(const remainder of reserved.remaining){
+        const part=planCityBlock(remainder,streets,areaPerHouse,alleyWidth,compact,clipConcave,spacing,mixedDenseSites);
+        if(!part)continue;
+        plan.buildings.push(...part.buildings);plan.lanes.push(...part.lanes);plan.runs.push(...part.runs);
+        for(const[b,f]of part.frontages)plan.frontages.set(b,f);
+        plan.gardens!.push(...part.gardens??[]);
+        exclusions.push(...part.exclusions??[]);
+      }
+      // Remainder hulls can repeat the compound notch. Union reservations so
+      // even-odd water-style checks cannot cancel overlapping exclusions.
+      const rings=exclusions.map(points=>points.map(p=>[Math.round(p.x*1e8)/1e8,Math.round(p.y*1e8)/1e8] as [number,number]));
+      plan.exclusions=polygonClipping.union([rings[0]],...rings.slice(1).map(r=>[r]))
+        .flatMap(p=>p.map(r=>r.slice(0,-1).map(([x,y])=>new Point(x,y))));
+      retainUsefulCompoundNeighbours(plan,areaPerHouse);
+      retainConnectedCompoundLanes(plan,streets);
+      if(!best || plan.buildings.length>best.buildings.length)best=plan;
+    }
+    }
+    if(best)return best;
+  }
+  // Boolean cuts can leave virtually collinear hull vertices. The strict
+  // Polygon predicate and hull use differently based cross products, whose
+  // last-bit signs can disagree and repeatedly rehull the same polygon.
+  const weaklyConvex=site.square>0 && site.vertices.every((b,i)=>{
+    const a=site.vertices[(i+site.length-1)%site.length],c=site.vertices[(i+1)%site.length];
+    return (b.x-a.x)*(c.y-b.y)-(b.y-a.y)*(c.x-b.x)>=-1e-10;
+  });
+  if (!weaklyConvex) {
     if (!clipConcave) return null;
     // Wall insets can introduce tiny reflex notches. They must not send an
     // otherwise ordinary block back to the sparse estate subdivision.

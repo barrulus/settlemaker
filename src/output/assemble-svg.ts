@@ -6,12 +6,13 @@ import { greenGround } from '../assets/greens-art.js';
 import { farmDetails, wallArtwork, bridgeArtwork } from './artwork.js';
 import { ARTWORK_MANIFEST, ART_TOKENS, artworkBiome, cityGlyph } from '../assets/artwork.js';
 import type { Palette } from '../types/interfaces.js';
-import type { BuildingFeature, Scene, ScenePoint } from '../scene/scene.js';
+import type { BuildingFeature, Scene, ScenePoint, SymbolInstance } from '../scene/scene.js';
 import type { AssetSet } from '../assets/asset-sets.js';
 import { assetSetFor } from '../assets/asset-sets.js';
 import type { RenderTheme } from './render-theme.js';
 import { REFINED_MANIFEST } from '../assets/refined-manifest.js';
 import { refinedStyle, resolveVarFallbacks } from '../assets/refined-style.js';
+import { linkedBuildingIds } from '../scene/symbol-buildings.js';
 
 const NORMAL_STROKE = 0.15;
 const THICK_STROKE = 1.8;
@@ -35,8 +36,10 @@ export interface AssembleOptions {
 function fmt(n: number): string { return n.toFixed(2); }
 function fmt4(n: number): string { return n.toFixed(4); }
 
-function buildingAttribute(id?: string): string {
-  return id === undefined ? '' : ` data-building-id="${id.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]!)}"`;
+function buildingAttribute(id?: string, ids?: string[]): string {
+  const escape = (value: string) => value.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]!);
+  return (id === undefined ? '' : ` data-building-id="${escape(id)}"`)
+    + (ids === undefined ? '' : ` data-building-ids="${escape(ids.join(' '))}"`);
 }
 
 function glyphTransform(
@@ -49,6 +52,19 @@ function glyphTransform(
   // Scale along local art axes, then rotate the placement about its anchor.
   const [ax, ay] = anchor ?? [c, c];
   return `translate(${fmt(at.x)},${fmt(at.y)}) rotate(${rotationDeg}) scale(${fmt4(scale / n)},${fmt4(scaleY / viewBox[3])}) translate(${-ax},${-ay})`;
+}
+
+/** Wells are low street furniture: the building-sized theme displacement can
+ * detach their shadow entirely. Keep its direction, bounded by the prop size. */
+function propShadowCorrection(symbol: SymbolInstance, offset: RenderTheme['shadowOffset']): string {
+  if (!/^sm-well(?:--|$)/.test(symbol.id)) return '';
+  // Match the actual parent transform, including its output precision.
+  const dx = Number(fmt(offset.dx)), dy = Number(fmt(offset.dy));
+  const distance = Math.hypot(dx, dy);
+  const limit = 0.1 * Math.min(symbol.scale, symbol.scaleY ?? symbol.scale);
+  if (distance <= limit) return '';
+  const ratio = limit / distance;
+  return `translate(${fmt4(dx * (ratio - 1))},${fmt4(dy * (ratio - 1))}) `;
 }
 
 function ringPath(ring: ScenePoint[]): string {
@@ -136,7 +152,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     return Math.min(s.scale / meta.footprint[0], (s.scaleY ?? s.scale) / meta.footprint[1]) * meters >= meta.minScale;
   });
   const structureSymbols = visibleSymbols.filter(s => s.zBand === 'structure');
-  const renderedBuildings = new Set(structureSymbols.map(s => s.buildingId).filter(Boolean));
+  const renderedBuildings = new Set(structureSymbols.flatMap(s => [...linkedBuildingIds(s)]));
   const markSymbols = visibleSymbols.filter(s => s.zBand === 'overlay');
 
   const usedKinds = [...new Set(L.vegetation.filter(v => detailedTree(v.scale)).map(v => v.kind))];
@@ -285,7 +301,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     for (const bld of shadowable) parts.push(`<path${buildingAttribute(bld.id)} d="${ringPath(bld.ring)}"/>`);
     for (const s of structureSymbols) {
       if (!assets.glyphs![s.id].sil) continue;
-      parts.push(`<use href="#glyph-${s.id}-sil"${buildingAttribute(s.buildingId)} transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor, s.scaleY)}"/>`);
+      parts.push(`<use href="#glyph-${s.id}-sil"${buildingAttribute(s.buildingId, s.buildingIds)} transform="${propShadowCorrection(s, theme.shadowOffset)}${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor, s.scaleY)}"/>`);
     }
     parts.push('</g>');
   }
@@ -313,7 +329,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   if (structureSymbols.length > 0) {
     parts.push('<g id="symbols">');
     for (const s of [...structureSymbols].sort((a, b) => a.at.y - b.at.y)) {
-      parts.push(`<use href="#${materialId(s)}"${buildingAttribute(s.buildingId)} transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor, s.scaleY)}"/>`);
+      parts.push(`<use href="#${materialId(s)}"${buildingAttribute(s.buildingId, s.buildingIds)} transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor, s.scaleY)}"/>`);
     }
     parts.push('</g>');
   }
@@ -365,7 +381,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   if (markSymbols.length > 0) {
     parts.push('<g id="marks">');
     for (const s of [...markSymbols].sort((a, b) => a.at.y - b.at.y)) {
-      parts.push(`<use href="#${materialId(s)}"${buildingAttribute(s.buildingId)} transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor, s.scaleY)}"/>`);
+      parts.push(`<use href="#${materialId(s)}"${buildingAttribute(s.buildingId, s.buildingIds)} transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor, s.scaleY)}"/>`);
     }
     parts.push('</g>');
   }

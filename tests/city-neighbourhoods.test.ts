@@ -93,7 +93,7 @@ describe('city neighbourhoods', () => {
     for (const patch of model.patches) {
       const ward = patch.ward;
       if (!ward) continue;
-      for (const s of model.symbols.filter(s => s.building && ward.geometry.includes(s.building))) {
+      for (const s of model.symbols.filter(s => s.building && !s.buildings && ward.geometry.includes(s.building))) {
         const f = s.frontage!;
         expect(f).toBeDefined();
         const angle = s.rotationDeg * Math.PI / 180;

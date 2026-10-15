@@ -94,6 +94,16 @@ describe('paint-aware spatial queries',()=>{
     const view=createSceneIndex(scene).query({min_x:0,min_y:0,max_x:1,max_y:1},{assetSet:{name:'unbounded',symbols:{}}});
     expect(view.layers.buildings).toHaveLength(2);
   });
+  it('keeps all compound wing identities when only one part of its artwork crosses a crop',()=>{
+    const scene=fixture();
+    scene.layers.buildings=scene.layers.buildings.map(b=>({...b,glyphBacked:true}));
+    scene.layers.symbols=[{id:'sm-city-courtyard-u',buildingId:'a',buildingIds:['a','b'],at:{x:-15,y:0},scale:50,rotationDeg:0,zBand:'structure'}];
+    const bounds={min_x:0,min_y:-3,max_x:4,max_y:3};
+    const view=createSceneIndex(scene).query(bounds);
+    expect(view.layers.symbols).toHaveLength(1);
+    expect(view.layers.buildings.map(b=>b.id)).toEqual(['a','b']);
+    expect(scanSceneInView(scene,bounds)).toEqual(view);
+  });
   it('applies road emphasis only to display and leaves reserved widths unchanged',()=>{
     const scene=fixture(), before=JSON.stringify(scene);
     const full=assembleSvg(scene);

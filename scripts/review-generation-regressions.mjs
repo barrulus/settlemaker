@@ -14,6 +14,7 @@ import { nearestOnSegment } from '../dist/generator/city-frontage.js';
 import { pointInPolygon } from '../dist/geom/point-in-polygon.js';
 import { Polygon } from '../dist/geom/polygon.js';
 import { Point } from '../dist/types/point.js';
+import { linkedBuildingIds } from '../dist/scene/symbol-buildings.js';
 
 const args = process.argv.slice(2);
 function argument(name, fallback) {
@@ -56,8 +57,10 @@ function resized(svg, b, width) {
   return svg.replace(/<svg\b[^>]*>/, `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${Math.round(width * h / w)}" viewBox="${b.min_x} ${b.min_y} ${w} ${h}">`);
 }
 function uses(svg) {
-  const glyphs = [...svg.matchAll(/<use href="#glyph-([^" ]+)"[^>]*data-building-id="([^"]+)"/g)].filter(m => !m[1].endsWith('-sil'));
-  return { glyphs: glyphs.length, highDensityGlyphs: glyphs.filter(m => /tenement|terrace|courtyard/.test(m[1])).length,
+  const glyphs = [...svg.matchAll(/<use href="#glyph-([^" ]+)"[^>]*data-building-id="([^"]+)"[^>]*>/g)].filter(m => !m[1].endsWith('-sil'));
+  const backed = new Set(glyphs.flatMap(m => linkedBuildingIds({buildingId:m[2],
+    ...(m[0].match(/data-building-ids="([^"]*)"/) ? {buildingIds:m[0].match(/data-building-ids="([^"]*)"/)[1].split(' ').filter(Boolean)} : {})})));
+  return { glyphs: glyphs.length, glyphBackedFootprints: backed.size, highDensityGlyphs: glyphs.filter(m => /tenement|terrace|courtyard/.test(m[1])).length,
     rowHouseGlyphs: glyphs.filter(m => /row-house/.test(m[1])).length,
     shopHouseGlyphs: glyphs.filter(m => /shop-house/.test(m[1])).length,
     plainFootprints: [...svg.matchAll(/<path class="([^"]+)" data-building-id=/g)].length };
@@ -99,6 +102,45 @@ function proximity(buildings, roads, metresPerUnit) {
     return Math.min(...roads.flatMap(r => r.path.slice(1).map((end, i) => distance(p, r.path[i], end)))) * metresPerUnit;
   });
   return quantiles(values);
+}
+function artworkScaleReview(symbols, metresPerUnit) {
+  const dimensions = s => {
+    const ink = engine.ARTWORK_INK[s.id];
+    if (!ink) return null;
+    return [(ink.bounds[2]-ink.bounds[0])*s.scale/64, (ink.bounds[3]-ink.bounds[1])*(s.scaleY??s.scale)/64];
+  };
+  const homes = symbols.filter(s => s.buildingId && /house|tenement/.test(s.id)
+    && !engine.ARTWORK_MANIFEST[s.id]?.courtyardVoids?.length && dimensions(s));
+  const nearby = s => {
+    const owned = new Set(linkedBuildingIds(s));
+    const nearest = homes.filter(h => h!==s && !linkedBuildingIds(h).some(id=>owned.has(id))).map(h => ({h,distance:Math.hypot(h.at.x-s.at.x,h.at.y-s.at.y)}))
+      .sort((a,b)=>a.distance-b.distance).slice(0,5);
+    const widths = nearest.map(({h})=>Math.min(...dimensions(h))*metresPerUnit).sort((a,b)=>a-b);
+    return { nearbyHomeIds: nearest.map(({h})=>h.buildingId), nearbyHomePaintedShortSideMedianMetres: widths[Math.floor(widths.length/2)]??null };
+  };
+  const wells = [], courtyards = [];
+  for (const s of symbols) {
+    const meta = engine.ARTWORK_MANIFEST[s.id], size = dimensions(s);
+    if (!meta || !size) continue;
+    if (/^sm-well(?:--|$)/.test(s.id)) {
+      const neighbours = nearby(s), paintedDiameterMetres = Math.max(...size)*metresPerUnit;
+      wells.push({id:s.id,at:s.at,...neighbours,paintedDiameterMetres,
+        diameterToNearbyHomeWidth: neighbours.nearbyHomePaintedShortSideMedianMetres ? paintedDiameterMetres/neighbours.nearbyHomePaintedShortSideMedianMetres : null});
+    }
+    if (meta.courtyardVoids?.length && meta.footprintPolygons?.length) {
+      // Catalogue components are authored as axis-aligned roof polygons. The
+      // short local bounding-box side measures wing thickness, not site size.
+      const componentRoofWidthsMetres = meta.footprintPolygons.map(poly=>{
+        const xs=poly.map(p=>p[0]),ys=poly.map(p=>p[1]);
+        return Math.min((Math.max(...xs)-Math.min(...xs))*s.scale/64,
+          (Math.max(...ys)-Math.min(...ys))*(s.scaleY??s.scale)/64)*metresPerUnit;
+      });
+      const neighbours = nearby(s), minimumComponentRoofWidthMetres = Math.min(...componentRoofWidthsMetres);
+      courtyards.push({id:s.id,buildingId:s.buildingId,buildingIds:linkedBuildingIds(s),at:s.at,...neighbours,componentRoofWidthsMetres,minimumComponentRoofWidthMetres,
+        componentToNearbyHomeWidth: neighbours.nearbyHomePaintedShortSideMedianMetres ? minimumComponentRoofWidthMetres/neighbours.nearbyHomePaintedShortSideMedianMetres : null});
+    }
+  }
+  return { measurement:'guarded painted bounds for wells/houses; authored component bounds for courtyard wings; legacy metres remain estimated', wells,courtyards };
 }
 const reports = [];
 for (const fixture of fixtures) {
@@ -161,6 +203,16 @@ for (const fixture of fixtures) {
   const symbolCounts = {};
   for (const s of L.symbols) symbolCounts[s.id] = (symbolCounts[s.id] ?? 0) + 1;
   const full = session.renderFull();
+  const artworkScale = artworkScaleReview(L.symbols, metresPerUnit);
+  for (const [name, entries, score] of [['scale-well',artworkScale.wells,'diameterToNearbyHomeWidth'],['scale-courtyard',artworkScale.courtyards,'componentToNearbyHomeWidth']]) {
+    if (!entries.length) continue;
+    const selected = [...entries].sort((a,b)=>name==='scale-well' ? b[score]-a[score] : a[score]-b[score])[0];
+    const radius = 35/metresPerUnit, p=selected.at;
+    frames[fixture.id][name] ??= {bounds:{min_x:p.x-radius,max_x:p.x+radius,min_y:p.y-radius,max_y:p.y+radius},detail:'full',
+      framing:'fixed first-review site; 70 metre width (legacy estimated)',focus:selected};
+    if (name === 'scale-courtyard') frames[fixture.id][`${name}-current`] = {bounds:{min_x:p.x-radius,max_x:p.x+radius,min_y:p.y-radius,max_y:p.y+radius},detail:'full',
+      framing:'current smallest component/home ratio site; fixed 70 metre width (legacy estimated)',focus:selected};
+  }
   await writeFile(`${out}/${fixture.id}-full.svg`, full);
   const report = {
     id: fixture.id, query: fixture.query, input: parsed.burg, options,
@@ -172,7 +224,7 @@ for (const fixture of fixtures) {
     byKind, largestPlainFootprints: plain.slice(0, 25),
     plainFootprintAreaUnits2: plain.reduce((n, b) => n + b.areaUnits2, 0),
     estimatedPlainFootprintAreaM2: plain.reduce((n, b) => n + b.estimatedAreaM2, 0),
-    symbolCounts, full: uses(full),
+    symbolCounts, artworkScale, full: uses(full),
     farmCentroidToAnyRoad: proximity(farms, L.roads, scene.metersPerUnit ?? 1),
     farmCentroidToApproach: proximity(farms, L.roads.filter(r => r.role === 'approach' || r.kind === 'road'), scene.metersPerUnit ?? 1),
     farmCentroidToNearestField: fieldProximity(farms, L.fields, scene.metersPerUnit ?? 1),

@@ -67,6 +67,7 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
         at: sc(s.at), scale: s.scale, rotationDeg: s.rotationDeg, zBand: s.zBand,
         ...(s.scaleY !== undefined ? { scaleY: s.scaleY } : {}),
         ...(s.building && ids.has(s.building) ? { buildingId: ids.get(s.building) } : {}),
+        ...(s.buildings ? { buildingIds: s.buildings.flatMap(b => ids.has(b) ? [ids.get(b)!] : []) } : {}),
       })),
       roads: [], buildings: [], piers: [], walls: [],
     },
@@ -115,6 +116,8 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
       continue; // groves are greens, not buildings
     }
     for(const garden of ward.gardens)scene.layers.greens.push({purpose: 'private',ring:ring(garden.ring.vertices),paths:garden.access.length?[ring(garden.access)]:[],pathWidth:.3});
+    for(const compound of ward.compounds)for(const court of compound.courts)
+      scene.layers.greens.push({purpose:'private',surface:'paved',ring:ring(court.vertices)});
     if(ward.publicSpace)scene.layers.greens.push({purpose:'civic',surface:'paved',ring:ring(ward.publicSpace.vertices)});
     for (const poly of ward.geometry) {
       scene.layers.buildings.push({

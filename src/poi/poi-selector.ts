@@ -157,6 +157,18 @@ function patchesWithWard(model: Model, type: WardType): Patch[] {
 
 function emitTown(ctx: EmitCtx): void {
   const P = ctx.population;
+  const plannedInns: Array<{building:Polygon;patch:Patch}> = [];
+  for (const patch of ctx.model.patches) {
+    const ward = patch.ward;
+    if (!ward) continue;
+    for (const compound of ward.compounds) {
+      if (!compound.buildings.length || !compound.buildings.every(b=>ward.geometry.includes(b))) continue;
+      // A complete compound has one planned identity. Its other wings are
+      // real census buildings, not spare candidates for unrelated POIs.
+      for (const building of compound.buildings) ctx.usedBuildings.add(building);
+      if (compound.family==='inn') plannedInns.push({building:compound.buildings[0],patch});
+    }
+  }
 
   // Tier 1 (adoption-essential), alphabetical within tier:
   //   cathedral, chapel, inn, market, mill, smithy, tavern
@@ -173,8 +185,13 @@ function emitTown(ctx: EmitCtx): void {
     emitAdopted(ctx, 'cathedral', new Set([WardType.Cathedral]), 1, { allowFallback: false });
   }
 
+  const innCount = Math.max(1, Math.round(P / 1500));
+  for (const {building,patch} of plannedInns.slice(0,innCount)) ctx.pois.push({
+    kind:'inn',point:building.centroid,wardType:patch.ward!.type,
+    buildingId:ctx.buildingIdMap.get(building)??null,
+  });
   emitAdopted(ctx, 'inn', new Set([WardType.Merchant]),
-    Math.max(1, Math.round(P / 1500)), { allowFallback: true });
+    Math.max(0,innCount-plannedInns.length), { allowFallback: true });
 
   // market and mill are now sourced from generator-placed symbol sites
   // (sm-market-cross, sm-mill-wind) via emitPlacedSymbolPois — see
