@@ -143,3 +143,16 @@ preceded the final administration artwork-only fallback. The extra geometric
 work is bounded and leaves successful centred fits unchanged. The durable
 review runner now includes the exact 1,200-person case, plain areas by ward and
 a fixed crop around the largest concentration of plain footprints.
+
+Validation: all **147 engine files / 1,556 tests** passed across a clean
+145-file run and nine individually selected tests from the two longest village
+files. The initial aggregate run exposed an outdated residential-only garden
+assertion (now checks all wards and scene/export parity) and a Vitest task-update
+RPC timeout. Splitting the long files avoided that runner error without changing
+assertions or timeout settings. TypeScript, script typing, documentation checks,
+**20 client files / 145 tests** and the production build passed. Chromium on the
+actual port-5199 preview confirmed 7, 18 and 153 plain footprints, with no page
+errors, diagnostic strip or rendering fallback. Vite was restarted to clear
+retained engine modules. Final browser bundle: `source-7b24fd0b46b8dac5ac748a44`.
+Local fixed-frame comparisons and browser evidence are in
+`output/city-filler-review/` (ignored).
