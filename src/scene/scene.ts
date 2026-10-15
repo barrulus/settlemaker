@@ -32,6 +32,7 @@ export interface FieldPlot {
 /** @deprecated Always empty since settlemaker 0.8.0 — fields carry angleDeg instead of furrow segments. */
 export interface Furrow { start: ScenePoint; end: ScenePoint }
 export interface GreenFeature {
+  purpose?: 'public' | 'private' | 'natural' | 'civic';
   /** A civic square occupies open ground but is paved rather than grassed. */
   surface?: 'paved';
   ring: ScenePoint[];
@@ -58,6 +59,10 @@ export interface SymbolInstance {
 }
 
 export interface RoadFeature {
+  /** Optional generated street identity, distinct from supplied external route IDs. */
+  id?: string;
+  /** Semantic hierarchy; width remains the reserved physical corridor. */
+  role?: 'trunk' | 'approach' | 'street' | 'service';
   routeIds?: string[];
   path: ScenePoint[];
   /** artery = trunk; road = external approach; alley = local street or block service lane. */

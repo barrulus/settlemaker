@@ -426,6 +426,8 @@ export interface GenerationParams {
     texturePopulation: number;
     metresPerUnit: number;
     landScale: number;
+    /** Extra outer plot area for gardens and detached spacing, independent of the core. */
+    outerLandScale?: number;
   };
   /** Number of Voronoi patches for the inner city */
   nPatches: number;

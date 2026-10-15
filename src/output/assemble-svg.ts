@@ -26,6 +26,10 @@ export interface AssembleOptions {
   symbols?: boolean;
   /** Display pixels per scene unit. Omitted requests all artwork detail. */
   pixelsPerUnit?: number;
+  /** Display-only minimum for trunk/approach routes; omitted for full-quality physical exports. */
+  overviewRoadMinPixels?: number;
+  /** Preserve sub-unit viewport coordinates for adjacent raster tiles. */
+  preciseBounds?: boolean;
 }
 
 function fmt(n: number): string { return n.toFixed(2); }
@@ -116,6 +120,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   const showSymbols = options.symbols !== false;
   const b = scene.bounds;
   const w = b.max_x - b.min_x, h = b.max_y - b.min_y;
+  const frame = (value: number) => value.toFixed(options.preciseBounds ? 6 : 1);
   const L = scene.layers;
   const pixels = options.pixelsPerUnit;
   const detailedTree = (scale: number) => pixels === undefined || scale * pixels >= 16;
@@ -179,11 +184,11 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     return `<pattern id="${nativePatternId(f)}" patternUnits="userSpaceOnUse" width="${fmt4(pitch)}" height="${fmt4(pitch)}" patternTransform="rotate(${bucketOf(f.angleDeg)})"><use href="#glyph-${f.glyph}" transform="scale(${fmt4(k)})"/></pattern>`;
   }).join('');
   const parts: string[] = [];
-  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${b.min_x.toFixed(1)} ${b.min_y.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}">`);
-  parts.push(`<defs><clipPath id="${clipId}"><rect x="${b.min_x.toFixed(1)}" y="${b.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"/></clipPath>${patternDefs}${nativePatterns}${symbolDefs}${glyphDefs}${materialDefs}</defs>`);
+  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${frame(b.min_x)} ${frame(b.min_y)} ${frame(w)} ${frame(h)}">`);
+  parts.push(`<defs><clipPath id="${clipId}"><rect x="${frame(b.min_x)}" y="${frame(b.min_y)}" width="${frame(w)}" height="${frame(h)}"/></clipPath>${patternDefs}${nativePatterns}${symbolDefs}${glyphDefs}${materialDefs}</defs>`);
   parts.push(`<style>\n${themeToCss(theme, assets.refined)}\n${assets.refined ? refinedStyle(tokens) : ''}\n</style>`);
   // data-bg contract with cropSvgToTile: attribute markup + inline fill.
-  parts.push(`<rect data-bg="paper" x="${b.min_x.toFixed(1)}" y="${b.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="${theme.paper}"/>`);
+  parts.push(`<rect data-bg="paper" x="${frame(b.min_x)}" y="${frame(b.min_y)}" width="${frame(w)}" height="${frame(h)}" fill="${theme.paper}"/>`);
 
   if (L.fields.length > 0) {
     parts.push('<g id="fields">');
@@ -250,9 +255,12 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     const lanes = L.roads.map(r => {
       const key = r.kind === 'artery' ? 'arteryWidth' : r.kind === 'road' ? 'roadWidth' : undefined;
       const explicitWidth = key ? options.theme?.[key] ?? (!options.palette ? skin?.city[key] : undefined) : undefined;
+      const width = explicitWidth ?? r.width ?? (r.kind === 'artery' ? theme.arteryWidth : theme.roadWidth);
+      const important = r.role === 'trunk' || r.role === 'approach' || (!r.role && r.kind !== 'alley');
+      const minimum = important && pixels && options.overviewRoadMinPixels ? options.overviewRoadMinPixels / pixels : 0;
       return {
         path: linePath(r.path),
-        width: explicitWidth ?? r.width ?? (r.kind === 'artery' ? theme.arteryWidth : theme.roadWidth),
+        width: Math.max(width, minimum),
         reserved: r.width !== undefined && explicitWidth === undefined,
       };
     });

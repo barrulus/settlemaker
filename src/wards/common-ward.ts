@@ -1,4 +1,5 @@
 import { cityUrbanity } from '../generator/city-character.js';
+import { neighbourhoodCharacter } from '../generator/city-neighbourhoods.js';
 import { Polygon } from '../geom/polygon.js';
 import { Point } from '../types/point.js';
 import { WardType } from '../types/interfaces.js';
@@ -52,12 +53,19 @@ export class CommonWard extends Ward {
       // Demand chooses the grain, with a fixed lower bound: extra population
       // cannot make arbitrarily small buildings or erase access/courtyards.
       const meanArea = meanBuildingArea(this.model.params.development?.texturePopulation ?? this.model.params.population) * this.model.minSqScale / 0.6;
-      const minimum = meanArea * 0.45;
-      let area = Math.max(minimum, Math.min(meanArea * 2,
+      const minimum = meanArea * (this.model.params.development ? .75 : .45);
+      const maximum = meanArea * (this.model.params.development ? 1 : 2);
+      let area = Math.max(minimum, Math.min(maximum,
         Math.abs(block.square) * 0.85 / Math.max(1, this.cityBuildingTarget)));
       const streets = wardFrontages(this);
       const compact = !!this.model.params.development && cityUrbanity(this.model, this.patch) >= .75;
-      let plan = planCityBlock(block, streets, area, alleyWidth, compact, !!this.model.params.development);
+      const urbanity = cityUrbanity(this.model, this.patch);
+      const character = this.model.params.development ? neighbourhoodCharacter(this.model, this.patch) : 'terraces';
+      const spacing = this.model.params.development && !compact ? {
+        gapRatio: (1 - urbanity) * (character === 'workshops' ? .65 : character === 'crofts' ? 1.6 : 1.05),
+        groupSize: character === 'crofts' ? 1 : character === 'gardens' ? 2 : character === 'workshops' ? 3 : 4,
+      } : undefined;
+      let plan = planCityBlock(block, streets, area, alleyWidth, compact, !!this.model.params.development, spacing);
       // Reserve a little supply for wells and neighbouring lots lost to access
       // constraints. The final census pass trims whole run ends to the budget.
       const target = this.model.params.development ? Math.ceil(this.cityBuildingTarget)
@@ -69,17 +77,18 @@ export class CommonWard extends Ward {
       for (let trial = 0; trial < 5 && plan && this.cityBuildingTarget > 0; trial++) {
         const ratio = plan.buildings.length / target;
         if (ratio >= 1 && ratio <= 1.04) break;
-        const next = Math.max(minimum, Math.min(meanArea * 2, area * ratio));
+        const next = Math.max(minimum, Math.min(maximum, area * ratio));
         if (Math.abs(next - area) < 0.001) break;
         area = next;
-        plan = planCityBlock(block, streets, area, alleyWidth, compact, !!this.model.params.development);
+        plan = planCityBlock(block, streets, area, alleyWidth, compact, !!this.model.params.development, spacing);
         if (plan && (!best || error(plan.buildings.length) < error(best.buildings.length))) best = plan;
       }
       plan = best;
       if (plan?.buildings.length) {
         if (!this.model.params.development) coalesceCityRuns(plan, target);
-        const urbanity=cityUrbanity(this.model,this.patch);
-        const roofScale=this.model.params.development ? .48+.52*Math.min(1,urbanity*1.35) : .65+.35*Math.min(1,urbanity*1.35);
+        for (const garden of plan.gardens ?? []) this.gardens.push({ ring: garden, access: [] });
+        // Physical density changes the frontage spacing above, never house size.
+        const roofScale=this.model.params.development ? 1 : .65+.35*Math.min(1,urbanity*1.35);
         if(roofScale<.98)for(const b of plan.buildings){
           const c=b.centroid,front=plan.frontages.get(b);
           this.gardens.push({ring:new Polygon(b.vertices),access:front?[front.at,c]:[]});

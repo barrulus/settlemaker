@@ -125,15 +125,22 @@ describe('physical settlement planning', () => {
     })();
     const occupied = new Set(raw!.patches.filter(p=>['core','suburb','satellite'].includes(p.zone)));
     const sectors = Array<number>(8).fill(0);
+    const edgeCoverage: number[] = [];
     for (const p of occupied) {
       if (p.zone==='core' || !raw!.adjacency!.neighboursOf(p).some(n=>!occupied.has(n))) continue;
       const c = p.shape.centroid;
       sectors[Math.floor((Math.atan2(c.y,c.x)+Math.PI)/(2*Math.PI)*8)%8]++;
       expect(cityUrbanity(raw!,p)).toBeLessThan(.05);
-      // Verify actual roofs too: irregular blocks must not bypass the taper.
+      // Greens are explicit reservations, not roofs. Detached frontage now
+      // preserves house sizes: judge its lower ground coverage rather than
+      // requiring the former 48%-dimension roof-shrink artefact.
+      if (p.ward!.type === 'park') continue;
       const roofArea = p.ward!.geometry.reduce((s,b)=>s+Math.abs(b.square),0);
-      expect(roofArea/Math.abs(p.shape.square)).toBeLessThan(.25);
+      edgeCoverage.push(roofArea/Math.abs(p.shape.square));
+      expect(edgeCoverage.at(-1)).toBeLessThan(.6);
     }
+    edgeCoverage.sort((a,b)=>a-b);
+    expect(edgeCoverage[Math.floor(edgeCoverage.length/2)]).toBeLessThan(.4);
     expect(sectors.every(n=>n>0)).toBe(true);
     expect(r.model.residents.insideWalls.assigned).toBe(10000);
     expect(r.model.residents.outsideWalls.assigned).toBe(190000);

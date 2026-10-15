@@ -74,24 +74,24 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
   };
 
   for (const artery of model.arteries) {
-    scene.layers.roads.push({ path: ring(artery.vertices), kind: 'artery',
+    scene.layers.roads.push({ path: ring(artery.vertices), kind: 'artery', role: 'trunk',
       ...(model.usesCityLayout ? { width: MAIN_STREET * edgeInsetScale(model.params.development?.texturePopulation ?? model.params.population) } : {}),
     } as RoadFeature);
   }
   for (const road of model.roads) {
-    scene.layers.roads.push({ path: ring(road.vertices), kind: 'road',
+    scene.layers.roads.push({ path: ring(road.vertices), kind: 'road', role: 'approach',
       ...(model.usesCityLayout ? { width: MAIN_STREET * edgeInsetScale(model.params.development?.texturePopulation ?? model.params.population) } : {}),
     } as RoadFeature);
   }
 
   for (const street of cityLocalStreets(model)) {
-    scene.layers.roads.push({ path: ring([street.a, street.b]), kind: 'alley', width: street.width });
+    scene.layers.roads.push({ path: ring([street.a, street.b]), kind: 'alley', role: 'street', width: street.width });
   }
 
   for (const patch of model.patches) {
     const ward = patch.ward;
     if (!ward) continue;
-    for (const lane of ward.lanes) scene.layers.roads.push({ path: ring([lane.a, lane.b]), kind: 'alley', width: lane.width });
+    for (const lane of ward.lanes) scene.layers.roads.push({ path: ring([lane.a, lane.b]), kind: 'alley', role: 'service', width: lane.width });
     if (ward instanceof Farm) {
       for (let i = 0; i < ward.subPlots.length; i++) {
         const plot = ward.subPlots[i];
@@ -110,12 +110,12 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
     }
     if (ward.type === WardType.Park) {
       for (const grove of ward.geometry) {
-        scene.layers.greens.push({ ring: ring(grove.vertices), ...(ward instanceof Park && ward.paths.length
+        scene.layers.greens.push({ purpose: 'public', ring: ring(grove.vertices), ...(ward instanceof Park && ward.paths.length
           ? { paths: ward.paths.map(ring), pathWidth: ward.pathWidth } : {}) });
       }
       continue; // groves are greens, not buildings
     }
-    if(ward instanceof CommonWard)for(const garden of ward.gardens)scene.layers.greens.push({ring:ring(garden.ring.vertices),paths:garden.access.length?[ring(garden.access)]:[],pathWidth:.3});
+    if(ward instanceof CommonWard)for(const garden of ward.gardens)scene.layers.greens.push({purpose: 'private',ring:ring(garden.ring.vertices),paths:garden.access.length?[ring(garden.access)]:[],pathWidth:.3});
     for (const poly of ward.geometry) {
       scene.layers.buildings.push({
         id: ids.get(poly),

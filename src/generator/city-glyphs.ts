@@ -31,6 +31,7 @@ export function cityMetersPerUnit(model: Model): number {
 export function fitCityGlyph(
   building: Polygon, id: string, metersPerUnit: number, frontage?: CityFrontage, minCoverage = 0.5,
   maxPhysicalScale = Infinity,
+  maxAspect = 1.5,
 ): (PlacedSymbol & { paintedArea: number }) | null {
   const meta = REFINED_MANIFEST[id], ink = REFINED_INK[id];
   if (!meta?.footprint || !ink || building.length < 3 || Math.abs(building.square) < 1e-8) return null;
@@ -51,7 +52,7 @@ export function fitCityGlyph(
   for (const rotation of frontage ? [angle] : [angle, angle + Math.PI / 2]) {
     const ax = Math.cos(rotation), ay = Math.sin(rotation);
     const hasCourt = (meta.courtyardVoids?.length ?? 0) > 0 || (meta.footprintPolygons?.length ?? 0) > 1;
-    for (const aspect of hasCourt ? [1] : [1, 0.8, 1.25, 0.67, 1.5]) {
+    for (const aspect of hasCourt ? [1] : [1, 0.8, 1.25, 0.67, 1.5].filter(a => Math.max(a,1/a) <= maxAspect)) {
       const fw = nominalWidth * aspect, fh = nominalHeight / aspect;
       const iw = (x1 - x0) * fw / 64, ih = (y1 - y0) * fh / 64;
       let factor = Infinity;
@@ -162,7 +163,10 @@ export function placeCityGlyphs(model: Model): void {
       const use=semantic.get(ids.get(building)??'');
       const roll=landscapeHash(Math.round(building.centroid.x*10),Math.round(building.centroid.y*10),model.params.seed);
       const ruralHome=resolveGlyphFor(model.params.biome??'temperate',roll<.5?'sm-house':'sm-house-tiled');
-      const home=urbanity<.45 && roll>.25?ruralHome:architecture.home;
+      const detached = model.params.development
+        ? roll < Math.max(0, Math.min(.85, (1 - urbanity) * 1.1 - .15))
+        : urbanity < .45 && roll > .25;
+      const home=detached ? ruralHome : architecture.home;
       let corner = !model.params.development;
       if (model.params.development && ward.type === WardType.Patriciate) {
         const nearby: typeof lines = lines.filter(line=>building.vertices.some(p=>Point.distance(p,nearestOnSegment(p,line.a,line.b))<=line.width/2+.15));
@@ -187,7 +191,8 @@ export function placeCityGlyphs(model: Model): void {
       for (const frontage of candidates) {
         const candidate = fitCityGlyph(building, id, metersPerUnit, frontage,
           building === temple ? 0 : use || building === keep || building === palacePrincipal ? .25 : .5,
-          building === temple ? templeMaxScale : Infinity);
+          building === temple ? templeMaxScale : model.params.development && !use && building !== keep && building !== palacePrincipal ? 1.35 : Infinity,
+          model.params.development ? 1.25 : 1.5);
         // A courtyard is a site arrangement, not a miniature icon for every
         // inn. Small urban inns occupy street houses; keep their POI identity.
         if (candidate && model.params.development && REFINED_MANIFEST[id]?.courtyardVoids?.length
@@ -197,7 +202,7 @@ export function placeCityGlyphs(model: Model): void {
       if (!best && model.params.development && REFINED_MANIFEST[id]?.courtyardVoids?.length && building!==temple) {
         const compactId = cityGlyph(use==='inn' ? 'shop-house' : 'row-house-a',model.params.biome);
         for (const frontage of candidates) {
-          const candidate=fitCityGlyph(building,compactId,metersPerUnit,frontage);
+          const candidate=fitCityGlyph(building,compactId,metersPerUnit,frontage,.5,1.35,1.25);
           if(candidate && (!best || candidate.paintedArea>best.paintedArea))best=candidate;
         }
       }

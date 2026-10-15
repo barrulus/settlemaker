@@ -28,6 +28,15 @@ export interface CityBlockPlan {
   runs: Polygon[][];
   /** Concave boundary cutouts that must also survive quota coalescing. */
   exclusions?: Point[][];
+  /** Unbuilt strips between physical detached plots, reserved as private gardens. */
+  gardens?: Polygon[];
+}
+
+export interface CityBlockSpacing {
+  /** Gap relative to an ordinary house frontage; changes spacing, never roof scale. */
+  gapRatio: number;
+  /** Attached pairs/short runs share frontage, with larger yards between groups. */
+  groupSize?: number;
 }
 
 /** Meet a smaller quota by joining neighbours on the same street, preserving
@@ -64,6 +73,7 @@ export function planCityBlock(
   areaPerHouse: number, alleyWidth: number,
   compact = false,
   clipConcave = compact,
+  spacing?: CityBlockSpacing,
 ): CityBlockPlan | null {
   if (site.length < 3 || Math.abs(site.square) < 1) return null;
   if (!site.isConvex()) {
@@ -71,7 +81,7 @@ export function planCityBlock(
     // Wall insets can introduce tiny reflex notches. They must not send an
     // otherwise ordinary block back to the sparse estate subdivision.
     const hull=new Polygon(convexHull(site.vertices));
-    const plan=planCityBlock(hull,streets,areaPerHouse,alleyWidth,compact,clipConcave);
+    const plan=planCityBlock(hull,streets,areaPerHouse,alleyWidth,compact,clipConcave,spacing);
     if(!plan)return null;
     // Shared near-collinear wall vertices need a common precision grid for
     // the Boolean sweep; raw floating-point drift can leave an unclosed ring.
@@ -95,11 +105,13 @@ export function planCityBlock(
     plan.buildings=plan.runs.flat();
     plan.frontages=frontages;
     plan.exclusions=notches;
+    if (plan.gardens) plan.gardens = plan.gardens.flatMap(g => polygonClipping.intersection([ring(g)], [ring(site)])
+      .filter(p => p.length === 1).map(p => new Polygon(p[0].slice(0, -1).map(([x,y]) => new Point(x,y)))));
     plan.lanes=plan.lanes.flatMap(l=>drySegments(l.a,l.b,notches).map(([a,b])=>({...l,a,b})));
     return plan;
   }
   const depth = Math.sqrt(areaPerHouse * 1.15), frontage = areaPerHouse / depth;
-  const plan: CityBlockPlan = { buildings: [], lanes: [], frontages: new Map(), runs: [] };
+  const plan: CityBlockPlan = { buildings: [], lanes: [], frontages: new Map(), runs: [], ...(spacing ? { gardens: [] } : {}) };
   const lines = [...streets];
   const main = [...streets].sort((a, b) => Point.distance(b.a, b.b) - Point.distance(a.a, a.b))[0];
   const mainLength = main ? Point.distance(main.a, main.b) : 1;
@@ -191,18 +203,34 @@ export function planCityBlock(
       if (strip.length < 3) continue;
       const projections = strip.vertices.map(p => ax * p.x + ay * p.y);
       const lo = Math.min(...projections), hi = Math.max(...projections);
-      const count = Math.max(1, Math.round((hi - lo) / frontage));
+      const gap = frontage * (spacing?.gapRatio ?? 0);
+      const count = Math.max(1, Math.round((hi - lo) / (frontage + gap)));
       const width = (hi - lo) / count;
+      const houseWidth = spacing ? Math.min(frontage * 1.2, width - Math.min(gap, width * .75)) : width;
+      const groupSize = Math.max(1, spacing?.groupSize ?? 1);
+      const startAt = (i: number) => {
+        const groupStart = Math.floor(i / groupSize) * groupSize;
+        const members = Math.min(groupSize, count - groupStart);
+        const shift = ((members - 1) / 2 - (i - groupStart)) * (width - houseWidth);
+        return lo + i * width + (width - houseWidth) / 2 + shift;
+      };
       const run: Polygon[] = [];
       for (let i = 0; i < count; i++) {
         // A small seam distinguishes houses without turning every party wall into a lane.
-        let lot = clipBlock(strip, -ax, -ay, -(lo + i * width + 0.025));
-        lot = clipBlock(lot, ax, ay, lo + (i + 1) * width - 0.025);
+        const start = spacing ? startAt(i) : lo + i * width;
+        let lot = clipBlock(strip, -ax, -ay, -(start + 0.025));
+        lot = clipBlock(lot, ax, ay, (spacing ? start + houseWidth : lo + (i + 1) * width) - 0.025);
         if (lot.length < 3 || Math.abs(lot.square) < areaPerHouse * 0.32 || lot.compactness < 0.35) continue;
         const at = nearestOnSegment(lot.centroid, source.line.a, source.line.b);
         plan.buildings.push(lot);
         run.push(lot);
         plan.frontages.set(lot, { ...source.line, at });
+        const nextStart = i + 1 < count ? startAt(i + 1) : hi;
+        if (spacing && nextStart - start - houseWidth > .1) {
+          const garden = clipBlock(clipBlock(strip, -ax, -ay, -(start + houseWidth)), ax, ay,
+            Math.min(hi, nextStart));
+          if (garden.length >= 3 && Math.abs(garden.square) > .05) plan.gardens!.push(garden);
+        }
       }
       if (run.length) plan.runs.push(run);
     }

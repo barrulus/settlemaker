@@ -1,0 +1,88 @@
+# Generation and viewer implementation review
+
+Implementation of the [approved design](2026-10-15-generation-and-viewer-design.md), 15 October 2026. This is a local paired engine/client change, not a published release. Physical planning remains an explicit preview; existing URLs keep their legacy generation mode.
+
+## Implemented behaviour
+
+Physical city outskirts retain normal building dimensions. Deterministic terrace, workshop, garden and croft neighbourhoods vary arrangements and spacing. Commons are reserved before housing, targeting 4% of eligible suburban area with bounded whole-district overshoot. Selection favours underserved land and approach access; its distance measure is a district-centre proxy, not a pedestrian-network calculation. Natural and public green areas remain distinguishable from private gardens.
+
+`development.ruralPopulation` is an optional count within the requested total, defaults to zero and cannot borrow from `corePopulation`. Existing farms are adopted before new rural housing is allocated. Rural clusters reuse frontage, artwork fitting, collision and access helpers. Final landscape road extension respects occupied land, water at the full road width, protected greens, piers and walls. Residents and district roles survive export; urban/rural and inside/outside-wall accounts are separate.
+
+The engine owns `createSettlementSession`: one retained model, metadata, reusable spatial index, viewport rendering, full SVG and on-demand GeoJSON. Legacy city generation now has one model-only helper shared with its existing public entry point. Legacy village rendering retains its full-vector fallback. Session metadata declares coordinate units, planner, seed, diagnostics and source identity. Custom artwork without measured bounds takes a conservative rendering path.
+
+The client owns one viewer runtime used by the builder and `/fmg`: a persistent generation worker, latest-request scheduling, atomic map/export acceptance, cancellation/retry, and an explicit synchronous fallback. A source digest and protocol handshake check the actual separately loaded engine bundle. Appearance changes reuse generation. Both entry points share planner parsing and appearance validation, and derive their wire types from engine exports.
+
+The camera updates CSS transforms once per animation frame. Filtered SVG artwork becomes guttered raster tiles over an overview, with a 32 or 64 MiB decoded-raster cache budget. All visible tiles fit the chosen resolution and swap together; optional prefetch does not delay visible readiness. Old accepted artwork remains usable during generation. Uncached detail pauses while the single worker is generating. Repeated zoom-button clicks no longer bubble into background double-click zoom.
+
+Exports retain full artwork independently of the camera. Chromium prepares the export document lazily and creates full-resolution native-print content on demand; other browsers retain the established preload path. Complete water/wall structures and legacy villages use conservative fallbacks rather than incomplete viewport output.
+
+## Shared ownership
+
+- `src/output/legacy-model.ts`: common legacy model preparation, including coastal retries.
+- `src/scene/spatial-index.ts`: shared painted-bounds rules for indexed and linear filtering; full-frame one-shot rendering avoids unnecessary index construction.
+- `src/geom/bounds.ts` and `src/geom/road-corridor.ts`: shared bounds and physical road-clearance geometry.
+- Existing frontage, ward, artwork, resident and SVG helpers remain authoritative. Mutable placement grids and immutable display indexes retain different lifecycles.
+- `src/settlement/quality.ts`: one offline ground classifier used by both generation benchmark and visual-review scripts.
+- Client `site/src/viewer`, `planner.ts` and `appearance.ts`: shared lifecycle, rendering, camera and input helpers for both pages.
+
+## Reproducible checks
+
+Engine baseline: `89859eab47100cdd42c484820338c9a22d5efc36`. Client baseline: `5fc1e990988ee9260eb58b8917025b7f405be118`; its previous engine pin was `5160d59ba5b2475f97ccbe7b1eebbd0e51912052` (2.6.0). These are different baselines: the original legacy browser probe does not measure physical-planner generation.
+
+```sh
+npm test -- --maxWorkers=4
+npm run docs:check
+npm run typecheck:scripts
+npm run benchmark:generation -- --output output/generation-benchmark.json
+```
+
+`scripts/benchmark-generation.mjs --engine /path/to/baseline.mjs` runs exactly the same physical fixture matrix against a separately built baseline. Results record runtime, machine, source/artifact identity, fixed inputs and seed, stage timings, resident accounting and footprint/ground measures. Each fixture is a single run, not a latency percentile; keep other CPU-intensive work stopped during comparisons.
+
+In the client checkout, build the engine library, build `site`, run `npm run merge`, then:
+
+```sh
+node scripts/review-browser.mjs --playwright /path/to/playwright/index.mjs --executable /path/to/chromium
+node scripts/review-browser.mjs --playwright /path/to/playwright/index.mjs --executable /path/to/chromium --dpr 2 --quick --output output/browser-review-dpr2
+```
+
+The production browser harness checks the actual worker/library path, builder and `/fmg`, legacy and physical layouts, rural demand, cache bounds, coherent detail completion, gesture frames, cold print preparation, and tile parity including large custom shadows. It records detail latency separately from acceptance and gesture timing. Print checks exercise `beforeprint` resources and the full-resolution canvas; they do not automate a system print dialog.
+
+## Interpretation and remaining calibration
+
+The clean engine suite passed **143 files / 1,532 tests** with four Vitest workers. An unrestricted-concurrency run passed its tests but reported two runner RPC timeouts; it was repeated successfully. Documentation checks passed 20 public pages, 186 local links/anchors, 12 gallery fixtures and executable Node/browser/TypeScript examples. Script type checking passed.
+
+The final engine matrix contains 20 cases (seeds 2 and 7), including a 1,000-person village, 300–250,000-person cities and constrained coastal cities. Every case conserved demand with zero unassigned residents. Selected seed-2 timings on Linux 6.18.55, Node 24.21.0, Intel Core Ultra 9 275HX, source bundle `source-0cc40854d21c050fa3ba8996`:
+
+| Physical city population | Baseline generation | Candidate generation | Baseline full SVG | Candidate full SVG | Candidate first crop / reused crop |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 2,000 | 81 ms | 76 ms | 18 ms | 19 ms | 73 / 5 ms |
+| 10,000 | 306 ms | 226 ms | 48 ms | 41 ms | 105 / 7 ms |
+| 50,000 | 940 ms | 701 ms | 171 ms | 129 ms | 264 / 10 ms |
+| 200,000 | 3,311 ms | 2,847 ms | 762 ms | 489 ms | 973 / 8 ms |
+| 250,000 | 4,229 ms | 3,447 ms | 742 ms | 485 ms | 1,132 / 8 ms |
+
+The first crop includes index construction. A retained session pays this cost at creation; subsequent crops reuse it. Full-frame one-shot rendering avoids that index cost. These are sequential individual runs with different generated layouts, not a statistically established speedup. Offline area analysis is reported separately and does not run during interactive generation. Local raw evidence is under `output/generation-viewer-review/` (ignored); both harnesses are committed for reproduction.
+
+The client passed **19 files / 140 tests** and its production build. A real Chromium development-mode smoke test accepted a physical 2,000-person city with one worker, eight visible tiles, no fallback and no failed local requests. It exposed a Vite source-import query failure which was fixed; production retains its revision query and handshake.
+
+Final production Chromium 155.0.8059.39 measurements, 1600 × 1000, DPR 1:
+
+| Fixture | Accepted overview | Gesture p95 | Sharp refresh after zoom | Retained raster cache |
+| --- | ---: | ---: | ---: | ---: |
+| Legacy village 800 | 1,502 ms | 16.7 ms | Full SVG | Vector fallback |
+| Legacy city 100k | 922 ms | 16.7 ms | 2,308 ms | 52.9 MiB |
+| Physical city 2k | 688 ms | 16.8 ms | 843 ms | 42.4 MiB |
+| Physical city 200k | 4,907 ms | 16.8 ms | 1,427 ms | 43.0 MiB |
+| Physical 10k, rural 1k | 771 ms | 16.7 ms | 1,206 ms | 40.0 MiB |
+
+The visible-region readiness check waits for every visible tile, not an arbitrary screenshot delay. Retaining canvas tiles directly removed PNG encoding and re-decoding, reducing refresh from the previous 1,007 / 1,548 / 1,579 ms physical runs (2k / 200k / rural) to the table values. This still **misses the proposed 250 ms desktop sharp-refresh target**. Smooth camera gestures are achieved; instant sharp detail is not. A later renderer experiment should compare SVG decode/raster cost against a shared glyph atlas on these same scenes rather than claim the target already met.
+
+Every production case started its worker, rendered detail without fallback (except the intentional legacy village vector path), stayed within its raster budget and prepared a nonblank 4096-pixel print canvas. Tile/reference comparison found materially different pixels below 0.002%, including large offset shadows. Full-image print preparation remains costly: the 200k case recorded a roughly 7.1-second print-time main-thread task. Before-print long tasks reached 518 ms on that case, so the 100 ms responsiveness target is not an established all-phases guarantee. Native print dialogs, Firefox, Safari and real mobile devices remain untested here.
+
+The DPR 2 physical-2k production smoke also passed: 675 ms accepted overview, 16.7 ms gesture p95, 1,595 ms sharp refresh, 40 visible tiles and 63.4 MiB retained rasters, below the 64 MiB budget. It exercises the actual quantized-grid capacity calculation that prevents missing edge tiles at higher resolution.
+
+Ground areas and residual components are deterministic sampling estimates with explicit sample count and spacing. Narrow features can be missed. Failed-placement area is `null` because rejected candidate geometry is not retained. Residual ground is not relabelled as park or assumed suitable for infill. The reviewed seed-2 core estimates were 65.5% footprint / 11.1% residual at 2,000 residents and 70.0% / 9.3% at 20,000. These are individual fixtures, not universal thresholds.
+
+The existing core population cap and explicit core requests remain. This implementation does not claim a new globally optimised enclosure/infill solver, walking-network green accessibility, or a complete forestry simulation. The design's possible Canvas atlas/WebGL replacement remains conditional on measured need.
+
+Browser timing is headless desktop Chromium on the recorded machine, without CPU throttling. Firefox, Safari and a constrained real device still need direct validation before changing compatibility defaults or claiming those performance budgets. The 250 ms sharp-refresh target is a target, distinct from smooth gesture animation. Cache accounting bounds decoded viewer rasters; it is not a measurement of the browser's total memory, worker model or retained export string.

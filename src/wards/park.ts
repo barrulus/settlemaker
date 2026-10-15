@@ -1,5 +1,6 @@
 import { selectFloraAt, landscapeHash } from '../assets/landscape-placement.js';
 import { cityMetersPerUnit } from '../generator/city-glyphs.js';
+import { isNaturalCommon } from '../generator/city-neighbourhoods.js';
 import { ARTWORK_MANIFEST } from '../assets/artwork.js';
 import { WardType } from '../types/interfaces.js';
 import { Ward, ALLEY } from './ward.js';
@@ -55,11 +56,13 @@ export class Park extends Ward {
       const angle = Math.atan2(first.y - c.y, first.x - c.x), ax = Math.cos(angle), ay = Math.sin(angle);
       const metres = cityMetersPerUnit(this.model);
       const radius = 1.1, spacing = 3.6;
+      const natural = isNaturalCommon(this.model,this.patch);
       const extent = Math.max(...block.vertices.map(p => Point.distance(p, c)));
       for (let row = -Math.ceil(extent / spacing); row <= Math.ceil(extent / spacing); row++) {
         for (let column = -Math.ceil(extent / spacing); column <= Math.ceil(extent / spacing); column++) {
           if (Math.hypot(row, column) < 1.3) continue; // usable central lawn
-          const x = column * spacing, y = row * spacing;
+          const x = column * spacing + (natural ? (landscapeHash(column,row,this.model.params.seed)-.5)*spacing*.7 : 0);
+          const y = row * spacing + (natural ? (landscapeHash(column,row,this.model.params.seed^0x4e415455)-.5)*spacing*.7 : 0);
           const p = new Point(c.x + x * ax - y * ay, c.y + x * ay + y * ax);
           if (!pointInPolygon(p, block.vertices)) continue;
           let clear = true;
