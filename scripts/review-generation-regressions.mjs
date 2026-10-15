@@ -3,6 +3,8 @@
  * Compare revisions at identical bounds:
  *   --engine /tmp/baseline.mjs --out /tmp/before
  *   --out /tmp/after --frames /tmp/before/frames.json
+ * Use --fixture aldford-capital to review one case. Enclosed-ground coverage
+ * uses polygon Boolean accounting; painted roof envelopes are labelled proxies.
  * PNG output is optional; SVGs and JSON are always emitted. Wide rural views
  * intentionally use automatic detail, matching the viewer's scale semantics.
  */
@@ -15,6 +17,8 @@ import { pointInPolygon } from '../dist/geom/point-in-polygon.js';
 import { Polygon } from '../dist/geom/polygon.js';
 import { Point } from '../dist/types/point.js';
 import { linkedBuildingIds } from '../dist/scene/symbol-buildings.js';
+import { roadCorridor } from '../dist/geom/road-corridor.js';
+import polygonClipping from 'polygon-clipping';
 
 const args = process.argv.slice(2);
 function argument(name, fallback) {
@@ -34,10 +38,13 @@ const sharp = png ? (await import('sharp')).default : undefined;
 await mkdir(out, { recursive: true });
 
 const fixtures = [
+  { id: 'aldford-capital', query: 'name=Aldford&pop=5000&seed=271401&walls=1&plaza=1&temple=1&capital=1&shanty=1&theme=ancient&roads=330%3Amain%2C117%3Amarket%2C192%3Afootpath%2C278%3Amain&biome=desert' },
   { id: 'aldford-1200', query: 'name=Aldford&pop=1200&seed=353956&walls=1&plaza=1&roads=316%3Alocal%2C146%3Alocal%2C282%3Afootpath' },
   { id: 'aldford', query: 'name=Aldford&pop=3400&seed=60891&walls=1&plaza=1&roads=355%3Atrail%2C135%3Amarket%2C236%3Amarket' },
   { id: 'rural', query: 'name=Rural&pop=10000&seed=2&walls=1', development: { preset: 'city', corePopulation: 5000, ruralPopulation: 1000 } },
 ];
+const fixtureId = argument('--fixture');
+if (fixtureId && !fixtures.some(f=>f.id===fixtureId)) throw new Error(`Unknown fixture: ${fixtureId}`);
 function bounds(points) {
   if (!points.length) throw new Error('Expected fixture geometry is missing');
   return boundsOfPoints(points);
@@ -142,10 +149,108 @@ function artworkScaleReview(symbols, metresPerUnit) {
   }
   return { measurement:'guarded painted bounds for wells/houses; authored component bounds for courtyard wings; legacy metres remain estimated', wells,courtyards };
 }
+
+/** Exact Boolean accounting of the supplied polygon geometry. Artwork roof
+ * polygons are a paint-envelope proxy, never a claim to measured SVG pixels. */
+function enclosedGroundReviewAtPrecision(scene, precision) {
+  const L=scene.layers, unit=scene.metersPerUnit??1;
+  const geometry=points=>[points.map(p=>[Math.round(p.x*precision)/precision,Math.round(p.y*precision)/precision])];
+  const polygonArea=p=>area(p[0].map(([x,y])=>({x,y})))-p.slice(1).reduce((n,h)=>n+area(h.map(([x,y])=>({x,y}))),0);
+  const multiArea=polygons=>polygons.reduce((n,p)=>n+polygonArea(p),0);
+  const union=polygons=>polygons.length ? polygonClipping.union(polygons) : [];
+  const intersect=(a,b)=>a.length&&b.length ? polygonClipping.intersection(a,b) : [];
+  const subtract=(a,b)=>a.length&&b.length ? polygonClipping.difference(a,b) : a;
+  const outerPaths=L.walls.filter(w=>!w.large).flatMap(w=>w.polylines);
+  const closed=outerPaths.filter(p=>p.length>=4&&Math.hypot(p[0].x-p.at(-1).x,p[0].y-p.at(-1).y)<1e-6);
+  if (!closed.length || closed.length!==outerPaths.length)
+    return {available:false,reason:'No complete closed outer wall ring; open wall paths are not silently closed',closedOuterPaths:closed.length,outerPaths:outerPaths.length};
+  const enclosure=union(closed.map(geometry)), wallBounds=bounds(closed.flat());
+  const near=points=>{
+    if(points.length<3)return false;
+    const b=bounds(points);
+    return b.max_x>=wallBounds.min_x&&b.min_x<=wallBounds.max_x&&b.max_y>=wallBounds.min_y&&b.min_y<=wallBounds.max_y;
+  };
+  const water=L.water.polygons ? union(L.water.polygons.map(p=>p.map(r=>geometry(r)[0])))
+    : L.water.rings.length ? polygonClipping.xor(...L.water.rings.map(geometry)) : [];
+  const land=subtract(enclosure,water), landArea=multiArea(land), enclosureArea=multiArea(enclosure);
+  const clipped=polygons=>intersect(union(polygons),land);
+  const footprints=clipped(L.buildings.filter(b=>near(b.ring)).map(b=>geometry(b.ring)));
+  const roofPolygons=[], paintedIds=new Set();
+  let componentSymbols=0,boundsFallbackSymbols=0,unmeasuredBuildingSymbols=0;
+  for(const s of L.symbols){
+    const ids=linkedBuildingIds(s);
+    if(!ids.length)continue;
+    const meta=engine.ARTWORK_MANIFEST[s.id],ink=engine.ARTWORK_INK[s.id];
+    if(!meta||!ink){unmeasuredBuildingSymbols++;continue;}
+    const theta=s.rotationDeg*Math.PI/180,c=Math.cos(theta),sn=Math.sin(theta);
+    const transform=([x,y])=>{
+      const dx=(x-meta.anchor[0])*s.scale/meta.viewBox[2],dy=(y-meta.anchor[1])*(s.scaleY??s.scale)/meta.viewBox[3];
+      return {x:s.at.x+dx*c-dy*sn,y:s.at.y+dx*sn+dy*c};
+    };
+    const components=meta.footprintPolygons?.length ? meta.footprintPolygons : (()=>{
+      const [x0,y0,x1,y1]=ink.bounds;return [[[x0,y0],[x1,y0],[x1,y1],[x0,y1]]];
+    })();
+    let included=false;
+    for(const p of components){const world=p.map(transform);if(near(world)){roofPolygons.push(geometry(world));included=true;}}
+    if(included){if(meta.footprintPolygons?.length)componentSymbols++;else boundsFallbackSymbols++;}
+    ids.forEach(id=>paintedIds.add(id));
+  }
+  // Plain fallback roofs remain visible. An unknown/custom building symbol is
+  // conservatively represented by its footprint and reported as unmeasured.
+  for(const b of L.buildings)if(!paintedIds.has(b.id)&&near(b.ring))roofPolygons.push(geometry(b.ring));
+  const roofEnvelope=clipped(roofPolygons),streetPolygons=[];
+  let roadsWithoutWidth=0;
+  for(const r of L.roads){
+    if(!(r.width>0)){roadsWithoutWidth++;continue;}
+    for(let i=1;i<r.path.length;i++){
+      const corridor=roadCorridor(r.path[i-1],r.path[i],r.width).vertices;
+      if(near(corridor))streetPolygons.push(geometry(corridor));
+    }
+  }
+  const streets=clipped(streetPolygons);
+  const groups={publicGreen:[],privateGarden:[],naturalGreen:[],civicGreen:[],unclassifiedGreen:[],pavedCivic:[],pavedPrivate:[],pavedOther:[]};
+  for(const g of L.greens){
+    if(!near(g.ring))continue;
+    const key=g.surface==='paved' ? g.purpose==='civic'?'pavedCivic':g.purpose==='private'?'pavedPrivate':'pavedOther'
+      : g.purpose==='public'?'publicGreen':g.purpose==='private'?'privateGarden':g.purpose==='natural'?'naturalGreen':g.purpose==='civic'?'civicGreen':'unclassifiedGreen';
+    groups[key].push(geometry(g.ring));
+  }
+  const masks=Object.fromEntries(Object.entries(groups).map(([k,p])=>[k,clipped(p)]));
+  const measure=mask=>{const areaUnits2=multiArea(mask);return{areaUnits2,estimatedAreaM2:areaUnits2*unit**2,fractionOfEnclosedLand:landArea?areaUnits2/landArea:null};};
+  // Raw claims overlap: private parcel greens may include the building site.
+  // A separate precedence partition prevents adding those claims twice.
+  const ordered={buildingFootprint:footprints,streetCorridor:streets,pavedCivic:masks.pavedCivic,pavedPrivate:masks.pavedPrivate,pavedOther:masks.pavedOther,
+    publicGreen:masks.publicGreen,privateGarden:masks.privateGarden,naturalGreen:masks.naturalGreen,civicGreen:masks.civicGreen,unclassifiedGreen:masks.unclassifiedGreen};
+  let residual=land;const partition={};
+  for(const [name,mask]of Object.entries(ordered)){partition[name]=measure(intersect(residual,mask));residual=subtract(residual,mask);}
+  partition.unclassifiedGround=measure(residual);
+  const partitionArea=Object.values(partition).reduce((n,m)=>n+m.areaUnits2,0);
+  if(Math.abs(partitionArea-landArea)>Math.max(1e-6,landArea*1e-8))throw new Error('Disjoint ground partition does not conserve enclosed land area');
+  return {available:true,method:'Polygon unions/intersections on rounded geometry; outer wall centreline enclosure excludes citadels; land excludes water',coordinateGridUnits:1/precision,
+    enclosedAreaUnits2:enclosureArea,enclosedLandAreaUnits2:landArea,enclosedLandEstimatedAreaM2:landArea*unit**2,
+    enclosedWaterFraction:enclosureArea?(enclosureArea-landArea)/enclosureArea:0,
+    buildingFootprint:measure(footprints),paintedRoofEnvelope:{...measure(roofEnvelope),
+      method:'Transformed authored roof component polygons, or guarded ink bounding rectangles where unavailable; plain roofs retained. Excludes shadows, walls and nonbuilding props. Envelope proxy, not raster ink.',
+      componentSymbols,boundsFallbackSymbols,unmeasuredBuildingSymbols},
+    streetCorridor:{...measure(streets),method:'Union of reserved-width square-ended segment corridors; excludes decorative casing and rounded joins',roadsWithoutWidth},
+    rawGreenClaims:Object.fromEntries(Object.entries(masks).map(([k,m])=>[k,measure(m)])),
+    groundPartition:partition,partitionPrecedence:Object.keys(ordered),
+    residualMeaning:'Unclassified ground includes wall footprint, setbacks and unlabelled open space; it is not a measurement of failed placements'};
+}
+function enclosedGroundReview(scene) {
+  const precisionFailures=[];
+  // Coincident corridor intersections can trigger the Boolean library's
+  // floating sweep failure. Retry on explicit, progressively coarser grids;
+  // report every retry rather than silently dropping a troublesome feature.
+  for(const precision of [1e8,1e6,1e4])try{
+    return {...enclosedGroundReviewAtPrecision(scene,precision),...(precisionFailures.length?{precisionFailures}:{})};
+  }catch(error){precisionFailures.push({coordinateGridUnits:1/precision,error:String(error)});}
+  return {available:false,reason:'Polygon Boolean accounting failed at all bounded precision grids',precisionFailures};
+}
 const reports = [];
-for (const fixture of fixtures) {
+for (const fixture of fixtures.filter(f=>!fixtureId||f.id===fixtureId)) {
   const parsed = await engine.parseSettlementUrl(new URLSearchParams(fixture.query));
-  const options = { seed: parsed.seedOverride, ...(fixture.development ? { development: fixture.development } : {}) };
+  const options = { seed: parsed.seedOverride, ...(parsed.paletteName ? {theme:parsed.paletteName} : {}), ...(fixture.development ? { development: fixture.development } : {}) };
   const session = engine.createSettlementSession(parsed.burg, options);
   const scene = session.scene;
   if (!scene) throw new Error('Review fixtures require scene geometry');
@@ -224,7 +329,7 @@ for (const fixture of fixtures) {
     byKind, largestPlainFootprints: plain.slice(0, 25),
     plainFootprintAreaUnits2: plain.reduce((n, b) => n + b.areaUnits2, 0),
     estimatedPlainFootprintAreaM2: plain.reduce((n, b) => n + b.estimatedAreaM2, 0),
-    symbolCounts, artworkScale, full: uses(full),
+    symbolCounts, artworkScale, enclosedGround:enclosedGroundReview(scene), full: uses(full),
     farmCentroidToAnyRoad: proximity(farms, L.roads, scene.metersPerUnit ?? 1),
     farmCentroidToApproach: proximity(farms, L.roads.filter(r => r.role === 'approach' || r.kind === 'road'), scene.metersPerUnit ?? 1),
     farmCentroidToNearestField: fieldProximity(farms, L.fields, scene.metersPerUnit ?? 1),

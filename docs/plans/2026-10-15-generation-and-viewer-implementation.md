@@ -195,3 +195,53 @@ The reproducible review includes component-to-neighbour width ratios,
 separate glyph-instance and represented-building counts, and fixed comparison
 frames. Final bundle: `source-08b0d4f291576f7db8888b3a`. Local images and metrics
 are saved under `output/city-scale-review/` (ignored).
+
+
+## Follow-up: occupied land in the desert capital
+
+The 5,000-person Aldford report (seed 271401, desert/ancient, capital, temple,
+shanty, walls, and approaches 330/117/192/278) had a complete 556-building
+ordinary budget but only 38.73% building-footprint coverage inside its walls.
+The legacy radial character field still treated enclosed edge districts as
+suburbs, shrinking roofs and using detached spacing. Enclosed city wards now
+use the shared urban character value; areas outside the wall retain their
+gradient. The quota coalescer also rejects merges with frontage-oriented aspect
+ratios above 2.5, preventing shallow rows becoming oversized strip buildings.
+
+Legacy temple and military wards now reuse the civic block planner: occupied
+frontages surround a connected court, with larger sites for barracks. Temple
+annexes use the existing residential artwork fallback while the principal
+retains its dedicated form and physical size limits. Temple entrances must
+reach beyond the painted front edge rather than point sideways along a tangent
+alley. Civic geometry retains its existing census semantics.
+
+On the exact reported map, enclosed building footprints rise to 53.75% of land;
+ordinary district footprints rise from 45.55% to 64.75%. The two public parks
+remain, covering 13.22% of enclosed land after street setbacks. The temple's
+54 buildings and military district's 21 buildings all receive artwork. The
+ordinary budget remains 556/556 (459 core and 97 outer), with median ordinary
+footprint approximately 87 square metres. These are legacy scale estimates,
+not a surveyed physical settlement.
+
+The reproducible review now includes the exact capital URL and its ancient
+palette, with `--fixture aldford-capital` for a focused run. Wall-clipped polygon
+unions measure footprints and distinguish overlapping land claims from a
+disjoint partition of buildings, streets, gardens, parks, paving and unclassified
+ground. Artwork coverage is explicitly a roof-envelope proxy, not a raster ink
+measurement. Boolean precision retries are reported rather than silently
+omitting features. The shared physical generator revision is `physical-layout-6`.
+
+
+A newly exposed farmhouse/street collision is checked against cached full-width
+road corridors using the shared corridor helper. An obstructed house can try
+four short translations within its original field, retaining its footprint and
+random draws; moved houses must also clear complete claimed-site disks. This
+preserves real housing supply without expanding the settlement merely to replace
+a house that can safely move within its field.
+
+Validation: the broad run passed 1,566 checks and exposed one physical
+800-person density regression; the local farmhouse correction resolved it.
+The affected city, physical, scene and rendering suites then passed 105 checks,
+with four focused clearance/density checks and all nine fidelity checks passing
+against the final source. TypeScript, script typing and documentation examples
+also passed. Final source bundle: `source-7da7949f22b1f55b791bb108`.

@@ -8,10 +8,10 @@ import { convexHull } from '../village/dressing/parcel-cut.js';
 import polygonClipping from 'polygon-clipping';
 import { regularizeCityFootprints } from './city-footprints.js';
 
-/** A market or temple is a compact public site with occupied street fronts,
- * rather than a whole vacant neighbourhood. These buildings are commercial
- * premises / temple ancillary buildings, outside the residential census. */
-export function buildCivicBlock(ward: Ward, temple: boolean): void {
+/** A civic precinct reserves a usable court amid occupied street fronts.
+ * Its ward retains its existing census semantics: commercial/temple annexes
+ * are exempt, while military accommodation counts as actual buildings. */
+export function buildCivicBlock(ward: Ward, temple: boolean, options: { buildingAreaScale?: number } = {}): void {
   ward.gardens = [];
   const site = ward.getCityBlock(), metres = ward.model.params.development?.metresPerUnit;
   const streets = wardFrontages(ward);
@@ -41,7 +41,7 @@ export function buildCivicBlock(ward: Ward, temple: boolean): void {
   }
   ward.publicSpace = square();
   const laneWidth=.6*ward.insetScale;
-  const area=meanBuildingArea(ward.model.params.development?.texturePopulation ?? ward.model.params.population)*ward.model.minSqScale/.6;
+  const area=meanBuildingArea(ward.model.params.development?.texturePopulation ?? ward.model.params.population)*ward.model.minSqScale/.6*(options.buildingAreaScale??1);
   const plan=planCityBlock(site,streets,area,laneWidth,true);
   if (!plan) { ward.geometry=[]; return; }
   // Subtract the court from each lot, keeping real polygon footprints. A

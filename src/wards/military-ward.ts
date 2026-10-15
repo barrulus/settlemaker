@@ -3,6 +3,7 @@ import { Ward, createAlleys } from './ward.js';
 import { rowHousing } from '../generator/generation-params.js';
 import type { Model } from '../generator/model.js';
 import type { Patch } from '../generator/patch.js';
+import { buildCivicBlock } from '../generator/civic-blocks.js';
 
 export class MilitaryWard extends Ward {
   constructor(model: Model, patch: Patch) {
@@ -19,6 +20,14 @@ export class MilitaryWard extends Ward {
     // instead (WardType.Military is in ROW_WARDS — see village-rows.ts).
     if (!this.model.usesCityLayout && !rowHousing(this.model.params.population)) {
       this.geometry = [];
+      return;
+    }
+
+    if (this.model.usesCityLayout && !this.model.params.development) {
+      // Barracks earn somewhat larger sites than adjoining houses, but never
+      // scale to an arbitrary fraction of a whole district. Keep a connected
+      // drill court and occupied frontage instead of scattered giant roofs.
+      buildCivicBlock(this, false, { buildingAreaScale: 1.75 });
       return;
     }
 

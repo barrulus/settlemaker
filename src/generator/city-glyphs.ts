@@ -151,7 +151,17 @@ export function placeCityGlyphs(model: Model): void {
       // Both city entry points use this cap. A capped temple may occupy only
       // a small fraction of a large precinct, so no minimum ward coverage applies.
       const candidate = fitCityGlyph(site, architecture.temple, metersPerUnit, frontage, 0, templeMaxScale);
-      if (candidate && (!placed || candidate.paintedArea > placed.paintedArea)) placed = candidate;
+      if (!candidate) continue;
+      const rotation = candidate.rotationDeg * Math.PI / 180;
+      const front = (REFINED_INK[candidate.id].bounds[3] - REFINED_MANIFEST[candidate.id].anchor[1]) * candidate.scaleY! / 64;
+      const toward = -Math.sin(rotation) * (frontage.at.x - candidate.at.x)
+        + Math.cos(rotation) * (frontage.at.y - candidate.at.y);
+      // A court's lane extension may pass through the temple centre. Such a
+      // tangent is not a usable entrance, even when the rectangle itself fits.
+      if (toward <= front + 1e-7 || !segmentInside(candidate.at, frontage.at, templeWard.patch.shape)) continue;
+      const dry = drySegments(candidate.at, frontage.at, water);
+      if (dry.length !== 1 || dry[0][0] !== candidate.at || dry[0][1] !== frontage.at) continue;
+      if (!placed || candidate.paintedArea > placed.paintedArea) placed = candidate;
     }
     if (placed) {
       const [x0, y0, x1, y1] = REFINED_INK[placed.id].bounds;
@@ -255,7 +265,7 @@ export function placeCityGlyphs(model: Model): void {
           && segmentInside(entrance, street, ward.patch.shape) && entranceClear(entrance, street);
       };
       const ordinary = !use && building !== temple && building !== keep && building !== palacePrincipal
-        && ([WardType.Craftsmen, WardType.Merchant, WardType.Patriciate, WardType.Slum, WardType.GateWard].includes(ward.type)
+        && ([WardType.Craftsmen, WardType.Merchant, WardType.Patriciate, WardType.Slum, WardType.GateWard, WardType.Cathedral].includes(ward.type)
           // Non-capital physical administration blocks already select homes.
           // Give those homes the same size-qualified row-house fallback;
           // named civic POIs and capital palace wings retain their own forms.

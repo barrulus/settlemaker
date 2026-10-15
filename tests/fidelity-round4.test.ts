@@ -194,7 +194,10 @@ describe('fidelity round 4: probe path', () => {
     // retain their own footprints and reviewed house-scale vector detail.
     // Compound entrances now meet the street network; low well shadows stay
     // attached at the corrected scale. Final artwork and repeatability reviewed.
-    expect(sha256(svg)).toBe('37762c706e78f46a04ae37c1f4309f8695ec639fc83da8111c72781cb84adb21');
+    // Enclosed neighbourhoods retain urban roof grain; temple and military
+    // precincts now reserve explicit courts amid occupied street fronts.
+    // Reviewed final visuals; mesh and ordinary census remain unchanged.
+    expect(sha256(svg)).toBe('0f3da9540686a158bff3e83df59c1e7c0b721b713f72a700573e0bfca734bc21');
   });
 
   it('pins direct legacy generateFromBurg output at pop 800 (not the village engine)', () => {

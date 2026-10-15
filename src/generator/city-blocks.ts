@@ -52,6 +52,14 @@ export function coalesceCityRuns(plan: CityBlockPlan, target: number): void {
       if (best && area >= best.area) continue;
       const joined = new Polygon(convexHull([...a.vertices, ...b.vertices]));
       if (joined.length < 3 || Math.abs(joined.square) < area - 1e-7 || Math.abs(joined.square) > area * 1.05) continue;
+      const frontage=plan.frontages.get(a)!;
+      const length=Point.distance(frontage.a,frontage.b);
+      const ax=(frontage.b.x-frontage.a.x)/length,ay=(frontage.b.y-frontage.a.y)/length;
+      const xs=joined.vertices.map(p=>ax*p.x+ay*p.y),ys=joined.vertices.map(p=>-ay*p.x+ax*p.y);
+      const width=Math.max(...xs)-Math.min(...xs),depth=Math.max(...ys)-Math.min(...ys);
+      // A quota is not permission to turn several shallow houses into a
+      // 30-metre strip. Unmerged sites remain real buildings until budget trim.
+      if(Math.max(width/depth,depth/width)>2.5)continue;
       if (plan.exclusions && overlapsWater(joined, plan.exclusions)) continue;
       if (joined.square < 0) joined.vertices.reverse();
       best = { run, index: i - 1, joined, area };

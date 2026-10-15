@@ -136,6 +136,17 @@ describe('street-led city blocks', () => {
     }
   });
 
+  it('does not invent one thirty-metre strip house to satisfy a smaller quota',()=>{
+    const buildings=Array.from({length:4},(_,i)=>polygon([[i*7.5,0],[i*7.5+7.45,0],[i*7.5+7.45,3.7],[i*7.5,3.7]]));
+    const frontage={a:new Point(0,0),b:new Point(30,0),at:new Point(0,0),width:.6,kind:'street' as const};
+    const plan={buildings,lanes:[],runs:[[...buildings]],frontages:new Map(buildings.map(b=>[b,{...frontage,at:nearestOnSegment(b.centroid,frontage.a,frontage.b)}]))};
+    coalesceCityRuns(plan,1);
+    // The later budget pass may trim real run ends; coalescing may not fake
+    // a single household footprint by fusing an unbuildable 30x3.7m roof.
+    expect(plan.buildings).toHaveLength(4);
+    expect(plan.buildings).toEqual(buildings);
+  });
+
   it('checks the whole footprint against narrow water, enclosed ponds and islands', () => {
     const lot = polygon([[0, 0], [10, 0], [10, 10], [0, 10]]);
     const water = polygon([[4.9, -1], [5.1, -1], [5.1, 11], [4.9, 11]]).vertices;
