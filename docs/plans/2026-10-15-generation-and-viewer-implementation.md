@@ -100,3 +100,46 @@ Large coarse field parcels receive bounded local subdivision only where farm hom
 The reproducible visual check is `npm run review:generation-regressions -- --png`. Its `--engine` option accepts a baseline bundle; `--frames` reuses saved geographic bounds for honest comparisons. A separately labelled current-farm crop follows relocated farms at a fixed 440-metre width. SVG and JSON output do not require rasterisation. The physical generator revision is now `physical-layout-3`; the performance tables above describe the earlier implementation and are not timings for this correction.
 
 The correction bundle is `source-08c377776a1c045bb0a72ec9`. All **145 engine files / 1,545 tests** passed cleanly with two workers. The four-worker run passed its assertions but reported a runner task-update RPC timeout, so it was repeated at lower concurrency. Script type checking, documentation checks, **19 client files / 140 tests**, and the actual client's production build passed. Local before/after artifacts and exact-input metrics are saved under `output/generation-correction-review/` (ignored).
+
+## Follow-up: remaining plain city footprints
+
+The population-1,200 Aldford report (seed 353956, local approaches 316/146 and
+footpath 282) exposed further failures to fit usable tapered plots. A shared
+contained-rectangle solver now allows a bounded translation after existing
+centred artwork candidates fail. It preserves painted coverage and useful-size
+limits, and checks the actual doorway route against neighbouring buildings,
+water and the ward boundary. The same helper plans rectangular houses inside
+acute end parcels before census allocation, with the remaining ground exported
+as private yards. Regular parcels retain their footprints.
+
+Physical narrow houses now retain ordinary depth and rear gardens while wide
+tenement sites retain their deeper footprints. Physical corner replacements
+require at least 16 square metres and a three-metre short side. Noncapital
+administration blocks now receive the same row-house fallback as other blocks
+that select residential architecture; named civic buildings and palaces retain
+their dedicated forms. Geometry and fitting stay in the shared engine.
+
+Fixed-frame full-detail comparisons show:
+
+| Fixture | Plain footprints before | After | Total buildings after |
+| --- | ---: | ---: | ---: |
+| Aldford 1,200, seed 353956 | 46 | 7 | 216 |
+| Aldford 3,400, seed 60891 | 67 | 18 | 449 |
+| Physical 10,000, seed 2, core 5,000/rural 1,000 | 360 | 153 | 2,285 |
+
+The physical central crop drops from 48 to 12 plain footprints. Plain footprint
+area decreases approximately 84%, 75% and 71% respectively. Some unsuitable
+footprints still retain polygon roofs. Both legacy cases preserve their exact
+patch, ward and road topology and their residential budgets (203 and 417).
+The physical case retains all 10,000 residents and the requested core/rural
+split; available capacity falls from 13,112 to 13,104. Total roof footprint
+area decreases approximately 2.4%, 1.1% and 5.0%, with explicit yard ground.
+The physical generator revision is `physical-layout-4`.
+
+Seven alternating warm session measurements during this correction measured
+roughly 25→31 ms, 35→42 ms and 355→394 ms for these fixtures. These are local
+generation timings, not browser interaction measurements; the physical timing
+preceded the final administration artwork-only fallback. The extra geometric
+work is bounded and leaves successful centred fits unchanged. The durable
+review runner now includes the exact 1,200-person case, plain areas by ward and
+a fixed crop around the largest concentration of plain footprints.

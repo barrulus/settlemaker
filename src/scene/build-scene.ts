@@ -1,7 +1,6 @@
 import { cityLocalStreets } from '../generator/city-streets.js';
 import { MAIN_STREET } from '../wards/ward.js';
 import { edgeInsetScale } from '../generator/generation-params.js';
-import { CommonWard } from '../wards/common-ward.js';
 import { selectFloraAt } from '../assets/landscape-placement.js';
 import { fieldKinds, ARTWORK_MANIFEST } from '../assets/artwork.js';
 import { cityCrossings } from './crossings.js';
@@ -115,7 +114,7 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
       }
       continue; // groves are greens, not buildings
     }
-    if(ward instanceof CommonWard)for(const garden of ward.gardens)scene.layers.greens.push({purpose: 'private',ring:ring(garden.ring.vertices),paths:garden.access.length?[ring(garden.access)]:[],pathWidth:.3});
+    for(const garden of ward.gardens)scene.layers.greens.push({purpose: 'private',ring:ring(garden.ring.vertices),paths:garden.access.length?[ring(garden.access)]:[],pathWidth:.3});
     if(ward.publicSpace)scene.layers.greens.push({purpose:'civic',surface:'paved',ring:ring(ward.publicSpace.vertices)});
     for (const poly of ward.geometry) {
       scene.layers.buildings.push({

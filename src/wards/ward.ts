@@ -53,6 +53,8 @@ export class Ward {
   principalSymbol: PlacedSymbol | null = null;
   /** Reserved square or temple court within a developed civic block. */
   publicSpace: Polygon | null = null;
+  /** Explicit unbuilt portions of occupied residential or civic parcels. */
+  gardens: Array<{ring:Polygon;access:Point[]}> = [];
   type: WardType = WardType.Empty;
 
   constructor(model: Model, patch: Patch) {

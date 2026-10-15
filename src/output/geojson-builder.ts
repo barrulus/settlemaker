@@ -10,7 +10,6 @@ import type { LocalBounds } from '../generator/bounds.js';
 import { computeSettlementScale } from './settlement-tiler.js';
 import { Castle } from '../wards/castle.js';
 import { Park } from '../wards/park.js';
-import { CommonWard } from '../wards/common-ward.js';
 import { Harbour } from '../wards/harbour.js';
 import { Point } from '../types/point.js';
 import { IdAllocator, buildingIds } from './id-allocator.js';
@@ -97,7 +96,7 @@ export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = 
       });
     }
 
-    if(patch.ward instanceof CommonWard)for(const garden of patch.ward.gardens){
+    for(const garden of patch.ward.gardens){
       features.push({type:'Feature',properties:{layer:'green',kind:'garden',wardType:patch.ward.type},geometry:polygonToGeoJson(garden.ring,shift)});
     }
     if(patch.ward.publicSpace)features.push({type:'Feature',properties:{layer:'green',kind:'court',purpose:'civic',surface:'paved',wardType:patch.ward.type},geometry:polygonToGeoJson(patch.ward.publicSpace,shift)});

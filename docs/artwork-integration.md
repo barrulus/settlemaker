@@ -18,10 +18,16 @@ code when creating a skin.
   measured roof and porch extents rather than generic house/hut ratios.
 - Cities fit native urban buildings to existing surveyed lots. The fitter uses
   guarded ink measurements and preserves the building polygon/GeoJSON identity.
+  When a centred fit fails, a bounded geometric search can move the artwork
+  within the footprint, keeping its scale, coverage and street-access checks.
+  It uses the same contained-rectangle helper as corner-site planning; it never
+  expands across a concave boundary or stretches artwork to match a wedge.
   Central housing mixes one seeded row-house family with substantial tenements;
   wealthy blocks can use single-building courtyard forms where the site fits.
   The physical planner reserves wider tenement sites among narrow attached street
-  houses, keeping real frontage access and the same capacity per building. Dense
+  houses, keeping real frontage access and the same capacity per building.
+  Ordinary houses keep their usual depth with rear gardens; only the wider
+  tenement sites need deeper footprints. Dense
   art is never shrunk to a tiny cluster to fit a cottage plot: tenements require
   a nominal canvas of at least 10.4 metres (about eight metres of painted frontage),
   and courts require 12.8 metres. A corner house needs an actual street corner;
@@ -39,6 +45,11 @@ code when creating a skin.
   frontages. They do not consume an entire neighbourhood for a solitary ornament.
   Concave wall-edge blocks retain street rows clipped to their actual boundary;
   a small boundary notch does not switch the whole district to sparse estates.
+  Acute corner parcels can reserve a rectangular house and explicit remaining
+  yard before the census runs. Physical replacements must retain at least
+  40% of the parcel, 16 square metres of footprint and a three-metre short side,
+  with clear access. Regular footprints remain unchanged. Residential and civic
+  yards appear consistently in the scene and GeoJSON.
 - Multi-building terrace and complete compound presets are available in the
   artwork registry/catalogue but are not substituted for individual household
   lots. Compound planning must retain constituent identities and real capacities;

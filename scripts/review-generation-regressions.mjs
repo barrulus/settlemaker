@@ -33,6 +33,7 @@ const sharp = png ? (await import('sharp')).default : undefined;
 await mkdir(out, { recursive: true });
 
 const fixtures = [
+  { id: 'aldford-1200', query: 'name=Aldford&pop=1200&seed=353956&walls=1&plaza=1&roads=316%3Alocal%2C146%3Alocal%2C282%3Afootpath' },
   { id: 'aldford', query: 'name=Aldford&pop=3400&seed=60891&walls=1&plaza=1&roads=355%3Atrail%2C135%3Amarket%2C236%3Amarket' },
   { id: 'rural', query: 'name=Rural&pop=10000&seed=2&walls=1', development: { preset: 'city', corePopulation: 5000, ruralPopulation: 1000 } },
 ];
@@ -46,6 +47,9 @@ function pad(b, fraction = .04) {
 }
 function center(ring) {
   return new Polygon(ring.map(p => new Point(p.x, p.y))).centroid;
+}
+function area(ring) {
+  return Math.abs(new Polygon(ring.map(p => new Point(p.x, p.y))).square);
 }
 function resized(svg, b, width) {
   const w = b.max_x - b.min_x, h = b.max_y - b.min_y;
@@ -127,9 +131,30 @@ for (const fixture of fixtures) {
     frames[fixture.id]['farm-current'] = { bounds: { min_x: p.x - radius, max_x: p.x + radius, min_y: p.y - radius, max_y: p.y + radius }, detail: 'full', framing: 'current northernmost farm; fixed 440 metre width' };
   }
   const byKind = {};
+  const plain = [];
+  const metresPerUnit = scene.metersPerUnit ?? 1;
   for (const b of L.buildings) {
-    byKind[b.kind] ??= { total: 0, glyphBacked: 0, plain: 0 };
+    byKind[b.kind] ??= { total: 0, glyphBacked: 0, plain: 0, areaUnits2: 0, plainAreaUnits2: 0, estimatedAreaM2: 0, estimatedPlainAreaM2: 0 };
     byKind[b.kind].total++; byKind[b.kind][b.glyphBacked ? 'glyphBacked' : 'plain']++;
+    const a = area(b.ring);
+    byKind[b.kind].areaUnits2 += a;
+    byKind[b.kind].estimatedAreaM2 += a * metresPerUnit ** 2;
+    if (!b.glyphBacked) {
+      byKind[b.kind].plainAreaUnits2 += a;
+      byKind[b.kind].estimatedPlainAreaM2 += a * metresPerUnit ** 2;
+      plain.push({ id: b.id, kind: b.kind, areaUnits2: a, estimatedAreaM2: a * metresPerUnit ** 2, centre: center(b.ring), bounds: bounds(b.ring) });
+    }
+  }
+  plain.sort((a, b) => b.areaUnits2 - a.areaUnits2);
+  if (!frames[fixture.id].filler && plain.length) {
+    const urban = frames[fixture.id].urban.bounds, radius = (urban.max_x - urban.min_x) * .2;
+    const inside = plain.filter(b => b.centre.x >= urban.min_x && b.centre.x <= urban.max_x && b.centre.y >= urban.min_y && b.centre.y <= urban.max_y);
+    // Save the highest-area cluster as a fixed geographic crop for subsequent
+    // revisions. IDs may change with geometry; the before frame must not move.
+    const scored = inside.map(b => ({ b, score: inside.filter(n => Math.hypot(n.centre.x - b.centre.x, n.centre.y - b.centre.y) < radius).reduce((n, p) => n + p.areaUnits2, 0) }));
+    scored.sort((a, b) => b.score - a.score);
+    const p = (scored[0]?.b ?? plain[0]).centre;
+    frames[fixture.id].filler = { bounds: { min_x: p.x - radius, max_x: p.x + radius, min_y: p.y - radius, max_y: p.y + radius }, detail: 'full', framing: 'fixed highest-area plain-footprint cluster from first review' };
   }
   const residentialKinds = ['craftsmen', 'merchant', 'slum', 'patriciate', 'gate', 'farm'];
   const residential = L.buildings.filter(b => residentialKinds.includes(b.kind) && !b.landmark);
@@ -144,7 +169,10 @@ for (const fixture of fixtures) {
     buildings: L.buildings.length, glyphBacked: L.buildings.filter(b => b.glyphBacked).length,
     // Ward-based visual proxy, not an independent occupancy or population count.
     residentialWardFootprints: residential.length, plainResidentialWardFootprints: residential.filter(b => !b.glyphBacked).length,
-    byKind, symbolCounts, full: uses(full),
+    byKind, largestPlainFootprints: plain.slice(0, 25),
+    plainFootprintAreaUnits2: plain.reduce((n, b) => n + b.areaUnits2, 0),
+    estimatedPlainFootprintAreaM2: plain.reduce((n, b) => n + b.estimatedAreaM2, 0),
+    symbolCounts, full: uses(full),
     farmCentroidToAnyRoad: proximity(farms, L.roads, scene.metersPerUnit ?? 1),
     farmCentroidToApproach: proximity(farms, L.roads.filter(r => r.role === 'approach' || r.kind === 'road'), scene.metersPerUnit ?? 1),
     farmCentroidToNearestField: fieldProximity(farms, L.fields, scene.metersPerUnit ?? 1),
@@ -158,7 +186,7 @@ for (const fixture of fixtures) {
     const selected = frame.detail === 'full' ? fullView : auto;
     const svg = resized(selected, b, width);
     await writeFile(`${out}/${fixture.id}-${name}.svg`, svg);
-    if (name === 'detail') await writeFile(`${out}/${fixture.id}-${name}-auto.svg`, resized(auto, b, width));
+    if (name === 'detail' || name === 'filler') await writeFile(`${out}/${fixture.id}-${name}-auto.svg`, resized(auto, b, width));
     if (png) await sharp(Buffer.from(svg)).png().toFile(`${out}/${fixture.id}-${name}.png`);
   }
   reports.push(report);

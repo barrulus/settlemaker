@@ -6,6 +6,7 @@ import { WardType } from '../types/interfaces.js';
 import { Ward, createAlleys, ALLEY } from './ward.js';
 import { rowHousing, maxLotArea, meanBuildingArea } from '../generator/generation-params.js';
 import { planCityBlock, coalesceCityRuns } from '../generator/city-blocks.js';
+import { regularizeCityFootprints } from '../generator/city-footprints.js';
 import { wardFrontages } from '../generator/city-frontage.js';
 import { SYMBOL_MANIFEST } from '../assets/symbol-manifest.js';
 import { ARTWORK_MANIFEST } from '../assets/artwork.js';
@@ -19,7 +20,6 @@ export class CommonWard extends Ward {
   protected sizeChaos: number;
   protected emptyProb: number;
   cityBuildingTarget: number | null = null;
-  gardens: Array<{ring:Polygon;access:Point[]}> = [];
 
   constructor(
     model: Model, patch: Patch,
@@ -87,6 +87,8 @@ export class CommonWard extends Ward {
       plan = best;
       if (plan?.buildings.length) {
         if (!this.model.params.development) coalesceCityRuns(plan, target);
+        const metres = this.model.params.development?.metresPerUnit;
+        regularizeCityFootprints(plan, area, metres ? 3/metres : undefined, metres ? 16/metres**2 : undefined);
         for (const garden of plan.gardens ?? []) this.gardens.push({ ring: garden, access: [] });
         // Physical density changes the frontage spacing above, never house size.
         const roofScale=this.model.params.development ? 1 : .65+.35*Math.min(1,urbanity*1.35);

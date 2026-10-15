@@ -188,7 +188,9 @@ describe('fidelity round 4: probe path', () => {
     // temple and retained annex; other scene layers and repeatability match.
     // Inhabited civic frontages, clipped concave blocks and site-qualified
     // dense glyphs intentionally change this city; the village pin remains.
-    expect(sha256(svg)).toBe('1d6eeed952e377adc0747277735bae462a2245716823928b2e533becd6f6e514');
+    // Translated contained artwork and rectangular end-lot houses with explicit
+    // yards replace polygon filler; both reported legacy crops were reviewed.
+    expect(sha256(svg)).toBe('252db4ebfac471ba4cc3ba25e67794df1c4c05d8ac5310ffdcdd6f9571ec8a2a');
   });
 
   it('pins direct legacy generateFromBurg output at pop 800 (not the village engine)', () => {

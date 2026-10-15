@@ -31,6 +31,25 @@ describe('inhabited city cores', () => {
     expect(fitted.paintedArea).toBeGreaterThan(Math.abs(site.square)*.7);
   });
 
+  it('replaces most of the reported 1200-person city filler without dropping inhabited lots', () => {
+    const input={...aldford,population:1200,roadBearings:[
+      {bearing_deg:316,kind:'local' as const,through:false},
+      {bearing_deg:146,kind:'local' as const,through:false},
+      {bearing_deg:282,kind:'footpath' as const,through:false},
+    ]};
+    const {model}=createCityModel(input,{seed:353956});
+    const buildings=model.patches.filter(p=>p.ward && ![WardType.Park,WardType.Water,WardType.Empty].includes(p.ward.type)).flatMap(p=>p.ward!.geometry);
+    expect(buildings).toHaveLength(216);
+    // Previously46 were plain. Contained artwork and explicit end-lot yards
+    // replace most filler without lowering the painted coverage floor.
+    expect(buildings.filter(b=>!model.glyphBackedBuildings.has(b)).length).toBeLessThanOrEqual(10);
+    for(const symbol of model.symbols.filter(s=>s.building && s.paintedArea)) {
+      const ward=model.patches.find(p=>p.ward?.geometry.includes(symbol.building!))!.ward!;
+      for(const other of ward.geometry)if(other!==symbol.building && symbol.frontage)
+        expect(blocksAccess(symbol.building!.centroid,symbol.frontage.at,other)).toBe(false);
+    }
+  });
+
   it('gives the reported legacy core real dense artwork and occupied concave blocks', () => {
     const {model}=createCityModel(aldford,{seed:60891});
     const wealthy=model.patches.find(p=>p.ward?.type===WardType.Patriciate)!.ward!;
@@ -43,6 +62,9 @@ describe('inhabited city cores', () => {
       expect(ward.geometry.length).toBeGreaterThan(ward.cityBuildingTarget!*.7);
       expect(ward.geometry.reduce((s,b)=>s+Math.abs(b.square),0)/Math.abs(ward.getCityBlock().square)).toBeGreaterThan(.45);
     }
+    const buildings=model.patches.filter(p=>p.ward && ![WardType.Park,WardType.Water,WardType.Empty].includes(p.ward.type)).flatMap(p=>p.ward!.geometry);
+    expect(buildings).toHaveLength(449);
+    expect(buildings.filter(b=>!model.glyphBackedBuildings.has(b)).length).toBeLessThanOrEqual(20);
     const dense=model.symbols.filter(s=>s.id==='sm-city-tenement');
     expect(dense.length).toBeGreaterThan(10);
     for(const s of dense)expect(Math.min(s.scale,s.scaleY!)*cityMetersPerUnit(model)).toBeGreaterThanOrEqual(10.4);
@@ -82,6 +104,28 @@ describe('inhabited city cores', () => {
     expect(model.residents.insideWalls).toMatchObject({requested:8000,assigned:8000,unassigned:0});
     expect(model.residents.assigned).toBe(10000);
     expect(model.buildings.reduce((n,b)=>n+b.residents,0)).toBe(10000);
+  });
+
+  it('reduces physical city filler while retaining the requested urban and rural residents', () => {
+    const model=createSettlementModel({...aldford,name:'Rural',population:10000,plaza:false,roadBearings:undefined},
+      {seed:2,development:{preset:'city',corePopulation:5000,ruralPopulation:1000}});
+    const buildings=model.scene.layers.buildings;
+    // The reported fixture had360 plain footprints among2286 buildings.
+    // Guard the improvement and the supply: removing inhabited buildings
+    // wholesale must not satisfy the artwork-completeness assertion.
+    expect(buildings.length).toBeGreaterThan(2200);
+    expect(buildings.filter(b=>!b.glyphBacked).length).toBeLessThanOrEqual(170);
+    const administration=buildings.filter(b=>b.kind===WardType.Administration);
+    expect(administration).toHaveLength(30);
+    expect(administration.filter(b=>b.glyphBacked).length).toBeGreaterThan(administration.length*.8);
+    const adminIds=new Set(administration.map(b=>b.id));
+    for(const b of model.buildings.filter(b=>adminIds.has(b.id)))expect(b.capacity).toBe(8);
+    const adminSymbols=model.scene.layers.symbols.filter(s=>s.buildingId && adminIds.has(s.buildingId));
+    expect(adminSymbols.some(s=>s.id.startsWith('sm-city-row-house'))).toBe(true);
+    for(const s of adminSymbols.filter(s=>s.id==='sm-city-tenement'))
+      expect(Math.min(s.scale,s.scaleY!)).toBeGreaterThanOrEqual(10.4);
+    expect(model.residents.assigned).toBe(10000);
+    expect(model.buildings.reduce((sum,b)=>sum+b.residents,0)).toBe(10000);
   });
 
   it('keeps mixed dense sites disjoint and connected without enlarging every street house', () => {

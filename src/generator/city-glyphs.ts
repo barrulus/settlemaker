@@ -3,11 +3,12 @@ import { landscapeHash } from '../assets/landscape-placement.js';
 import { buildingIds, IdAllocator } from '../output/id-allocator.js';
 import { ARTWORK_MANIFEST as REFINED_MANIFEST, ARTWORK_INK as REFINED_INK, cityGlyph } from '../assets/artwork.js';
 import { SeededRandom } from '../utils/random.js';
-import { frontagesFor, wardFrontages, polygonsOverlap, drySegments, blocksAccess, overlapsWater, nearestOnSegment, type CityFrontage } from './city-frontage.js';
+import { frontagesFor, wardFrontages, polygonsOverlap, drySegments, segmentInside, blocksAccess, overlapsWater, nearestOnSegment, type CityFrontage } from './city-frontage.js';
 import { scoreBuildings, scoringReference, selectPois } from '../poi/poi-selector.js';
 import { Point } from '../types/point.js';
 import { WardType } from '../types/interfaces.js';
 import { Polygon } from '../geom/polygon.js';
+import { fitInscribedRectangle } from '../geom/inscribed-rectangle.js';
 import { resolveGlyphFor } from '../village/deck.js';
 import { computeLocalBounds } from './bounds.js';
 import { computeSettlementScale } from '../output/settlement-tiler.js';
@@ -33,6 +34,7 @@ export function fitCityGlyph(
   maxPhysicalScale = Infinity,
   maxAspect = 1.5,
   entranceClear?: (entrance: Point, street: Point) => boolean,
+  translate = false,
 ): (PlacedSymbol & { paintedArea: number }) | null {
   const meta = REFINED_MANIFEST[id], ink = REFINED_INK[id];
   if (!meta?.footprint || !ink || building.length < 3 || Math.abs(building.square) < 1e-8) return null;
@@ -67,6 +69,7 @@ export function fitCityGlyph(
       const fw = nominalWidth * aspect, fh = nominalHeight / aspect;
       const iw = (x1 - x0) * fw / 64, ih = (y1 - y0) * fh / 64;
       let factor = Infinity;
+      let center = c;
       building.forEdge((a, b) => {
         const ex = b.x - a.x, ey = b.y - a.y, length = Math.hypot(ex, ey);
         if (length < 1e-8) return;
@@ -74,21 +77,28 @@ export function fitCityGlyph(
         const projection = (Math.abs(ex * ay - ey * ax) * iw + Math.abs(ex * ax + ey * ay) * ih) / (2 * length);
         factor = Math.min(factor, (distance - 0.002) / projection);
       });
-      factor = Math.min(factor, maxPhysicalScale / (metersPerUnit * Math.max(aspect, 1 / aspect)));
+      const cap = maxPhysicalScale / (metersPerUnit * Math.max(aspect, 1 / aspect));
+      factor = Math.min(factor, cap);
+      if (translate) {
+        const fit = fitInscribedRectangle(building, iw, ih, rotation, cap);
+        if (!fit) continue;
+        factor = fit.scale;
+        center = fit.center;
+      }
       if (!Number.isFinite(factor) || factor * Math.min(aspect, 1 / aspect) * metersPerUnit < meta.minScale) continue;
       const paintedArea = ink.area * fw * fh * factor * factor / (64 * 64);
       // A narrow or irregular lot stays a polygon instead of becoming a tiny
       // detached house surrounded by the empty remainder of its city frontage.
       if (paintedArea < Math.abs(building.square) * minCoverage || (best && paintedArea <= best.paintedArea)) continue;
-      // Parallel frontage fits have the same access segment already checked
-      // from the lot centroid. A rotated front edge has a different exit:
-      // reject it if that actual route crosses a neighbouring building.
-      if(frontage && entranceClear && Math.abs(Math.sin(rotation-angle))>1e-7
-        && !entranceClear(new Point(c.x-ay*ih*factor/2,c.y+ax*ih*factor/2),frontage.at))continue;
+      // Centred parallel fits reuse the centroid access check. Rotation or
+      // translation changes the exit, so validate the actual front-door route
+      // even when the translated artwork remains parallel to its frontage.
+      if(frontage && entranceClear && (translate || Math.abs(Math.sin(rotation-angle))>1e-7)
+        && !entranceClear(new Point(center.x-ay*ih*factor/2,center.y+ax*ih*factor/2),frontage.at))continue;
       const dx = ((x0 + x1) / 2 - meta.anchor[0]) * fw / 64 * factor;
       const dy = ((y0 + y1) / 2 - meta.anchor[1]) * fh / 64 * factor;
       best = {
-        id, building, ...(frontage ? { frontage } : {}), at: new Point(c.x - dx * ax + dy * ay, c.y - dx * ay - dy * ax),
+        id, building, ...(frontage ? { frontage } : {}), at: new Point(center.x - dx * ax + dy * ay, center.y - dx * ay - dy * ax),
         scale: fw * factor, scaleY: fh * factor,
         rotationDeg: rotation * 180 / Math.PI, zBand: 'structure', paintedArea,
       };
@@ -209,38 +219,52 @@ export function placeCityGlyphs(model: Model): void {
       const plannedFrontage = ward.buildingFrontages.get(building);
       const candidates = frontagesFor(building, ward, plannedFrontage ? [plannedFrontage] : lines);
       const entranceClear = (entrance: Point, street: Point) => !ward.geometry.some(other=>other!==building && blocksAccess(entrance,street,other));
+      const translatedEntranceClear = (entrance: Point, street: Point) => {
+        const dry = drySegments(entrance, street, water);
+        return dry.length === 1 && dry[0][0] === entrance && dry[0][1] === street
+          && segmentInside(entrance, street, ward.patch.shape) && entranceClear(entrance, street);
+      };
       const ordinary = !use && building !== temple && building !== keep && building !== palacePrincipal
-        && [WardType.Craftsmen, WardType.Merchant, WardType.Patriciate, WardType.Slum, WardType.GateWard].includes(ward.type);
+        && ([WardType.Craftsmen, WardType.Merchant, WardType.Patriciate, WardType.Slum, WardType.GateWard].includes(ward.type)
+          // Non-capital physical administration blocks already select homes.
+          // Give those homes the same size-qualified row-house fallback;
+          // named civic POIs and capital palace wings retain their own forms.
+          || (ward.type === WardType.Administration && !!model.params.development && !model.params.capitalNeeded));
       // The intended architecture must fit its site at a useful real size.
       // A corner house is only for a corner; its failure must not turn an
       // entire wealthy neighbourhood into anonymous polygon roofs.
       const forms = ordinary ? [...new Set([id, ...(dense ? [architecture.dense] : []), detached ? ruralHome : architecture.home])] : [id];
-      for (const form of forms) {
-      for (const frontage of candidates) {
-        const candidate = fitCityGlyph(building, form, metersPerUnit, frontage,
-          building === temple ? 0 : use || building === keep || building === palacePrincipal ? .25 : .5,
-          building === temple ? templeMaxScale : (model.params.development && !use && building !== keep && building !== palacePrincipal)
-            || (ordinary && (form === architecture.dense || form === architecture.court)) ? 1.35 : Infinity,
-          model.params.development ? 1.25 : 1.5, entranceClear);
-        // A courtyard is a site arrangement, not a miniature icon for every
-        // inn. Small urban inns occupy street houses; keep their POI identity.
-        if (candidate && (model.params.development || ordinary) && REFINED_MANIFEST[form]?.courtyardVoids?.length
-          && Math.min(candidate.scale,candidate.scaleY??candidate.scale)*metersPerUnit<12.8) continue;
-        // Tenements depict one substantial building. Their eight-metre
-        // painted frontage needs a 10.4m nominal canvas, not the catalogue's
-        // permissive four-metre icon floor. Courts need wider sites still.
-        if (candidate && form === architecture.dense
-          && Math.min(candidate.scale,candidate.scaleY??candidate.scale)*metersPerUnit < 10.4) continue;
-        if (candidate && (!best || candidate.paintedArea > best.paintedArea)) best = candidate;
-      }
-      if (best) break;
-      }
-      if (!best && model.params.development && REFINED_MANIFEST[id]?.courtyardVoids?.length && building!==temple) {
-        const compactId = cityGlyph(use==='inn' ? 'shop-house' : 'row-house-a',model.params.biome);
-        for (const frontage of candidates) {
-          const candidate=fitCityGlyph(building,compactId,metersPerUnit,frontage,.5,1.35,1.25,entranceClear);
-          if(candidate && (!best || candidate.paintedArea>best.paintedArea))best=candidate;
+      // First preserve the existing centred family selection. Only a lot
+      // with no successful replacement gets the translated recovery pass.
+      for (const translate of [false, true]) {
+        for (const form of forms) {
+          for (const frontage of candidates) {
+            const candidate = fitCityGlyph(building, form, metersPerUnit, frontage,
+              building === temple ? 0 : use || building === keep || building === palacePrincipal ? .25 : .5,
+              building === temple ? templeMaxScale : (model.params.development && !use && building !== keep && building !== palacePrincipal)
+                || (ordinary && (form === architecture.dense || form === architecture.court)) ? 1.35 : Infinity,
+              model.params.development ? 1.25 : 1.5, translate ? translatedEntranceClear : entranceClear, translate);
+            // A courtyard is a site arrangement, not a miniature icon for every
+            // inn. Small urban inns occupy street houses; keep their POI identity.
+            if (candidate && (model.params.development || ordinary) && REFINED_MANIFEST[form]?.courtyardVoids?.length
+              && Math.min(candidate.scale,candidate.scaleY??candidate.scale)*metersPerUnit<12.8) continue;
+            // Tenements depict one substantial building. Their eight-metre
+            // painted frontage needs a 10.4m nominal canvas, not the catalogue's
+            // permissive four-metre icon floor. Courts need wider sites still.
+            if (candidate && form === architecture.dense
+              && Math.min(candidate.scale,candidate.scaleY??candidate.scale)*metersPerUnit < 10.4) continue;
+            if (candidate && (!best || candidate.paintedArea > best.paintedArea)) best = candidate;
+          }
+          if (best) break;
         }
+        if (!best && model.params.development && REFINED_MANIFEST[id]?.courtyardVoids?.length && building!==temple) {
+          const compactId = cityGlyph(use==='inn' ? 'shop-house' : 'row-house-a',model.params.biome);
+          for (const frontage of candidates) {
+            const candidate=fitCityGlyph(building,compactId,metersPerUnit,frontage,.5,1.35,1.25,translate ? translatedEntranceClear : entranceClear,translate);
+            if(candidate && (!best || candidate.paintedArea>best.paintedArea))best=candidate;
+          }
+        }
+        if (best) break;
       }
       // A fallback footprint remains in tight corners; never turn the front
       // door away from its access just to increase the number of glyphs.

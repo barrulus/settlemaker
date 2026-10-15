@@ -12,6 +12,32 @@ function input(population: number) {
 }
 
 describe('street-led city blocks', () => {
+  it('gives narrow dense houses rear yards while retaining deep tenement sites', () => {
+    const site = polygon([[0, 0], [60, 0], [60, 20], [0, 20]]);
+    const streets: Array<WardLane & {kind:'street'}> = [];
+    site.forEdge((a,b) => streets.push({a,b,width:.6,kind:'street'}));
+    const area = 8, ordinaryDepth = Math.sqrt(area * 1.15);
+    const plan = planCityBlock(site, streets, area, .36, true, true, undefined, true)!;
+    expect(plan.gardens!.length).toBeGreaterThan(20);
+    const dimensions = plan.buildings.map(b => {
+      const f = plan.frontages.get(b)!, length = Point.distance(f.a, f.b);
+      const ax = (f.b.x-f.a.x)/length, ay = (f.b.y-f.a.y)/length;
+      const depths = b.vertices.map(p => -ay*p.x+ax*p.y);
+      return Math.max(...depths)-Math.min(...depths);
+    });
+    expect(dimensions.filter(d => Math.abs(d-ordinaryDepth)<1e-7).length).toBeGreaterThan(20);
+    expect(dimensions.filter(d => Math.abs(d-ordinaryDepth*Math.SQRT2)<1e-7).length).toBeGreaterThan(5);
+    for (const garden of plan.gardens!) for (const house of plan.buildings) {
+      const ring = (p:Polygon) => p.vertices.map(v => [v.x,v.y] as [number,number]);
+      const overlap = polygonClipping.intersection([ring(garden)],[ring(house)]);
+      expect(overlap.reduce((sum,p) => sum+Math.abs(polygon(p[0]).square),0)).toBeLessThan(1e-7);
+    }
+    for (const house of plan.buildings) {
+      const f = plan.frontages.get(house)!;
+      for (const other of plan.buildings) if (house!==other) expect(blocksAccess(house.centroid,f.at,other)).toBe(false);
+    }
+  });
+
   it('forms long attached terraces in dense quarters instead of little square compounds', () => {
     const site=polygon([[0,0],[60,0],[60,20],[0,20]]);
     const streets: Array<WardLane & {kind:'street'}>=[];

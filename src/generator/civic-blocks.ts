@@ -6,11 +6,13 @@ import { meanBuildingArea } from './generation-params.js';
 import type { Ward } from '../wards/ward.js';
 import { convexHull } from '../village/dressing/parcel-cut.js';
 import polygonClipping from 'polygon-clipping';
+import { regularizeCityFootprints } from './city-footprints.js';
 
 /** A market or temple is a compact public site with occupied street fronts,
  * rather than a whole vacant neighbourhood. These buildings are commercial
  * premises / temple ancillary buildings, outside the residential census. */
 export function buildCivicBlock(ward: Ward, temple: boolean): void {
+  ward.gardens = [];
   const site = ward.getCityBlock(), metres = ward.model.params.development?.metresPerUnit;
   const streets = wardFrontages(ward);
   const main = [...streets].sort((a,b)=>Point.distance(b.a,b.b)-Point.distance(a.a,a.b))[0];
@@ -97,4 +99,8 @@ export function buildCivicBlock(ward: Ward, temple: boolean): void {
   }
   // Draw on the cut boundary so every lane mouth meets the court circuit.
   ward.publicSpace.forEdge((a,b)=>ward.lanes.push({a,b,width:laneWidth}));
+  const accepted = {buildings:ward.geometry,frontages:ward.buildingFrontages,lanes:ward.lanes,runs:[ward.geometry],gardens:[] as Polygon[]};
+  regularizeCityFootprints(accepted,area,metres ? 3/metres : undefined,metres ? 16/metres**2 : undefined);
+  ward.geometry = accepted.buildings;
+  ward.gardens = accepted.gardens.map(ring=>({ring,access:[]}));
 }

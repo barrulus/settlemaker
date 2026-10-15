@@ -28,7 +28,7 @@ export interface CityBlockPlan {
   runs: Polygon[][];
   /** Concave boundary cutouts that must also survive quota coalescing. */
   exclusions?: Point[][];
-  /** Unbuilt strips between physical detached plots, reserved as private gardens. */
+  /** Unbuilt strips beside detached plots or behind narrow terraces, reserved as private gardens. */
   gardens?: Polygon[];
 }
 
@@ -112,11 +112,13 @@ export function planCityBlock(
     return plan;
   }
   // A dense block mixes narrow street houses and substantial tenements.
-  // Give the whole row useful depth, then widen selected sites: shrinking a
-  // multi-storey building's artwork into an ordinary cottage lot is not a
-  // substitute for planning its footprint. Every site still counts once.
-  const depth = Math.sqrt(areaPerHouse * 1.15 * (mixedDenseSites ? 2 : 1)), frontage = areaPerHouse / depth;
-  const plan: CityBlockPlan = { buildings: [], lanes: [], frontages: new Map(), runs: [], ...(spacing ? { gardens: [] } : {}) };
+  // Deep, wide sites accommodate tenements; ordinary narrow houses retain
+  // their usual depth and a rear garden. Giving every narrow lot tenement
+  // depth produces slender footprints that cannot hold ordinary house art.
+  // Every site still counts once, regardless of its footprint.
+  const ordinaryDepth = Math.sqrt(areaPerHouse * 1.15);
+  const depth = mixedDenseSites ? ordinaryDepth * Math.SQRT2 : ordinaryDepth, frontage = areaPerHouse / depth;
+  const plan: CityBlockPlan = { buildings: [], lanes: [], frontages: new Map(), runs: [], ...(spacing || mixedDenseSites ? { gardens: [] } : {}) };
   const lines = [...streets];
   const main = [...streets].sort((a, b) => Point.distance(b.a, b.b) - Point.distance(a.a, a.b))[0];
   const mainLength = main ? Point.distance(main.a, main.b) : 1;
@@ -229,11 +231,17 @@ export function planCityBlock(
         const start = spacing ? startAt(i) : mixedDenseSites ? lotEnds[i] : lo+i*width;
         let lot = clipBlock(strip, -ax, -ay, -(start + 0.025));
         lot = clipBlock(lot, ax, ay, (spacing ? start + houseWidth : mixedDenseSites ? lotEnds[i+1] : lo+(i+1)*width) - 0.025);
+        let rearGarden: Polygon | undefined;
+        if (mixedDenseSites && weights[i] === 1) {
+          rearGarden = clipBlock(lot, -edge.nx, -edge.ny, -edge.k - ordinaryDepth);
+          lot = clipBlock(lot, edge.nx, edge.ny, edge.k + ordinaryDepth);
+        }
         if (lot.length < 3 || Math.abs(lot.square) < areaPerHouse * 0.32 || lot.compactness < 0.35) continue;
         const at = nearestOnSegment(lot.centroid, source.line.a, source.line.b);
         plan.buildings.push(lot);
         run.push(lot);
         plan.frontages.set(lot, { ...source.line, at });
+        if (rearGarden && rearGarden.length >= 3 && Math.abs(rearGarden.square) > .05) plan.gardens!.push(rearGarden);
         const nextStart = i + 1 < count ? startAt(i + 1) : hi;
         if (spacing && nextStart - start - houseWidth > .1) {
           const garden = clipBlock(clipBlock(strip, -ax, -ay, -(start + houseWidth)), ax, ay,
