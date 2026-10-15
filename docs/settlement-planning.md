@@ -62,7 +62,7 @@ districts, with roads influencing the outline. The walled core retains urban
 spacing throughout. Large cities add neighbourhoods rather than stretching a
 fixed number of precincts along distant roads.
 
-Physical layout revision `physical-layout-2` keeps ordinary house footprints in
+Physical layout revision `physical-layout-3` keeps ordinary house footprints in
 a bounded physical range. Sparse outskirts use wider gaps, paired houses and
 short street runs instead of shrinking each roof inside its old plot. Workshop
 approaches, garden neighbourhoods and crofts use coherent local spacing rules.
@@ -91,7 +91,11 @@ Review timing is recorded separately from generation.
 
 The default city house accommodates eight residents, compared with four in a
 detached village dwelling. Dense blocks use smaller individual footprints in
-long attached rows, separated by narrow service streets. Population sets the
+long attached rows, separated by narrow service streets, with wider sites for
+properly sized tenements. The core selects existing high-density artwork where
+its measured ink and physical dimensions fit; ordinary street houses remain
+part of the same neighbourhood. A larger illustration does not silently add
+residents or merge building identities. Population sets the
 amount of housing to plan; it does not merge neighbouring roofs or erase row
 ends to make the number of buildings match a census. Spare capacity is reported
 explicitly. Set `centreOccupancy` when your setting needs a different number of
@@ -165,10 +169,24 @@ console.log(region.model.residents.urban.assigned); // 18000 on a suitable site
 
 An explicit rural target interprets population as the total demand for this
 generated region. Existing farm residences contribute to that target first;
-new hamlets, farmsteads and occasional larger villages provide the remainder
-along connected approaches. Their houses and access reserve ground before
-fields are subdivided. Rural homes do not enlarge the city's empty field
-exclusion belt, so agriculture can remain between clusters.
+new farmsteads and small hamlets provide the remainder within the cultivated
+region. The field envelope is planned first and shared with rural placement.
+Existing approach sections inside that envelope supply short bent farm tracks;
+most sites contain one to three homes, with a minority of compact six to twelve
+home hamlets. Higher demand branches the connected track network into available
+cultivated ground rather than lengthening rows beyond the farms.
+
+Homes and full-width access corridors reserve ground before field subdivision.
+Physical field validation checks contained claims as well as edge intersections,
+so a small farmhouse cannot be swallowed by a large field between sample points.
+When a coarse regional parcel meets rural homes or tracks, that parcel receives
+bounded local subdivision before the same clearance checks run. Distant parcels
+keep their geometry and crop choices; rural clusters retain smaller cultivated
+plots between their access lanes instead of becoming broad empty lawns.
+The cultivated edge has route-related lobes and uncultivated indentations, with
+whole fringe parcels tapering into the surrounding natural ground. Water and
+existing reservations still constrain every accepted site. Rural homes do not
+enlarge the city's empty field exclusion belt; fields remain between clusters.
 
 Urban/rural accounts are separate from inside/outside-wall accounts. The rural
 target never borrows an explicit core allocation. Capacity shortages remain

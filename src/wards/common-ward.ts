@@ -53,19 +53,20 @@ export class CommonWard extends Ward {
       // Demand chooses the grain, with a fixed lower bound: extra population
       // cannot make arbitrarily small buildings or erase access/courtyards.
       const meanArea = meanBuildingArea(this.model.params.development?.texturePopulation ?? this.model.params.population) * this.model.minSqScale / 0.6;
+      const urbanity = cityUrbanity(this.model, this.patch);
+      const compact = urbanity >= .75;
+      const mixedDenseSites = !!this.model.params.development && compact;
       const minimum = meanArea * (this.model.params.development ? .75 : .45);
       const maximum = meanArea * (this.model.params.development ? 1 : 2);
       let area = Math.max(minimum, Math.min(maximum,
         Math.abs(block.square) * 0.85 / Math.max(1, this.cityBuildingTarget)));
       const streets = wardFrontages(this);
-      const compact = !!this.model.params.development && cityUrbanity(this.model, this.patch) >= .75;
-      const urbanity = cityUrbanity(this.model, this.patch);
       const character = this.model.params.development ? neighbourhoodCharacter(this.model, this.patch) : 'terraces';
       const spacing = this.model.params.development && !compact ? {
         gapRatio: (1 - urbanity) * (character === 'workshops' ? .65 : character === 'crofts' ? 1.6 : 1.05),
         groupSize: character === 'crofts' ? 1 : character === 'gardens' ? 2 : character === 'workshops' ? 3 : 4,
       } : undefined;
-      let plan = planCityBlock(block, streets, area, alleyWidth, compact, !!this.model.params.development, spacing);
+      let plan = planCityBlock(block, streets, area, alleyWidth, compact, true, spacing, mixedDenseSites);
       // Reserve a little supply for wells and neighbouring lots lost to access
       // constraints. The final census pass trims whole run ends to the budget.
       const target = this.model.params.development ? Math.ceil(this.cityBuildingTarget)
@@ -80,7 +81,7 @@ export class CommonWard extends Ward {
         const next = Math.max(minimum, Math.min(maximum, area * ratio));
         if (Math.abs(next - area) < 0.001) break;
         area = next;
-        plan = planCityBlock(block, streets, area, alleyWidth, compact, !!this.model.params.development, spacing);
+        plan = planCityBlock(block, streets, area, alleyWidth, compact, true, spacing, mixedDenseSites);
         if (plan && (!best || error(plan.buildings.length) < error(best.buildings.length))) best = plan;
       }
       plan = best;

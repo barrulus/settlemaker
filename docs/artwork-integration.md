@@ -18,8 +18,16 @@ code when creating a skin.
   measured roof and porch extents rather than generic house/hut ratios.
 - Cities fit native urban buildings to existing surveyed lots. The fitter uses
   guarded ink measurements and preserves the building polygon/GeoJSON identity.
-  Central housing has one seeded row-house family, with five restrained biome roof
-  tones. Demand favours the centre; outer roofs sit in progressively larger gardens
+  Central housing mixes one seeded row-house family with substantial tenements;
+  wealthy blocks can use single-building courtyard forms where the site fits.
+  The physical planner reserves wider tenement sites among narrow attached street
+  houses, keeping real frontage access and the same capacity per building. Dense
+  art is never shrunk to a tiny cluster to fit a cottage plot: tenements require
+  a nominal canvas of at least 10.4 metres (about eight metres of painted frontage),
+  and courts require 12.8 metres. A corner house needs an actual street corner;
+  unsuitable forms fall back to the city's row-house family before plain polygons.
+  Five restrained biome roof tones preserve a coherent neighbourhood.
+  Demand favours the centre; outer roofs sit in progressively larger gardens
   and mix detached rural houses with urban forms. Parks scale with neighbourhood
   count. Gardens are also exported as `layer: green`, `kind: garden` polygons. Actual POI assignments select
   inns, shops, workshops, bathhouses, guildhalls and warehouses. The principal
@@ -27,6 +35,10 @@ code when creating a skin.
   administrative halls/wings use the dedicated kits. Court-bearing forms scale
   uniformly and their holes stay transparent. Unsuitable lots retain their real
   polygon, coloured to match the city's roof palette.
+- City markets reserve compact paved courts with occupied commercial street
+  frontages. They do not consume an entire neighbourhood for a solitary ornament.
+  Concave wall-edge blocks retain street rows clipped to their actual boundary;
+  a small boundary notch does not switch the whole district to sparse estates.
 - Multi-building terrace and complete compound presets are available in the
   artwork registry/catalogue but are not substituted for individual household
   lots. Compound planning must retain constituent identities and real capacities;

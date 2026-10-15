@@ -32,6 +32,7 @@ export function fitCityGlyph(
   building: Polygon, id: string, metersPerUnit: number, frontage?: CityFrontage, minCoverage = 0.5,
   maxPhysicalScale = Infinity,
   maxAspect = 1.5,
+  entranceClear?: (entrance: Point, street: Point) => boolean,
 ): (PlacedSymbol & { paintedArea: number }) | null {
   const meta = REFINED_MANIFEST[id], ink = REFINED_INK[id];
   if (!meta?.footprint || !ink || building.length < 3 || Math.abs(building.square) < 1e-8) return null;
@@ -43,13 +44,23 @@ export function fitCityGlyph(
     const d = Math.hypot(b.x - a.x, b.y - a.y);
     if (d > longest) { longest = d; angle = Math.atan2(b.y - a.y, b.x - a.x); }
   });
+  const siteAngle = angle;
   let best: (PlacedSymbol & { paintedArea: number }) | null = null;
   if (frontage) {
     angle = Math.atan2(frontage.b.y - frontage.a.y, frontage.b.x - frontage.a.x);
     // The village artwork's entrance faces local south (+y).
     if (-Math.sin(angle) * (frontage.at.x - c.x) + Math.cos(angle) * (frontage.at.y - c.y) < 0) angle += Math.PI;
   }
-  for (const rotation of frontage ? [angle] : [angle, angle + Math.PI / 2]) {
+  const rotations = frontage ? [angle] : [angle, angle + Math.PI / 2];
+  if(frontage)for(let rotation of [siteAngle,siteAngle+Math.PI/2]) {
+    if(-Math.sin(rotation)*(frontage.at.x-c.x)+Math.cos(rotation)*(frontage.at.y-c.y)<0)rotation+=Math.PI;
+    const delta=Math.abs(Math.atan2(Math.sin(rotation-angle),Math.cos(rotation-angle)));
+    // Older civic/military lots need not be parallel to their street. Align
+    // to the real rectangular footprint when the doorway still faces its
+    // accessible frontage, never to a rear wall or across a neighbour.
+    if(delta>1e-7 && delta<=Math.PI/4)rotations.push(rotation);
+  }
+  for (const rotation of rotations) {
     const ax = Math.cos(rotation), ay = Math.sin(rotation);
     const hasCourt = (meta.courtyardVoids?.length ?? 0) > 0 || (meta.footprintPolygons?.length ?? 0) > 1;
     for (const aspect of hasCourt ? [1] : [1, 0.8, 1.25, 0.67, 1.5].filter(a => Math.max(a,1/a) <= maxAspect)) {
@@ -69,6 +80,11 @@ export function fitCityGlyph(
       // A narrow or irregular lot stays a polygon instead of becoming a tiny
       // detached house surrounded by the empty remainder of its city frontage.
       if (paintedArea < Math.abs(building.square) * minCoverage || (best && paintedArea <= best.paintedArea)) continue;
+      // Parallel frontage fits have the same access segment already checked
+      // from the lot centroid. A rotated front edge has a different exit:
+      // reject it if that actual route crosses a neighbouring building.
+      if(frontage && entranceClear && Math.abs(Math.sin(rotation-angle))>1e-7
+        && !entranceClear(new Point(c.x-ay*ih*factor/2,c.y+ax*ih*factor/2),frontage.at))continue;
       const dx = ((x0 + x1) / 2 - meta.anchor[0]) * fw / 64 * factor;
       const dy = ((y0 + y1) / 2 - meta.anchor[1]) * fh / 64 * factor;
       best = {
@@ -81,12 +97,14 @@ export function fitCityGlyph(
   return best;
 }
 
-/** One ordinary dwelling family per city. Special forms have explicit uses. */
+/** A coherent row-house family plus the catalogue's single-building dense
+ * forms. Aggregate terraces are not interchangeable with one census lot. */
 export function cityArchitecture(seed: number, biome = 'temperate') {
   const rng = new SeededRandom(seed ^ 0x43495459);
   const native = (family: string) => cityGlyph(family, biome);
   return {
     home: native(rng.bool(.5) ? 'row-house-a' : 'row-house-b'),
+    dense: native('tenement'), court: native('courtyard-u'),
     wealthy: native('corner'), workshop: native('workshop'), poor: native('row-house-a'),
     temple: native(['church','cathedral','temple-hall','temple-court'][Math.floor(rng.float()*4)]),
     palace: native('palace-hall'), palaceWing: native('palace-wing'),
@@ -149,7 +167,7 @@ export function placeCityGlyphs(model: Model): void {
   for (const patch of model.patches) {
     const ward = patch.ward;
     if (!ward || [WardType.Park, WardType.Water, WardType.Empty].includes(ward.type)
-      || (ward.type === WardType.Market && !model.params.development)) continue;
+      || (ward.type === WardType.Market && !ward.publicSpace)) continue;
     const lines = wardFrontages(ward);
     const urbanity=cityUrbanity(model,patch);
     const palacePrincipal = ward.type === WardType.Administration && model.params.capitalNeeded
@@ -166,9 +184,11 @@ export function placeCityGlyphs(model: Model): void {
       const detached = model.params.development
         ? roll < Math.max(0, Math.min(.85, (1 - urbanity) * 1.1 - .15))
         : urbanity < .45 && roll > .25;
-      const home=detached ? ruralHome : architecture.home;
-      let corner = !model.params.development;
-      if (model.params.development && ward.type === WardType.Patriciate) {
+      const dense = !detached && urbanity >= .7;
+      const home: string=detached ? ruralHome : dense && (roll < .8 || Math.abs(building.square)*metersPerUnit*metersPerUnit >= 64)
+        ? architecture.dense : architecture.home;
+      let corner = false;
+      if (ward.type === WardType.Patriciate) {
         const nearby: typeof lines = lines.filter(line=>building.vertices.some(p=>Point.distance(p,nearestOnSegment(p,line.a,line.b))<=line.width/2+.15));
         corner = nearby.some((a,i)=>nearby.slice(i+1).some(b=>{
           const ax=a.b.x-a.a.x, ay=a.b.y-a.a.y, bx=b.b.x-b.a.x, by=b.b.y-b.a.y;
@@ -182,31 +202,47 @@ export function placeCityGlyphs(model: Model): void {
           : ward.type === WardType.Market ? cityGlyph('shop-house',model.params.biome)
           : ward.type === WardType.Slum ? architecture.poor
             : ward.type === WardType.Administration ? (model.params.capitalNeeded ? architecture.palaceWing : model.params.development ? home : cityGlyph('guildhall',model.params.biome))
-              : ward.type === WardType.Patriciate ? (corner ? architecture.wealthy : home)
+              : ward.type === WardType.Patriciate ? (corner ? architecture.wealthy : dense && roll < .3 ? architecture.court : home)
               : [WardType.Military, WardType.Castle].includes(ward.type) ? architecture.barracks
                 : ward.type === WardType.Harbour ? cityGlyph('warehouse',model.params.biome) : home;
       let best: ReturnType<typeof fitCityGlyph> = null;
       const plannedFrontage = ward.buildingFrontages.get(building);
       const candidates = frontagesFor(building, ward, plannedFrontage ? [plannedFrontage] : lines);
+      const entranceClear = (entrance: Point, street: Point) => !ward.geometry.some(other=>other!==building && blocksAccess(entrance,street,other));
+      const ordinary = !use && building !== temple && building !== keep && building !== palacePrincipal
+        && [WardType.Craftsmen, WardType.Merchant, WardType.Patriciate, WardType.Slum, WardType.GateWard].includes(ward.type);
+      // The intended architecture must fit its site at a useful real size.
+      // A corner house is only for a corner; its failure must not turn an
+      // entire wealthy neighbourhood into anonymous polygon roofs.
+      const forms = ordinary ? [...new Set([id, ...(dense ? [architecture.dense] : []), detached ? ruralHome : architecture.home])] : [id];
+      for (const form of forms) {
       for (const frontage of candidates) {
-        const candidate = fitCityGlyph(building, id, metersPerUnit, frontage,
+        const candidate = fitCityGlyph(building, form, metersPerUnit, frontage,
           building === temple ? 0 : use || building === keep || building === palacePrincipal ? .25 : .5,
-          building === temple ? templeMaxScale : model.params.development && !use && building !== keep && building !== palacePrincipal ? 1.35 : Infinity,
-          model.params.development ? 1.25 : 1.5);
+          building === temple ? templeMaxScale : (model.params.development && !use && building !== keep && building !== palacePrincipal)
+            || (ordinary && (form === architecture.dense || form === architecture.court)) ? 1.35 : Infinity,
+          model.params.development ? 1.25 : 1.5, entranceClear);
         // A courtyard is a site arrangement, not a miniature icon for every
         // inn. Small urban inns occupy street houses; keep their POI identity.
-        if (candidate && model.params.development && REFINED_MANIFEST[id]?.courtyardVoids?.length
+        if (candidate && (model.params.development || ordinary) && REFINED_MANIFEST[form]?.courtyardVoids?.length
           && Math.min(candidate.scale,candidate.scaleY??candidate.scale)*metersPerUnit<12.8) continue;
+        // Tenements depict one substantial building. Their eight-metre
+        // painted frontage needs a 10.4m nominal canvas, not the catalogue's
+        // permissive four-metre icon floor. Courts need wider sites still.
+        if (candidate && form === architecture.dense
+          && Math.min(candidate.scale,candidate.scaleY??candidate.scale)*metersPerUnit < 10.4) continue;
         if (candidate && (!best || candidate.paintedArea > best.paintedArea)) best = candidate;
+      }
+      if (best) break;
       }
       if (!best && model.params.development && REFINED_MANIFEST[id]?.courtyardVoids?.length && building!==temple) {
         const compactId = cityGlyph(use==='inn' ? 'shop-house' : 'row-house-a',model.params.biome);
         for (const frontage of candidates) {
-          const candidate=fitCityGlyph(building,compactId,metersPerUnit,frontage,.5,1.35,1.25);
+          const candidate=fitCityGlyph(building,compactId,metersPerUnit,frontage,.5,1.35,1.25,entranceClear);
           if(candidate && (!best || candidate.paintedArea>best.paintedArea))best=candidate;
         }
       }
-      // A fallback footprint remains in tight corners; do not rotate the front
+      // A fallback footprint remains in tight corners; never turn the front
       // door away from its access just to increase the number of glyphs.
       if (!best) continue;
       model.symbols.push({ ...best, wardType: ward.type, materialVariant:roll<.45?0:1+Math.floor((roll-.45)/.55*4) });

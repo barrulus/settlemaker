@@ -74,6 +74,7 @@ export function planCityBlock(
   compact = false,
   clipConcave = compact,
   spacing?: CityBlockSpacing,
+  mixedDenseSites = false,
 ): CityBlockPlan | null {
   if (site.length < 3 || Math.abs(site.square) < 1) return null;
   if (!site.isConvex()) {
@@ -81,7 +82,7 @@ export function planCityBlock(
     // Wall insets can introduce tiny reflex notches. They must not send an
     // otherwise ordinary block back to the sparse estate subdivision.
     const hull=new Polygon(convexHull(site.vertices));
-    const plan=planCityBlock(hull,streets,areaPerHouse,alleyWidth,compact,clipConcave,spacing);
+    const plan=planCityBlock(hull,streets,areaPerHouse,alleyWidth,compact,clipConcave,spacing,mixedDenseSites);
     if(!plan)return null;
     // Shared near-collinear wall vertices need a common precision grid for
     // the Boolean sweep; raw floating-point drift can leave an unclosed ring.
@@ -110,7 +111,11 @@ export function planCityBlock(
     plan.lanes=plan.lanes.flatMap(l=>drySegments(l.a,l.b,notches).map(([a,b])=>({...l,a,b})));
     return plan;
   }
-  const depth = Math.sqrt(areaPerHouse * 1.15), frontage = areaPerHouse / depth;
+  // A dense block mixes narrow street houses and substantial tenements.
+  // Give the whole row useful depth, then widen selected sites: shrinking a
+  // multi-storey building's artwork into an ordinary cottage lot is not a
+  // substitute for planning its footprint. Every site still counts once.
+  const depth = Math.sqrt(areaPerHouse * 1.15 * (mixedDenseSites ? 2 : 1)), frontage = areaPerHouse / depth;
   const plan: CityBlockPlan = { buildings: [], lanes: [], frontages: new Map(), runs: [], ...(spacing ? { gardens: [] } : {}) };
   const lines = [...streets];
   const main = [...streets].sort((a, b) => Point.distance(b.a, b.b) - Point.distance(a.a, a.b))[0];
@@ -204,8 +209,12 @@ export function planCityBlock(
       const projections = strip.vertices.map(p => ax * p.x + ay * p.y);
       const lo = Math.min(...projections), hi = Math.max(...projections);
       const gap = frontage * (spacing?.gapRatio ?? 0);
-      const count = Math.max(1, Math.round((hi - lo) / (frontage + gap)));
+      const count = Math.max(1, Math.round((hi - lo) / (frontage * (mixedDenseSites ? 1.4 : 1) + gap)));
       const width = (hi - lo) / count;
+      const weights = Array.from({length:count},(_,i)=>mixedDenseSites && i%4===1 ? 2.6 : 1);
+      const unitWidth = (hi-lo)/weights.reduce((a,b)=>a+b,0);
+      const lotEnds = [lo];
+      for(const weight of weights)lotEnds.push(lotEnds[lotEnds.length-1]+weight*unitWidth);
       const houseWidth = spacing ? Math.min(frontage * 1.2, width - Math.min(gap, width * .75)) : width;
       const groupSize = Math.max(1, spacing?.groupSize ?? 1);
       const startAt = (i: number) => {
@@ -217,9 +226,9 @@ export function planCityBlock(
       const run: Polygon[] = [];
       for (let i = 0; i < count; i++) {
         // A small seam distinguishes houses without turning every party wall into a lane.
-        const start = spacing ? startAt(i) : lo + i * width;
+        const start = spacing ? startAt(i) : mixedDenseSites ? lotEnds[i] : lo+i*width;
         let lot = clipBlock(strip, -ax, -ay, -(start + 0.025));
-        lot = clipBlock(lot, ax, ay, (spacing ? start + houseWidth : lo + (i + 1) * width) - 0.025);
+        lot = clipBlock(lot, ax, ay, (spacing ? start + houseWidth : mixedDenseSites ? lotEnds[i+1] : lo+(i+1)*width) - 0.025);
         if (lot.length < 3 || Math.abs(lot.square) < areaPerHouse * 0.32 || lot.compactness < 0.35) continue;
         const at = nearestOnSegment(lot.centroid, source.line.a, source.line.b);
         plan.buildings.push(lot);

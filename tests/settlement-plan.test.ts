@@ -33,7 +33,21 @@ describe('physical settlement planning', () => {
     expect(homes.length).toBeGreaterThanOrEqual(200);
     const sizes=homes.map(b=>area(b.footprint)).sort((a,b)=>a-b);
     expect(sizes[Math.floor(sizes.length/2)]).toBeLessThan(45);
-    expect(sizes[Math.floor(sizes.length*.9)]).toBeLessThan(65);
+    // Most core sites remain ordinary houses; roughly a quarter now have
+    // wider frontage for a substantial tenement. Bound each family against
+    // its planned grain instead of requiring tenements to fit cottage lots.
+    const ordinary=sizes.filter(s=>s<=65), larger=sizes.filter(s=>s>65);
+    expect(ordinary.length/homes.length).toBeGreaterThan(.7);
+    expect(larger.length).toBeGreaterThan(0);
+    // 9.03 mesh-area mean * .3/.6 texture * 3² m² * 2.6 wide-site weight,
+    // allowing the planner's rounded frontage count to vary width by 25%.
+    expect(Math.max(...larger)).toBeLessThan(9.03*.3/.6*9*2.6*1.25);
+    const tenements=L.symbols.filter(s=>ARTWORK_MANIFEST[s.id]?.family==='tenement');
+    expect(tenements.length).toBeGreaterThan(0);
+    for(const s of tenements) {
+      expect(Math.min(s.scale,s.scaleY??s.scale)).toBeGreaterThanOrEqual(10.4);
+      expect(Math.max(s.scale,s.scaleY??s.scale)).toBeLessThanOrEqual(16*1.35);
+    }
     const faith=L.symbols.filter(s=>ARTWORK_MANIFEST[s.id]?.category==='faith');
     expect(faith).toHaveLength(1);
     expect(Math.max(faith[0].scale,faith[0].scaleY??faith[0].scale)).toBeGreaterThan(12);
@@ -48,8 +62,10 @@ describe('physical settlement planning', () => {
     expect(temple.length).toBeGreaterThan(4);
     expect(market.every(b=>!b.landmark)).toBe(true);
     const plaza=L.greens.filter(g=>g.surface==='paved');
-    expect(plaza).toHaveLength(1);
-    expect(area(plaza[0].ring)).toBeLessThanOrEqual(324.000001);
+    expect(plaza.length).toBeGreaterThanOrEqual(1);
+    expect(plaza.every(p=>p.purpose==='civic')).toBe(true);
+    expect(plaza.some(p=>area(p.ring)<=324.000001)).toBe(true);
+    for(const p of plaza)expect(area(p.ring)).toBeLessThanOrEqual(576.000001); // 24m temple court maximum
     for(const b of [...market,...temple]){
       const footprint=new Polygon(b.ring.map(p=>new Point(p.x,p.y)));
       for(const r of L.roads)for(let i=1;i<r.path.length;i++){

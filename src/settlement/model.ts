@@ -29,7 +29,8 @@ export interface SettlementDistrict {
   insideWalls: boolean;
   settlementRole?: 'urban' | 'rural';
   character?: NeighbourhoodCharacter | 'green' | 'civic' | 'rural';
-  /** Actual accepted roof area and district ground in square metres. */
+  /** Accepted building-footprint area and district ground in square metres.
+   * Artwork courtyards/voids are accounted separately by the ground review. */
   occupiedAreaM2?: number;
   areaM2?: number;
 }

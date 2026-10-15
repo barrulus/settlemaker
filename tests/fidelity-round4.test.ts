@@ -186,7 +186,9 @@ describe('fidelity round 4: probe path', () => {
     // Reviewed both Aldford fixtures and verified exact repeatability before repinning.
     // Legacy temples now share the physical size cap. Reviewed the smaller
     // temple and retained annex; other scene layers and repeatability match.
-    expect(sha256(svg)).toBe('bdae17be517a3a87878a196f7c7b1162fb85941fb7eee1e9bf4252e950e96873');
+    // Inhabited civic frontages, clipped concave blocks and site-qualified
+    // dense glyphs intentionally change this city; the village pin remains.
+    expect(sha256(svg)).toBe('1d6eeed952e377adc0747277735bae462a2245716823928b2e533becd6f6e514');
   });
 
   it('pins direct legacy generateFromBurg output at pop 800 (not the village engine)', () => {
@@ -453,15 +455,26 @@ describe('fidelity round 4: footprint and texture scale with population', () => 
       const preTrim = model.pretrimCoreOrdinaryCount;
       const postTrim = totalCoreOrdinary(model);
       expect(preTrim).toBeGreaterThan(0);
-      const trimmedFrac = (preTrim - postTrim) / preTrim;
-      expect(trimmedFrac).toBeLessThan(0.12);
-
       let wards = 0, buildings = 0;
+      let occupiedArea=0, availableArea=0;
       for (const patch of model.patches) {
         if (!(patch.ward instanceof CommonWard) || !patch.withinWalls) continue;
         wards++;
         buildings += patch.ward.geometry.length;
+        occupiedArea+=patch.ward.geometry.reduce((n,b)=>n+Math.abs(b.square),0);
+        availableArea+=Math.abs(patch.ward.getCityBlock().square);
+        for(const run of patch.ward.streetRuns){
+          const alive=run.map(b=>patch.ward!.geometry.includes(b));
+          // A well consumes at most one interior lot. Budget trimming must
+          // leave continuous rows rather than hollowing the whole district.
+          expect(alive.slice(0,alive.lastIndexOf(true)).filter(v=>!v).length).toBeLessThanOrEqual(1);
+        }
       }
+      // The current row planner reserves10% supply plus ceil rounding and
+      // one spare lot per ward. Newly inhabited concave wards now reach that
+      // reserve: bound actual removals by that policy, not an old12% fit.
+      expect(preTrim-postTrim).toBeLessThanOrEqual(postTrim*.1+wards*2);
+      expect(occupiedArea/availableArea).toBeGreaterThan(.55);
       const density = buildings / wards;
       const target = perPatchDensity(population);
       expect(density).toBeGreaterThanOrEqual(target * 0.7);

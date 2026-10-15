@@ -22,6 +22,7 @@
     "docs:images": "npm run build && node scripts/generate-examples.mjs",
     "docs:check": "npm run build && npm run build:lib && node scripts/check-docs.mjs",
     "review:settlements": "npm run build && node scripts/review-settlements.mjs",
+    "review:generation-regressions": "npm run build && npm run build:lib && node scripts/review-generation-regressions.mjs",
     "generate": "npm run build && node scripts/settlemaker.mjs"
   },
   "license": "GPL-3.0-only",
@@ -48,6 +49,7 @@
     "scripts/build-runtime-art.mjs",
     "scripts/build-lib.mjs",
     "scripts/benchmark-generation.mjs",
+    "scripts/review-generation-regressions.mjs",
     "scripts/art",
     "NOTICE",
     "docs/skins.schema.json",

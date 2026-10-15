@@ -1,3 +1,4 @@
+import { buildingLots, countrysidePlan } from './countryside.js';
 import { Point } from '../types/point.js';
 import { SeededRandom } from '../utils/random.js';
 import { ARTWORK_MANIFEST } from '../assets/artwork.js';
@@ -6,7 +7,7 @@ import { buildVegetation } from '../village/dressing/vegetation.js';
 import { radialExtent } from '../village/dressing/extent.js';
 import { clipPolylineToRect } from '../village/geometry.js';
 import { drySegments, overlapsWater, polygonsOverlap } from '../generator/city-frontage.js';
-import type { Lane, Lot } from '../village/types.js';
+import type { Lane } from '../village/types.js';
 import type { Layout } from './layouts.js';
 import polygonClipping from 'polygon-clipping';
 import { waterFillPolygons } from '../village/water-boundary.js';
@@ -28,14 +29,9 @@ export function dressSettlement(layout: Layout, seed: number): void {
     L.water.polygons = polygons;
     L.water.rings = polygons.flat();
   }
-  const lots: Lot[] = L.buildings.map((b, i) => {
-    const xs = b.ring.map(p => p.x), ys = b.ring.map(p => p.y);
-    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-    return { id: b.id ?? `claim:${i}`, laneId: '', side: 1, front: new Point((minX + maxX) / 2, minY), bearingDeg: 0,
-      frontageM: maxX - minX, depthM: maxY - minY, score: 0 };
-  });
-  const ruralIds = new Set(layout.buildings.filter(b => b.settlementRole === 'rural').map(b => b.id));
-  const urbanLots = lots.filter(l => !ruralIds.has(l.id));
+  const lots=buildingLots(layout);
+  const ruralIds=new Set(layout.buildings.filter(b=>b.settlementRole==='rural').map(b=>b.id));
+  const countryside=countrysidePlan(layout,seed),urbanLots=countryside.urbanLots;
   const builtPoints = L.buildings.flatMap(b => b.ring.map(p => new Point(p.x, p.y)));
   // Rural homes reserve their actual footprints, not an empty radial envelope
   // around every hamlet. Fields remain interleaved with inhabited countryside.
@@ -75,9 +71,15 @@ export function dressSettlement(layout: Layout, seed: number): void {
   const lanes: Lane[] = L.roads.map((r, i) => ({ id: `street:${i}`, type: 'local', points: r.path.map(p => new Point(p.x, p.y)), widthM: r.width ?? 3 }));
   const reservations = [...L.greens.map(g => g.ring), ...L.piers.map(p => p.ring),
     ...L.buildings.filter(b => b.id && ruralIds.has(b.id)).map(b => b.ring)].map(r => r.map(p => new Point(p.x, p.y)));
+  const farmClaims=L.buildings.filter(b=>b.id?.startsWith('building:rural:')).map(b=>b.ring.map(p=>new Point(p.x,p.y)));
+  for(const road of L.roads.filter(r=>r.id?.startsWith('street:rural:')))for(let i=1;i<road.path.length;i++) {
+    const corridor=roadCorridor(road.path[i-1],road.path[i],(road.width??3)+1).vertices;
+    reservations.push(corridor);farmClaims.push(corridor);
+  }
   const rng = new SeededRandom(seed ^ 0x51f15e);
   const fields = buildFields(site, green, lanes, urbanLots, [], rng, new Set(urbanLots.map(l => l.id)), reservations, {
-    maxRegionDepthM: Math.max(200, Math.sqrt(site.population * 150)),
+    regionPlan: countryside.plan,
+    ...(farmClaims.length?{refineAround:{claims:farmClaims,targetAreaM2:1200,maxDepth:5}}:{}),
     parcelAreaM2: 1200 * Math.max(1, site.population / 20000),
     maxCutDepth: 20,
     approachLaneIds: new Set(lanes.filter((_,i)=>L.roads[i].kind==='road').map(l=>l.id)),

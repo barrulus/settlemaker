@@ -116,12 +116,13 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
       continue; // groves are greens, not buildings
     }
     if(ward instanceof CommonWard)for(const garden of ward.gardens)scene.layers.greens.push({purpose: 'private',ring:ring(garden.ring.vertices),paths:garden.access.length?[ring(garden.access)]:[],pathWidth:.3});
+    if(ward.publicSpace)scene.layers.greens.push({purpose:'civic',surface:'paved',ring:ring(ward.publicSpace.vertices)});
     for (const poly of ward.geometry) {
       scene.layers.buildings.push({
         id: ids.get(poly),
         ring: ring(poly.vertices),
         kind: String(ward.type),
-        landmark: LANDMARK_TYPES.has(ward.type) && !(ward.type === WardType.Market && model.params.development)
+        landmark: LANDMARK_TYPES.has(ward.type) && !(ward.type === WardType.Market && ward.publicSpace)
           && (ward.type !== WardType.Cathedral || !ward.principalBuilding || poly === ward.principalBuilding),
         ...(model.glyphBackedBuildings.has(poly) ? { glyphBacked: true as const } : {}),
       } as BuildingFeature);

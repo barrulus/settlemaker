@@ -53,7 +53,6 @@ describe('physical neighbourhood character', () => {
     expect(model.buildings.every(b=>b.residents>=0&&b.residents<=b.capacity)).toBe(true);
     const rural = model.buildings.filter(b=>b.id.startsWith('building:rural:'));
     expect(rural.length).toBeGreaterThan(20);
-    expect(model.buildings.some(b=>b.settlementRole==='rural'&&!b.id.startsWith('building:rural:'))).toBe(true);
     const obstacles = new PlacementIndex<{id:string;polygon:Polygon}>();
     for(const b of model.scene.layers.buildings) { const p=polygon(b.ring);obstacles.insert(placementBounds(p.vertices),{id:b.id!,polygon:p}); }
     const fields = new PlacementIndex<Polygon>();

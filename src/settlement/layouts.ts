@@ -131,7 +131,6 @@ export function blockLayout(input: AzgaarBurgInput, seed: number, profile: Devel
     }
   }
   const plaza = (model.plaza?.ward?.publicSpace ?? model.plaza?.shape)?.vertices.map(p => new Point(p.x * k, p.y * k));
-  if (plaza) scene.layers.greens.push({ ring: plaza, surface: 'paved', purpose: 'civic' });
   return { scene, buildings, districts, site,
     green: { centre: new Point(0, 0), diameter: 0, bearingDeg: 0, shape: 'sm-green-round', variant: 'a', ...(plaza ? { outline: plaza } : {}) },
     degradedFlags: [...model.degradedFlags], diagnostics: [...model.degradedFlags].map(f => `layout could not place ${f}`) };
