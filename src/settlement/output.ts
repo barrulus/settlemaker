@@ -27,7 +27,7 @@ export function renderSettlement(model: SettlementModel, options: SettlementRend
   const bounds=options.bounds??model.scene.bounds;
   if (!Object.values(bounds).every(Number.isFinite)||bounds.max_x<=bounds.min_x||bounds.max_y<=bounds.min_y) throw new RangeError('render bounds must have positive finite dimensions');
   if (options.detail!==undefined&&!['auto','full'].includes(options.detail)) throw new RangeError('render detail must be auto or full');
-  const appearance = {...options, pixelsPerUnit: options.detail==='full'?undefined:width/(bounds.max_x-bounds.min_x)};
+  const appearance = {...options, cullOffscreenArtwork:options.cullOffscreenArtwork??!!options.bounds, pixelsPerUnit: options.detail==='full'?undefined:width/(bounds.max_x-bounds.min_x)};
   const scene=sceneInView(model.scene,bounds,appearance);
   return renderPhysicalScene(scene, appearance);
 }

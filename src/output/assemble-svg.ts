@@ -14,6 +14,7 @@ import { REFINED_MANIFEST } from '../assets/refined-manifest.js';
 import { refinedStyle, resolveVarFallbacks } from '../assets/refined-style.js';
 import { linkedBuildingIds } from '../scene/symbol-buildings.js';
 import { WALL_GATE_CLEARANCE, wallTowerCanvas } from '../assets/fortification-dimensions.js';
+import { artworkPaintRadius } from '../assets/artwork-bounds.js';
 
 const NORMAL_STROKE = 0.15;
 const THICK_STROKE = 1.8;
@@ -32,6 +33,8 @@ export interface AssembleOptions {
   overviewRoadMinPixels?: number;
   /** Preserve sub-unit viewport coordinates for adjacent raster tiles. */
   preciseBounds?: boolean;
+  /** Omit wholly offscreen native wall motifs/towers without clipping their geometry. */
+  cullOffscreenArtwork?: boolean;
 }
 
 function fmt(n: number): string { return n.toFixed(2); }
@@ -167,7 +170,14 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   for (const s of visibleSymbols) if (assets.glyphs?.[s.id]) glyphIds.add(s.id);
   for (const f of L.fields) if (fieldDetail && f.glyph && assets.glyphs?.[f.glyph]) glyphIds.add(f.glyph);
   const towerId = cityGlyph('castle-tower-round', scene.biome);
-  if(L.walls.length && assets.glyphs?.[towerId]) glyphIds.add(towerId);
+  const visibleTowers = (wall: Scene['layers']['walls'][number]) => wall.towers.filter(t => {
+    if(wall.gates.some(g=>Math.hypot(t.x-(g.p1.x+g.p2.x)/2,t.y-(g.p1.y+g.p2.y)/2)<WALL_GATE_CLEARANCE))return false;
+    // Unmeasured custom glyphs retain the original conservative behaviour.
+    if(!options.cullOffscreenArtwork||skin||options.assetSet)return true;
+    const radius=artworkPaintRadius(towerId,wallTowerCanvas(wall.large))+.02;
+    return t.x+radius>=b.min_x&&t.x-radius<=b.max_x&&t.y+radius>=b.min_y&&t.y-radius<=b.max_y;
+  });
+  if(L.walls.some(w=>!options.cullOffscreenArtwork||visibleTowers(w).length) && assets.glyphs?.[towerId]) glyphIds.add(towerId);
   const materialId = (s: typeof visibleSymbols[number]) => `glyph-${s.id}${assets.name === 'settlement' && !skin?.overrides.has(s.id) && s.materialVariant ? `-tone-${s.materialVariant}` : ''}`;
   const fixedRoof = options.theme?.buildingFill !== undefined
     || (!options.palette && (skin?.city.buildingFill !== undefined
@@ -339,11 +349,10 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     parts.push('<g id="walls">');
     for (const wallF of L.walls) {
       if(assets.name==='settlement'){
-        parts.push(wallArtwork(wallF,scene.biome));
+        parts.push(wallArtwork(wallF,scene.biome,options.cullOffscreenArtwork?b:undefined));
         const g=assets.glyphs?.[towerId];
-        if(g)for(const t of wallF.towers){
+        if(g)for(const t of visibleTowers(wallF)){
           // Leave real gate openings clear, even where a legacy tower coincides with a gate vertex.
-          if(wallF.gates.some(g=>Math.hypot(t.x-(g.p1.x+g.p2.x)/2,t.y-(g.p1.y+g.p2.y)/2)<WALL_GATE_CLEARANCE))continue;
           parts.push(`<use href="#glyph-${towerId}" transform="${glyphTransform(t,wallTowerCanvas(wallF.large),0,g.viewBox,g.anchor)}"/>`);
         }
         continue;

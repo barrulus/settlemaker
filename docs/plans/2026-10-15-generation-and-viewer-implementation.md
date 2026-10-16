@@ -268,3 +268,17 @@ shared appearance checks, physical population planning, all nine fidelity checks
 TypeScript and script typing, and documentation examples. The reviewed city SVG
 pin changes; the legacy 800-person pin remains unchanged. Visual evidence lives
 in the ignored `output/city-park-review/` review directory.
+
+### Zoom sharpening work (16 October)
+
+The reported slow zoom exposed serial SVG loading and rasterisation across the
+entire visible tile grid. The web viewer now overlaps at most two tile jobs,
+uses one 60 ms settling deadline, and retains completed tiles still useful to a
+new camera position without committing an obsolete view. The retained cache
+reserves 5 MiB for transient work within its existing memory allocation.
+
+Shared viewport rendering omits offscreen wall decorations and towers while
+keeping original wall paths, gate intervals and decorative spacing. Full SVG
+exports remain unchanged. The reported desert capital's central tile drops
+from 157 KB to 55 KB; 37 raster comparisons cover wall materials, gates, corners,
+towers, shadows and adjacent crops without changing pixels.

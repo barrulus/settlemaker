@@ -51,7 +51,7 @@ function oriented(center,tangent,along,across){const [x,y]=center,[tx,ty]=tangen
 
 export const wallKinds=['curtain','rubble','palisade'];
 /** Width stays constant around bends. Gates remove intervals from BOTH layers. */
-export function wall(input,{biome='temperate',kind='curtain',width=12,gates=[],detailPitch=8}={}){
+export function wall(input,{biome='temperate',kind='curtain',width=12,gates=[],detailPitch=8,detailBounds=[-Infinity,-Infinity,Infinity,Infinity]}={}){
   if(!palettes[biome]||!wallKinds.includes(kind)||!Number.isFinite(width)||width<4||!Number.isFinite(detailPitch)||detailPitch<2)throw new Error('Invalid wall profile.');
   if(!Array.isArray(input)||input.some(p=>!Array.isArray(p)||p.length!==2||!p.every(Number.isFinite)))throw new Error('Invalid wall points.');
   if(gates.some(g=>!Number.isFinite(g.at)||!Number.isFinite(g.width)||g.width<=0))throw new Error('Invalid wall gate.');
@@ -76,7 +76,14 @@ export function wall(input,{biome='temperate',kind='curtain',width=12,gates=[],d
   }
   for(let d=detailPitch/2;d<m.length;d+=kind==='palisade'?3.8:detailPitch){
     if(d<half||d>m.length-half||nearGate(d)||m.corners.some(c=>Math.abs(c-d)<half))continue;
-    const sample=m.at(d),loc=(u,v)=>oriented(sample.p,sample.t,u,v);
+    const sample=m.at(d);
+    // Keep the original distance phase, gate exclusions and complete base
+    // paths. Only omit motifs whose entire stroke envelope is offscreen.
+    // Every profile fits within half+4 of its sample, including its pen.
+    const reach=half+4;
+    if(detailBounds&&(sample.p[0]+reach<detailBounds[0]||sample.p[1]+reach<detailBounds[1]
+      ||sample.p[0]-reach>detailBounds[2]||sample.p[1]-reach>detailBounds[3]))continue;
+    const loc=(u,v)=>oriented(sample.p,sample.t,u,v);
     if(kind==='palisade'){
       p.detail(points([loc(0,-half+1.2),loc(.15,half-1.2)]),'none',.65);
       p.detail(points([loc(-.8,-half+1.3),loc(.8,-half+1.3)]),'none',.7);

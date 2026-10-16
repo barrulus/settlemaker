@@ -147,7 +147,7 @@ export function createSettlementSession(input: AzgaarBurgInput, options: Generat
       const minimum=view.overviewRoadMinPixels??1.5;
       if(!Number.isFinite(minimum)||minimum<0)throw new RangeError('overviewRoadMinPixels must be nonnegative and finite');
       if(!scene)return full(view.appearance);
-      const a={...appearance(view.appearance),preciseBounds:true,pixelsPerUnit:detail==='full'?undefined:width/(bounds.max_x-bounds.min_x),overviewRoadMinPixels:detail==='full'?undefined:minimum};
+      const a={...appearance(view.appearance),preciseBounds:true,cullOffscreenArtwork:true,pixelsPerUnit:detail==='full'?undefined:width/(bounds.max_x-bounds.min_x),overviewRoadMinPixels:detail==='full'?undefined:minimum};
       const visible=index!.query(bounds,a);
       return physicalModel?renderPhysicalScene(visible,a):assembleSvg(visible,a);
     },
