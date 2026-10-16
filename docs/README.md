@@ -1,18 +1,18 @@
 # SettleMaker documentation
 
-These guides describe the 3.0.x npm library. The declarations shipped in `dist/`
+These guides describe the 3.1 library. The declarations shipped in `dist/`
 and the corresponding [source](../src/index.ts) are the complete type reference.
 
 ## Start here
 
-- [Shared physical planner](settlement-planning.md): development presets, mixed density, resident accounting, metre-based output and the expanded review (unreleased).
+- [Shared physical planner](settlement-planning.md): development presets, mixed density, resident accounting, metre-based output and the expanded review.
 
 - [Getting started](getting-started.md): install, generate a map, use TypeScript or a browser.
 - [Gallery](gallery.md): current output across five biomes and both planners, plus Copperline.
 - [Library API](api.md): input fields, engine selection, options, errors and reproducibility.
 - [GeoJSON and coordinates](geojson.md): schema 4, local units, IDs, road geometry and tiling.
 
-- [Shared appearance and engine selection](appearance.md): unreleased themes for both planners and explicit village/city controls.
+- [Shared appearance and engine selection](appearance.md): themes for both planners and explicit village/city controls.
 
 ## Create a setting
 
@@ -33,18 +33,22 @@ and the corresponding [source](../src/index.ts) are the complete type reference.
 
 - [Development](development.md): build, checks, documentation images and release workflow.
 - [Example URLs](test-urls.md): reproducible fixtures for integration checks.
-- [3.0.1](releases/3.0.1.md) and [3.0.0](releases/3.0.0.md) release notes.
+- [3.1.0 release notes](releases/3.1.0.md): new planning and rendering APIs, artwork improvements and upgrade considerations.
+- Earlier releases: [3.0.1](releases/3.0.1.md) and [3.0.0](releases/3.0.0.md).
 
 ## Contract versions
 
 | Contract | Current value | Meaning |
 | --- | --- | --- |
-| npm package | 3.0.1 | A specific engine and documentation release. |
-| GeoJSON `metadata.schema_version` | 4 | Output structure; both planners share this number. |
-| City `Scene.version` | 2 | Semantic city scene; villages do not use this scene type. |
+| npm package | 3.1.0 | A specific engine and documentation release. |
+| Legacy GeoJSON `metadata.schema_version` | 4 | Original village and city output structure. |
+| Physical GeoJSON `metadata.schema_version` | 1 | Separate `settlemaker/physical-plan` contract in local metres. |
+| `SettlementModel.version` | 1 | Physical planner model structure; generator revision is recorded separately. |
+| `Scene.version` | 2 | Legacy city and shared physical scenes; legacy villages use their own model. |
 | URL envelope `v` | 1 | Compressed burg input for a URL adapter. |
 | Skin `version` | 1 | Portable artwork and biome definition. |
-| `waterContext.version` | 1 | Measured-water input, supported for villages only. |
+| `waterContext.version` | 1 | Measured village-water input. |
+| `BUILD_INFO.protocolVersion` | 1 | Retained-session worker integration handshake. |
 
 A shared schema version does not imply identical fields in every engine's feature
 properties. Check the [output reference](geojson.md) before sharing a renderer.

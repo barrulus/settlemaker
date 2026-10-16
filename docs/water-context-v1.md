@@ -12,7 +12,7 @@ inputs. See the [URL adapter contract](url-api.md) and [library API](api.md).
 ## Scope and wire format
 
 This implementation serves the **village engine**. Automatic selection uses it
-through population 1,000. The unreleased explicit `engine: 'village'` option also
+through population 1,000. The explicit `engine: 'village'` option in 3.1 also
 allows larger villages; use sufficient survey coverage for their planning area.
 The selected planner determines support and coordinate units, not population. Add `waterContext`
 to `AzgaarBurgInput` in a direct library call or the compressed `i=` payload. The enclosing URL payload

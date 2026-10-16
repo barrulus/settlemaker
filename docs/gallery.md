@@ -1,6 +1,6 @@
 # Gallery
 
-These maps were generated with SettleMaker 3.0.1 through the public
+These maps were generated with SettleMaker 3.1.0 through the public
 `generateSettlement` API. PNG previews and full SVGs come from the same output.
 The gallery covers all five built-in artwork biomes in both engines, plus Copperline.
 

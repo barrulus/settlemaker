@@ -1,6 +1,6 @@
 # Authoring settlement skins
 
-This is the portable **skin format 1** contract for SettleMaker 3.0.x. Start here
+This is the portable **skin format 1** contract for SettleMaker 3.1. Start here
 to create a personalised setting; the older `AssetSet` API is for trusted city
 rendering code and is not required to distribute a skin.
 

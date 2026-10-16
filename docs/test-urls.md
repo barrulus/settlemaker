@@ -1,6 +1,6 @@
 # Reproducible example URLs
 
-The [current gallery](gallery.md) is the public example set for 3.0.x. Its images
+The [current gallery](gallery.md) is the public example set for 3.1. Its images
 are generated with `generateSettlement`, so automatic selection at population ≤1,000 uses the village
 planner instead of forcing small inputs through the city generator.
 

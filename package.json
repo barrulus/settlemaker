@@ -1,6 +1,6 @@
 {
   "name": "settlemaker",
-  "version": "3.0.1",
+  "version": "3.1.0",
   "type": "module",
   "description": "Procedural village and city map engine with SVG, local GeoJSON, biome artwork and portable skins for Node.js and browsers",
   "main": "dist/index.js",
@@ -69,6 +69,7 @@
     "docs/*.md",
     "docs/releases/3.0.0.md",
     "docs/releases/3.0.1.md",
+    "docs/releases/3.1.0.md",
     "docs/examples/gallery",
     "scripts/generate-examples.mjs",
     "scripts/check-docs.mjs",

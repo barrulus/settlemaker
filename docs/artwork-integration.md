@@ -1,6 +1,6 @@
 # Integrated settlement artwork
 
-In 3.0.x, `generateSettlement` uses the reviewed city, village, landscape and shared
+In 3.1, `generateSettlement` uses the reviewed city, village, landscape and shared
 infrastructure libraries by default. The village/city population routing remains
 unchanged. No feature flag or asset download is required.
 

@@ -31,7 +31,7 @@ corridor widths, painted widths, setbacks, bridge decks and route provenance.
 
 ## Migration for consumers
 
-For 3.0.x, check schema **4**, inspect `properties.layer` and geometry types,
+For current releases, check schema **4**, inspect `properties.layer` and geometry types,
 and accept optional fields your application does not need. Branch for the
 [village/city differences](geojson.md), especially POIs, greens, gate features,
 coordinates and IDs. The package version, scene version and URL envelope version

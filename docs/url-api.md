@@ -5,8 +5,8 @@ for a renderer at `https://settlemaker.com/fmg`. The URL envelope version remain
 **1**. The npm library and hosted website have separate release cycles; a package
 publication alone does not establish which generator a website is running.
 
-**Development addition:** `engine` and shared village themes require a renderer
-built from this unreleased source; npm 3.0.1 and older hosts do not implement them.
+`engine` and shared village themes require a renderer using SettleMaker 3.1
+or later. Hosts still running 3.0.1 or older do not implement these additions.
 
 Use the [library API](api.md) when your application generates maps itself. Use a
 URL adapter when a host such as Azgaar's Fantasy Map Generator embeds a separately

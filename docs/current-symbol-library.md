@@ -1,6 +1,6 @@
 # Current symbol library
 
-SettleMaker 3.0.x ships six default artwork collections containing **852 drawings**.
+SettleMaker 3.1 ships six default artwork collections containing **852 drawings**.
 These are the current authoring and download sources, distinct from the runtime
 slots used by the generator and by portable skins.
 

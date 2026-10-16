@@ -22,7 +22,7 @@ npm run build
 npm run build:lib
 ```
 
-The 3.0.x release checks use Node 24. A Nix flake is available with `nix develop`
+The 3.1 release checks use Node 24. A Nix flake is available with `nix develop`
 if you prefer that environment; it is optional. No unlisted `tsx` command or
 root-level smoke-test file is required.
 
