@@ -1,8 +1,8 @@
 # Shared appearance and engine selection
 
-These are **unreleased additions after npm 3.0.1**. Build this source checkout to
-try them. Published 3.0.1 screenshots remain a record of that release; regenerate
-the local review below to see the new behaviour.
+SettleMaker 3.1 adds shared appearance controls and explicit village/city
+selection. The examples below use the 3.1 API; the local review compares
+planners and themes at the same scale.
 
 For the new metre-based model, density profiles and explicit resident allocations,
 see [shared settlement planning](settlement-planning.md). The `engine` controls

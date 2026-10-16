@@ -1,8 +1,7 @@
 # Getting started
 
-SettleMaker is an ES module library. The examples here use Node 24, the runtime
-used to validate the 3.0.x npm release. A source checkout also includes an optional
-Nix development shell; Nix is not required to install or use the npm package.
+SettleMaker is an ES module library. The examples and 3.1 release checks use
+Node 24. A source checkout also includes an optional Nix development shell; Nix is not required to install or use the npm package.
 
 ## Node.js
 
@@ -83,12 +82,14 @@ See [lower-level rendering](scene-schema.md#render-an-existing-city-model).
 
 ## Appearance and planner choice
 
-In this development source, add `engine: 'village'` or `engine: 'city'` to the
+In SettleMaker 3.1, add `engine: 'village'` or `engine: 'city'` to the
 burg to choose independently of population. The default remains `auto`.
 Pass `{ theme: 'night' }` as a generation option to theme either planner; omit it
 for shared natural biome colours. See [appearance and engine selection](appearance.md)
-for examples, compatibility details and the local visual review. These additions
-are not in the published npm 3.0.1 package yet.
+for examples, compatibility details and the local visual review.
+
+For the opt-in metre-based model and resident accounting, pass a `development`
+preset as described in [shared settlement planning](settlement-planning.md).
 
 ## Browser applications
 

@@ -1,11 +1,11 @@
 # City scene and rendering contract
 
-Development preview: the [shared physical planner](settlement-planning.md) adds
+Since 3.1.0, the [shared physical planner](settlement-planning.md) adds
 `development` presets, resident accounting and one metre-based output model.
 The legacy API and contracts documented below remain available.
 
-`Scene` version **2** is the semantic rendering representation of the **city**
-planner. Villages use `VillageModel` and `renderVillage`; they do not pass through
+`Scene` version **2** is the semantic rendering representation of the legacy **city**
+planner and physical plans. Legacy villages use `VillageModel` and `renderVillage`; they do not pass through
 `buildScene`. Use [GeoJSON](geojson.md) for exported feature data from both planners,
 and [skins](skins.md) for portable artwork that works in both.
 

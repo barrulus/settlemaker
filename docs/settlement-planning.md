@@ -1,6 +1,6 @@
 # Shared settlement planning
 
-Development preview after npm 3.0.1. Build this checkout before using these APIs.
+Available in SettleMaker 3.1 as an explicit opt-in API.
 
 The physical planner combines village frontage plots and city blocks in a common
 pipeline. Population specifies demand. The development preset controls building
@@ -44,7 +44,8 @@ Both entry points return `{ kind, model, svg, geojson }`.
 | `development.edgeOccupancy` | Capacity of an ordinary detached dwelling; default 4. |
 | `development.ruralPopulation` | Optional city-only rural resident target, deducted from the same total. Nonnegative integer, less than total population, and no greater than population minus the resolved core target. Default 0 plans no additional rural settlements. |
 | `seed` | Deterministic integer seed; otherwise derived from the name. |
-| `theme`, `style`, `skin` | Shared appearance controls; they do not alter housing or geometry. |
+| `theme`, `style` | Shared appearance controls; they do not alter housing or geometry. |
+| `skin` | Replacement artwork and biome inheritance. A different inherited biome can change generation; create a new model when changing skins. |
 | `render.width`, `render.bounds`, `render.detail` | Display width, viewport in metres and artwork detail; described below. |
 | `onStageTiming` | Optional callback receiving `{ stage, durationMs, attempt? }`. Timings are observations, never part of the deterministic model. |
 
@@ -62,12 +63,12 @@ districts, with roads influencing the outline. The walled core retains urban
 spacing throughout. Large cities add neighbourhoods rather than stretching a
 fixed number of precincts along distant roads.
 
-Physical layout revision `physical-layout-3` keeps ordinary house footprints in
+The physical planner keeps ordinary house footprints in
 a bounded physical range. Sparse outskirts use wider gaps, paired houses and
 short street runs instead of shrinking each roof inside its old plot. Workshop
 approaches, garden neighbourhoods and crofts use coherent local spacing rules.
 Public commons and natural groves reserve suburban ground before residential
-demand is allocated. The preview policy targets 4% of eligible suburban land
+demand is allocated. The commons policy targets 4% of eligible suburban land
 area, choosing each next common to serve previously uncovered district centres
 and favouring nearby approaches. Access is a Euclidean proxy at three typical
 district widths, not a measured walking route. Whole-district reservations may

@@ -1,14 +1,12 @@
 # Library API
 
-Development preview: the [shared physical planner](settlement-planning.md) adds
+The [shared physical planner](settlement-planning.md) adds
 `development` presets, resident accounting and one metre-based output model.
 The legacy API and contracts documented below remain available.
 
 The normal entry point is `generateSettlement(burg, options?)`. It returns
 synchronously and selects the planner explicitly or, by default, by population. Import functions and types
 from `settlemaker`; the published declarations are the complete reference.
-
-> Shared appearance and explicit selection are unreleased additions after npm 3.0.1.
 
 ## Engine selection
 

@@ -1,10 +1,10 @@
 # GeoJSON, coordinates and identity
 
-Development preview: the [shared physical planner](settlement-planning.md) adds
+Since 3.1.0, the [shared physical planner](settlement-planning.md) adds
 `development` presets, resident accounting and one metre-based output model.
 The legacy API and contracts documented below remain available.
 
-Both planners return a `FeatureCollection` with a top-level `metadata` foreign
+Both legacy planners return a `FeatureCollection` with a top-level `metadata` foreign
 member. The current `metadata.schema_version` is **4**. Filter features by
 `properties.layer`, then inspect the geometry type and the fields for that engine.
 Do not assume that sharing a schema number makes the two planners interchangeable
