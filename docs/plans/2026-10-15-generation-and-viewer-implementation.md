@@ -272,13 +272,23 @@ in the ignored `output/city-park-review/` review directory.
 ### Zoom sharpening work (16 October)
 
 The reported slow zoom exposed serial SVG loading and rasterisation across the
-entire visible tile grid. The web viewer now overlaps at most two tile jobs,
-uses one 60 ms settling deadline, and retains completed tiles still useful to a
-new camera position without committing an obsolete view. The retained cache
-reserves 5 MiB for transient work within its existing memory allocation.
+entire visible tile grid. The web viewer now decodes adjacent missing tiles in
+bounded 2×2 batches, retaining independent 512-pixel canvases. It uses one 60 ms
+settling deadline and retains completed tiles still useful to a new camera
+position without committing an obsolete view. The retained cache reserves
+6 MiB for one decoded atlas and a pending crop within its existing allocation.
 
 Shared viewport rendering omits offscreen wall decorations and towers while
 keeping original wall paths, gate intervals and decorative spacing. Full SVG
 exports remain unchanged. The reported desert capital's central tile drops
 from 157 KB to 55 KB; 37 raster comparisons cover wall materials, gates, corners,
 towers, shadows and adjacent crops without changing pixels.
+
+Fixed Aldford browser samples at 1440×1000 CSS pixels retain the same tile counts
+and backing resolution. Three standard-DPI zooms sharpen in 310/421/97 ms,
+previously 667/650/240 ms; high-DPI samples take 565/553/180 ms, previously
+1133/1238/670 ms. These are local Chromium measurements, not device-independent
+latency guarantees. The web repository's `scripts/review-zoom-latency.mjs`
+reproduces the inputs and records worker, SVG-load and canvas timings. The web
+suite passes 155 checks, including stale work, pause/resume, atlas cleanup and
+high-DPI memory allocation.
