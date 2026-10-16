@@ -10,6 +10,7 @@
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { boundsOfPoints } from '../dist/geom/bounds.js';
 import { nearestOnSegment } from '../dist/generator/city-frontage.js';
@@ -148,6 +149,42 @@ function artworkScaleReview(symbols, metresPerUnit) {
     }
   }
   return { measurement:'guarded painted bounds for wells/houses; authored component bounds for courtyard wings; legacy metres remain estimated', wells,courtyards };
+}
+
+/** Guarded canopy rectangles are deliberately labelled envelopes, not opaque leaf coverage. */
+function parkReview(scene) {
+  const unit=scene.metersPerUnit??1, L=scene.layers;
+  const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
+  const polygon=ring=>[ring.map(p=>[Math.round(p.x*1e6)/1e6,Math.round(p.y*1e6)/1e6])];
+  const multiArea=polys=>polys.reduce((sum,p)=>sum+area(p[0].map(([x,y])=>({x,y})))-p.slice(1).reduce((n,r)=>n+area(r.map(([x,y])=>({x,y}))),0),0);
+  const parks=L.greens.filter(g=>g.purpose==='public'&&g.surface!=='paved').map((g,index)=>{
+    const trees=L.vegetation.filter(v=>pointInPolygon(v.at,g.ring)), kinds={}, sizes=[], envelopes=[];
+    let unmeasuredTrees=0;
+    for(const v of trees){
+      kinds[v.kind]=(kinds[v.kind]??0)+1;
+      const meta=engine.ARTWORK_MANIFEST[v.kind], ink=engine.ARTWORK_INK[v.kind];
+      if(!meta||!ink){unmeasuredTrees++;continue;}
+      const [x0,y0,x1,y1]=ink.bounds,[ax,ay]=meta.anchor??[meta.viewBox[2]/2,meta.viewBox[3]/2];
+      const theta=v.rotationDeg*Math.PI/180,c=Math.cos(theta),sn=Math.sin(theta);
+      const ring=[[x0,y0],[x1,y0],[x1,y1],[x0,y1]].map(([x,y])=>{
+        const dx=(x-ax)*v.scale/meta.viewBox[2],dy=(y-ay)*v.scale/meta.viewBox[3];
+        return {x:v.at.x+dx*c-dy*sn,y:v.at.y+dx*sn+dy*c};
+      });
+      sizes.push(Math.max((x1-x0)*v.scale/meta.viewBox[2],(y1-y0)*v.scale/meta.viewBox[3])*unit);
+      envelopes.push(polygon(ring));
+    }
+    const parkArea=area(g.ring), union=envelopes.length?polygonClipping.union(envelopes):[];
+    const clipped=union.length?polygonClipping.intersection(union,polygon(g.ring)):[];
+    const pathPolygons=(g.paths??[]).flatMap(path=>path.slice(1).map((end,i)=>polygon(roadCorridor(path[i],end,g.pathWidth??.7).vertices)));
+    const pathUnion=pathPolygons.length?polygonClipping.union(pathPolygons):[];
+    return {index,bounds:bounds(g.ring),areaUnits2:parkArea,estimatedAreaM2:parkArea*unit**2,trees:trees.length,kinds,
+      paintedCanopyMaximumDimension:quantiles(sizes),unmeasuredTrees,
+      canopyEnvelopeFraction:parkArea?multiArea(clipped)/parkArea:null,
+      canopyEnvelopePathOverlapAreaUnits2:clipped.length&&pathUnion.length?multiArea(polygonClipping.intersection(clipped,pathUnion)):0,
+      pathCount:g.paths?.length??0,pathsHash:hash({paths:g.paths,pathWidth:g.pathWidth}),groundHash:hash(g.ring)};
+  });
+  return {method:'Public unpaved greens; trees assigned by centre. Union of transformed guarded ink rectangles clipped to park: canopy envelope proxy, not opaque leaf pixels. Legacy metres estimated.',
+    buildingCensusHash:hash(L.buildings),parks};
 }
 
 /** Exact Boolean accounting of the supplied polygon geometry. Artwork roof
@@ -309,6 +346,11 @@ for (const fixture of fixtures.filter(f=>!fixtureId||f.id===fixtureId)) {
   for (const s of L.symbols) symbolCounts[s.id] = (symbolCounts[s.id] ?? 0) + 1;
   const full = session.renderFull();
   const artworkScale = artworkScaleReview(L.symbols, metresPerUnit);
+  const parks = parkReview(scene);
+  if (parks.parks.length) {
+    const largest=[...parks.parks].sort((a,b)=>b.areaUnits2-a.areaUnits2)[0];
+    frames[fixture.id].park ??= {bounds:pad(largest.bounds,.12),detail:'full',framing:'Fixed largest public park from first review',parkIndex:largest.index};
+  }
   for (const [name, entries, score] of [['scale-well',artworkScale.wells,'diameterToNearbyHomeWidth'],['scale-courtyard',artworkScale.courtyards,'componentToNearbyHomeWidth']]) {
     if (!entries.length) continue;
     const selected = [...entries].sort((a,b)=>name==='scale-well' ? b[score]-a[score] : a[score]-b[score])[0];
@@ -329,13 +371,14 @@ for (const fixture of fixtures.filter(f=>!fixtureId||f.id===fixtureId)) {
     byKind, largestPlainFootprints: plain.slice(0, 25),
     plainFootprintAreaUnits2: plain.reduce((n, b) => n + b.areaUnits2, 0),
     estimatedPlainFootprintAreaM2: plain.reduce((n, b) => n + b.estimatedAreaM2, 0),
-    symbolCounts, artworkScale, enclosedGround:enclosedGroundReview(scene), full: uses(full),
+    symbolCounts, artworkScale, parks, enclosedGround:enclosedGroundReview(scene), full: uses(full),
     farmCentroidToAnyRoad: proximity(farms, L.roads, scene.metersPerUnit ?? 1),
     farmCentroidToApproach: proximity(farms, L.roads.filter(r => r.role === 'approach' || r.kind === 'road'), scene.metersPerUnit ?? 1),
     farmCentroidToNearestField: fieldProximity(farms, L.fields, scene.metersPerUnit ?? 1),
     farmDistribution: farmDistribution(farms, L.fields, frames[fixture.id].urban.bounds), views: {},
   };
   for (const [name, frame] of Object.entries(frames[fixture.id])) {
+    if (argument('--view') && name!==argument('--view')) continue;
     const width = 1400, b = frame.bounds;
     const fullView = session.renderView({ bounds: b, width, detail: 'full' });
     const auto = session.renderView({ bounds: b, width, detail: 'auto' });

@@ -40,7 +40,8 @@ import { PatriciateWard } from '../wards/patriciate-ward.js';
 import { Park } from '../wards/park.js';
 import { buildWardDistribution, type WardConstructor } from '../wards/ward-distribution.js';
 import type { PlacedSymbol, ClaimedSite } from './symbols.js';
-import { placeCityGlyphs } from './city-glyphs.js';
+import { placeCityGlyphs, cityMetersPerUnit } from './city-glyphs.js';
+import { plantCityParks } from './park-planting.js';
 import { overlapsWater } from './city-frontage.js';
 import { stampVillageRows } from './village-rows.js';
 
@@ -1554,6 +1555,7 @@ export class Model {
     stampVillageRows(this, buildingBudget(this.params.population, this.params.urbanDensity));
     connectCityLanes(this);
     timeGenerationStage('glyphs', this.onStageTiming, () => placeCityGlyphs(this));
+    if(city)timeGenerationStage('parks', this.onStageTiming, () => plantCityParks(this, cityMetersPerUnit(this)));
   }
 
   /** Allocate demand to the available urban land before drawing rows. The

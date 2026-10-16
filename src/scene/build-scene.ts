@@ -245,7 +245,7 @@ function scatterVegetation(
   for (const patch of model.patches) {
     const ward = patch.ward;
     if (!ward || ward.type !== WardType.Park || !ward.geometry.length) continue;
-    if (ward instanceof Park && ward.paths.length) {
+    if (ward instanceof Park && model.usesCityLayout) {
       for (const tree of ward.trees) scene.layers.vegetation.push({ ...tree, at: sc(tree.at) });
       continue;
     }

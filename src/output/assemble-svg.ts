@@ -13,6 +13,7 @@ import type { RenderTheme } from './render-theme.js';
 import { REFINED_MANIFEST } from '../assets/refined-manifest.js';
 import { refinedStyle, resolveVarFallbacks } from '../assets/refined-style.js';
 import { linkedBuildingIds } from '../scene/symbol-buildings.js';
+import { WALL_GATE_CLEARANCE, wallTowerCanvas } from '../assets/fortification-dimensions.js';
 
 const NORMAL_STROKE = 0.15;
 const THICK_STROKE = 1.8;
@@ -342,8 +343,8 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
         const g=assets.glyphs?.[towerId];
         if(g)for(const t of wallF.towers){
           // Leave real gate openings clear, even where a legacy tower coincides with a gate vertex.
-          if(wallF.gates.some(g=>Math.hypot(t.x-(g.p1.x+g.p2.x)/2,t.y-(g.p1.y+g.p2.y)/2)<4))continue;
-          parts.push(`<use href="#glyph-${towerId}" transform="${glyphTransform(t,wallF.large?6:4.8,0,g.viewBox,g.anchor)}"/>`);
+          if(wallF.gates.some(g=>Math.hypot(t.x-(g.p1.x+g.p2.x)/2,t.y-(g.p1.y+g.p2.y)/2)<WALL_GATE_CLEARANCE))continue;
+          parts.push(`<use href="#glyph-${towerId}" transform="${glyphTransform(t,wallTowerCanvas(wallF.large),0,g.viewBox,g.anchor)}"/>`);
         }
         continue;
       }

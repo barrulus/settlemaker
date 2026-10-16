@@ -65,7 +65,7 @@ export function createSettlementModel(input: AzgaarBurgInput, options: Settlemen
   timeGenerationStage('landscape', observe, () => dressSettlement(layout, seed));
   const diagnostics = [...layout.diagnostics];
   if (residents.unassigned) diagnostics.push(`${residents.unassigned} residents could not be accommodated within the requested enclosure and available land`);
-  const model: SettlementModel = { version: 1, generatorRevision: 'physical-layout-6', name: input.name, seed, development, coordinateSystem: 'local_metres_y_down',
+  const model: SettlementModel = { version: 1, generatorRevision: 'physical-layout-7', name: input.name, seed, development, coordinateSystem: 'local_metres_y_down',
     scene: layout.scene, buildings: layout.buildings, districts: layout.districts, residents, diagnostics,
     ...(layout.site.waterContextResult ? { waterContextResult: layout.site.waterContextResult } : {}),
     degradedFlags: layout.degradedFlags ?? [] };

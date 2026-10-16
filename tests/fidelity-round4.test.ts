@@ -197,7 +197,9 @@ describe('fidelity round 4: probe path', () => {
     // Enclosed neighbourhoods retain urban roof grain; temple and military
     // precincts now reserve explicit courts amid occupied street fronts.
     // Reviewed final visuals; mesh and ordinary census remain unchanged.
-    expect(sha256(svg)).toBe('0f3da9540686a158bff3e83df59c1e7c0b721b713f72a700573e0bfca734bc21');
+    // Reviewed managed canopy groves and clean green ground. Housing,
+    // paths, census and generator RNG match the previous fixture exactly.
+    expect(sha256(svg)).toBe('aa7d4fbb56c7d1e9eb0e4a98cabcf9ced88e43a682e3ec667aa425ed54e8fb86');
   });
 
   it('pins direct legacy generateFromBurg output at pop 800 (not the village engine)', () => {

@@ -86,9 +86,14 @@ code when creating a skin.
   Gates are cut where roads cross that enclosure. Wet wall segments are omitted.
   Village walls and gates are included in GeoJSON.
 - Greens use biome-specific turf, sand or moss colours, a single soft earth
-  edge and sparse botanical marks. Village shapes and junction outlines keep
+  edge and quiet ground without repeated curved texture marks. Village shapes and junction outlines keep
   their surveyed geometry; city gardens and parks use actual parcel boundaries.
   The 60 standalone variants are in `symbols/greens/`.
+- City parks plant small groves of biome-appropriate shade trees at their final
+  metre scale, with open central lawns and clear paths. Managed parks use a
+  tree-only mix, separate from wilderness scrub; complete canopy extents clear
+  buildings, streets, water and fortifications. Private garden ground remains
+  separate from public park planting.
 - Bridges use planned river crossings. Village decks follow the existing
   surveyed centreline and width. City scenes publish additive `layers.bridges`
   records for bounded wet road runs between two dry banks; roads terminating in

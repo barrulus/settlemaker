@@ -113,7 +113,9 @@ does not keep the shorter sides dense.
 Village approaches join their existing continuations and bend gently through
 dry farmland; road junctions and water-routed approaches retain their anchors.
 
-City squares are paved, and occasional parks retain their planted trees.
+City squares are paved, and parks contain small shade groves with clear paths
+and central lawns. Trees are planted after the final housing geometry and scale
+are known, without changing housing supply or consuming generation randomness.
 Markets and temples occupy compact public sites within developed blocks,
 with shops and temple ancillary buildings around them. These non-residential
 buildings appear in the scene and GeoJSON but do not add residential capacity.

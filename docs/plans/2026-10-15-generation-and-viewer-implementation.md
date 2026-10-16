@@ -245,3 +245,26 @@ The affected city, physical, scene and rendering suites then passed 105 checks,
 with four focused clearance/density checks and all nine fidelity checks passing
 against the final source. TypeScript, script typing and documentation examples
 also passed. Final source bundle: `source-7da7949f22b1f55b791bb108`.
+
+### Managed park groves (16 October)
+
+Removed the repeated curved ground marks from the shared green artwork and
+regenerated all 60 standalone variants. City parks now plant biome-appropriate
+shade trees after final geometry and metre scale are known. Public groves keep
+open walks and central lawns; private garden ground and wilderness selection
+remain separate. Shared measured-artwork bounds and fortification dimensions
+keep complete crowns clear of roads, buildings, water, walls and towers.
+
+Fixed-frame reviews of the reported desert capital, temperate 1200-person town
+and physical 10000-person settlement preserve building census, resident totals,
+park boundaries and paths exactly. Capital parks contain 176 and 162 trees,
+with guarded canopy-envelope coverage of 38–42%; the temperate park has 19
+trees and 32%. These are artwork-envelope proxies, not opaque leaf coverage.
+No measured canopy envelopes cross park paths. The physical revision is now
+`physical-layout-7`; final source bundle is `source-e161e035ae15c4526dc07918`.
+
+Validation includes the park and neighbourhood checks, artwork/rendering and
+shared appearance checks, physical population planning, all nine fidelity checks,
+TypeScript and script typing, and documentation examples. The reviewed city SVG
+pin changes; the legacy 800-person pin remains unchanged. Visual evidence lives
+in the ignored `output/city-park-review/` review directory.

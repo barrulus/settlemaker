@@ -1,3 +1,4 @@
+import { artworkPaintRadius } from './artwork-bounds.js';
 import { artworkBiome, floraId, selectFlora } from './artwork.js';
 
 export function landscapeHash(x: number, y: number, seed: number): number {
@@ -31,4 +32,29 @@ export function selectFloraAt(biome: string, x: number, y: number, seed: number,
   const kind=choice<.8?kinds[0]:kinds[1+Math.floor((choice-.8)/.2*(kinds.length-1))];
   const variant=Math.min(2,Math.floor(roll*3));
   return floraId(kind,b,variant,b==='tundra'&&variant===2);
+}
+
+/** Managed public groves have shade trees even where the surrounding wild
+ * biome is scrub. These are cultivated oasis trees in desert parks, and
+ * sheltered treeline spruce in tundra; the regional wilderness mix is intact. */
+const PARK_TREES: Record<string, string[]> = {
+  temperate: ['oak','beech','birch','spruce'],
+  desert: ['acacia','date-palm','olive'],
+  tundra: ['treeline-spruce'],
+  tropical: ['fig','rainforest-canopy','fan-palm'],
+  coastal: ['windswept-pine','windthorn','sheltered-apple'],
+};
+
+export function selectParkTreeAt(biome: string, x: number, y: number, seed: number, roll: number): string {
+  const b=artworkBiome(biome), kinds=PARK_TREES[b];
+  // Nearby crowns share a species; each still has its own artwork variant.
+  const species=Math.floor(landscapeHash(Math.floor(x/32),Math.floor(y/32),seed^0x5041524b)*kinds.length);
+  const variant=Math.max(0,Math.min(2,Math.floor(roll*3)));
+  return floraId(kinds[species],b,variant,b==='tundra'&&variant===2);
+}
+
+/** Rotation-independent circle containing every measured painted corner.
+ * `canvas` is the placed artwork width, in the caller's coordinate units. */
+export function floraCanopyRadius(id: string, canvas: number): number {
+  return artworkPaintRadius(id,canvas);
 }
