@@ -6,18 +6,24 @@ import { meanBuildingArea } from './generation-params.js';
 import type { Ward } from '../wards/ward.js';
 import { convexHull } from '../village/dressing/parcel-cut.js';
 import polygonClipping from 'polygon-clipping';
+import { regularizeCityFootprints } from './city-footprints.js';
 
-/** A market or temple is a compact public site with occupied street fronts,
- * rather than a whole vacant neighbourhood. These buildings are commercial
- * premises / temple ancillary buildings, outside the residential census. */
-export function buildCivicBlock(ward: Ward, temple: boolean): void {
-  const site = ward.getCityBlock(), metres = ward.model.params.development!.metresPerUnit;
+/** A civic precinct reserves a usable court amid occupied street fronts.
+ * Its ward retains its existing census semantics: commercial/temple annexes
+ * are exempt, while military accommodation counts as actual buildings. */
+export function buildCivicBlock(ward: Ward, temple: boolean, options: { buildingAreaScale?: number } = {}): void {
+  ward.gardens = [];
+  const site = ward.getCityBlock(), metres = ward.model.params.development?.metresPerUnit;
   const streets = wardFrontages(ward);
   const main = [...streets].sort((a,b)=>Point.distance(b.a,b.b)-Point.distance(a.a,a.b))[0];
   if (!main || site.length < 3) { ward.geometry = []; return; }
   const length = Point.distance(main.a,main.b), ax = (main.b.x-main.a.x)/length, ay = (main.b.y-main.a.y)/length;
   const c = site.centroid, cx = ax*c.x+ay*c.y, cy = -ay*c.x+ax*c.y;
-  let half = Math.min((temple ? 24 : 18)/metres, Math.sqrt(Math.abs(site.square)*.3))/2;
+  // Legacy mesh units are not metres, and the final rendering scale depends
+  // on farms that have not been generated yet. Reserve a bounded share of
+  // this surveyed site instead of consulting a partially built frame.
+  let half = (metres ? Math.min((temple ? 24 : 18)/metres, Math.sqrt(Math.abs(site.square)*.3))
+    : Math.sqrt(Math.abs(site.square)*.18))/2;
   const envelope = site.isConvex() ? site : new Polygon(convexHull(site.vertices));
   envelope.forEdge((a,b)=>{
     const ex=b.x-a.x, ey=b.y-a.y, n=Math.hypot(ex,ey);
@@ -35,7 +41,7 @@ export function buildCivicBlock(ward: Ward, temple: boolean): void {
   }
   ward.publicSpace = square();
   const laneWidth=.6*ward.insetScale;
-  const area=meanBuildingArea(ward.model.params.development!.texturePopulation)*ward.model.minSqScale/.6;
+  const area=meanBuildingArea(ward.model.params.development?.texturePopulation ?? ward.model.params.population)*ward.model.minSqScale/.6*(options.buildingAreaScale??1);
   const plan=planCityBlock(site,streets,area,laneWidth,true);
   if (!plan) { ward.geometry=[]; return; }
   // Subtract the court from each lot, keeping real polygon footprints. A
@@ -93,4 +99,8 @@ export function buildCivicBlock(ward: Ward, temple: boolean): void {
   }
   // Draw on the cut boundary so every lane mouth meets the court circuit.
   ward.publicSpace.forEdge((a,b)=>ward.lanes.push({a,b,width:laneWidth}));
+  const accepted = {buildings:ward.geometry,frontages:ward.buildingFrontages,lanes:ward.lanes,runs:[ward.geometry],gardens:[] as Polygon[]};
+  regularizeCityFootprints(accepted,area,metres ? 3/metres : undefined,metres ? 16/metres**2 : undefined);
+  ward.geometry = accepted.buildings;
+  ward.gardens = accepted.gardens.map(ring=>({ring,access:[]}));
 }

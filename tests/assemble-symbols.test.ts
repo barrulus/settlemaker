@@ -149,6 +149,19 @@ describe('glyph-backed buildings', () => {
     expect(svg).toMatch(/<g id="buildings">[\s\S]*M0\.00,0\.00/);
   });
 
+  it('links one compound drawing to all wings and restores every footprint when art is hidden', () => {
+    const ids=['wing-a','wing-b','wing-c'];
+    const scene=sceneWith([{...HOUSE_SYM,id:'sm-city-courtyard-u',scale:32,buildingId:ids[0],buildingIds:ids}]);
+    scene.layers.buildings=ids.map((id,i)=>({...HOUSE_RECT,id,ring:HOUSE_RECT.ring.map(p=>({x:p.x+i*7,y:p.y}))}));
+    const painted=assembleSvg(scene);
+    expect(painted).toContain('data-building-id="wing-a" data-building-ids="wing-a wing-b wing-c"');
+    for(const id of ids)expect(painted).not.toContain(`<path class="craftsmen" data-building-id="${id}"`);
+    for(const options of [{symbols:false},{assetSet:SCHEMATIC_SET},{pixelsPerUnit:.01}]) {
+      const fallback=assembleSvg(scene,options);
+      for(const id of ids)expect(fallback).toContain(`<path class="craftsmen" data-building-id="${id}"`);
+    }
+  });
+
   it('non-glyphBacked buildings are unaffected either way', () => {
     const scene = sceneWith([]);
     scene.layers.buildings.push({ ...HOUSE_RECT, glyphBacked: undefined });

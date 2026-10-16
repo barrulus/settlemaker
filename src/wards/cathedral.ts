@@ -14,7 +14,7 @@ export class Cathedral extends Ward {
   override createGeometry(): void {
     this.principalBuilding = null;
     this.principalSymbol = null;
-    if (this.model.params.development) {
+    if (this.model.usesCityLayout) {
       buildCivicBlock(this, true);
       // The glyph pass replaces this reserved site with the actual temple.
       if (this.publicSpace) this.geometry.unshift(this.getPublicBuildingSite());

@@ -4,7 +4,7 @@ import { buildingIds } from '../src/output/id-allocator.js';
 import { describe, expect, it } from 'vitest';
 import { generateSettlement, buildScene, Point, Polygon, WardType } from '../src/index.js';
 import { cityArchitecture } from '../src/generator/city-glyphs.js';
-import { ARTWORK_MANIFEST } from '../src/assets/artwork.js';
+import { ARTWORK_MANIFEST, ARTWORK_INK } from '../src/assets/artwork.js';
 import { blocksAccess, nearestOnSegment, segmentInside, drySegments, wardFrontages } from '../src/generator/city-frontage.js';
 import { Park } from '../src/wards/park.js';
 import { createAlleys } from '../src/wards/ward.js';
@@ -28,12 +28,20 @@ describe('city neighbourhoods', () => {
         const poiBuildings=new Set(geojson.features.filter(f=>f.properties?.layer==='poi').map(f=>f.properties?.building_id));
         const homes = model.symbols.filter(s => s.building && !poiBuildings.has(ids.get(s.building)) && [WardType.Craftsmen, WardType.Merchant, WardType.GateWard, WardType.Farm].includes(s.wardType!));
         expect(homes.length).toBeGreaterThan(100);
-        const allowed=new Set([architecture.home,resolveGlyphFor(biome,'sm-house'),resolveGlyphFor(biome,'sm-house-tiled')]);
+        const allowed=new Set([architecture.home,architecture.dense,resolveGlyphFor(biome,'sm-house'),resolveGlyphFor(biome,'sm-house-tiled')]);
+        const metres=buildScene(model).metersPerUnit!;
         for(const home of homes){
           expect(allowed.has(home.id)).toBe(true);
           const patch=model.patches.find(p=>p.ward?.geometry.includes(home.building!))!;
-          if(cityUrbanity(model,patch)>=.45)expect(home.id).toBe(architecture.home);
+          const urbanity=cityUrbanity(model,patch);
+          if(urbanity>=.45)expect([architecture.home,architecture.dense]).toContain(home.id);
+          if(home.id===architecture.dense){
+            expect(urbanity).toBeGreaterThanOrEqual(.7);
+            expect(Math.min(home.scale,home.scaleY!)*metres).toBeGreaterThanOrEqual(10.4);
+            expect(Math.max(home.scale,home.scaleY!)*metres).toBeLessThanOrEqual(16*1.35);
+          }
         }
+        expect(homes.some(s=>s.id===architecture.dense)).toBe(true);
         expect(homes.some(s=>s.id.startsWith('sm-house'))).toBe(true);
         const temples = model.symbols.filter(s => /cathedral|chapel|temple|church/.test(s.id));
         expect(temples, `seed ${seed}`).toHaveLength(1);
@@ -85,15 +93,25 @@ describe('city neighbourhoods', () => {
     for (const patch of model.patches) {
       const ward = patch.ward;
       if (!ward) continue;
-      for (const s of model.symbols.filter(s => s.building && ward.geometry.includes(s.building))) {
+      for (const s of model.symbols.filter(s => s.building && !s.buildings && ward.geometry.includes(s.building))) {
         const f = s.frontage!;
         expect(f).toBeDefined();
         const angle = s.rotationDeg * Math.PI / 180;
         const along = Math.atan2(f.b.y - f.a.y, f.b.x - f.a.x);
-        expect(Math.abs(Math.sin(angle - along))).toBeLessThan(1e-8);
+        // Rectangular legacy lots may be oblique to the street. They can
+        // follow their actual footprint while facing within45° of it.
+        expect(Math.abs(Math.sin(angle - along))).toBeLessThanOrEqual(Math.SQRT1_2+1e-8);
         const c = s.building!.centroid;
         expect(-Math.sin(angle) * (f.at.x - c.x) + Math.cos(angle) * (f.at.y - c.y)).toBeGreaterThan(0);
-        for (const other of ward.geometry) if (other !== s.building) expect(blocksAccess(c, f.at, other)).toBe(false);
+        // Also check the glyph's front edge, rather than assuming that a
+        // centroid-to-street segment proves the rotated entrance accessible.
+        const {anchor}=ARTWORK_MANIFEST[s.id], [x0,,x1,y1]=ARTWORK_INK[s.id].bounds;
+        const dx=((x0+x1)/2-anchor[0])*s.scale/64, dy=(y1-anchor[1])*(s.scaleY??s.scale)/64;
+        const door=new Point(s.at.x+dx*Math.cos(angle)-dy*Math.sin(angle),s.at.y+dx*Math.sin(angle)+dy*Math.cos(angle));
+        for (const other of ward.geometry) if (other !== s.building) {
+          expect(blocksAccess(c, f.at, other)).toBe(false);
+          expect(blocksAccess(door, f.at, other),s.id).toBe(false);
+        }
         checked++;
       }
     }

@@ -58,7 +58,9 @@ describe('city artwork integration', () => {
       const placements = model.symbols.filter(s => s.building);
       expect(placements.length).toBeGreaterThan(100);
       for (const s of placements) {
-        const polygon = s.building!, [x0, y0, x1, y1] = REFINED_INK[s.id].bounds;
+        const compound = s.buildings && model.patches.flatMap(p=>p.ward?.compounds??[])
+          .find(compound=>compound.buildings[0]===s.building);
+        const polygon = compound?.site ?? s.building!, [x0, y0, x1, y1] = REFINED_INK[s.id].bounds;
         const anchor = REFINED_MANIFEST[s.id].anchor;
         const angle = s.rotationDeg * Math.PI / 180;
         for (const [x, y] of [[x0, y0], [x0, y1], [x1, y0], [x1, y1]]) {
@@ -109,6 +111,27 @@ describe('city artwork integration', () => {
   it('rejects a narrow lot rather than shrinking a dwelling to a sliver', () => {
     const thin = new Polygon([new Point(0, 0), new Point(10, 0), new Point(10, 0.1), new Point(0, 0.1)]);
     expect(fitCityGlyph(thin, 'sm-house', 1)).toBeNull();
+  });
+
+  it('recovers a tapered lot by translating useful-sized artwork and checking its actual front door', () => {
+    const site=new Polygon([[0,0],[6,0],[2,6],[0,6]].map(([x,y])=>new Point(x,y)));
+    const frontage={a:new Point(0,-1),b:new Point(6,-1),at:new Point(site.centroid.x,-1),width:1,kind:'street' as const};
+    expect(fitCityGlyph(site,'sm-city-row-house-a',1,frontage,.5,1.35,1.25)).toBeNull();
+    let checked=0;
+    const fit=fitCityGlyph(site,'sm-city-row-house-a',1,frontage,.5,1.35,1.25,(door,street)=>{
+      checked++;
+      expect(street).toBe(frontage.at);
+      expect(door.y).toBeLessThan(site.centroid.y);
+      return true;
+    },true)!;
+    expect(fit).not.toBeNull();
+    expect(checked).toBeGreaterThan(0);
+    expect(fit.paintedArea).toBeGreaterThan(Math.abs(site.square)*.5);
+    expect(fit.scale).toBeGreaterThan(5);
+    // The rejected centred candidate is already frontage-parallel: its
+    // translated replacement must still invoke the new doorway check.
+    expect(fitCityGlyph(site,'sm-city-row-house-a',1,frontage,.5,1.35,1.25,()=>false,true)).toBeNull();
+    expect(fitCityGlyph(site,'sm-city-row-house-a',1,frontage,.5,.25,1.25,()=>true,true)).toBeNull();
   });
 
   it('omits phase 1-only art from the default SVG', () => {

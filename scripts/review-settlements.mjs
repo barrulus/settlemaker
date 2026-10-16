@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import sharp from 'sharp';
 import { BIOMES, PALETTES, planSettlement, createSettlementModel, renderSettlement } from '../dist/index.js';
+import { reviewSettlementGround } from '../dist/settlement/quality.js';
 const out = new URL('../output/appearance-review/', import.meta.url);
 await mkdir(new URL('data/',out), { recursive:true });
 const base={name:'Appearance review',roadBearings:[20,145,270],port:false,citadel:false,walls:true,plaza:true,temple:true,shanty:false,capital:false};
@@ -27,7 +28,9 @@ for(const biome of biomes)for(const f of fixtures){
    buildingsInsideWalls:model.buildings.filter(b=>b.capacity>0 && b.insideWalls).length,
    buildingsOutsideWalls:model.buildings.filter(b=>b.capacity>0 && !b.insideWalls).length,
    residents:model.residents};
- summary.push({biome,...f,operation:process.argv.includes('--reuse')?'load-cached-model':'generate-model',ms:Math.round(performance.now()-start),buildings:model.buildings.length,residents:model.residents});
+ const modelMs=Math.round(performance.now()-start), qualityStart=performance.now();
+ const ground=f.preset==='city'?reviewSettlementGround(model):null;
+ summary.push({ground,groundReviewMs:performance.now()-qualityStart,biome,...f,operation:process.argv.includes('--reuse')?'load-cached-model':'generate-model',ms:modelMs,buildings:model.buildings.length,residents:model.residents});
  console.log(`${key}: ${model.residents.assigned}/${f.population} residents`);
 }
 const start=performance.now();
@@ -45,7 +48,8 @@ const cityRadius = manifest['city-200000'].centreRadius + 125;
 const cityView = renderSettlement(large.model,{width:1400,bounds:{min_x:-cityRadius,min_y:-cityRadius,max_x:cityRadius,max_y:cityRadius}});
 await writeFile(new URL('city-200000-city.svg',out),cityView);
 await sharp(Buffer.from(cityView)).resize(1400).png().toFile(fileURLToPath(new URL('city-200000.png',out)));
-summary.push({biome:'temperate',preset:'city',population:200000,seed:2,operation:'generate-render-export',ms:largeMs,svgBytes:Buffer.byteLength(large.svg),buildings:large.model.buildings.length,residents:large.model.residents});
+const qualityStart=performance.now(),ground=reviewSettlementGround(large.model);
+summary.push({ground,groundReviewMs:performance.now()-qualityStart,biome:'temperate',preset:'city',population:200000,seed:2,operation:'generate-render-export',ms:largeMs,svgBytes:Buffer.byteLength(large.svg),buildings:large.model.buildings.length,residents:large.model.residents});
 await writeFile(new URL('metrics.json',out),JSON.stringify(summary,null,2));
 const worker=await build({entryPoints:[fileURLToPath(new URL('settlement-review-worker.mjs',import.meta.url))],bundle:true,format:'iife',target:'es2022',write:false});
 await writeFile(new URL('worker-source.js',out),`globalThis.settlementReviewWorker=${JSON.stringify(worker.outputFiles[0].text)};`);

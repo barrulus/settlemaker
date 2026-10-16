@@ -42,9 +42,11 @@ Both entry points return `{ kind, model, svg, geojson }`.
 | `development.corePopulation` | Residents to accommodate inside the main wall. Requires `burg.walls: true`; integer from zero to total population. |
 | `development.centreOccupancy` | Capacity of an ordinary dense city building; default 8 (or `edgeOccupancy` if higher). |
 | `development.edgeOccupancy` | Capacity of an ordinary detached dwelling; default 4. |
+| `development.ruralPopulation` | Optional city-only rural resident target, deducted from the same total. Nonnegative integer, less than total population, and no greater than population minus the resolved core target. Default 0 plans no additional rural settlements. |
 | `seed` | Deterministic integer seed; otherwise derived from the name. |
 | `theme`, `style`, `skin` | Shared appearance controls; they do not alter housing or geometry. |
 | `render.width`, `render.bounds`, `render.detail` | Display width, viewport in metres and artwork detail; described below. |
+| `onStageTiming` | Optional callback receiving `{ stage, durationMs, attempt? }`. Timings are observations, never part of the deterministic model. |
 
 The city preset defaults to 80% of residents inside the walls, capped at 10,000.
 The village preset uses `edgeOccupancy` throughout; a capacity gradient requires
@@ -60,9 +62,40 @@ districts, with roads influencing the outline. The walled core retains urban
 spacing throughout. Large cities add neighbourhoods rather than stretching a
 fixed number of precincts along distant roads.
 
+Physical layout revision `physical-layout-3` keeps ordinary house footprints in
+a bounded physical range. Sparse outskirts use wider gaps, paired houses and
+short street runs instead of shrinking each roof inside its old plot. Workshop
+approaches, garden neighbourhoods and crofts use coherent local spacing rules.
+Public commons and natural groves reserve suburban ground before residential
+demand is allocated. The preview policy targets 4% of eligible suburban land
+area, choosing each next common to serve previously uncovered district centres
+and favouring nearby approaches. Access is a Euclidean proxy at three typical
+district widths, not a measured walking route. Whole-district reservations may
+undershoot; they never exceed 150% of the target. Very small suburbs may have no
+eligible whole district within that budget. These constraints preserve room for
+housing rather than silently treating the target as guaranteed provision.
+Green features distinguish `purpose: 'public' | 'private'
+| 'natural' | 'civic'`; civic squares retain their paved surface. Districts expose
+`character`, `settlementRole`, `occupiedAreaM2` and `areaM2` for review. These
+areas describe accepted geometry; they are not a claim that every remaining
+gap is accessible or suitable for infill. Offline benchmark and review tooling
+uses `reviewSettlementGround` to estimate the partition of district ground into explicit building
+footprints, artwork-declared courts, road corridors, walls, public/private/natural
+greens, civic space, water and unclassified residual. The bounded deterministic cell-centre sampler reports sample count and spacing
+per district; narrow gaps can fall between samples, and residual component counts
+are estimates at that resolution. Sample areas are weighted to each district’s
+exact boundary area. Its masks use square-ended road segments and 3 m wall corridors. They report failed-placement
+area as unknown: rejected candidate polygons are not retained, so unexplained
+open ground cannot honestly be relabelled failed placement or intentional court.
+Review timing is recorded separately from generation.
+
 The default city house accommodates eight residents, compared with four in a
 detached village dwelling. Dense blocks use smaller individual footprints in
-long attached rows, separated by narrow service streets. Population sets the
+long attached rows, separated by narrow service streets, with wider sites for
+properly sized tenements. The core selects existing high-density artwork where
+its measured ink and physical dimensions fit; ordinary street houses remain
+part of the same neighbourhood. A larger illustration does not silently add
+residents or merge building identities. Population sets the
 amount of housing to plan; it does not merge neighbouring roofs or erase row
 ends to make the number of buildings match a census. Spare capacity is reported
 explicitly. Set `centreOccupancy` when your setting needs a different number of
@@ -80,7 +113,9 @@ does not keep the shorter sides dense.
 Village approaches join their existing continuations and bend gently through
 dry farmland; road junctions and water-routed approaches retain their anchors.
 
-City squares are paved, and occasional parks retain their planted trees.
+City squares are paved, and parks contain small shade groves with clear paths
+and central lawns. Trees are planted after the final housing geometry and scale
+are known, without changing housing supply or consuming generation randomness.
 Markets and temples occupy compact public sites within developed blocks,
 with shops and temple ancillary buildings around them. These non-residential
 buildings appear in the scene and GeoJSON but do not add residential capacity.
@@ -122,6 +157,51 @@ Allocation never exceeds a building's capacity. A constrained layout reports a
 shortfall rather than inflating occupancy or moving residents across a requested
 wall allocation. Generation makes bounded attempts to provide more plots and
 land before reporting the result. Always check `model.residents.unassigned`.
+
+### Optional inhabited countryside
+
+```js
+const region = planSettlement({ ...burg, population: 20000, walls: true }, {
+  seed: 2,
+  development: { preset: 'city', corePopulation: 10000, ruralPopulation: 2000 },
+});
+console.log(region.model.residents.rural.assigned); // 2000 on a suitable site
+console.log(region.model.residents.urban.assigned); // 18000 on a suitable site
+```
+
+An explicit rural target interprets population as the total demand for this
+generated region. Existing farm residences contribute to that target first;
+new farmsteads and small hamlets provide the remainder within the cultivated
+region. The field envelope is planned first and shared with rural placement.
+Existing approach sections inside that envelope supply short bent farm tracks;
+most sites contain one to three homes, with a minority of compact six to twelve
+home hamlets. Higher demand branches the connected track network into available
+cultivated ground rather than lengthening rows beyond the farms.
+
+Homes and full-width access corridors reserve ground before field subdivision.
+Physical field validation checks contained claims as well as edge intersections,
+so a small farmhouse cannot be swallowed by a large field between sample points.
+When a coarse regional parcel meets rural homes or tracks, that parcel receives
+bounded local subdivision before the same clearance checks run. Distant parcels
+keep their geometry and crop choices; rural clusters retain smaller cultivated
+plots between their access lanes instead of becoming broad empty lawns.
+The cultivated edge has route-related lobes and uncultivated indentations, with
+whole fringe parcels tapering into the surrounding natural ground. Water and
+existing reservations still constrain every accepted site. Rural homes do not
+enlarge the city's empty field exclusion belt; fields remain between clusters.
+
+Urban/rural accounts are separate from inside/outside-wall accounts. The rural
+target never borrows an explicit core allocation. Capacity shortages remain
+reported when water or available frontage prevents placement. With the default
+zero target, no new hamlets are generated and existing farm residences retain
+their proportional occupancy; the rural subtotal reports those existing people.
+Buildings carry `settlementRole` so they can be counted once across both views.
+
+Stage timings include layout attempts, topology, roads, neighbourhoods, plots,
+glyph fitting, scene extraction, rural placement, resident allocation and
+landscape. `layout` includes its child stages and `plots` includes `glyphs`;
+do not add inclusive durations together. The convenience output function also
+reports `svg` and `geojson`. Enabling profiling does not change model data.
 
 ## One coordinate contract
 

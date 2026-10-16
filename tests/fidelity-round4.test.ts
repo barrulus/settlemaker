@@ -186,7 +186,20 @@ describe('fidelity round 4: probe path', () => {
     // Reviewed both Aldford fixtures and verified exact repeatability before repinning.
     // Legacy temples now share the physical size cap. Reviewed the smaller
     // temple and retained annex; other scene layers and repeatability match.
-    expect(sha256(svg)).toBe('bdae17be517a3a87878a196f7c7b1162fb85941fb7eee1e9bf4252e950e96873');
+    // Inhabited civic frontages, clipped concave blocks and site-qualified
+    // dense glyphs intentionally change this city; the village pin remains.
+    // Translated contained artwork and rectangular end-lot houses with explicit
+    // yards replace polygon filler; both reported legacy crops were reviewed.
+    // Wells now use final-frame physical scale. Planned compound wings
+    // retain their own footprints and reviewed house-scale vector detail.
+    // Compound entrances now meet the street network; low well shadows stay
+    // attached at the corrected scale. Final artwork and repeatability reviewed.
+    // Enclosed neighbourhoods retain urban roof grain; temple and military
+    // precincts now reserve explicit courts amid occupied street fronts.
+    // Reviewed final visuals; mesh and ordinary census remain unchanged.
+    // Reviewed managed canopy groves and clean green ground. Housing,
+    // paths, census and generator RNG match the previous fixture exactly.
+    expect(sha256(svg)).toBe('aa7d4fbb56c7d1e9eb0e4a98cabcf9ced88e43a682e3ec667aa425ed54e8fb86');
   });
 
   it('pins direct legacy generateFromBurg output at pop 800 (not the village engine)', () => {
@@ -293,7 +306,9 @@ describe('fidelity round 4: probe path', () => {
     expect(svg.length).toBeGreaterThan(1000);
     // Shared biome ground with paved city roads; urban street corridors and lane mouths are visible.
     // Reviewed both Aldford fixtures and verified exact repeatability before repinning.
-    expect(sha256(svg)).toBe('1715e1dfd9d90439470194cd6a9892e39748a54fe6367d4fedb1d359dd398927');
+    // Only well-shadow offsets changed here; removing the corrective transform
+    // restores byte identity with the preceding reviewed SVG.
+    expect(sha256(svg)).toBe('163185665983d82cb21f0c3cb09a47a0ab83bbaf9f1cf1c5b6422625e4424c3d');
   });
 });
 
@@ -453,15 +468,26 @@ describe('fidelity round 4: footprint and texture scale with population', () => 
       const preTrim = model.pretrimCoreOrdinaryCount;
       const postTrim = totalCoreOrdinary(model);
       expect(preTrim).toBeGreaterThan(0);
-      const trimmedFrac = (preTrim - postTrim) / preTrim;
-      expect(trimmedFrac).toBeLessThan(0.12);
-
       let wards = 0, buildings = 0;
+      let occupiedArea=0, availableArea=0;
       for (const patch of model.patches) {
         if (!(patch.ward instanceof CommonWard) || !patch.withinWalls) continue;
         wards++;
         buildings += patch.ward.geometry.length;
+        occupiedArea+=patch.ward.geometry.reduce((n,b)=>n+Math.abs(b.square),0);
+        availableArea+=Math.abs(patch.ward.getCityBlock().square);
+        for(const run of patch.ward.streetRuns){
+          const alive=run.map(b=>patch.ward!.geometry.includes(b));
+          // A well consumes at most one interior lot. Budget trimming must
+          // leave continuous rows rather than hollowing the whole district.
+          expect(alive.slice(0,alive.lastIndexOf(true)).filter(v=>!v).length).toBeLessThanOrEqual(1);
+        }
       }
+      // The current row planner reserves10% supply plus ceil rounding and
+      // one spare lot per ward. Newly inhabited concave wards now reach that
+      // reserve: bound actual removals by that policy, not an old12% fit.
+      expect(preTrim-postTrim).toBeLessThanOrEqual(postTrim*.1+wards*2);
+      expect(occupiedArea/availableArea).toBeGreaterThan(.55);
       const density = buildings / wards;
       const target = perPatchDensity(population);
       expect(density).toBeGreaterThanOrEqual(target * 0.7);

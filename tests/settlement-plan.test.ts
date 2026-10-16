@@ -33,7 +33,21 @@ describe('physical settlement planning', () => {
     expect(homes.length).toBeGreaterThanOrEqual(200);
     const sizes=homes.map(b=>area(b.footprint)).sort((a,b)=>a-b);
     expect(sizes[Math.floor(sizes.length/2)]).toBeLessThan(45);
-    expect(sizes[Math.floor(sizes.length*.9)]).toBeLessThan(65);
+    // Most core sites remain ordinary houses; roughly a quarter now have
+    // wider frontage for a substantial tenement. Bound each family against
+    // its planned grain instead of requiring tenements to fit cottage lots.
+    const ordinary=sizes.filter(s=>s<=65), larger=sizes.filter(s=>s>65);
+    expect(ordinary.length/homes.length).toBeGreaterThan(.7);
+    expect(larger.length).toBeGreaterThan(0);
+    // 9.03 mesh-area mean * .3/.6 texture * 3² m² * 2.6 wide-site weight,
+    // allowing the planner's rounded frontage count to vary width by 25%.
+    expect(Math.max(...larger)).toBeLessThan(9.03*.3/.6*9*2.6*1.25);
+    const tenements=L.symbols.filter(s=>ARTWORK_MANIFEST[s.id]?.family==='tenement');
+    expect(tenements.length).toBeGreaterThan(0);
+    for(const s of tenements) {
+      expect(Math.min(s.scale,s.scaleY??s.scale)).toBeGreaterThanOrEqual(10.4);
+      expect(Math.max(s.scale,s.scaleY??s.scale)).toBeLessThanOrEqual(16*1.35);
+    }
     const faith=L.symbols.filter(s=>ARTWORK_MANIFEST[s.id]?.category==='faith');
     expect(faith).toHaveLength(1);
     expect(Math.max(faith[0].scale,faith[0].scaleY??faith[0].scale)).toBeGreaterThan(12);
@@ -47,9 +61,13 @@ describe('physical settlement planning', () => {
     expect(market.length).toBeGreaterThan(4);
     expect(temple.length).toBeGreaterThan(4);
     expect(market.every(b=>!b.landmark)).toBe(true);
-    const plaza=L.greens.filter(g=>g.surface==='paved');
-    expect(plaza).toHaveLength(1);
-    expect(area(plaza[0].ring)).toBeLessThanOrEqual(324.000001);
+    // Compound courtyards are private paved spaces, not civic plazas.
+    const paved=L.greens.filter(g=>g.surface==='paved');
+    expect(paved.every(p=>p.purpose==='civic'||p.purpose==='private')).toBe(true);
+    const plaza=paved.filter(g=>g.purpose==='civic');
+    expect(plaza.length).toBeGreaterThanOrEqual(1);
+    expect(plaza.some(p=>area(p.ring)<=324.000001)).toBe(true);
+    for(const p of plaza)expect(area(p.ring)).toBeLessThanOrEqual(576.000001); // 24m temple court maximum
     for(const b of [...market,...temple]){
       const footprint=new Polygon(b.ring.map(p=>new Point(p.x,p.y)));
       for(const r of L.roads)for(let i=1;i<r.path.length;i++){
@@ -125,15 +143,22 @@ describe('physical settlement planning', () => {
     })();
     const occupied = new Set(raw!.patches.filter(p=>['core','suburb','satellite'].includes(p.zone)));
     const sectors = Array<number>(8).fill(0);
+    const edgeCoverage: number[] = [];
     for (const p of occupied) {
       if (p.zone==='core' || !raw!.adjacency!.neighboursOf(p).some(n=>!occupied.has(n))) continue;
       const c = p.shape.centroid;
       sectors[Math.floor((Math.atan2(c.y,c.x)+Math.PI)/(2*Math.PI)*8)%8]++;
       expect(cityUrbanity(raw!,p)).toBeLessThan(.05);
-      // Verify actual roofs too: irregular blocks must not bypass the taper.
+      // Greens are explicit reservations, not roofs. Detached frontage now
+      // preserves house sizes: judge its lower ground coverage rather than
+      // requiring the former 48%-dimension roof-shrink artefact.
+      if (p.ward!.type === 'park') continue;
       const roofArea = p.ward!.geometry.reduce((s,b)=>s+Math.abs(b.square),0);
-      expect(roofArea/Math.abs(p.shape.square)).toBeLessThan(.25);
+      edgeCoverage.push(roofArea/Math.abs(p.shape.square));
+      expect(edgeCoverage.at(-1)).toBeLessThan(.6);
     }
+    edgeCoverage.sort((a,b)=>a-b);
+    expect(edgeCoverage[Math.floor(edgeCoverage.length/2)]).toBeLessThan(.4);
     expect(sectors.every(n=>n>0)).toBe(true);
     expect(r.model.residents.insideWalls.assigned).toBe(10000);
     expect(r.model.residents.outsideWalls.assigned).toBe(190000);

@@ -1,9 +1,35 @@
 import { Point } from '../types/point.js';
 import type { Model } from './model.js';
 import type { WardLane } from '../wards/ward.js';
-import { Farm } from '../wards/farm.js';
 import { WardType } from '../types/interfaces.js';
 import { blocksAccess, drySegments, nearestOnSegment, wardFrontages } from './city-frontage.js';
+import { Polygon } from '../geom/polygon.js';
+import { boundsOfPoints } from '../geom/bounds.js';
+import type { LocalBounds } from './bounds.js';
+import { MAIN_STREET } from '../wards/ward.js';
+import { edgeInsetScale } from './generation-params.js';
+import { roadCorridor } from '../geom/road-corridor.js';
+
+const roadReservations=new WeakMap<Model,{patches:Model['patches'];wall:Model['wall'];roads:Model['roads'];arteries:Model['arteries'];values:Array<{polygon:Polygon;bounds:LocalBounds}>}>();
+
+/** Stable street corridors exist before farm geometry. Cache per mesh so
+ * every farmhouse checks the same full painted widths without rescanning wards. */
+export function cityRoadReservations(model:Model):ReadonlyArray<{polygon:Polygon;bounds:LocalBounds}> {
+  const cached=roadReservations.get(model);
+  if(cached&&cached.patches===model.patches&&cached.wall===model.wall&&cached.roads===model.roads&&cached.arteries===model.arteries)return cached.values;
+  const width=MAIN_STREET*edgeInsetScale(model.params.development?.texturePopulation??model.params.population);
+  const lines=[...cityLocalStreets(model),...[...model.roads,...model.arteries].flatMap(path=>path.vertices.slice(1).map((b,i)=>({a:path.vertices[i],b,width})))];
+  const values=lines.flatMap(line=>{
+    const length=Point.distance(line.a,line.b);
+    if(length<1e-8)return [];
+    const dx=(line.b.x-line.a.x)/length*line.width/2,dy=(line.b.y-line.a.y)/length*line.width/2;
+    // Square endpoint clearance conservatively includes the round painted cap.
+    const polygon=roadCorridor(new Point(line.a.x-dx,line.a.y-dy),new Point(line.b.x+dx,line.b.y+dy),line.width);
+    return [{polygon,bounds:boundsOfPoints(polygon.vertices)}];
+  });
+  roadReservations.set(model,{patches:model.patches,wall:model.wall,roads:model.roads,arteries:model.arteries,values});
+  return values;
+}
 
 /** Reserved streets between urban blocks. These are the same corridors used
  * to place buildings and connect service lanes, not new cuts through lots. */
@@ -20,7 +46,7 @@ export function cityLocalStreets(model: Model): WardLane[] {
   const streets: WardLane[] = [];
   for (const patch of model.patches) {
     const ward = patch.ward;
-    if (!ward || ward instanceof Farm || model.waterbody.includes(patch)
+    if (!ward || ward.type === WardType.Farm || model.waterbody.includes(patch)
       || ward.type === WardType.Empty || ward.type === WardType.Water) continue;
     for (const line of wardFrontages(ward)) {
       if (line.kind !== 'street') continue;

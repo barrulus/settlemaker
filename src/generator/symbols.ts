@@ -12,6 +12,8 @@ export interface PlacedSymbol {
   scaleY?: number;
   /** Exact surviving footprint replaced by this placement. Never inferred by proximity. */
   building?: Polygon;
+  /** All real building wings covered by one compound illustration, including building. */
+  buildings?: Polygon[];
   /** Estimated painted area in local units squared, for review diagnostics. */
   paintedArea?: number;
   frontage?: CityFrontage;

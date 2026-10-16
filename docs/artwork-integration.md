@@ -18,8 +18,22 @@ code when creating a skin.
   measured roof and porch extents rather than generic house/hut ratios.
 - Cities fit native urban buildings to existing surveyed lots. The fitter uses
   guarded ink measurements and preserves the building polygon/GeoJSON identity.
-  Central housing has one seeded row-house family, with five restrained biome roof
-  tones. Demand favours the centre; outer roofs sit in progressively larger gardens
+  When a centred fit fails, a bounded geometric search can move the artwork
+  within the footprint, keeping its scale, coverage and street-access checks.
+  It uses the same contained-rectangle helper as corner-site planning; it never
+  expands across a concave boundary or stretches artwork to match a wedge.
+  Central housing mixes one seeded row-house family with substantial tenements;
+  selected wealthy blocks reserve full-sized courtyard compounds.
+  The physical planner reserves wider tenement sites among narrow attached street
+  houses, keeping real frontage access and the same capacity per building.
+  Ordinary houses keep their usual depth with rear gardens; only the wider
+  tenement sites need deeper footprints. Dense
+  art is never shrunk to a tiny cluster to fit a cottage plot: tenements require
+  a nominal canvas of at least 10.4 metres (about eight metres of painted frontage),
+  while compound wings are sized to the surrounding house frontage. A corner house needs an actual street corner;
+  unsuitable forms fall back to the city's row-house family before plain polygons.
+  Five restrained biome roof tones preserve a coherent neighbourhood.
+  Demand favours the centre; outer roofs sit in progressively larger gardens
   and mix detached rural houses with urban forms. Parks scale with neighbourhood
   count. Gardens are also exported as `layer: green`, `kind: garden` polygons. Actual POI assignments select
   inns, shops, workshops, bathhouses, guildhalls and warehouses. The principal
@@ -27,10 +41,27 @@ code when creating a skin.
   administrative halls/wings use the dedicated kits. Court-bearing forms scale
   uniformly and their holes stay transparent. Unsuitable lots retain their real
   polygon, coloured to match the city's roof palette.
-- Multi-building terrace and complete compound presets are available in the
-  artwork registry/catalogue but are not substituted for individual household
-  lots. Compound planning must retain constituent identities and real capacities;
-  this integration does not invent households to fill an aggregate illustration.
+- City markets reserve compact paved courts with occupied commercial street
+  frontages. They do not consume an entire neighbourhood for a solitary ornament.
+  Concave wall-edge blocks retain street rows clipped to their actual boundary;
+  a small boundary notch does not switch the whole district to sparse estates.
+  Acute corner parcels can reserve a rectangular house and explicit remaining
+  yard before the census runs. Physical replacements must retain at least
+  40% of the parcel, 16 square metres of footprint and a three-metre short side,
+  with clear access. Regular footprints remain unchanged. Residential and civic
+  yards appear consistently in the scene and GeoJSON.
+- A rare merchant inn or patrician courtyard reserves a larger site before
+  ordinary rows are subdivided. Its five or three wings are real building
+  footprints with individual identities and normal per-building capacity.
+  Courtyard space and connecting access remain open. One compound illustration
+  covers the complete group at its planned scale. If later trimming removes a
+  wing, surviving wings receive individual artwork instead. An ordinary inn on
+  a small plot uses a street-house form; it never miniaturizes the compound.
+  Aggregate terrace presets remain available in the catalogue.
+- City wells use the reviewed artwork's metre dimensions after the complete
+  city scale is known. Their painted diameter is about 2.3 metres on a suitable
+  site, rather than interpreting the nominal size as legacy mesh units. Their
+  complete painted bounds must fit within the reserved well courtyard.
 - Vegetation uses native seeded variants, with separate metre footprints for
   trees, shrubs and low plants. Tundra defaults to low vegetation, including snow
   variants; treeline trees are not scattered across open tundra. Wet-margin
@@ -55,9 +86,14 @@ code when creating a skin.
   Gates are cut where roads cross that enclosure. Wet wall segments are omitted.
   Village walls and gates are included in GeoJSON.
 - Greens use biome-specific turf, sand or moss colours, a single soft earth
-  edge and sparse botanical marks. Village shapes and junction outlines keep
+  edge and quiet ground without repeated curved texture marks. Village shapes and junction outlines keep
   their surveyed geometry; city gardens and parks use actual parcel boundaries.
   The 60 standalone variants are in `symbols/greens/`.
+- City parks plant small groves of biome-appropriate shade trees at their final
+  metre scale, with open central lawns and clear paths. Managed parks use a
+  tree-only mix, separate from wilderness scrub; complete canopy extents clear
+  buildings, streets, water and fortifications. Private garden ground remains
+  separate from public park planting.
 - Bridges use planned river crossings. Village decks follow the existing
   surveyed centreline and width. City scenes publish additive `layers.bridges`
   records for bounded wet road runs between two dry banks; roads terminating in

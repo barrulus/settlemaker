@@ -36,6 +36,7 @@ function physicalUrbanity(model: Model, patch: Patch): number {
 export function cityUrbanity(model: Model, patch: Patch): number {
   // The enclosed core uses urban spacing as well as urban occupancy. Its
   // edge must not become detached housing merely because the city is small.
+  if (model.usesCityLayout && model.wall !== null && patch.withinWalls) return 1;
   if (model.params.development && patch.zone === 'core') return 1;
   if (model.params.development) return physicalUrbanity(model,patch);
   const built=model.patches.filter(p=>p.withinCity && !model.waterbody.includes(p));

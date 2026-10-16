@@ -48,11 +48,15 @@ function modelWithPlaza(): Model {
 }
 
 describe('market cross', () => {
-  it('plaza ward emits exactly one cross and no landmark building', () => {
+  it('plaza ward retains one market marker inside its reserved court and occupied frontages', () => {
     const m = modelWithPlaza();
     const crosses = m.symbols.filter(s => s.id === 'sm-market-cross');
     expect(crosses).toHaveLength(1);
-    expect(m.plaza!.ward!.geometry).toHaveLength(0);
+    const ward=m.plaza!.ward!;
+    expect(ward.geometry.length).toBeGreaterThan(0);
+    expect(pointInPolygon(crosses[0].at,ward.publicSpace!.vertices)).toBe(true);
+    for(const building of ward.geometry)expect(pointInPolygon(crosses[0].at,building.vertices)).toBe(false);
+    expect(buildScene(m).layers.buildings.filter(b=>b.kind==='market').every(b=>!b.landmark)).toBe(true);
     expect(crosses[0].zBand).toBe('structure');
     expect(crosses[0].rotationDeg % 90).toBe(0); // snap-cardinal (manifest confirms)
   });

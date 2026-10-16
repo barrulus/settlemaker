@@ -15,8 +15,15 @@ export class Market extends Ward {
   }
 
   override createGeometry(): void {
-    if (this.model.params.development) {
+    if (this.model.usesCityLayout) {
       buildCivicBlock(this, false);
+      // Preserve the legacy market POI at the actual reserved court. The
+      // city renderer omits this old marker, but exports still use its site.
+      if(!this.model.params.development && this.model.plaza===this.patch && this.publicSpace) {
+        const at=this.publicSpace.centroid;
+        this.model.symbols.push({id:'sm-market-cross',at,scale:Math.min(3,Math.sqrt(Math.abs(this.publicSpace.square))*.4),
+          rotationDeg:0,zBand:'structure',wardType:WardType.Market});
+      }
       return;
     }
     // Only the plaza becomes a true plaza with the cross; secondary Market

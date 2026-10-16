@@ -2,6 +2,10 @@ import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import { mapToGenerationParams, MAX_PATCHES } from '../input/azgaar-input.js';
 import { Model } from '../generator/model.js';
 import { cityUrbanity } from '../generator/city-character.js';
+import { neighbourhoodCharacter, isNaturalCommon } from '../generator/city-neighbourhoods.js';
+import { timeGenerationStage, type GenerationTimingObserver } from '../generator/timing.js';
+import type { DegradedFlag } from '../generator/generation-params.js';
+import { meanBuildingArea, patchAreaForDemand } from '../generator/generation-params.js';
 import { buildingIds } from '../output/id-allocator.js';
 import { buildScene } from '../scene/build-scene.js';
 import { SCENE_VERSION, type Scene, type ScenePoint } from '../scene/scene.js';
@@ -25,6 +29,7 @@ export interface Layout {
   site: Site;
   green: Green;
   diagnostics: string[];
+  degradedFlags?: DegradedFlag[];
 }
 
 /** The block solver's mesh has a fixed engineering scale, independent of
@@ -50,7 +55,7 @@ function scaleScene(scene: Scene, k: number): void {
   delete scene.buildingCapacity;
 }
 
-export function blockLayout(input: AzgaarBurgInput, seed: number, profile: DevelopmentProfile, supply = { core: 1, outer: 1 }, landScale = 1): Layout {
+export function blockLayout(input: AzgaarBurgInput, seed: number, profile: DevelopmentProfile, supply = { core: 1, outer: 1 }, landScale = 1, onStageTiming?: GenerationTimingObserver): Layout {
   const site = buildSite({ ...input, engine: 'village' }, seed);
   const corePeople = profile.corePopulation ?? Math.ceil(input.population * .8);
   const coreBuildings = Math.ceil(corePeople / profile.centreOccupancy * supply.core);
@@ -73,10 +78,29 @@ export function blockLayout(input: AzgaarBurgInput, seed: number, profile: Devel
   const patchLimit = Math.max(MAX_PATCHES, Math.min(1200, Math.ceil(target / 26) + 2));
   params.nCore = Math.min(patchLimit - (outerBuildings > 0 ? 1 : 0), Math.max(input.population < 100 ? 4 : 8, Math.ceil(coreBuildings / 26) + 2));
   params.nPatches = Math.min(patchLimit, params.nCore + (outerBuildings > 0 ? Math.max(2, Math.ceil(outerBuildings / 24)) : 0));
-  const demandScale = .8 * Math.sqrt(.5 * Math.max(.16, coreBuildings / Math.max(1, params.nCore - 2) / 30));
-  params.development = { coreBuildings, texturePopulation: 10000, metresPerUnit: k, landScale: landScale * demandScale };
-  const model = new Model(params).generate();
-  const scene = buildScene(model);
+  // Size the enclosure for the actual bounded house grain and net coverage.
+  // The old calibration assumed tiny fringe roofs and repeatedly rebuilt the
+  // whole city after the first physical capacity estimate came up short.
+  const houseArea = meanBuildingArea(10000) * params.textureScaleOverride / .6 * .85;
+  const physicalScale = Math.max(.25, Math.sqrt(coreBuildings / Math.max(1, params.nCore - 2)
+    * houseArea / (.6 * patchAreaForDemand(10000))));
+  // Small towns retain their compact, reviewed enclosure; their local supply
+  // correction is cheap. Blend into the physical estimate before large-city
+  // retries become expensive, rather than introducing a population threshold.
+  const compactScale = .8 * Math.sqrt(.5 * Math.max(.16, coreBuildings / Math.max(1, params.nCore - 2) / 30));
+  const blend = Math.max(0,Math.min(1,(input.population-2000)/8000));
+  const demandScale = compactScale + (physicalScale-compactScale)*blend;
+  params.development = { coreBuildings, texturePopulation: 10000, metresPerUnit: k, landScale: landScale * demandScale,
+    outerLandScale: Math.sqrt(1.7) };
+  const model = new Model(params);
+  model.onStageTiming = onStageTiming;
+  model.generate();
+  const scene = timeGenerationStage('scene', onStageTiming, () => buildScene(model));
+  // Outer commons can retain a natural grove rather than a formal civic lawn.
+  // Their ground was reserved by createWards, before residential subdivision.
+  const natural = new Set(model.patches.filter(p => p.ward?.type === WardType.Park && isNaturalCommon(model,p))
+    .flatMap(p => p.ward!.geometry.map(g => `${g.vertices[0]?.x},${g.vertices[0]?.y}`)));
+  for (const g of scene.layers.greens) if (natural.has(`${g.ring[0]?.x},${g.ring[0]?.y}`)) g.purpose = 'natural';
   scaleScene(scene, k);
   const ids = buildingIds(model);
   const excluded = new Set([WardType.Castle, WardType.Cathedral, WardType.Market, WardType.Harbour, WardType.Park, WardType.Water, WardType.Empty]);
@@ -89,22 +113,27 @@ export function blockLayout(input: AzgaarBurgInput, seed: number, profile: Devel
     const urbanity = patch.zone === 'core' ? 1 : cityUrbanity(model, patch);
     const id = `district:${i}`;
     const insideWalls = model.wall !== null && patch.withinWalls;
-    districts.push({ id, urbanity, insideWalls, boundary: patch.shape.vertices.map(p => ({ x: p.x * k, y: p.y * k })) });
+    const settlementRole = patch.ward.type === WardType.Farm ? 'rural' as const : 'urban' as const;
+    districts.push({ id, urbanity, insideWalls, settlementRole,
+      character: patch.ward.type === WardType.Park ? 'green' : settlementRole === 'rural' ? 'rural'
+        : excluded.has(patch.ward.type) ? 'civic' : neighbourhoodCharacter(model, patch),
+      occupiedAreaM2: patch.ward.type === WardType.Park ? 0 : patch.ward.geometry.reduce((sum,b) => sum + Math.abs(b.square) * k * k, 0),
+      areaM2: Math.abs(patch.shape.square) * k * k,
+      boundary: patch.shape.vertices.map(p => ({ x: p.x * k, y: p.y * k })) });
     // Public neighbourhoods are still part of the city land area. Their
     // buildings contribute no residential capacity, but omitting the district
     // makes parks, squares and temple precincts look like holes in the city.
     if (excluded.has(patch.ward.type)) continue;
     for (const building of patch.ward.geometry) {
       const buildingId = ids.get(building)!;
-      buildings.push({ id: buildingId, districtId: id, footprint: footprints.get(buildingId)!, urbanity,
+      buildings.push({ id: buildingId, districtId: id, footprint: footprints.get(buildingId)!, urbanity, settlementRole,
         insideWalls, capacity: residentialCapacity(profile, urbanity), residents: 0 });
     }
   }
   const plaza = (model.plaza?.ward?.publicSpace ?? model.plaza?.shape)?.vertices.map(p => new Point(p.x * k, p.y * k));
-  if (plaza) scene.layers.greens.push({ ring: plaza, surface: 'paved' });
   return { scene, buildings, districts, site,
     green: { centre: new Point(0, 0), diameter: 0, bearingDeg: 0, shape: 'sm-green-round', variant: 'a', ...(plaza ? { outline: plaza } : {}) },
-    diagnostics: [...model.degradedFlags].map(f => `layout could not place ${f}`) };
+    degradedFlags: [...model.degradedFlags], diagnostics: [...model.degradedFlags].map(f => `layout could not place ${f}`) };
 }
 
 export function frontageLayout(input: AzgaarBurgInput, seed: number, profile: DevelopmentProfile): Layout {

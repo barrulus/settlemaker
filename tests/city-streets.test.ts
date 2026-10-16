@@ -1,7 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { buildScene, generateSettlement, generateSvg, Point, WardType, type AzgaarBurgInput } from '../src/index.js';
-import { cityLocalStreets } from '../src/generator/city-streets.js';
-import { blocksAccess, nearestOnSegment } from '../src/generator/city-frontage.js';
+import { cityLocalStreets, cityRoadReservations } from '../src/generator/city-streets.js';
+import { blocksAccess, nearestOnSegment, polygonsOverlap, segmentInside } from '../src/generator/city-frontage.js';
+import * as cityStreets from '../src/generator/city-streets.js';
+import { Farm } from '../src/wards/farm.js';
+import { Polygon } from '../src/geom/polygon.js';
+import { pointInPolygon } from '../src/geom/point-in-polygon.js';
 import { CommonWard } from '../src/wards/common-ward.js';
 import { MAIN_STREET } from '../src/wards/ward.js';
 import { edgeInsetScale } from '../src/generator/generation-params.js';
@@ -61,6 +65,48 @@ describe('small city streets', () => {
     }
     const buildings = result.model.patches.filter(p => p.ward?.type !== WardType.Park).flatMap(p => p.ward?.geometry ?? []);
     for (const street of local) expect(buildings.some(b => blocksAccess(street.a, street.b, b))).toBe(false);
+  });
+
+  it('keeps farm houses outside full street widths and painted endpoint caps', () => {
+    const { model } = city();
+    const farms = model.patches.filter(p => p.ward?.type === WardType.Farm).flatMap(p => p.ward!.geometry);
+    const reservations = cityRoadReservations(model);
+    expect(farms.length).toBeGreaterThan(0);
+    expect(reservations.length).toBeGreaterThan(20);
+    for (const farm of farms) expect(reservations.some(r => polygonsOverlap(farm, r.polygon))).toBe(false);
+    expect(model.getBuildingCapacity().shortfall).toBe(0);
+  });
+
+  it('recovers a road-obstructed farmhouse by translation within its existing field, without shrinking it', () => {
+    const actual=city().model;
+    const ignoreRoads=vi.spyOn(cityStreets,'cityRoadReservations').mockReturnValue([]);
+    let original: typeof actual;
+    try { original=city().model; } finally { ignoreRoads.mockRestore(); }
+    let recovered=0;
+    for(const [i,patch] of actual.patches.entries()) {
+      if(!(patch.ward instanceof Farm)) continue;
+      const before=original!.patches[i].ward?.geometry??[];
+      for(const house of patch.ward.geometry) {
+        if(before.some(b=>Point.distance(b.centroid,house.centroid)<1e-8)) continue;
+        const source=before.find(b=>b.length===house.length&&b.vertices.every((v,j)=>{
+          const delta=house.centroid.subtract(b.centroid);
+          return Point.distance(v.add(delta),house.vertices[j])<1e-7;
+        }));
+        expect(source).toBeDefined();
+        expect(Math.abs(house.square)).toBeCloseTo(Math.abs(source!.square),8);
+        expect(Point.distance(house.centroid,source!.centroid)).toBeLessThanOrEqual(Math.sqrt(Math.abs(source!.square))+1e-8);
+        expect(patch.ward.subPlots.some(r=>{
+          const plot=new Polygon(r);
+          return house.vertices.every((v,j)=>segmentInside(v,house.vertices[(j+1)%house.length],plot));
+        })).toBe(true);
+        for(const site of actual.claimedSites){
+          expect(pointInPolygon(site.at,house.vertices)).toBe(false);
+          for(const [j,v] of house.vertices.entries())expect(Point.distance(site.at,nearestOnSegment(site.at,v,house.vertices[(j+1)%house.length]))).toBeGreaterThan(site.radius);
+        }
+        recovered++;
+      }
+    }
+    expect(recovered).toBeGreaterThan(0);
   });
 
   it('fits painted trunk roads inside their reserved corridors while retaining explicit drawing overrides', () => {

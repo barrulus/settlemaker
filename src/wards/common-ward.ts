@@ -1,16 +1,21 @@
 import { cityUrbanity } from '../generator/city-character.js';
+import { neighbourhoodCharacter } from '../generator/city-neighbourhoods.js';
 import { Polygon } from '../geom/polygon.js';
 import { Point } from '../types/point.js';
 import { WardType } from '../types/interfaces.js';
 import { Ward, createAlleys, ALLEY } from './ward.js';
 import { rowHousing, maxLotArea, meanBuildingArea } from '../generator/generation-params.js';
 import { planCityBlock, coalesceCityRuns } from '../generator/city-blocks.js';
+import { regularizeCityFootprints } from '../generator/city-footprints.js';
 import { wardFrontages } from '../generator/city-frontage.js';
 import { SYMBOL_MANIFEST } from '../assets/symbol-manifest.js';
-import { ARTWORK_MANIFEST } from '../assets/artwork.js';
+import { ARTWORK_MANIFEST, ARTWORK_INK } from '../assets/artwork.js';
+import { resolveGlyphFor } from '../village/deck.js';
 import type { PlacedSymbol, ClaimedSite } from '../generator/symbols.js';
 import type { Model } from '../generator/model.js';
 import type { Patch } from '../generator/patch.js';
+import { landscapeHash } from '../assets/landscape-placement.js';
+import { retainUsefulCompoundNeighbours } from '../generator/city-compounds.js';
 
 export class CommonWard extends Ward {
   protected minSq: number;
@@ -18,7 +23,6 @@ export class CommonWard extends Ward {
   protected sizeChaos: number;
   protected emptyProb: number;
   cityBuildingTarget: number | null = null;
-  gardens: Array<{ring:Polygon;access:Point[]}> = [];
 
   constructor(
     model: Model, patch: Patch,
@@ -35,6 +39,7 @@ export class CommonWard extends Ward {
   override createGeometry(): void {
     this.lanes = [];
     this.gardens = [];
+    this.compounds = [];
     this.buildingFrontages.clear();
     this.streetRuns = [];
     // Village regime: dwellings are stamped along road frontages by
@@ -52,12 +57,29 @@ export class CommonWard extends Ward {
       // Demand chooses the grain, with a fixed lower bound: extra population
       // cannot make arbitrarily small buildings or erase access/courtyards.
       const meanArea = meanBuildingArea(this.model.params.development?.texturePopulation ?? this.model.params.population) * this.model.minSqScale / 0.6;
-      const minimum = meanArea * 0.45;
-      let area = Math.max(minimum, Math.min(meanArea * 2,
+      const urbanity = cityUrbanity(this.model, this.patch);
+      const compact = urbanity >= .75;
+      const mixedDenseSites = !!this.model.params.development && compact;
+      const minimum = meanArea * (this.model.params.development ? .75 : .45);
+      const maximum = meanArea * (this.model.params.development ? 1 : 2);
+      let area = Math.max(minimum, Math.min(maximum,
         Math.abs(block.square) * 0.85 / Math.max(1, this.cityBuildingTarget)));
       const streets = wardFrontages(this);
-      const compact = !!this.model.params.development && cityUrbanity(this.model, this.patch) >= .75;
-      let plan = planCityBlock(block, streets, area, alleyWidth, compact, !!this.model.params.development);
+      const character = this.model.params.development ? neighbourhoodCharacter(this.model, this.patch) : 'terraces';
+      const spacing = this.model.params.development && !compact ? {
+        gapRatio: (1 - urbanity) * (character === 'workshops' ? .65 : character === 'crofts' ? 1.6 : 1.05),
+        groupSize: character === 'crofts' ? 1 : character === 'gardens' ? 2 : character === 'workshops' ? 3 : 4,
+      } : undefined;
+      // One merchant inn and one patrician court are neighbourhood-scale
+      // variations. Rank whole districts, never stamp a compound on each lot.
+      const family = this.type===WardType.Merchant ? 'inn' as const : this.type===WardType.Patriciate ? 'courtyard-u' as const : undefined;
+      const candidates=family ? this.model.patches.filter(p=>p.ward?.type===this.type && p.withinCity)
+        .sort((a,b)=>{
+          const score=(p:Patch)=>Math.abs(p.shape.square)*(.85+.3*landscapeHash(Math.round(p.shape.centroid.x),Math.round(p.shape.centroid.y),this.model.params.seed^0x434f5552));
+          return score(b)-score(a);
+        }) : [];
+      const compound=family && candidates[0]===this.patch && this.cityBuildingTarget>=8 ? {family,biome:this.model.params.biome} : undefined;
+      let plan = planCityBlock(block, streets, area, alleyWidth, compact, true, spacing, mixedDenseSites, compound);
       // Reserve a little supply for wells and neighbouring lots lost to access
       // constraints. The final census pass trims whole run ends to the budget.
       const target = this.model.params.development ? Math.ceil(this.cityBuildingTarget)
@@ -69,18 +91,31 @@ export class CommonWard extends Ward {
       for (let trial = 0; trial < 5 && plan && this.cityBuildingTarget > 0; trial++) {
         const ratio = plan.buildings.length / target;
         if (ratio >= 1 && ratio <= 1.04) break;
-        const next = Math.max(minimum, Math.min(meanArea * 2, area * ratio));
+        const next = Math.max(minimum, Math.min(maximum, area * ratio));
         if (Math.abs(next - area) < 0.001) break;
         area = next;
-        plan = planCityBlock(block, streets, area, alleyWidth, compact, !!this.model.params.development);
+        plan = planCityBlock(block, streets, area, alleyWidth, compact, true, spacing, mixedDenseSites, compound);
         if (plan && (!best || error(plan.buildings.length) < error(best.buildings.length))) best = plan;
       }
       plan = best;
+      // A physical district has a concrete resident allocation. Optional
+      // compounds must leave enough useful houses after bounded feedback;
+      // otherwise retain ordinary rows instead of growing the entire city
+      // merely to subsidise a court on a constrained small-city block.
+      if(this.model.params.development && plan?.compounds?.length && plan.buildings.length<target){
+        plan=planCityBlock(block,streets,area,alleyWidth,compact,true,spacing,mixedDenseSites);
+      }
       if (plan?.buildings.length) {
         if (!this.model.params.development) coalesceCityRuns(plan, target);
-        const urbanity=cityUrbanity(this.model,this.patch);
-        const roofScale=this.model.params.development ? .48+.52*Math.min(1,urbanity*1.35) : .65+.35*Math.min(1,urbanity*1.35);
+        const metres = this.model.params.development?.metresPerUnit;
+        regularizeCityFootprints(plan, area, metres ? 3/metres : undefined, metres ? 16/metres**2 : undefined);
+        retainUsefulCompoundNeighbours(plan,area);
+        for (const garden of plan.gardens ?? []) this.gardens.push({ ring: garden, access: [] });
+        // Physical density changes the frontage spacing above, never house size.
+        const roofScale=this.model.params.development ? 1 : .65+.35*Math.min(1,urbanity*1.35);
+        const compoundWings=new Set(plan.compounds?.flatMap(c=>c.buildings));
         if(roofScale<.98)for(const b of plan.buildings){
+          if(compoundWings.has(b))continue;
           const c=b.centroid,front=plan.frontages.get(b);
           this.gardens.push({ring:new Polygon(b.vertices),access:front?[front.at,c]:[]});
           b.vertices=b.vertices.map(p=>new Point(c.x+(p.x-c.x)*roofScale,c.y+(p.y-c.y)*roofScale));
@@ -89,6 +124,7 @@ export class CommonWard extends Ward {
         this.lanes = plan.lanes;
         this.buildingFrontages = plan.frontages;
         this.streetRuns = plan.runs;
+        this.compounds = plan.compounds??[];
         this.tryPlaceWell();
         return;
       }
@@ -119,6 +155,44 @@ export class CommonWard extends Ward {
   // the old (discarded) lot layout — see tryPlaceWell's retraction step.
   private wellSymbol: PlacedSymbol | null = null;
   private wellSite: ClaimedSite | null = null;
+  private wellLot: Polygon | null = null;
+
+  /** Finalize artwork after all wards and the city frame exist. The old
+   * compatibility size is only a conservative planning reservation in legacy
+   * mesh units; refined artwork uses the same metre convention in both city
+   * routes. The consumed courtyard and census are unchanged. */
+  finalizeWellScale(metersPerUnit: number): void {
+    if (!this.wellSymbol || !this.wellSite || !this.wellLot) return;
+    const symbol = this.wellSymbol, lot = this.wellLot;
+    const id = resolveGlyphFor(this.model.params.biome ?? 'temperate', symbol.id);
+    const meta = ARTWORK_MANIFEST[id], ink = ARTWORK_INK[id];
+    if (!meta?.footprint || !ink || !Number.isFinite(metersPerUnit) || metersPerUnit <= 0) return;
+    const nominal = Math.max(...meta.footprint);
+    const [x0,y0,x1,y1] = ink.bounds;
+    const guardedRadius = Math.max(...[[x0,y0],[x0,y1],[x1,y0],[x1,y1]]
+      .map(([x,y])=>Math.hypot(x-meta.anchor[0],y-meta.anchor[1])/64));
+    let available = Infinity;
+    lot.forEdge((a,b)=>{
+      const length = Point.distance(a,b);
+      if (length < 1e-8) return;
+      const distance = Math.sign(lot.square)*((b.x-a.x)*(symbol.at.y-a.y)-(b.y-a.y)*(symbol.at.x-a.x))/length;
+      available = Math.min(available,distance-.002);
+    });
+    const scale = Math.min(nominal/metersPerUnit,available/guardedRadius);
+    if (!Number.isFinite(scale) || scale*metersPerUnit < nominal*meta.minScale) {
+      // Keep the communal courtyard reservation; an unsuitable site cannot
+      // justify artwork crossing another lot or a miniature well symbol.
+      this.model.symbols = this.model.symbols.filter(s=>s!==symbol);
+      this.model.claimedSites = this.model.claimedSites.filter(s=>s!==this.wellSite);
+      this.model.wellBudget++;
+      this.wellSymbol = null;
+      this.wellSite = null;
+      this.wellLot = null;
+      return;
+    }
+    symbol.scale = scale;
+    this.wellSite.radius = guardedRadius*scale;
+  }
 
   /**
    * Sacrifice one interior lot as a well courtyard. Wells CONSUME a lot
@@ -143,6 +217,7 @@ export class CommonWard extends Ward {
       m.wellBudget++;
       this.wellSymbol = null;
       this.wellSite = null;
+      this.wellLot = null;
     }
 
     if (m.wellBudget <= 0 || !CommonWard.WELL_WARDS.has(this.type)) return;
@@ -157,8 +232,11 @@ export class CommonWard extends Ward {
     if (!roll || this.geometry.length < 2) return; // never consume a ward's only building
     const c = this.patch.shape.centroid;
     let bestIdx = 0, bestD2 = Infinity;
-    for (let i = 0; i < this.geometry.length; i++) {
-      const b = this.geometry[i].centroid;
+    const ordinary = this.geometry.map((building,i)=>({building,i}))
+      .filter(({building})=>!this.compounds.some(compound=>compound.buildings.includes(building)));
+    const candidates = ordinary.length ? ordinary : this.geometry.map((building,i)=>({building,i}));
+    for (const {building,i} of candidates) {
+      const b = building.centroid;
       const d2 = (b.x - c.x) * (b.x - c.x) + (b.y - c.y) * (b.y - c.y);
       if (d2 < bestD2) { bestD2 = d2; bestIdx = i; }
     }
@@ -177,6 +255,7 @@ export class CommonWard extends Ward {
     m.claimedSites.push(site);
     this.wellSymbol = symbol;
     this.wellSite = site;
+    this.wellLot = lot;
     m.wellBudget--;
   }
 }

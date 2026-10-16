@@ -6,12 +6,15 @@ import { greenGround } from '../assets/greens-art.js';
 import { farmDetails, wallArtwork, bridgeArtwork } from './artwork.js';
 import { ARTWORK_MANIFEST, ART_TOKENS, artworkBiome, cityGlyph } from '../assets/artwork.js';
 import type { Palette } from '../types/interfaces.js';
-import type { BuildingFeature, Scene, ScenePoint } from '../scene/scene.js';
+import type { BuildingFeature, Scene, ScenePoint, SymbolInstance } from '../scene/scene.js';
 import type { AssetSet } from '../assets/asset-sets.js';
 import { assetSetFor } from '../assets/asset-sets.js';
 import type { RenderTheme } from './render-theme.js';
 import { REFINED_MANIFEST } from '../assets/refined-manifest.js';
 import { refinedStyle, resolveVarFallbacks } from '../assets/refined-style.js';
+import { linkedBuildingIds } from '../scene/symbol-buildings.js';
+import { WALL_GATE_CLEARANCE, wallTowerCanvas } from '../assets/fortification-dimensions.js';
+import { artworkPaintRadius } from '../assets/artwork-bounds.js';
 
 const NORMAL_STROKE = 0.15;
 const THICK_STROKE = 1.8;
@@ -26,13 +29,21 @@ export interface AssembleOptions {
   symbols?: boolean;
   /** Display pixels per scene unit. Omitted requests all artwork detail. */
   pixelsPerUnit?: number;
+  /** Display-only minimum for trunk/approach routes; omitted for full-quality physical exports. */
+  overviewRoadMinPixels?: number;
+  /** Preserve sub-unit viewport coordinates for adjacent raster tiles. */
+  preciseBounds?: boolean;
+  /** Omit wholly offscreen native wall motifs/towers without clipping their geometry. */
+  cullOffscreenArtwork?: boolean;
 }
 
 function fmt(n: number): string { return n.toFixed(2); }
 function fmt4(n: number): string { return n.toFixed(4); }
 
-function buildingAttribute(id?: string): string {
-  return id === undefined ? '' : ` data-building-id="${id.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]!)}"`;
+function buildingAttribute(id?: string, ids?: string[]): string {
+  const escape = (value: string) => value.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]!);
+  return (id === undefined ? '' : ` data-building-id="${escape(id)}"`)
+    + (ids === undefined ? '' : ` data-building-ids="${escape(ids.join(' '))}"`);
 }
 
 function glyphTransform(
@@ -45,6 +56,19 @@ function glyphTransform(
   // Scale along local art axes, then rotate the placement about its anchor.
   const [ax, ay] = anchor ?? [c, c];
   return `translate(${fmt(at.x)},${fmt(at.y)}) rotate(${rotationDeg}) scale(${fmt4(scale / n)},${fmt4(scaleY / viewBox[3])}) translate(${-ax},${-ay})`;
+}
+
+/** Wells are low street furniture: the building-sized theme displacement can
+ * detach their shadow entirely. Keep its direction, bounded by the prop size. */
+function propShadowCorrection(symbol: SymbolInstance, offset: RenderTheme['shadowOffset']): string {
+  if (!/^sm-well(?:--|$)/.test(symbol.id)) return '';
+  // Match the actual parent transform, including its output precision.
+  const dx = Number(fmt(offset.dx)), dy = Number(fmt(offset.dy));
+  const distance = Math.hypot(dx, dy);
+  const limit = 0.1 * Math.min(symbol.scale, symbol.scaleY ?? symbol.scale);
+  if (distance <= limit) return '';
+  const ratio = limit / distance;
+  return `translate(${fmt4(dx * (ratio - 1))},${fmt4(dy * (ratio - 1))}) `;
 }
 
 function ringPath(ring: ScenePoint[]): string {
@@ -116,6 +140,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   const showSymbols = options.symbols !== false;
   const b = scene.bounds;
   const w = b.max_x - b.min_x, h = b.max_y - b.min_y;
+  const frame = (value: number) => value.toFixed(options.preciseBounds ? 6 : 1);
   const L = scene.layers;
   const pixels = options.pixelsPerUnit;
   const detailedTree = (scale: number) => pixels === undefined || scale * pixels >= 16;
@@ -131,7 +156,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     return Math.min(s.scale / meta.footprint[0], (s.scaleY ?? s.scale) / meta.footprint[1]) * meters >= meta.minScale;
   });
   const structureSymbols = visibleSymbols.filter(s => s.zBand === 'structure');
-  const renderedBuildings = new Set(structureSymbols.map(s => s.buildingId).filter(Boolean));
+  const renderedBuildings = new Set(structureSymbols.flatMap(s => [...linkedBuildingIds(s)]));
   const markSymbols = visibleSymbols.filter(s => s.zBand === 'overlay');
 
   const usedKinds = [...new Set(L.vegetation.filter(v => detailedTree(v.scale)).map(v => v.kind))];
@@ -145,7 +170,14 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   for (const s of visibleSymbols) if (assets.glyphs?.[s.id]) glyphIds.add(s.id);
   for (const f of L.fields) if (fieldDetail && f.glyph && assets.glyphs?.[f.glyph]) glyphIds.add(f.glyph);
   const towerId = cityGlyph('castle-tower-round', scene.biome);
-  if(L.walls.length && assets.glyphs?.[towerId]) glyphIds.add(towerId);
+  const visibleTowers = (wall: Scene['layers']['walls'][number]) => wall.towers.filter(t => {
+    if(wall.gates.some(g=>Math.hypot(t.x-(g.p1.x+g.p2.x)/2,t.y-(g.p1.y+g.p2.y)/2)<WALL_GATE_CLEARANCE))return false;
+    // Unmeasured custom glyphs retain the original conservative behaviour.
+    if(!options.cullOffscreenArtwork||skin||options.assetSet)return true;
+    const radius=artworkPaintRadius(towerId,wallTowerCanvas(wall.large))+.02;
+    return t.x+radius>=b.min_x&&t.x-radius<=b.max_x&&t.y+radius>=b.min_y&&t.y-radius<=b.max_y;
+  });
+  if(L.walls.some(w=>!options.cullOffscreenArtwork||visibleTowers(w).length) && assets.glyphs?.[towerId]) glyphIds.add(towerId);
   const materialId = (s: typeof visibleSymbols[number]) => `glyph-${s.id}${assets.name === 'settlement' && !skin?.overrides.has(s.id) && s.materialVariant ? `-tone-${s.materialVariant}` : ''}`;
   const fixedRoof = options.theme?.buildingFill !== undefined
     || (!options.palette && (skin?.city.buildingFill !== undefined
@@ -179,11 +211,11 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     return `<pattern id="${nativePatternId(f)}" patternUnits="userSpaceOnUse" width="${fmt4(pitch)}" height="${fmt4(pitch)}" patternTransform="rotate(${bucketOf(f.angleDeg)})"><use href="#glyph-${f.glyph}" transform="scale(${fmt4(k)})"/></pattern>`;
   }).join('');
   const parts: string[] = [];
-  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${b.min_x.toFixed(1)} ${b.min_y.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}">`);
-  parts.push(`<defs><clipPath id="${clipId}"><rect x="${b.min_x.toFixed(1)}" y="${b.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"/></clipPath>${patternDefs}${nativePatterns}${symbolDefs}${glyphDefs}${materialDefs}</defs>`);
+  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${frame(b.min_x)} ${frame(b.min_y)} ${frame(w)} ${frame(h)}">`);
+  parts.push(`<defs><clipPath id="${clipId}"><rect x="${frame(b.min_x)}" y="${frame(b.min_y)}" width="${frame(w)}" height="${frame(h)}"/></clipPath>${patternDefs}${nativePatterns}${symbolDefs}${glyphDefs}${materialDefs}</defs>`);
   parts.push(`<style>\n${themeToCss(theme, assets.refined)}\n${assets.refined ? refinedStyle(tokens) : ''}\n</style>`);
   // data-bg contract with cropSvgToTile: attribute markup + inline fill.
-  parts.push(`<rect data-bg="paper" x="${b.min_x.toFixed(1)}" y="${b.min_y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="${theme.paper}"/>`);
+  parts.push(`<rect data-bg="paper" x="${frame(b.min_x)}" y="${frame(b.min_y)}" width="${frame(w)}" height="${frame(h)}" fill="${theme.paper}"/>`);
 
   if (L.fields.length > 0) {
     parts.push('<g id="fields">');
@@ -250,9 +282,12 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     const lanes = L.roads.map(r => {
       const key = r.kind === 'artery' ? 'arteryWidth' : r.kind === 'road' ? 'roadWidth' : undefined;
       const explicitWidth = key ? options.theme?.[key] ?? (!options.palette ? skin?.city[key] : undefined) : undefined;
+      const width = explicitWidth ?? r.width ?? (r.kind === 'artery' ? theme.arteryWidth : theme.roadWidth);
+      const important = r.role === 'trunk' || r.role === 'approach' || (!r.role && r.kind !== 'alley');
+      const minimum = important && pixels && options.overviewRoadMinPixels ? options.overviewRoadMinPixels / pixels : 0;
       return {
         path: linePath(r.path),
-        width: explicitWidth ?? r.width ?? (r.kind === 'artery' ? theme.arteryWidth : theme.roadWidth),
+        width: Math.max(width, minimum),
         reserved: r.width !== undefined && explicitWidth === undefined,
       };
     });
@@ -277,7 +312,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     for (const bld of shadowable) parts.push(`<path${buildingAttribute(bld.id)} d="${ringPath(bld.ring)}"/>`);
     for (const s of structureSymbols) {
       if (!assets.glyphs![s.id].sil) continue;
-      parts.push(`<use href="#glyph-${s.id}-sil"${buildingAttribute(s.buildingId)} transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor, s.scaleY)}"/>`);
+      parts.push(`<use href="#glyph-${s.id}-sil"${buildingAttribute(s.buildingId, s.buildingIds)} transform="${propShadowCorrection(s, theme.shadowOffset)}${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor, s.scaleY)}"/>`);
     }
     parts.push('</g>');
   }
@@ -305,7 +340,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   if (structureSymbols.length > 0) {
     parts.push('<g id="symbols">');
     for (const s of [...structureSymbols].sort((a, b) => a.at.y - b.at.y)) {
-      parts.push(`<use href="#${materialId(s)}"${buildingAttribute(s.buildingId)} transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor, s.scaleY)}"/>`);
+      parts.push(`<use href="#${materialId(s)}"${buildingAttribute(s.buildingId, s.buildingIds)} transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor, s.scaleY)}"/>`);
     }
     parts.push('</g>');
   }
@@ -314,12 +349,11 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     parts.push('<g id="walls">');
     for (const wallF of L.walls) {
       if(assets.name==='settlement'){
-        parts.push(wallArtwork(wallF,scene.biome));
+        parts.push(wallArtwork(wallF,scene.biome,options.cullOffscreenArtwork?b:undefined));
         const g=assets.glyphs?.[towerId];
-        if(g)for(const t of wallF.towers){
+        if(g)for(const t of visibleTowers(wallF)){
           // Leave real gate openings clear, even where a legacy tower coincides with a gate vertex.
-          if(wallF.gates.some(g=>Math.hypot(t.x-(g.p1.x+g.p2.x)/2,t.y-(g.p1.y+g.p2.y)/2)<4))continue;
-          parts.push(`<use href="#glyph-${towerId}" transform="${glyphTransform(t,wallF.large?6:4.8,0,g.viewBox,g.anchor)}"/>`);
+          parts.push(`<use href="#glyph-${towerId}" transform="${glyphTransform(t,wallTowerCanvas(wallF.large),0,g.viewBox,g.anchor)}"/>`);
         }
         continue;
       }
@@ -357,7 +391,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   if (markSymbols.length > 0) {
     parts.push('<g id="marks">');
     for (const s of [...markSymbols].sort((a, b) => a.at.y - b.at.y)) {
-      parts.push(`<use href="#${materialId(s)}"${buildingAttribute(s.buildingId)} transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor, s.scaleY)}"/>`);
+      parts.push(`<use href="#${materialId(s)}"${buildingAttribute(s.buildingId, s.buildingIds)} transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor, s.scaleY)}"/>`);
     }
     parts.push('</g>');
   }

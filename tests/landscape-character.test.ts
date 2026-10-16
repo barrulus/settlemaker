@@ -93,8 +93,13 @@ describe('biome landscape character',()=>{
     };
     expect(coverage(true)).toBeGreaterThan(coverage(false)*1.6);
     expect(r.model.patches.filter(p=>p.ward instanceof Park).length).toBeGreaterThan(1);
-    expect(buildScene(r.model).layers.greens.length).toBeGreaterThan(30);
-    expect(r.geojson.features.filter(f=>f.properties?.kind==='garden').length).toBe(r.model.patches.reduce((n,p)=>n+(p.ward instanceof CommonWard?p.ward.gardens.length:0),0));
+    const scene=buildScene(r.model);
+    expect(scene.layers.greens.length).toBeGreaterThan(30);
+    // Civic corner parcels now reserve yards too; both public outputs must
+    // include every ward's private ground, not just residential gardens.
+    const gardens=r.model.patches.reduce((n,p)=>n+(p.ward?.gardens.length??0),0);
+    expect(r.geojson.features.filter(f=>f.properties?.kind==='garden').length).toBe(gardens);
+    expect(scene.layers.greens.filter(g=>g.purpose==='private'&&g.surface!=='paved').length).toBe(gardens);
     expect(r.model.symbols.filter(s=>s.id.startsWith('sm-house')).length).toBeGreaterThan(10);
     expect(new Set(r.model.symbols.map(s=>s.materialVariant??0)).size).toBe(5);
     expect(r.svg).toContain('roof-tone-4');

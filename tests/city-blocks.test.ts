@@ -12,6 +12,32 @@ function input(population: number) {
 }
 
 describe('street-led city blocks', () => {
+  it('gives narrow dense houses rear yards while retaining deep tenement sites', () => {
+    const site = polygon([[0, 0], [60, 0], [60, 20], [0, 20]]);
+    const streets: Array<WardLane & {kind:'street'}> = [];
+    site.forEdge((a,b) => streets.push({a,b,width:.6,kind:'street'}));
+    const area = 8, ordinaryDepth = Math.sqrt(area * 1.15);
+    const plan = planCityBlock(site, streets, area, .36, true, true, undefined, true)!;
+    expect(plan.gardens!.length).toBeGreaterThan(20);
+    const dimensions = plan.buildings.map(b => {
+      const f = plan.frontages.get(b)!, length = Point.distance(f.a, f.b);
+      const ax = (f.b.x-f.a.x)/length, ay = (f.b.y-f.a.y)/length;
+      const depths = b.vertices.map(p => -ay*p.x+ax*p.y);
+      return Math.max(...depths)-Math.min(...depths);
+    });
+    expect(dimensions.filter(d => Math.abs(d-ordinaryDepth)<1e-7).length).toBeGreaterThan(20);
+    expect(dimensions.filter(d => Math.abs(d-ordinaryDepth*Math.SQRT2)<1e-7).length).toBeGreaterThan(5);
+    for (const garden of plan.gardens!) for (const house of plan.buildings) {
+      const ring = (p:Polygon) => p.vertices.map(v => [v.x,v.y] as [number,number]);
+      const overlap = polygonClipping.intersection([ring(garden)],[ring(house)]);
+      expect(overlap.reduce((sum,p) => sum+Math.abs(polygon(p[0]).square),0)).toBeLessThan(1e-7);
+    }
+    for (const house of plan.buildings) {
+      const f = plan.frontages.get(house)!;
+      for (const other of plan.buildings) if (house!==other) expect(blocksAccess(house.centroid,f.at,other)).toBe(false);
+    }
+  });
+
   it('forms long attached terraces in dense quarters instead of little square compounds', () => {
     const site=polygon([[0,0],[60,0],[60,20],[0,20]]);
     const streets: Array<WardLane & {kind:'street'}>=[];
@@ -108,6 +134,17 @@ describe('street-led city blocks', () => {
       for (const other of plan.buildings) if (other !== building) expect(blocksAccess(building.centroid, f.at, other)).toBe(false);
       for (const lane of plan.lanes) expect(blocksAccess(lane.a, lane.b, building)).toBe(false);
     }
+  });
+
+  it('does not invent one thirty-metre strip house to satisfy a smaller quota',()=>{
+    const buildings=Array.from({length:4},(_,i)=>polygon([[i*7.5,0],[i*7.5+7.45,0],[i*7.5+7.45,3.7],[i*7.5,3.7]]));
+    const frontage={a:new Point(0,0),b:new Point(30,0),at:new Point(0,0),width:.6,kind:'street' as const};
+    const plan={buildings,lanes:[],runs:[[...buildings]],frontages:new Map(buildings.map(b=>[b,{...frontage,at:nearestOnSegment(b.centroid,frontage.a,frontage.b)}]))};
+    coalesceCityRuns(plan,1);
+    // The later budget pass may trim real run ends; coalescing may not fake
+    // a single household footprint by fusing an unbuildable 30x3.7m roof.
+    expect(plan.buildings).toHaveLength(4);
+    expect(plan.buildings).toEqual(buildings);
   });
 
   it('checks the whole footprint against narrow water, enclosed ponds and islands', () => {

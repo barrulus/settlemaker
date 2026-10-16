@@ -5,7 +5,7 @@ import { pointInPolygon } from '../../geom/point-in-polygon.js';
 import { SeededRandom } from '../../utils/random.js';
 import {
   bearingOf, bearingVector, closestPointOnSegment, dist, greenDrawnRadius, inAnyWater,
-  wrapDeg,
+  wrapDeg, segmentIntersection,
 } from '../geometry.js';
 import { lotObb, type Obb } from '../parcels/overlap.js';
 import {
@@ -363,6 +363,7 @@ interface LaneSeg {
   clearanceM: number;
 }
 interface Obstacles {
+  completeClaims?: boolean;
   cells: Map<string, { claims: Obstacle[]; segs: LaneSeg[] }>;
   water: Point[][];
 }
@@ -463,6 +464,22 @@ function firstBlocker(
   for (const p of parcelSamples(poly)) {
     const blocker = blockerAt(p, obs);
     if (blocker !== null) return { at: p, blocker };
+  }
+  if(obs.completeClaims) {
+    // A small farmhouse may be wholly INSIDE a large field without touching
+    // any edge sample or its centroid. Check contained claims and crossings,
+    // using the same obstacle grid, before accepting the physical parcel.
+    const claims=new Set<Obstacle>();
+    const minX=Math.floor(Math.min(...poly.map(p=>p.x))/OBSTACLE_CELL_M),maxX=Math.floor(Math.max(...poly.map(p=>p.x))/OBSTACLE_CELL_M);
+    const minY=Math.floor(Math.min(...poly.map(p=>p.y))/OBSTACLE_CELL_M),maxY=Math.floor(Math.max(...poly.map(p=>p.y))/OBSTACLE_CELL_M);
+    for(let x=minX;x<=maxX;x++)for(let y=minY;y<=maxY;y++)for(const claim of obs.cells.get(`${x},${y}`)?.claims??[])claims.add(claim);
+    for(const obstacle of claims) {
+      for(const at of obstacle.poly)if(pointInPolygon(at,poly))return {at,blocker:{kind:'claim',obstacle}};
+      for(let i=0;i<poly.length;i++)for(let j=0;j<obstacle.poly.length;j++) {
+        const at=segmentIntersection(poly[i],poly[(i+1)%poly.length],obstacle.poly[j],obstacle.poly[(j+1)%obstacle.poly.length]);
+        if(at)return {at,blocker:{kind:'claim',obstacle}};
+      }
+    }
   }
   return null;
 }
@@ -809,52 +826,74 @@ export interface FieldsResult {
  * Never throws. An empty result means the region was walled off entirely
  * (water, claims, corridors) or every parcel was culled.
  */
+/** Optional shared physical-planner region, decided before rural homes and
+ * access reserve ground. Legacy callers retain their original field RNG/order. */
+export interface FieldRegionPlan {
+  belt: Point[];
+  region: Point[];
+  fabricRadius: number;
+  /** Non-convex cultivated edge; subdivision starts from its convex cover. */
+  cultivatedBoundary?: Point[];
+}
+
+export function planFieldRegion(site: Site, green: Green, lots: Lot[], crofts: Croft[], rng: SeededRandom,
+  housedLotIds?: ReadonlySet<string>, maxRegionDepthM?: number): FieldRegionPlan {
+  const fabricRadius=computeFabricRadius(green,lots,crofts,housedLotIds);
+  const belt=beltPolygon(green,builtEdgeExtent(green,lots,crofts,housedLotIds),rng);
+  const region=regionHull(green,belt,Math.max(0,site.population)*FIELD_M2_PER_CAPITA/FIELD_REGION_EFFICIENCY,rng,maxRegionDepthM);
+  return {belt,region,fabricRadius};
+}
+
 export function buildFields(
   site: Site, green: Green, lanes: Lane[], lots: Lot[], crofts: Croft[], rng: SeededRandom,
   housedLotIds?: ReadonlySet<string>,
   reservations: Point[][] = [],
-  options: { maxRegionDepthM?: number; parcelAreaM2?: number; maxCutDepth?: number; approachLaneIds?: ReadonlySet<string> } = {},
+  options: { maxRegionDepthM?: number; parcelAreaM2?: number; maxCutDepth?: number; approachLaneIds?: ReadonlySet<string>; regionPlan?: FieldRegionPlan;
+    refineAround?: { claims: Point[][]; targetAreaM2: number; maxDepth?: number } } = {},
 ): FieldsResult {
-  const fabricRadius = computeFabricRadius(green, lots, crofts, housedLotIds);
-  const edge = builtEdgeExtent(green, lots, crofts, housedLotIds);
-
-  const belt = beltPolygon(green, edge, rng);
-  const demand = Math.max(0, site.population) * FIELD_M2_PER_CAPITA;
-  const region = regionHull(green, belt, demand / FIELD_REGION_EFFICIENCY, rng, options.maxRegionDepthM);
+  const plan=options.regionPlan??planFieldRegion(site,green,lots,crofts,rng,housedLotIds,options.maxRegionDepthM);
+  const {fabricRadius,belt,region}=plan;
+  const outerBoundary=plan.cultivatedBoundary??region;
 
   const obstacles = buildObstacles(lots, crofts, lanes, site.water, reservations);
+  obstacles.completeClaims=options.regionPlan!==undefined;
   const roads = exitRoads(green, options.approachLaneIds ? lanes.filter(l=>options.approachLaneIds!.has(l.id)) : lanes, belt);
   const leaves: Point[][] = [];
   subdivide(region, 0, belt, roads, rng, leaves, options.parcelAreaM2, options.maxCutDepth);
 
   const crops = fieldKinds(site.biome, site.biome === 'desert' || site.freshwaterIrrigation === true);
-  if (!crops.length) return { blocks: [], edges: [], outerRadius: fabricRadius, regionPolygon: region };
+  if (!crops.length) return { blocks: [], edges: [], outerRadius: fabricRadius, regionPolygon: outerBoundary };
 
   const blocks: FieldBlock[] = [];
   let outerRadius = fabricRadius;
-  let ordinal = 0;
-  for (const leaf of leaves) {
-    rng.float(); // Preserve the crop draw in the independent dressing stream.
-    const furrowRoll = rng.float();
-    const fringeRoll = rng.float();
-
+  const refinement=options.refineAround;
+  const refinementObstacles=refinement?.claims.length?buildObstacles([],[],[],[],refinement.claims):null;
+  if(refinementObstacles)refinementObstacles.completeClaims=true;
+  // One acceptance path serves coarse and locally refined leaves. Existing
+  // coarse RNG draws and ordinals are evaluated first and remain unchanged for
+  // every unaffected field, including its glyph, identity and furrow bearing.
+  const accept=(leaf:Point[],furrowRoll:number,fringeRoll:number,id:string,cropOrdinal:number):FieldBlock|null=> {
     // `subdivide` has already taken the village out of every cell small
     // enough for the local clip to be sound; this catches the rare leaf
     // that came out of a corridor cut above that size.
     const clipped = clipOutsideBelt(leaf, belt);
-    if (clipped.length < 3) continue;
+    if (clipped.length < 3) return null;
     const parcel = insetConvex(clipped, FIELD_BAULK_M);
-    if (parcel.length < 3) continue;
-    if (polygonArea(parcel) < FIELD_MIN_BLOCK_AREA_M2) continue;
+    if (parcel.length < 3) return null;
+    if (polygonArea(parcel) < FIELD_MIN_BLOCK_AREA_M2) return null;
     // The fringe cull: a fifth of the parcels standing on the region's own
     // outer boundary are dropped, so the farmland ends raggedly against the
     // waste rather than being drawn out flush along a straight hull side.
     if (fringeRoll < FIELD_FRINGE_CULL_CHANCE
-      && parcel.some((p) => distToBoundary(p, region) <= FIELD_BAULK_M + FIELD_FRINGE_TOL_M)) continue;
+      && parcel.some((p) => distToBoundary(p, region) <= FIELD_BAULK_M + FIELD_FRINGE_TOL_M)) return null;
     const cleared = trimToClearGround(parcel, obstacles);
-    if (cleared.length < 3) continue;
+    if (cleared.length < 3) return null;
+    // Whole irregular fringe parcels taper into uncultivated ground. This
+    // physical-only boundary was also used to place farmsteads; do not replace
+    // it with the subdivision's coarse convex cover.
+    if(plan.cultivatedBoundary && cleared.some(p=>!pointInPolygon(p,plan.cultivatedBoundary!)))return null;
     const clearArea = polygonArea(cleared);
-    if (clearArea < FIELD_MIN_BLOCK_AREA_M2) continue;
+    if (clearArea < FIELD_MIN_BLOCK_AREA_M2) return null;
 
     // A splinter -- the offcut left beside a road corridor, a claim or the
     // belt -- measured on the TRIMMED parcel, which is the shape drawn.
@@ -863,22 +902,42 @@ export function buildFields(
     const across = extentAlong(cleared, axis + 90);
     const lengthM = along.hi - along.lo;
     const widthM = across.hi - across.lo;
-    if (!(lengthM > 0) || widthM < FIELD_PARCEL_MIN_ASPECT * lengthM) continue;
+    if (!(lengthM > 0) || widthM < FIELD_PARCEL_MIN_ASPECT * lengthM) return null;
 
     const furrow = wrapDeg(axis + furrowRoll * FIELD_JITTER_RANGE_DEG - FIELD_JITTER_RANGE_DEG / 2);
-    blocks.push({
-      id: `field:P${ordinal}`,
+    return {
+      id,
       furlongId: `furlong:${Math.floor(bearingOf(green.centre, polygonCentroid(cleared)) / 30)}`,
-      glyph: crops[ordinal % crops.length],
+      glyph: crops[cropOrdinal % crops.length],
       polygon: cleared,
       furrowBearingDeg: furrow,
       areaM2: clearArea,
-    });
-    ordinal += 1;
-    for (const p of cleared) outerRadius = Math.max(outerRadius, dist(green.centre, p));
+    };
+  };
+  let ordinal=0;
+  for(const [leafIndex,leaf] of leaves.entries()) {
+    rng.float();
+    const furrowRoll=rng.float(),fringeRoll=rng.float(),cropOrdinal=ordinal;
+    const coarse=accept(leaf,furrowRoll,fringeRoll,`field:P${ordinal}`,ordinal);
+    if(coarse)ordinal++;
+    let accepted=coarse?[coarse]:[];
+    if(refinement&&refinementObstacles&&polygonArea(leaf)>refinement.targetAreaM2*2&&firstBlocker(leaf,refinementObstacles)) {
+      const localRng=new SeededRandom(rng.getSeed()^Math.imul(leafIndex+1,0x4649454c));
+      const localLeaves:Point[][]=[];
+      subdivide(leaf,0,belt,[],localRng,localLeaves,refinement.targetAreaM2,Math.min(6,refinement.maxDepth??5));
+      const refined:FieldBlock[]=[];
+      for(const [i,child] of localLeaves.entries()) {
+        localRng.float();
+        const block=accept(child,localRng.float(),localRng.float(),`field:R${leafIndex}:${i}`,cropOrdinal+i);
+        if(block)refined.push(block);
+      }
+      if(refined.length)accepted=refined;
+    }
+    blocks.push(...accepted);
+    for(const block of accepted)for(const p of block.polygon)outerRadius=Math.max(outerRadius,dist(green.centre,p));
   }
 
   return {
-    blocks, edges: [], outerRadius, regionPolygon: region, ...(site.flags.walls ? {innerBoundary:belt}:{}),
+    blocks, edges: [], outerRadius, regionPolygon: outerBoundary, ...(site.flags.walls ? {innerBoundary:belt}:{}),
   };
 }

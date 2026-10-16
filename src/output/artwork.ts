@@ -1,16 +1,26 @@
 import { wall, bridge } from '../assets/infrastructure-art.js';
 import { artworkBiome, ARTWORK_MANIFEST } from '../assets/artwork.js';
 import type { ScenePoint, WallFeature } from '../scene/scene.js';
+import { WALL_ART_SCALE, WALL_GATE_CLEARANCE, wallArtWidth, wallPaintWidth } from '../assets/fortification-dimensions.js';
+import { boundsOfPoints } from '../geom/bounds.js';
+import type { LocalBounds } from '../generator/bounds.js';
 
 const n=(v:number)=>Number(v.toFixed(4));
 const path=(pts:ScenePoint[],close=false)=>pts.map((p,i)=>`${i?'L':'M'}${n(p.x)},${n(p.y)}`).join(' ')+(close?'Z':'');
 const light=(s:string)=>`<g transform="translate(0.3,0.4)" color="var(--sm-shadow-color, #46303c)" opacity="var(--sm-shadow-opacity, .2)">${s}</g>`;
 
 /** Draw along real centreline geometry, in a constant art-to-world scale. */
-export function wallArtwork(w: WallFeature, biome?: string): string {
-  const k=.15, body:string[]=[],shadows:string[]=[];
+export function wallArtwork(w: WallFeature, biome?: string, viewport?: LocalBounds): string {
+  const k=WALL_ART_SCALE, body:string[]=[],shadows:string[]=[];
   for(const line of w.polylines){
     if(line.length<2)continue;
+    if(viewport&&!line.slice(1).some((b,i)=>{
+      // Complete paths preserve closed joins, gate caps and motif phase.
+      // The margin includes the fixed (.3,.4) shadow and rounding guard.
+      const box=boundsOfPoints([line[i],b],wallPaintWidth(w.large)/2+.7);
+      return box.min_x<=viewport.max_x&&box.max_x>=viewport.min_x
+        &&box.min_y<=viewport.max_y&&box.max_y>=viewport.min_y;
+    }))continue;
     const points=line.map(p=>[p.x/k,p.y/k]);
     const gates:Array<{at:number;width:number}>=[];
     for(const g of w.gates){
@@ -19,16 +29,17 @@ export function wallArtwork(w: WallFeature, biome?: string): string {
         const a=line[i-1],b=line[i],dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy),t=Math.max(0,Math.min(1,((c.x-a.x)*dx+(c.y-a.y)*dy)/(len*len||1)));
         const d=Math.hypot(a.x+t*dx-c.x,a.y+t*dy-c.y);if(d<best){best=d;at=offset+t*len;}offset+=len;
       }
-      if(best<2)gates.push({at:at/k,width:Math.max(4,Math.hypot(g.p2.x-g.p1.x,g.p2.y-g.p1.y))/k});
+      if(best<2)gates.push({at:at/k,width:Math.max(WALL_GATE_CLEARANCE,Math.hypot(g.p2.x-g.p1.x,g.p2.y-g.p1.y))/k});
     }
     const length=line.slice(1).reduce((s,p,i)=>s+Math.hypot(p.x-line[i].x,p.y-line[i].y),0)/k;
     if(Math.hypot(line[0].x-line.at(-1)!.x,line[0].y-line.at(-1)!.y)<1e-6){
       for(const g of [...gates]){if(g.at<g.width/2)gates.push({...g,at:g.at+length});if(g.at+g.width/2>length)gates.push({...g,at:g.at-length});}
     }
-    const a=wall(points,{biome:artworkBiome(biome),kind:w.material??'curtain',width:w.large?14:12,gates: gates as never[]});
+    const detailBounds=viewport?[viewport.min_x/k,viewport.min_y/k,viewport.max_x/k,viewport.max_y/k]:undefined;
+    const a=wall(points,{biome:artworkBiome(biome),kind:w.material??'curtain',width:wallArtWidth(w.large),gates: gates as never[],detailBounds});
     body.push(`<g transform="scale(${k})">${a.body}</g>`);shadows.push(`<g transform="scale(${k})">${a.sil}</g>`);
   }
-  return light(shadows.join(''))+body.join('');
+  return viewport&&!body.length?'':light(shadows.join(''))+body.join('');
 }
 
 /** A bent crossing is divided into its surveyed straight runs. Width is never stretched with span. */

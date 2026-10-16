@@ -1,7 +1,6 @@
 import { cityLocalStreets } from '../generator/city-streets.js';
 import { MAIN_STREET } from '../wards/ward.js';
 import { edgeInsetScale } from '../generator/generation-params.js';
-import { CommonWard } from '../wards/common-ward.js';
 import { selectFloraAt } from '../assets/landscape-placement.js';
 import { fieldKinds, ARTWORK_MANIFEST } from '../assets/artwork.js';
 import { cityCrossings } from './crossings.js';
@@ -68,30 +67,31 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
         at: sc(s.at), scale: s.scale, rotationDeg: s.rotationDeg, zBand: s.zBand,
         ...(s.scaleY !== undefined ? { scaleY: s.scaleY } : {}),
         ...(s.building && ids.has(s.building) ? { buildingId: ids.get(s.building) } : {}),
+        ...(s.buildings ? { buildingIds: s.buildings.flatMap(b => ids.has(b) ? [ids.get(b)!] : []) } : {}),
       })),
       roads: [], buildings: [], piers: [], walls: [],
     },
   };
 
   for (const artery of model.arteries) {
-    scene.layers.roads.push({ path: ring(artery.vertices), kind: 'artery',
+    scene.layers.roads.push({ path: ring(artery.vertices), kind: 'artery', role: 'trunk',
       ...(model.usesCityLayout ? { width: MAIN_STREET * edgeInsetScale(model.params.development?.texturePopulation ?? model.params.population) } : {}),
     } as RoadFeature);
   }
   for (const road of model.roads) {
-    scene.layers.roads.push({ path: ring(road.vertices), kind: 'road',
+    scene.layers.roads.push({ path: ring(road.vertices), kind: 'road', role: 'approach',
       ...(model.usesCityLayout ? { width: MAIN_STREET * edgeInsetScale(model.params.development?.texturePopulation ?? model.params.population) } : {}),
     } as RoadFeature);
   }
 
   for (const street of cityLocalStreets(model)) {
-    scene.layers.roads.push({ path: ring([street.a, street.b]), kind: 'alley', width: street.width });
+    scene.layers.roads.push({ path: ring([street.a, street.b]), kind: 'alley', role: 'street', width: street.width });
   }
 
   for (const patch of model.patches) {
     const ward = patch.ward;
     if (!ward) continue;
-    for (const lane of ward.lanes) scene.layers.roads.push({ path: ring([lane.a, lane.b]), kind: 'alley', width: lane.width });
+    for (const lane of ward.lanes) scene.layers.roads.push({ path: ring([lane.a, lane.b]), kind: 'alley', role: 'service', width: lane.width });
     if (ward instanceof Farm) {
       for (let i = 0; i < ward.subPlots.length; i++) {
         const plot = ward.subPlots[i];
@@ -110,18 +110,21 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
     }
     if (ward.type === WardType.Park) {
       for (const grove of ward.geometry) {
-        scene.layers.greens.push({ ring: ring(grove.vertices), ...(ward instanceof Park && ward.paths.length
+        scene.layers.greens.push({ purpose: 'public', ring: ring(grove.vertices), ...(ward instanceof Park && ward.paths.length
           ? { paths: ward.paths.map(ring), pathWidth: ward.pathWidth } : {}) });
       }
       continue; // groves are greens, not buildings
     }
-    if(ward instanceof CommonWard)for(const garden of ward.gardens)scene.layers.greens.push({ring:ring(garden.ring.vertices),paths:garden.access.length?[ring(garden.access)]:[],pathWidth:.3});
+    for(const garden of ward.gardens)scene.layers.greens.push({purpose: 'private',ring:ring(garden.ring.vertices),paths:garden.access.length?[ring(garden.access)]:[],pathWidth:.3});
+    for(const compound of ward.compounds)for(const court of compound.courts)
+      scene.layers.greens.push({purpose:'private',surface:'paved',ring:ring(court.vertices)});
+    if(ward.publicSpace)scene.layers.greens.push({purpose:'civic',surface:'paved',ring:ring(ward.publicSpace.vertices)});
     for (const poly of ward.geometry) {
       scene.layers.buildings.push({
         id: ids.get(poly),
         ring: ring(poly.vertices),
         kind: String(ward.type),
-        landmark: LANDMARK_TYPES.has(ward.type) && !(ward.type === WardType.Market && model.params.development)
+        landmark: LANDMARK_TYPES.has(ward.type) && !(ward.type === WardType.Market && ward.publicSpace)
           && (ward.type !== WardType.Cathedral || !ward.principalBuilding || poly === ward.principalBuilding),
         ...(model.glyphBackedBuildings.has(poly) ? { glyphBacked: true as const } : {}),
       } as BuildingFeature);
@@ -242,7 +245,7 @@ function scatterVegetation(
   for (const patch of model.patches) {
     const ward = patch.ward;
     if (!ward || ward.type !== WardType.Park || !ward.geometry.length) continue;
-    if (ward instanceof Park && ward.paths.length) {
+    if (ward instanceof Park && model.usesCityLayout) {
       for (const tree of ward.trees) scene.layers.vegetation.push({ ...tree, at: sc(tree.at) });
       continue;
     }

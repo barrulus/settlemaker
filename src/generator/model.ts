@@ -1,6 +1,8 @@
 import { connectCityLanes } from './city-streets.js';
 import { VILLAGE_POP_CEILING } from '../input/settlement-engine.js';
 import { cityUrbanity } from './city-character.js';
+import { neighbourhoodCharacter, suburbanCommons } from './city-neighbourhoods.js';
+import { timeGenerationStage, type GenerationTimingObserver } from './timing.js';
 import { Point } from '../types/point.js';
 import { Polygon } from '../geom/polygon.js';
 import { Segment } from '../geom/segment.js';
@@ -33,9 +35,13 @@ import { Slum } from '../wards/slum.js';
 import { Harbour } from '../wards/harbour.js';
 import { CommonWard } from '../wards/common-ward.js';
 import { CraftsmenWard } from '../wards/craftsmen-ward.js';
+import { MerchantWard } from '../wards/merchant-ward.js';
+import { PatriciateWard } from '../wards/patriciate-ward.js';
+import { Park } from '../wards/park.js';
 import { buildWardDistribution, type WardConstructor } from '../wards/ward-distribution.js';
 import type { PlacedSymbol, ClaimedSite } from './symbols.js';
-import { placeCityGlyphs } from './city-glyphs.js';
+import { placeCityGlyphs, cityMetersPerUnit } from './city-glyphs.js';
+import { plantCityParks } from './park-planting.js';
 import { overlapsWater } from './city-frontage.js';
 import { stampVillageRows } from './village-rows.js';
 
@@ -127,6 +133,8 @@ function rescueDetachedPier(pier: Polygon, inWater: (p: Point) => boolean): Poly
 }
 
 export class Model {
+  /** Optional profiling observer; never changes generated state. */
+  onStageTiming?: GenerationTimingObserver;
   /** Legacy low-population direct calls keep their original layout unless explicitly selected as cities. */
   get usesCityLayout(): boolean {
     return this.params.cityLayout === true || this.params.population > VILLAGE_POP_CEILING;
@@ -386,20 +394,22 @@ export class Model {
     this.roads = [];
     this.plazaRingSegments = new Set();
 
-    this.buildPatches();
-    this.optimizeJunctions();
-    this.buildWalls();
-    this.classifyWater();
-    this.placeHarbour();
+    timeGenerationStage('topology', this.onStageTiming, () => {
+      this.buildPatches();
+      this.optimizeJunctions();
+      this.buildWalls();
+      this.classifyWater();
+      this.placeHarbour();
+    });
     // `buildWalls` towered the circuit against the gate set as it stood then;
     // `classifyWater` drops waterfront road gates and `placeHarbour` adds the
     // sea gate, so a coastal wall's gate set is only final here. Re-tower so
     // a demoted gate gets its tower back and the harbour gate doesn't get one.
     // Deterministic and gate-driven — a no-op when nothing moved the gates.
     if (this.wall !== null && this.waterbody.length > 0) this.wall.buildTowers();
-    this.buildStreets();
-    this.createWards();
-    this.buildGeometry();
+    timeGenerationStage('roads', this.onStageTiming, () => this.buildStreets());
+    timeGenerationStage('neighbourhoods', this.onStageTiming, () => this.createWards());
+    timeGenerationStage('plots', this.onStageTiming, () => this.buildGeometry());
   }
 
   // Phase 1: Build Voronoi patches
@@ -458,8 +468,9 @@ export class Model {
     // the synthetic ring's radius is chosen for this pass; classifyWater
     // just reads the cached rings back.
     this.ensureWaterRings(coreR);
+    const outerScale = this.params.development?.outerLandScale ?? 1;
     const uniformR = this.params.development
-      ? Math.max(4 * coreR, s0 * Math.sqrt(this.nPatches / Math.PI) * 1.3) : 4 * coreR;
+      ? Math.max(4 * coreR, s0 * Math.sqrt(this.nPatches / Math.PI) * 1.3 * outerScale) : 4 * coreR;
     const maxR = Math.max(12 * coreR, uniformR * 2);
     const points: Point[] = [new Point(0, 0)];
     let r = s0 * 0.6;
@@ -467,7 +478,9 @@ export class Model {
       const a = sa + i * GOLDEN_ANGLE;
       const jr = r * (0.9 + 0.2 * rng.float());
       points.push(new Point(Math.cos(a) * jr, Math.sin(a) * jr));
-      const s = r <= uniformR ? s0 : s0 * (1 + (r - uniformR) / coreR);
+      const transition = Math.max(0, Math.min(1, (r - coreR * 1.2) / (coreR * 1.5)));
+      const localScale = 1 + (outerScale - 1) * transition * transition * (3 - 2 * transition);
+      const s = (r <= uniformR ? s0 : s0 * (1 + (r - uniformR) / coreR)) * localScale;
       r += (s * s) / (2 * Math.PI * r);
     }
 
@@ -1370,10 +1383,17 @@ export class Model {
       }
     }
 
-    // Extramural fabric: ordinary wards, denser near the walls, poorer further out.
+    // Physical neighbourhoods reserve commons before demand is allocated.
+    const commons = this.params.development ? suburbanCommons(this) : new Set<Patch>();
+    // Extramural fabric: coherent neighbourhood forms follow access and edge depth.
     for (const patch of this.patches) {
       if (patch.ward !== null) continue;
-      if (patch.zone === 'suburb') patch.ward = new CraftsmenWard(this, patch);
+      if (commons.has(patch)) patch.ward = new Park(this, patch);
+      else if (patch.zone === 'suburb') {
+        const character = this.params.development ? neighbourhoodCharacter(this, patch) : 'terraces';
+        patch.ward = character === 'workshops' ? new MerchantWard(this, patch)
+          : character === 'gardens' ? new PatriciateWard(this, patch) : new CraftsmenWard(this, patch);
+      }
       else if (patch.zone === 'satellite') patch.ward = new Slum(this, patch);
     }
 
@@ -1534,7 +1554,8 @@ export class Model {
     // survivor count itself via `countOrdinaryBuildingsPublic()`.
     stampVillageRows(this, buildingBudget(this.params.population, this.params.urbanDensity));
     connectCityLanes(this);
-    placeCityGlyphs(this);
+    timeGenerationStage('glyphs', this.onStageTiming, () => placeCityGlyphs(this));
+    if(city)timeGenerationStage('parks', this.onStageTiming, () => plantCityParks(this, cityMetersPerUnit(this)));
   }
 
   /** Allocate demand to the available urban land before drawing rows. The

@@ -7,6 +7,9 @@ export interface DevelopmentOptions {
   centreOccupancy?: number;
   /** Capacity of a detached dwelling at the rural edge. Default 4. */
   edgeOccupancy?: number;
+  /** Explicit rural share of the same total demand. City preset only; default 0.
+   * Zero retains existing farm occupancy without planning additional hamlets. */
+  ruralPopulation?: number;
 }
 
 export interface DevelopmentProfile {
@@ -14,6 +17,7 @@ export interface DevelopmentProfile {
   corePopulation: number | null;
   centreOccupancy: number;
   edgeOccupancy: number;
+  ruralPopulation: number;
 }
 
 export function resolveDevelopment(population: number, walls: boolean, input: DevelopmentOptions): DevelopmentProfile {
@@ -30,7 +34,12 @@ export function resolveDevelopment(population: number, walls: boolean, input: De
   if (corePopulation !== null && (!walls || !Number.isSafeInteger(corePopulation) || corePopulation < 0 || corePopulation > population)) {
     throw new RangeError('corePopulation requires walls and must be an integer between zero and population');
   }
-  return { preset: input.preset, centreOccupancy, edgeOccupancy, corePopulation };
+  const ruralPopulation = input.ruralPopulation ?? 0;
+  if (!Number.isSafeInteger(ruralPopulation) || ruralPopulation < 0 || ruralPopulation >= population
+    || ruralPopulation + (corePopulation ?? 0) > population || (ruralPopulation > 0 && input.preset !== 'city')) {
+    throw new RangeError('ruralPopulation requires city development, must leave at least one urban resident and cannot borrow from corePopulation');
+  }
+  return { preset: input.preset, centreOccupancy, edgeOccupancy, corePopulation, ruralPopulation };
 }
 
 /** Capacity is fixed before residents are assigned; a shortage never raises it. */

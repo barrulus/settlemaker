@@ -7,6 +7,10 @@ import type { Model } from '../generator/model.js';
 import type { Patch } from '../generator/patch.js';
 import { SYMBOL_MANIFEST } from '../assets/symbol-manifest.js';
 import { intersectsSite } from '../generator/symbols.js';
+import { cityRoadReservations } from '../generator/city-streets.js';
+import { boundsOfPoints } from '../geom/bounds.js';
+import { polygonsOverlap, segmentInside, nearestOnSegment } from '../generator/city-frontage.js';
+import { pointInPolygon } from '../geom/point-in-polygon.js';
 
 const MIN_SUBPLOT = 400;
 const MIN_FURROW = 1.3;
@@ -82,11 +86,37 @@ export class Farm extends Ward {
     // Generate farmstead buildings (20% per subplot), skipping the mill plot
     // and rejecting any that overlap the mill's clearance radius.
     this.buildings = [];
+    const roads=m.usesCityLayout?cityRoadReservations(m):[];
     for (let i = 0; i < this.subPlots.length; i++) {
       if (i === this.millPlotIndex) continue;
       if (rng.bool(0.2)) {
         const h = this.getHousing(this.subPlots[i]);
-        if (!intersectsSite(h, m.claimedSites)) this.buildings.push(h);
+        const clear = (candidate: Polygon) => {
+          const bounds=boundsOfPoints(candidate.vertices);
+          return !intersectsSite(candidate,m.claimedSites)&&!roads.some(r=>bounds.min_x<=r.bounds.max_x&&bounds.max_x>=r.bounds.min_x
+            &&bounds.min_y<=r.bounds.max_y&&bounds.max_y>=r.bounds.min_y&&polygonsOverlap(candidate,r.polygon));
+        };
+        if (clear(h)) this.buildings.push(h);
+        else if (roads.length && !intersectsSite(h,m.claimedSites)) {
+          // An edge-corner farmhouse can intrude into a reserved street. Try
+          // four short inward moves in its own field before giving up. Keep
+          // the same real footprint and random draws; never borrow a new lot.
+          const plot=new Polygon(this.subPlots[i]), origin=h.centroid;
+          const inward=plot.centroid.subtract(origin), distance=inward.length;
+          if(distance>1e-8){
+            inward.normalize(1);
+            const step=Math.sqrt(Math.abs(h.square))*.25;
+            for(const factor of [1,2,3,4]){
+              const shift=Math.min(distance,step*factor);
+              const moved=new Polygon(h.vertices.map(p=>new Point(p.x+inward.x*shift,p.y+inward.y*shift)));
+              const touchesSite=m.claimedSites.some(site=>pointInPolygon(site.at,moved.vertices)
+                ||moved.vertices.some((p,j)=>Point.distance(site.at,nearestOnSegment(site.at,p,moved.vertices[(j+1)%moved.length]))<=site.radius));
+              if(!touchesSite&&clear(moved)&&moved.vertices.every((p,j)=>segmentInside(p,moved.vertices[(j+1)%moved.length],plot))){
+                this.buildings.push(moved);break;
+              }
+            }
+          }
+        }
       }
     }
 

@@ -34,6 +34,68 @@ Use positive populations. The high-level API is typed but is not a complete
 validator of arbitrary input JSON. Validate external data in your application;
 water context and skin definitions have their own explicit validation gates.
 
+## Retained rendering sessions
+
+`createSettlementSession(burg, options)` generates once and keeps the model for
+viewport rendering, appearance changes and exports. Its options are the existing
+`GenerateSettlementOptions`, or `SettlementOptions` with an explicit
+`development` preset. It does not create SVG or GeoJSON until requested.
+
+```js
+import { createSettlementSession, BUILD_INFO } from 'settlemaker';
+
+const session = createSettlementSession(burg, {
+  seed: 42, development: { preset: 'city' },
+});
+const preview = session.renderView({ width: 1200, detail: 'auto' });
+const recoloured = session.renderView({ appearance: { theme: 'blueprint' } });
+const fullSvg = session.renderFull();
+const geojson = session.exportGeoJson();
+console.log(session.metadata, BUILD_INFO);
+```
+
+`renderView` accepts `bounds: {min_x,min_y,max_x,max_y}` in the session's output
+coordinate system, display `width`, and `detail: 'auto' | 'full'`. Optional
+`appearance` accepts a named `theme` (`null` restores natural biome colours) and
+partial `style` overrides. Appearance applies to that call; it does not change
+the retained model or later calls. Changing skins requires a new session because
+a skin can change the generation biome. Automatic views apply a 1.5-display-pixel
+minimum to important road depiction; `overviewRoadMinPixels: 0` disables it.
+Physical street widths and full exports are unaffected.
+
+`renderFull(appearance?)` returns all artwork at the original generated bounds,
+independent of the current camera or preview detail. `exportGeoJson()` is lazy.
+The session metadata includes resolved seed, planner, build and schema revisions,
+coordinate/scale provenance, original bounds, diagnostics, resident accounts when
+available and measured generation/index stages. Timing observations are outside
+the deterministic geometry model; nested stages must not be summed as independent
+work. Scene revisions identify one retained session and are not persistent IDs.
+
+Physical plans use metres. Legacy city scenes retain mesh coordinates and their
+estimated metre scale. Legacy villages retain the separate full SVG renderer;
+`supportsViewport` is false, `originalBounds` describes its zero-based SVG frame,
+and `villageTransform` records the metre-to-SVG conversion. Do not infer units
+from population or translate a city estimate into a surveyed measurement.
+
+Native city/physical artwork uses an immutable spatial index with measured glyph
+bounds. Current queries retain complete water/wall structures. Unbounded custom
+skins/asset sets conservatively retain all geometry instead of risking clipped
+artwork. Treat `session.scene` as read-only; mutating retained geometry invalidates
+its index. Viewport queries account for current appearance, including changed
+shadow offsets, and retain crossing roads and linked building footprints.
+
+`BUILD_INFO` supplies worker-protocol, scene and engine versions plus a source
+content digest in `build:lib` artifacts. Hosts should compare the actual worker
+and page values before using them. Plain TypeScript/source builds expose a clearly
+labelled `source-<package version>` fallback, not a unique artifact digest.
+Workers must recreate skins from their JSON definitions in their own module.
+
+For lower-level legacy usage, `createCityModel(burg, options?)` preserves the
+city's coastal probing, output origin and degradation ladder without creating
+outputs. `createLegacySettlementModel(burg, options?)` adds automatic/explicit
+village selection and returns a `kind` discriminator with the retained model.
+Existing convenience functions keep their original result shapes and outputs.
+
 ## Burg input
 
 The name `AzgaarBurgInput` reflects the original integration; you do not need an
