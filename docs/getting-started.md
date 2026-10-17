@@ -1,6 +1,6 @@
 # Getting started
 
-SettleMaker is an ES module library. The examples and 3.1 release checks use
+SettleMaker is an ES module library. The examples and 4.0 release checks use
 Node 24. A source checkout also includes an optional Nix development shell; Nix is not required to install or use the npm package.
 
 ## Node.js

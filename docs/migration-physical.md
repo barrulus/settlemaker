@@ -1,9 +1,8 @@
 # Migrating to physical planning
 
-The working tree retires the legacy public city/village generation and schema-4
+SettleMaker 4.0 retires the legacy public city/village generation and schema-4
 exports. This is a breaking API change; the previous published release remains
-available for consumers that need to reproduce old geometry. It needs a major
-release before publication.
+available for consumers that need to reproduce old geometry. Version 4.0 is the major release for this change.
 
 ## Generation and models
 

@@ -1,6 +1,6 @@
 # SettleMaker documentation
 
-These guides describe the working tree after legacy API retirement. The declarations shipped in `dist/`
+These guides describe SettleMaker 4.0 after legacy API retirement. The declarations shipped in `dist/`
 and the corresponding [source](../src/index.ts) are the complete type reference.
 
 ## Start here
@@ -35,6 +35,7 @@ and the corresponding [source](../src/index.ts) are the complete type reference.
 
 - [Development](development.md): build, checks, documentation images and release workflow.
 - [Example URLs](test-urls.md): reproducible fixtures for integration checks.
+- [4.0.0 release notes](releases/4.0.0.md): physical-only public APIs and migration.
 - [3.1.0 release notes](releases/3.1.0.md): new planning and rendering APIs, artwork improvements and upgrade considerations.
 - Earlier releases: [3.0.1](releases/3.0.1.md) and [3.0.0](releases/3.0.0.md).
 
@@ -42,7 +43,7 @@ and the corresponding [source](../src/index.ts) are the complete type reference.
 
 | Contract | Current value | Meaning |
 | --- | --- | --- |
-| npm package | 3.1.0 | A specific engine and documentation release. |
+| npm package | 4.0.0 | A specific engine and documentation release. |
 | Physical GeoJSON `metadata.schema_version` | 1 | Separate `settlemaker/physical-plan` contract in local metres. |
 | `SettlementModel.version` | 1 | Physical planner model structure; generator revision is recorded separately. |
 | `Scene.version` | 2 | Shared physical scene for both layouts. |
