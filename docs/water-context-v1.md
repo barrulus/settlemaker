@@ -23,7 +23,7 @@ type WaterContextV1 =
       status: 'measured';
       coordinateSpace: 'burg-local-metres';
       surveyRadiusM: number;
-      geometryErrorM: number; // declared maximum physical boundary approximation error, <= 0.5 m
+      geometryErrorM: number; // map geometry approximation error, <= 0.5 m; not modelled river-width accuracy
       omittedRivers?: Array<{ riverId?: string; reason: 'local-width-unavailable' }>;
       bodies: Array<{
         featureId?: string; // actual water feature, not the adjacent land feature
@@ -52,6 +52,13 @@ malformed objects and unsupported coordinate spaces are errors, not legacy input
 `geometryErrorM` must be finite, nonnegative and no greater than 0.5 m. It describes
 approximation of the authoritative map boundary, not the real-world survey
 accuracy of that boundary. `coastApproximation` is invalid for a lake.
+For rivers with `widthSource: 'fmg-local-width-model'`, this budget applies to
+the exported FMG source course (polyline for older payloads, or the declared
+interpolated course for newer payloads),
+not agreement with the painted river boundary, its visual midline, or the
+accuracy of the estimated widths and resulting banks.
+Such inputs produce an `approximate` result and a
+`water-river-width-modelled` warning even when their ocean/lake boundaries are measured.
 
 When polygons are supplied, `polygonIndices` associates a body's summary with
 its own polygons. This avoids comparing an ocean distance with a nearby river
@@ -63,14 +70,15 @@ polygons remain authoritative geometry (for example, a legacy river polygon),
 but must not be used to validate an unrelated ocean/lake summary.
 
 Feature summaries do not claim to describe a whole lake shape. Existing
-`coastlineGeometry` supplies filled polygons; existing `rivers` supplies village
-river surveys. In measured village mode both remain burg-local metres.
+`coastlineGeometry` supplies filled polygons; `rivers` supplies river courses and
+widths. Both layouts consume these in burg-local metres.
 
 ## 1. Coverage without knowing the final frame
 
-**FMG's default survey radius is 3000 metres**, centred on the burg. This is an
-explicit protocol requirement, independent of population-based layout heuristics,
-seed, harbour cells and FMG's grid spacing. A caller may survey a larger radius.
+**The minimum survey radius is 3000 metres**, centred on the burg. The updated
+FMG sender starts with 3000 metres for villages and 4000 metres for cities.
+These defaults are not a guarantee of coverage for every seed or layout. A caller
+may explicitly request a larger radius; the consumer reports required coverage.
 
 FMG must identify every ocean/lake water area intersecting that disc, including
 any body containing the burg. `bodies: []` means none intersects it. Distance to
@@ -220,8 +228,99 @@ Do not send a river twice through `rivers` and `coastlineGeometry`; include rive
 polygons in the latter only when that river is not also supplied as a survey.
 `port` and `harbourSize` control infrastructure, never water visibility or distance.
 A port without an accessible nearby real shoreline produces a nonfatal
-`water-context-conflict` and no dock/jetty placement. Keep the settlement and water
-at their supplied locations; do not pull a coast inward to satisfy `port`.
+`water-context-conflict` and no dock/jetty placement. Keep water at its supplied
+location; do not pull a coast inward to satisfy `port`. The explicit river-port
+placement rule below may move the generated town within this coordinate frame.
+
+Without measured context or supplied polygons, a direction-only city coast is
+illustrative. Its generated shape is aligned with the physical city enclosure so
+the waterfront is accessible at city housing density. For a large port, generated
+headlands shelter about the inner half of the basin, forming a local inlet around
+the working quay. The city is then laid out against that shoreline, including
+its walls, access and buildings.
+This adjustment never moves supplied polygons, measured shores or independent
+rivers. Direction alone cannot reproduce FMG's displayed coastline.
+
+### Harbour infrastructure
+
+Physical cities reserve a harbour before neighbouring buildings and streets are
+generated. `harbourWaterKind?: 'ocean' | 'lake' | 'river'` identifies the port's
+adjacent water body; it does not add water or move the shoreline. FMG obtains
+this from the haven's feature, falling back to the local river where applicable.
+For river ports FMG also sends `harbourRiverId`, matching `rivers[].id`, from the
+burg cell's river association. A downstream lake used as the port's navigation
+feature does not replace that local river association.
+
+### Riverfront town placement
+
+A physical city explicitly marked `port: true` and `harbourWaterKind: 'river'`
+can move its generated centre toward its associated river bank. This corrects
+cartographic burg-marker offsets: FMG nudges river burgs by up to 0.6 map units,
+which can represent hundreds of metres at the selected map scale.
+
+The planner uses `harbourRiverId` to choose the intended river. A single
+unambiguous river can serve legacy callers without that identifier. A missing
+named river or multiple ambiguous rivers must not cause attachment to a
+different channel. The centre approaches an exposed bank on the original dry
+side, with centre-to-bank spacing derived from the physical city enclosure.
+Already-close towns keep their position; relocation must not cross other water.
+
+The source burg remains `(0, 0)`. River courses, widths, water polygons and survey
+coverage remain in that original frame. Only the generated town centre changes;
+buildings, streets, harbour, rural housing and farmland are planned together at
+the new location. Final survey coverage still checks distance from the original
+burg, including the displaced landscape and navigation clearance.
+
+`SettlementModel.placement`, session metadata and physical GeoJSON metadata
+record `{ kind: 'riverfront', riverId?, offsetM: { x, y },
+originalBankDistanceM, targetBankDistanceM }`. These are planning decisions,
+not corrections to the supplied geographic measurements. A diagnostic reports
+the displacement. Ordinary inland settlements and lake/ocean ports do not use
+this riverfront relocation rule.
+
+For a river-port city with an outer residential budget, the planner can reserve
+a connected neighbourhood on the opposite bank before houses are placed.
+Its road starts at an existing town gate, crosses one bounded river span with
+dry landings, and continues into the reserved neighbourhood. The bridge span
+uses a short crossing between the banks; dry approaches bend to meet it rather
+than forcing the bridge to follow a diagonal mesh edge. Harbour working ground
+and navigation space remain protected. Up to 70% of the outer district budget
+and housing demand is reserved for this neighbourhood, subject to available
+land. The bridge also carries urban access into its density calculation, so
+the opposite bank can develop streets and a denser interior. Residents come
+from the existing outer population allocation rather than being added to the
+census, and explicit walled population targets are preserved. Unsupported wide
+crossings do not receive a speculative bridge or ferry.
+
+Farmland and rural houses share a dry-ground connectivity check. Water divides
+the bounded countryside into components; only components connected to the town
+by dry ground or an actual road bridge are accessible. A detached bridge symbol
+does not establish access. Inaccessible existing farm buildings are excluded
+before resident allocation, and new farmsteads and fields use the same rule.
+Where no crossing fits, the opposite bank remains uncultivated.
+
+### Quays and navigation
+
+The planner fits a dry working quay, warehouse lots and connected cart access to
+the available shoreline. A large open-water port receives a compact basin,
+shore-connected enclosing arms, an offset entrance and a clear approach where
+space permits. Basin depth follows berth and manoeuvring clearance; additional
+empty water area is not a reason to extend the walls farther offshore.
+An existing inlet can supply shelter. Lakes omit ocean breakwaters, and river
+approaches follow the channel. Narrow sites can fall back to a landing with a
+diagnostic instead of claiming a basin that does not fit. These are geometric
+navigation checks; FMG does not supply water depth, wave exposure or tides.
+
+The natural water polygons remain unchanged. Quays, breakwaters and short berths
+are separate built structures. Roofed warehouse artwork, planking, masonry,
+bollards, cranes and beacons distinguish their uses. The scene's optional
+`layers.harbours` and physical GeoJSON expose the basin, entrance, approach,
+structures and fixtures; piers link back through `harbour_id`.
+
+Run `npm run build && node scripts/review-harbours.mjs` to regenerate close-up,
+city and landscape SVG/PNG views plus physical GeoJSON in `output/harbour-review/`.
+The fixtures include the original Tetlapan link and a measured coastal city whose
+supplied geometry deliberately contradicts its legacy ocean bearing.
 
 ## 3. Physical units and cities
 
@@ -247,10 +346,33 @@ from the authoritative river representation, transformed consistently into
 metres. Changing the display unit must not rescale an already kilometre-valued
 river width.
 
-Do not substitute mouth width for a missing local width silently. For measured
-water v1, a `rivers` survey's `widthM` must be a locally established width; use
-explicit local river polygons where the channel varies materially across the
-village. If only mouth width is available, omit the unsupported local survey and
+Do not substitute mouth width for a missing local width silently. A `rivers`
+entry contains `centreline`, a positive `widthM` fallback and optional positive
+`widthsM` values, one per centreline vertex. Widths interpolate between vertices;
+use `meander: false` to preserve an already shaped source course. Variable-width
+courses do not need to be split into separate channels. Alternatively supply
+explicit filled river polygons, without duplicating the same river as a course.
+
+FMG may evaluate its local flow-width model along the complete source course,
+retaining cumulative flux and original point indices before clipping to the
+survey. Export these estimates with `widthSource: 'fmg-local-width-model'`,
+`meander: false`, and optionally an `id` identifying the source river. The model's
+kilometre-valued result converts to metres independently of map distance units.
+This does not turn the stylized width of FMG's drawn river into a measured bank
+survey. Settlemaker reports `water-river-width-modelled` and marks the result
+`approximate`; supplied coast geometry still retains its own precision contract.
+
+`courseSource: 'fmg-catmull-rom-0.1'` identifies a course interpolated through
+the complete edited/meandered source anchors using FMG's Catmull–Rom family
+with alpha 0.1. The exporter constructs the curves before clipping so the survey
+edge does not change their tangents. It adaptively flattens relevant curves in
+metres and rounds coordinates within the declared geometry error budget.
+Local widths interpolate between the original anchor stations. The consumer
+preserves this already shaped course rather than introducing new random bends.
+FMG's painted bank outlines are separately offset and rounded; this provenance
+does not claim their stylized thickness as physical river width.
+
+If only mouth width is available, omit the unsupported local survey and
 show a nonfatal `water-river-local-width-unavailable` warning inside Settlemaker.
 FMG communicates that omission through optional `waterContext.omittedRivers`,
 an array of `{ riverId?: string, reason: 'local-width-unavailable' }`. This is
@@ -266,18 +388,17 @@ are kilometres. Audit each measurement by its source unit; kilometre-valued
 context windows and corridor distances also need the selected-unit conversion
 when their underlying measurements were made in map coordinates.
 
-**City scaling is owned by Settlemaker, not guessed by FMG.** FMG's future measured
-city payload must also use metres. A city implementation must establish and
-publish its physical `metresPerMeshUnit`, use it consistently for water, buildings,
-roads, frame and output, and define its own survey envelope. A viewBox, SVG pixel
-scale, Voronoi radius or `urbanDensity` is not that conversion.
+**City scaling is owned by Settlemaker, not guessed by FMG.** Both physical
+layouts accept metre-valued water context. The block layout uses a fixed
+3 metres per mesh unit internally, then returns water, buildings, roads and
+frame in metres. A viewBox, SVG pixel scale, Voronoi radius or `urbanDensity`
+is not that conversion. Both layouts remain subject to survey coverage checks.
 
-Until that work exists, `waterContext` on a selected city (including an
-800-person city), or on automatic selection above population 1,000, returns
-`water-context-unsupported-engine`; it must never reinterpret metres as mesh
-units. FMG does not enable this new mode for cities yet. Legacy city URLs keep
-their existing contract and do not gain a geographic-accuracy guarantee from this
-village rollout. This restriction is deliberate and visible, not a silent no-op.
+The updated FMG exporter permits measured villages and cities through an opted-in
+renderer URL. Deploy the supporting consumer before enabling that sender; a
+direction-only city URL does not gain geographic accuracy merely because the
+consumer now supports measured cities. Existing shared URLs keep their original
+payload and need regeneration in FMG to carry actual coastal geometry.
 
 ## 4. Output, transport and rollout requirements
 

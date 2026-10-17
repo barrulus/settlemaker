@@ -13,7 +13,7 @@ export type WaterContextV1 = {
 } | { version: 1; status: 'unknown-units'; sourceUnit: string };
 export type WaterIssueCode = 'water-coverage-exceeded' | 'water-geometry-required'
   | 'water-context-conflict' | 'water-units-unknown' | 'water-context-unsupported-engine'
-  | 'water-context-invalid' | 'water-river-local-width-unavailable';
+  | 'water-context-invalid' | 'water-river-local-width-unavailable' | 'water-river-width-modelled';
 export interface WaterContextResult {
   version: 1;
   status: 'measured' | 'approximate' | 'unknown-units' | 'error';
@@ -38,8 +38,25 @@ const finite = (x: unknown): x is number => typeof x === 'number' && Number.isFi
 const point = (x: unknown): boolean => record(x) && finite(x.x) && finite(x.y);
 function invalid(why: string): never { throw new WaterContextError('water-context-invalid', why); }
 
+function validateRivers(rivers: unknown): void {
+  if (!Array.isArray(rivers) || !rivers.every(r => record(r) && finite(r.widthM) && r.widthM > 0
+      && Array.isArray(r.centreline) && r.centreline.length >= 2 && r.centreline.every(point)
+      && (r.meander === undefined || typeof r.meander === 'boolean')
+      && (r.id === undefined || typeof r.id === 'string')
+      && (r.widthSource === undefined || r.widthSource === 'fmg-local-width-model')
+      && (r.courseSource === undefined || r.courseSource === 'fmg-catmull-rom-0.1')
+      && (r.widthsM === undefined || Array.isArray(r.widthsM) && r.widthsM.length === r.centreline.length
+        && r.widthsM.every(w => finite(w) && w > 0)))) invalid('Invalid local river survey.');
+}
+
 /** Validate at both the URL and direct-library boundaries. Never downgrade a new context to legacy. */
 export function validateWaterContext(input: AzgaarBurgInput, engine?: SettlementEngine): void {
+  if (input.harbourRiverId !== undefined && (typeof input.harbourRiverId !== 'string' || !input.harbourRiverId.trim()))
+    invalid('harbourRiverId must be a nonempty source river identifier.');
+  // Width profiles/provenance are explicit survey contracts even when a legacy
+  // caller does not supply an ocean/lake waterContext envelope.
+  if (Array.isArray(input.rivers) && input.rivers.some(r => record(r)
+    && ['widthsM', 'widthSource', 'courseSource', 'id'].some(key => Object.hasOwn(r, key)))) validateRivers(input.rivers);
   if (!Object.hasOwn(input, 'waterContext')) return;
   const c: unknown = input.waterContext;
   if (!record(c) || c.version !== 1) invalid('Unsupported or malformed waterContext version.');
@@ -78,9 +95,5 @@ export function validateWaterContext(input: AzgaarBurgInput, engine?: Settlement
   }
   if (c.omittedRivers !== undefined && (!Array.isArray(c.omittedRivers) || !c.omittedRivers.every(r =>
     record(r) && r.reason === 'local-width-unavailable' && (r.riverId === undefined || typeof r.riverId === 'string')))) invalid('Invalid omittedRivers.');
-  if (Object.hasOwn(input, 'rivers')) {
-    if (!Array.isArray(input.rivers) || !input.rivers.every(r => record(r) && finite(r.widthM) && r.widthM > 0
-      && Array.isArray(r.centreline) && r.centreline.length >= 2 && r.centreline.every(point)
-      && (r.meander === undefined || typeof r.meander === 'boolean'))) invalid('Invalid local river survey.');
-  }
+  if (Object.hasOwn(input, 'rivers')) validateRivers(input.rivers);
 }

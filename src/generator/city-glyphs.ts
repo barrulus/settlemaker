@@ -228,7 +228,11 @@ export function placeCityGlyphs(model: Model): void {
         model.glyphBackedBuildings.add(building);
         continue;
       }
-      const use=semantic.get(ids.get(building)??'');
+      // Physical harbour lots are purpose-built warehouse footprints with
+      // quay access. An adopted shop/inn POI must not replace that planned
+      // architecture or relax its normal footprint coverage and size limits.
+      const use: string | undefined = ward.type === WardType.Harbour && model.params.development
+        ? undefined : semantic.get(ids.get(building) ?? '');
       const roll=landscapeHash(Math.round(building.centroid.x*10),Math.round(building.centroid.y*10),model.params.seed);
       const ruralHome=resolveGlyphFor(model.params.biome??'temperate',roll<.5?'sm-house':'sm-house-tiled');
       const detached = model.params.development

@@ -8,13 +8,19 @@ import { prepareWaterBoundary, waterBoundarySegments } from './water-boundary.js
 export function prepareMeasuredInput(input: AzgaarBurgInput): { input: AzgaarBurgInput; result?: WaterContextResult } {
   validateWaterContext(input, 'village');
   const c = input.waterContext;
-  if (!c) return { input };
+  if (!c) return input.rivers?.some(r => r.widthSource === 'fmg-local-width-model')
+    ? { input, result: { version: 1, status: 'approximate', issues: [{ code: 'water-river-width-modelled' }] } }
+    : { input };
   const result: WaterContextResult = { version: 1, status: c.status, issues: [] };
   if (c.status === 'unknown-units') {
     result.issues.push({ code: 'water-units-unknown' });
     return { input: { ...input, oceanBearing: undefined, port: false }, result };
   }
   if (c.omittedRivers?.length) result.issues.push({ code: 'water-river-local-width-unavailable' });
+  if (input.rivers?.some(r => r.widthSource === 'fmg-local-width-model')) {
+    result.status = 'approximate';
+    result.issues.push({ code: 'water-river-width-modelled' });
+  }
   let polygons = input.coastlineGeometry;
   if (!Object.hasOwn(input, 'coastlineGeometry')) {
     const relevant = c.bodies.filter(b => b.distanceM <= c.surveyRadiusM);

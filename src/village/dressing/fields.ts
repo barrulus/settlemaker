@@ -849,6 +849,7 @@ export function buildFields(
   housedLotIds?: ReadonlySet<string>,
   reservations: Point[][] = [],
   options: { maxRegionDepthM?: number; parcelAreaM2?: number; maxCutDepth?: number; approachLaneIds?: ReadonlySet<string>; regionPlan?: FieldRegionPlan;
+    accessible?: (point: Point) => boolean;
     refineAround?: { claims: Point[][]; targetAreaM2: number; maxDepth?: number } } = {},
 ): FieldsResult {
   const plan=options.regionPlan??planFieldRegion(site,green,lots,crofts,rng,housedLotIds,options.maxRegionDepthM);
@@ -892,6 +893,7 @@ export function buildFields(
     // physical-only boundary was also used to place farmsteads; do not replace
     // it with the subdivision's coarse convex cover.
     if(plan.cultivatedBoundary && cleared.some(p=>!pointInPolygon(p,plan.cultivatedBoundary!)))return null;
+    if(options.accessible && cleared.some(p=>!options.accessible!(p)))return null;
     const clearArea = polygonArea(cleared);
     if (clearArea < FIELD_MIN_BLOCK_AREA_M2) return null;
 

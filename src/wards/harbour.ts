@@ -4,6 +4,8 @@ import { WardType } from '../types/interfaces.js';
 import { Ward, createAlleys } from './ward.js';
 import type { Model } from '../generator/model.js';
 import type { Patch } from '../generator/patch.js';
+import { planHarbour, type HarbourPlan } from './harbour-plan.js';
+import { nearestOnSegment } from '../generator/city-frontage.js';
 
 /**
  * Bisect a segment known to cross the painted shoreline (`a` and `b` on
@@ -86,15 +88,42 @@ function pickSeaward(
 
 export class Harbour extends Ward {
   piers: Polygon[] = [];
+  /** Physical working ground and navigation are reserved before other wards. */
+  plan: HarbourPlan | null = null;
   private large: boolean;
 
   constructor(model: Model, patch: Patch, large: boolean) {
     super(model, patch);
     this.type = WardType.Harbour;
     this.large = large;
+    if (model.params.development) this.plan = planHarbour({
+      patch: patch.shape, water: model.getWaterRings(), shorelines: model.getWaterShorelines(),
+      berthingShorelines: model.params.harbourShorelines,
+      gate: model.border?.shape.vertices.find(v => patch.shape.contains(v)), large,
+      waterKind: model.params.harbourWaterKind, metresPerUnit: model.params.development.metresPerUnit,
+      surveyRadius: model.params.waterSurveyRadius,
+      surveyOriginOffsetM: model.params.waterSurveyOriginOffsetM,
+    });
   }
 
   override createGeometry(): void {
+    if (this.model.params.development) {
+      this.geometry = this.plan?.warehouses ?? [];
+      this.piers = this.plan?.berths ?? [];
+      this.lanes = this.plan?.access.flatMap(path => path.slice(1).map((b, i) => ({
+        a: path[i], b, width: 3.5 / this.model.params.development!.metresPerUnit,
+      }))) ?? [];
+      this.buildingFrontages.clear();
+      const quay = this.plan?.access[0] ?? [];
+      for (const building of this.geometry) {
+        const front = building.vertices[2].add(building.vertices[3]).scale(.5);
+        const candidates = quay.slice(1).map((b, i) => ({ a: quay[i], b, at: nearestOnSegment(front, quay[i], b),
+          width: 3.5 / this.model.params.development!.metresPerUnit, kind: 'alley' as const }));
+        candidates.sort((a,b) => Point.distance(a.at,front)-Point.distance(b.at,front));
+        if(candidates[0])this.buildingFrontages.set(building,candidates[0]);
+      }
+      return;
+    }
     this.createWarehouses();
     this.createPiers();
   }

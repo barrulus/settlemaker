@@ -13,6 +13,7 @@ import { PlacementIndex, placementBounds } from '../generator/placement-index.js
 import type { Layout } from './layouts.js';
 import type { DevelopmentProfile } from './development.js';
 import type { RoadFeature } from '../scene/scene.js';
+import { harbourSolidRings } from '../scene/harbours.js';
 
 /** Rectangle in the road's orthonormal frame, used for both houses and access claims. */
 function rectangle(at: Point, ux: number, uy: number, along: number, across: number): Polygon {
@@ -28,7 +29,7 @@ export function addRuralHousing(layout: Layout, profile: DevelopmentProfile, see
   if (capacity >= profile.ruralPopulation) return;
   const L = layout.scene.layers;
   const claimed = new PlacementIndex<Polygon>();
-  for (const ring of [...L.buildings.map(b=>b.ring), ...L.greens.map(g=>g.ring), ...L.piers.map(p=>p.ring)]) {
+  for (const ring of [...L.buildings.map(b=>b.ring), ...L.greens.map(g=>g.ring), ...L.piers.map(p=>p.ring), ...harbourSolidRings(L.harbours)]) {
     const p = new Polygon(ring.map(v=>new Point(v.x,v.y)));
     claimed.insert(placementBounds(p.vertices,1),p);
   }
@@ -60,7 +61,7 @@ export function addRuralHousing(layout: Layout, profile: DevelopmentProfile, see
   // as far as the SAME field plan, then sample the entire accepted path.
   const regionReach=Math.max(...countryside.plan.region.map(p=>Point.distance(p,layout.green.centre)));
   for(const [route,road] of approaches.entries()) {
-    if(Math.hypot(road.path[0].x,road.path[0].y)>Math.hypot(road.path.at(-1)!.x,road.path.at(-1)!.y))road.path.reverse();
+    if(Point.distance(road.path[0] as Point,layout.green.centre)>Point.distance(road.path.at(-1)! as Point,layout.green.centre))road.path.reverse();
     const extension=growApronPath({id:`rural:${seed}:${route}`,type:'local',widthM:road.width??3,points:road.path.map(p=>new Point(p.x,p.y))},
       Math.max(0,regionReach-Point.distance(road.path.at(-1)! as Point,layout.green.centre)));
     for(let i=1;i<extension.length;i++) {

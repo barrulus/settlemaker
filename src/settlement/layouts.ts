@@ -1,6 +1,8 @@
+import polygonClipping from 'polygon-clipping';
 import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import { mapToGenerationParams, MAX_PATCHES } from '../input/azgaar-input.js';
 import { Model } from '../generator/model.js';
+import { nearestCoastEdge } from '../generator/origin-shift.js';
 import { cityUrbanity } from '../generator/city-character.js';
 import { neighbourhoodCharacter, isNaturalCommon } from '../generator/city-neighbourhoods.js';
 import { timeGenerationStage, type GenerationTimingObserver } from '../generator/timing.js';
@@ -19,8 +21,12 @@ import { buildSite } from '../village/site.js';
 import { pointInPolygon } from '../geom/point-in-polygon.js';
 import type { Green, Site } from '../village/types.js';
 import { residentialCapacity, type DevelopmentProfile } from './development.js';
-import type { SettlementBuilding, SettlementDistrict } from './model.js';
+import type { SettlementBuilding, SettlementDistrict, SettlementPlacement } from './model.js';
 import { shapeVillageApproaches } from './approaches.js';
+import { prepareWaterBoundary, waterBoundaryPaths, waterFillRings } from '../village/water-boundary.js';
+import { harbourInlet } from './harbour-inlet.js';
+import { planHarbour } from '../wards/harbour-plan.js';
+import { belongingBanks, portRiverBanks, riverfrontPlacement } from './waterfront-placement.js';
 
 export interface Layout {
   scene: Scene;
@@ -30,6 +36,7 @@ export interface Layout {
   green: Green;
   diagnostics: string[];
   degradedFlags?: DegradedFlag[];
+  placement?: SettlementPlacement;
 }
 
 /** The block solver's mesh has a fixed engineering scale, independent of
@@ -45,6 +52,15 @@ function scaleScene(scene: Scene, k: number): void {
   for (const g of L.greens) { ring(g.ring); g.paths?.forEach(ring); if (g.pathWidth !== undefined) g.pathWidth *= k; }
   for (const b of L.buildings) ring(b.ring);
   for (const p of L.piers) ring(p.ring);
+  for (const harbour of L.harbours ?? []) {
+    ring(harbour.basin); ring(harbour.entrance); ring(harbour.approach);
+    for (const q of harbour.quays) { ring(q.ring); ring(q.edge); }
+    for (const b of harbour.breakwaters) { ring(b.ring); ring(b.path); b.width *= k; }
+    for (const b of harbour.berths) ring(b.ring);
+    harbour.access.forEach(ring);
+    harbour.fixtures.forEach(f => point(f.at));
+    harbour.navigationWidth *= k;
+  }
   for (const r of L.roads) { ring(r.path); if (r.width !== undefined) r.width *= k; }
   for (const s of L.symbols) { point(s.at); s.scale *= k; if (s.scaleY !== undefined) s.scaleY *= k; }
   for (const v of L.vegetation) { point(v.at); v.scale *= k; }
@@ -92,14 +108,107 @@ export function blockLayout(input: AzgaarBurgInput, seed: number, profile: Devel
   const demandScale = compactScale + (physicalScale-compactScale)*blend;
   params.development = { coreBuildings, texturePopulation: 10000, metresPerUnit: k, landScale: landScale * demandScale,
     outerLandScale: Math.sqrt(1.7) };
+  // A direction-only ocean is an illustration, not surveyed geography. The
+  // shared site's village standoff scales with sqrt(population), whereas city
+  // housing uses a much denser physical footprint. Align that illustrated
+  // coast with the actual city enclosure before classifying any land or water.
+  // Keep the generated bay's shape, and leave explicit/measured shores and
+  // rivers exactly where their caller put them.
+  const syntheticOcean = site.syntheticCoast !== undefined;
+  if (syntheticOcean && site.water[0]) {
+    const radius = new Model({ ...params, coastlineGeometry: undefined, harbourSize: undefined }).probeWallRadius() * k;
+    const nearest = nearestCoastEdge([site.water[0]]);
+    if (nearest && nearest.distance > radius * .4) {
+      const pull = nearest.distance - radius * .4;
+      site.water[0] = site.water[0].map(p => new Point(p.x - nearest.bearing.x * pull, p.y - nearest.bearing.y * pull));
+      if (site.syntheticCoast) site.syntheticCoast.shoreline = site.water[0].slice(0, -2);
+      params.coastlineGeometry = site.water.map(r => r.map(p => new Point(p.x / k, p.y / k)));
+    }
+  }
+  // Dissolve overlapping sea/river pieces before the city uses even-odd water
+  // tests. Physical bank queries must never select internal or survey edges.
+  prepareWaterBoundary(site.water, site.surveyRadiusM ?? Infinity);
+  params.coastlineGeometry = waterFillRings(site.water)!.map(r => r.map(p => new Point(p.x / k, p.y / k)));
+  params.waterShorelines = waterBoundaryPaths(site.water).map(r => r.map(p => new Point(p.x / k, p.y / k)));
+  params.waterSurveyRadius = site.surveyRadiusM === undefined ? undefined : site.surveyRadiusM / k;
+  const bodies = input.waterContext?.status === 'measured' ? input.waterContext.bodies : [];
+  params.harbourWaterKind = input.harbourWaterKind ?? (site.syntheticCoast ? 'ocean'
+    : bodies.length === 1 ? bodies[0].kind : !bodies.length && input.rivers?.length && !input.coastlineGeometry?.length ? 'river' : undefined);
+  // A river mouth is one connected water union, but a sea port must berth on
+  // its sea bank. Keep every bank for collision checks and filter only the
+  // candidate berthing edges by the caller's explicit body associations.
+  const owned = bodies.filter(b => b.kind === params.harbourWaterKind).flatMap(b => b.polygonIndices ?? []);
+  const portBanks = owned.length ? owned.map(i => site.water[i]) : portRiverBanks(input, seed);
+  if (portBanks) params.harbourShorelines = belongingBanks(waterBoundaryPaths(site.water), portBanks)
+    .map(path => path.map(p => p.scale(1 / k)));
+  const radius = input.port && input.harbourWaterKind === 'river'
+    ? new Model({ ...params, coastlineGeometry: undefined, harbourSize: undefined }).probeWallRadius() * k : 0;
+  const placement = riverfrontPlacement(input, site, radius, seed);
+  const offset = placement ? new Point(placement.offsetM.x, placement.offsetM.y) : new Point(0, 0);
+  if (placement) {
+    const shift = (rings: Point[][]) => rings.map(r => r.map(p => p.subtract(offset.scale(1 / k))));
+    params.coastlineGeometry = shift(params.coastlineGeometry!);
+    params.waterShorelines = shift(params.waterShorelines!);
+    if (params.harbourShorelines) params.harbourShorelines = shift(params.harbourShorelines);
+    if (site.surveyRadiusM !== undefined) {
+      params.waterSurveyRadius = Math.max(0, site.surveyRadiusM - offset.length) / k;
+      params.waterSurveyOriginOffsetM = offset.length;
+    }
+  }
   const model = new Model(params);
   model.onStageTiming = onStageTiming;
+  if (site.syntheticCoast && input.port && input.harbourSize === 'large') {
+    model.onHarbourTerrain = ward => {
+      const originalPlan = ward.plan;
+      if (!originalPlan) return;
+      const originalWater = site.water, originalShore = site.syntheticCoast!.shoreline;
+      const shoreline = harbourInlet(originalShore, originalPlan, k);
+      if (!shoreline) return;
+      const candidateWater = [[...shoreline, ...originalWater[0].slice(-2)], ...originalWater.slice(1)];
+      if (pointInPolygon(new Point(0, 0), candidateWater[0])) return;
+      // Only reclaim water; preserving every previously dry point keeps the
+      // already reserved wall/topology safe across the terrain refinement.
+      const ringCoordinates = (ring: Point[]) => ring.map(p => [p.x, p.y] as [number, number]);
+      const newlyWet = polygonClipping.difference([ringCoordinates(candidateWater[0])], [ringCoordinates(originalWater[0])]);
+      const addedArea = newlyWet.reduce((sum, polygon) => sum + polygon.reduce((area, ring, index) => {
+        const signed = ring.reduce((a, p, i) => { const q = ring[(i + 1) % ring.length]; return a + p[0] * q[1] - q[0] * p[1]; }, 0) / 2;
+        return area + (index === 0 ? 1 : -1) * Math.abs(signed);
+      }, 0), 0);
+      if (addedArea > 1e-6) return;
+      prepareWaterBoundary(candidateWater, Infinity);
+      const water = waterFillRings(candidateWater)!.map(r => r.map(p => new Point(p.x / k, p.y / k)));
+      const banks = waterBoundaryPaths(candidateWater).map(r => r.map(p => new Point(p.x / k, p.y / k)));
+      const plan = planHarbour({
+        patch: ward.patch.shape, water, shorelines: banks,
+        gate: model.border?.shape.vertices.find(v => ward.patch.shape.contains(v)),
+        large: true, waterKind: 'ocean', metresPerUnit: k,
+      });
+      if (!plan || plan.kind !== 'protected' || plan.berths.length < originalPlan.berths.length
+        || plan.warehouses.length < originalPlan.warehouses.length) return;
+      // The shoulders add dry ground around the existing working bank. Keep
+      // the successful mesh and reserve its final harbour before any buildings.
+      const originalGeometry = params.coastlineGeometry, originalBanks = params.waterShorelines;
+      site.water = candidateWater;
+      site.syntheticCoast!.shoreline = shoreline;
+      params.coastlineGeometry = water;
+      params.waterShorelines = banks;
+      ward.plan = plan;
+      return () => {
+        site.water = originalWater;
+        site.syntheticCoast!.shoreline = originalShore;
+        params.coastlineGeometry = originalGeometry;
+        params.waterShorelines = originalBanks;
+        ward.plan = originalPlan;
+      };
+    };
+  }
   model.generate();
-  const scene = timeGenerationStage('scene', onStageTiming, () => buildScene(model));
+  const scene = timeGenerationStage('scene', onStageTiming, () => buildScene(model, { shift: { dx: offset.x / k, dy: offset.y / k, source: placement ? 'riverfront' : 'none' } }));
+  scene.layers.water.synthetic = syntheticOcean;
   // Outer commons can retain a natural grove rather than a formal civic lawn.
   // Their ground was reserved by createWards, before residential subdivision.
   const natural = new Set(model.patches.filter(p => p.ward?.type === WardType.Park && isNaturalCommon(model,p))
-    .flatMap(p => p.ward!.geometry.map(g => `${g.vertices[0]?.x},${g.vertices[0]?.y}`)));
+    .flatMap(p => p.ward!.geometry.map(g => `${g.vertices[0]?.x + offset.x / k},${g.vertices[0]?.y + offset.y / k}`)));
   for (const g of scene.layers.greens) if (natural.has(`${g.ring[0]?.x},${g.ring[0]?.y}`)) g.purpose = 'natural';
   scaleScene(scene, k);
   const ids = buildingIds(model);
@@ -119,7 +228,7 @@ export function blockLayout(input: AzgaarBurgInput, seed: number, profile: Devel
         : excluded.has(patch.ward.type) ? 'civic' : neighbourhoodCharacter(model, patch),
       occupiedAreaM2: patch.ward.type === WardType.Park ? 0 : patch.ward.geometry.reduce((sum,b) => sum + Math.abs(b.square) * k * k, 0),
       areaM2: Math.abs(patch.shape.square) * k * k,
-      boundary: patch.shape.vertices.map(p => ({ x: p.x * k, y: p.y * k })) });
+      boundary: patch.shape.vertices.map(p => ({ x: p.x * k + offset.x, y: p.y * k + offset.y })) });
     // Public neighbourhoods are still part of the city land area. Their
     // buildings contribute no residential capacity, but omitting the district
     // makes parks, squares and temple precincts look like holes in the city.
@@ -130,10 +239,22 @@ export function blockLayout(input: AzgaarBurgInput, seed: number, profile: Devel
         insideWalls, capacity: residentialCapacity(profile, urbanity), residents: 0 });
     }
   }
-  const plaza = (model.plaza?.ward?.publicSpace ?? model.plaza?.shape)?.vertices.map(p => new Point(p.x * k, p.y * k));
-  return { scene, buildings, districts, site,
-    green: { centre: new Point(0, 0), diameter: 0, bearingDeg: 0, shape: 'sm-green-round', variant: 'a', ...(plaza ? { outline: plaza } : {}) },
-    degradedFlags: [...model.degradedFlags], diagnostics: [...model.degradedFlags].map(f => `layout could not place ${f}`) };
+  const plaza = (model.plaza?.ward?.publicSpace ?? model.plaza?.shape)?.vertices.map(p => new Point(p.x * k + offset.x, p.y * k + offset.y));
+  const diagnostics = [...model.degradedFlags].map(f => `layout could not place ${f}`);
+  if (placement) diagnostics.push(`River-port town anchored ${Math.round(offset.length)} metres toward its declared river bank; water geography is unchanged.`);
+  if (input.port && input.harbourSize) {
+    const harbour = scene.layers.harbours?.[0];
+    if (!harbour) {
+      diagnostics.push('Harbour requested, but no accessible waterfront with room for a quay could be placed.');
+      if (site.waterContextResult && !site.waterContextResult.issues.some(i => i.code === 'water-context-conflict'))
+        site.waterContextResult.issues.push({ code: 'water-context-conflict' });
+    } else if (input.harbourSize === 'large' && harbour.kind === 'landing') {
+      diagnostics.push('The available waterfront fits a landing, but not a navigable harbour basin.');
+    }
+  }
+  return { scene, buildings, districts, site, ...(placement ? { placement } : {}),
+    green: { centre: offset, diameter: 0, bearingDeg: 0, shape: 'sm-green-round', variant: 'a', ...(plaza ? { outline: plaza } : {}) },
+    degradedFlags: [...model.degradedFlags], diagnostics };
 }
 
 export function frontageLayout(input: AzgaarBurgInput, seed: number, profile: DevelopmentProfile): Layout {

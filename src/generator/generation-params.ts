@@ -477,8 +477,17 @@ export interface GenerationParams {
    * longest waterfront edge).
    */
   coastlineGeometry?: Point[][];
+  /** Exposed banks only, with survey closures and internal water seams removed. */
+  waterShorelines?: Point[][];
+  /** Optional exposed banks belonging to the port's declared water body kind. */
+  harbourShorelines?: Point[][];
+  /** Geographic planning limit in mesh units, centred on the burg origin. */
+  waterSurveyRadius?: number;
+  /** Offset from original survey origin, in physical metres, for coverage errors. */
+  waterSurveyOriginOffsetM?: number;
   /** Harbour size — 'large' for major sea routes + big pop, 'small' for minor ports */
   harbourSize?: 'large' | 'small';
+  harbourWaterKind?: 'ocean' | 'lake' | 'river';
   /** People per household — FMG's urbanDensityInput. Drives the building budget. Defaults to densityCurve(population) (villages ≈4 → cities 12); explicit values override. */
   urbanDensity?: number;
   /** Azgaar biome name; flows to the scene for asset-set/palette defaults. */

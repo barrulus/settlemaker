@@ -12,6 +12,16 @@ export const SCENE_VERSION = 2 as const;
 export interface ScenePoint { x: number; y: number }
 
 export interface WaterLayer {
+  /** Real banks only: excludes internal seams and survey-square closure. */
+  shorelines?: ScenePoint[][];
+  /** A generated open sea can continue beyond the settlement's initial frame.
+   * Measured water and finite lakes never receive this approximation. */
+  oceanContinuation?: {
+    shoreline: ScenePoint[];
+    /** Unit vector pointing from land into the sea. */
+    waterDirection: ScenePoint;
+    otherWater: ScenePoint[][];
+  };
   /** Polygon grouping, including holes, when supplied by the physical planner. */
   polygons?: ScenePoint[][][];
   /** Even-odd rings in output coords; holes = islands. Empty = landlocked. */
@@ -83,7 +93,23 @@ export interface BuildingFeature {
   glyphBacked?: true;
 }
 
-export interface PierFeature { ring: ScenePoint[] }
+export interface PierFeature { ring: ScenePoint[]; harbourId?: string }
+
+/** Built infrastructure over an unchanged natural coast. Basin and approach
+ * reserve navigable water; quays/breakwaters/berths are solid footprints. */
+export interface HarbourFeature {
+  id: string;
+  kind: 'protected' | 'natural' | 'river' | 'lake' | 'landing';
+  basin: ScenePoint[];
+  entrance: [ScenePoint, ScenePoint];
+  approach: ScenePoint[];
+  quays: Array<{ ring: ScenePoint[]; edge: ScenePoint[] }>;
+  breakwaters: Array<{ ring: ScenePoint[]; path: ScenePoint[]; width: number }>;
+  berths: Array<{ ring: ScenePoint[] }>;
+  access: ScenePoint[][];
+  fixtures: Array<{ kind: 'bollard' | 'crane' | 'boat' | 'beacon'; at: ScenePoint; angle: number }>;
+  navigationWidth: number;
+}
 
 export interface WallGate {
   /** Endpoints of the gate bar, precomputed from wall direction. */
@@ -122,6 +148,7 @@ export interface Scene {
     roads: RoadFeature[];
     buildings: BuildingFeature[];
     piers: PierFeature[];
+    harbours?: HarbourFeature[];
     walls: WallFeature[];
     /** Bank-to-bank crossings; absent on older version-2 scenes. */
     bridges?: Array<{id:string;path:ScenePoint[];width:number}>;

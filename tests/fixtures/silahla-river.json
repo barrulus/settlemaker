@@ -1,0 +1,85 @@
+{
+  "v": 1,
+  "burg": {
+    "name": "Silahla",
+    "population": 9987,
+    "port": true,
+    "citadel": false,
+    "walls": true,
+    "plaza": true,
+    "temple": true,
+    "shanty": false,
+    "capital": false,
+    "roadBearings": [
+      {
+        "bearing_deg": 229.31602751986475,
+        "route_id": "62",
+        "kind": "market",
+        "group": "roads",
+        "through": false,
+        "relief": "ascent",
+        "followsRiver": true
+      }
+    ],
+    "harbourSize": "small",
+    "harbourWaterKind": "river",
+    "harbourRiverId": "653",
+    "biome": "Tropical rainforest",
+    "culture": "Eurabic",
+    "elevation": 49,
+    "temperature": 20,
+    "urbanDensity": 10,
+    "waterContext": {
+      "version": 1,
+      "status": "measured",
+      "coordinateSpace": "burg-local-metres",
+      "surveyRadiusM": 4000,
+      "geometryErrorM": 0.5,
+      "bodies": []
+    },
+    "coastlineGeometry": [],
+    "rivers": [
+      {
+        "id": "653",
+        "centreline": [
+          {
+            "x": 4101,
+            "y": 8.950170746311528
+          },
+          {
+            "x": 3942.892799999982,
+            "y": 48.280320000047595
+          },
+          {
+            "x": 64.37375999994129,
+            "y": -965.6063999999451
+          },
+          {
+            "x": -1400.1292800000074,
+            "y": -273.5884799999342
+          },
+          {
+            "x": -3991.1731200000295,
+            "y": -3025.566719999993
+          },
+          {
+            "x": -4101,
+            "y": -3013.6290156521695
+          }
+        ],
+        "widthsM": [
+          40,
+          40,
+          40,
+          40,
+          40,
+          40
+        ],
+        "widthM": 40,
+        "widthSource": "fmg-local-width-model",
+        "meander": false
+      }
+    ]
+  },
+  "seed": 2979797681
+}

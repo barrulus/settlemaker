@@ -55,15 +55,20 @@ export function computeLocalBounds(model: Model, padding = 20, shift?: OriginShi
   for (const patch of model.patches) {
     const ward = patch.ward;
     const hasPiers = ward instanceof Harbour && ward.piers.length > 0;
+    const harbour = ward instanceof Harbour ? ward.plan : null;
     const hasFields = ward instanceof Farm && ward.subPlots.length > 0;
     const hasGeometry = ward !== null && ward.geometry.length > 0;
-    if (!hasGeometry && !hasFields && !hasPiers) continue;
+    if (!hasGeometry && !hasFields && !hasPiers && !harbour) continue;
 
     for (const v of patch.shape.vertices) expand(v);
     if (hasPiers) {
       for (const pier of (ward as Harbour).piers) {
         for (const v of pier.vertices) expand(v);
       }
+    }
+    if (harbour) {
+      for (const p of [...harbour.quays.flatMap(q => q.ring), ...harbour.breakwaters.flatMap(b => b.ring)]) expand(p);
+      for (const f of harbour.fixtures) expand(f.at);
     }
   }
   if (model.wall !== null) {

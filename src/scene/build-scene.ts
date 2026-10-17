@@ -130,8 +130,19 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
       } as BuildingFeature);
     }
     if (ward instanceof Harbour) {
+      const harbourId = ward.plan ? `harbour:${scene.layers.harbours?.length ?? 0}` : undefined;
+      if (ward.plan) {
+        const p = ward.plan;
+        (scene.layers.harbours ??= []).push({ id: harbourId!, kind: p.kind,
+          basin: ring(p.basin), entrance: [sc(p.entrance[0]), sc(p.entrance[1])], approach: ring(p.approach),
+          quays: p.quays.map(q => ({ ring: ring(q.ring), edge: ring(q.edge) })),
+          breakwaters: p.breakwaters.map(b => ({ ring: ring(b.ring), path: ring(b.path), width: b.width })),
+          berths: p.berths.map(b => ({ ring: ring(b.vertices) })), access: p.access.map(ring),
+          fixtures: p.fixtures.map(f => ({ ...f, at: sc(f.at) })), navigationWidth: p.navigationWidth,
+        });
+      }
       for (const pier of ward.piers) {
-        scene.layers.piers.push({ ring: ring(pier.vertices) });
+        scene.layers.piers.push({ ring: ring(pier.vertices), ...(harbourId ? { harbourId } : {}) });
       }
     }
   }

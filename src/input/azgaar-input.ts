@@ -59,6 +59,11 @@ export interface AzgaarBurgInput {
   oceanBearing?: number;
   /** Harbour size for port cities — 'large' for major sea routes + big pop, 'small' otherwise */
   harbourSize?: 'large' | 'small';
+  /** Water used by this port; never inferred from the burg's "Naval" label. */
+  harbourWaterKind?: 'ocean' | 'lake' | 'river';
+  /** Source river used by a river port, matching rivers[].id. Prevents attaching
+   * the town to an unrelated nearby channel. */
+  harbourRiverId?: string;
   /** @deprecated Retained for old inputs. Use development.centreOccupancy and
    * development.edgeOccupancy; the physical planner reports this ignored field. */
   urbanDensity?: number;
@@ -86,7 +91,19 @@ export interface AzgaarBurgInput {
   coastlineGeometry?: Array<Array<{ x: number; y: number }>>;
   /** River surveys in burg-local metres for both layouts, added to water polygons. The
    * generator bends coarse centrelines unless meander is explicitly false. */
-  rivers?: Array<{ centreline: Array<{ x: number; y: number }>; widthM: number; meander?: boolean }>;
+  rivers?: Array<{
+    id?: string;
+    centreline: Array<{ x: number; y: number }>;
+    /** Full channel width in metres; fallback for readers without width profiles. */
+    widthM: number;
+    /** Full local widths, one for every centreline vertex. */
+    widthsM?: number[];
+    /** Estimated physical widths, independent of the map's display stroke. */
+    widthSource?: 'fmg-local-width-model';
+    /** FMG source course interpolated before clipping, then flattened in metres. */
+    courseSource?: 'fmg-catmull-rom-0.1';
+    meander?: boolean;
+  }>;
 }
 
 /** Hard footprint cap, chosen from round-4 calibration against the ≤8 s
@@ -266,6 +283,7 @@ export function mapToGenerationParams(
     // value than nothing — it is deliberately dropped here, not missing.
     ...(burg.oceanBearing != null ? { oceanBearing: burg.oceanBearing } : {}),
     ...(burg.port === true && burg.harbourSize != null ? { harbourSize: burg.harbourSize } : {}),
+    ...(burg.harbourWaterKind ? { harbourWaterKind: burg.harbourWaterKind } : {}),
     ...(burg.urbanDensity != null ? { urbanDensity: burg.urbanDensity } : {}),
     ...(burg.engine === 'city' ? { cityLayout: true } : {}),
     ...(burg.biome != null ? { biome: normaliseVillageBiome(burg.biome) } : {}),

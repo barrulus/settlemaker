@@ -236,12 +236,16 @@ export function buildSite(input: AzgaarBurgInput, seed = 0): Site {
     })
     .filter((r): r is SiteRoute => r !== null);
 
+  const ocean = oceanBearingFallback(input, seed);
   const water: Point[][] = (input.coastlineGeometry ?? [])
     .map((ring) => ring.map((p) => new Point(p.x, p.y)))
-    .concat(oceanBearingFallback(input, seed), riverPolygons(input, seed));
+    .concat(ocean, riverPolygons(input, seed));
 
   checkMeasuredWater(original, water, prepared.result);
   return {
+    ...(!original.waterContext && ocean.length ? { syntheticCoast: {
+      shoreline: ocean[0].slice(0, -2), waterDirection: bearingVector(input.oceanBearing!),
+    } } : {}),
     ...(prepared.result ? { waterContextResult: prepared.result } : {}),
     ...(original.waterContext?.status === 'measured' ? { surveyRadiusM: original.waterContext.surveyRadiusM } : {}),
     freshwaterIrrigation: (input.rivers?.length ?? 0) > 0,

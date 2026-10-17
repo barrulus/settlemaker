@@ -48,6 +48,7 @@ export type SettlementGeoJson = FeatureCollection & { metadata: {
   residents: SettlementModel['residents'];
   development: SettlementModel['development'];
   seed: number;
+  placement?: SettlementModel['placement'];
 } };
 
 /** Export the very same geometry the renderer consumes. This is a distinct,
@@ -73,7 +74,17 @@ export function exportSettlement(model: SettlementModel): SettlementGeoJson {
   for (const [i, g] of L.greens.entries()) { polygon(`green:${i}`, g.ring, { layer: 'green', ...(g.purpose ? {purpose:g.purpose} : {}), ...(g.surface ? {surface:g.surface} : {}) }); for (const [j, p] of (g.paths ?? []).entries()) line(`green:${i}:path:${j}`, p, { layer: 'path', width: g.pathWidth }); }
   for (const [i, v] of L.vegetation.entries()) point(`vegetation:${i}`, v.at, { layer: 'vegetation', glyph: v.kind, width_m: v.scale, bearing_deg: v.rotationDeg });
   if (L.water.rings.length) features.push({ type: 'Feature', id: 'water', properties: { layer: 'water' }, geometry: { type: 'MultiPolygon', coordinates: (L.water.polygons ?? L.water.rings.map(r => [r])).map(poly => poly.map(closed)) } });
-  for (const [i, p] of L.piers.entries()) polygon(`pier:${i}`, p.ring, { layer: 'pier' });
+  for (const [i, p] of L.piers.entries()) polygon(`pier:${i}`, p.ring, { layer: 'pier', ...(p.harbourId ? { harbour_id: p.harbourId } : {}) });
+  for (const harbour of L.harbours ?? []) {
+    const props = { harbour_id: harbour.id, harbour_kind: harbour.kind };
+    polygon(`${harbour.id}:basin`, harbour.basin, { ...props, layer: 'harbour-basin', navigation_width_m: harbour.navigationWidth });
+    line(`${harbour.id}:entrance`, harbour.entrance, { ...props, layer: 'harbour-entrance' });
+    line(`${harbour.id}:approach`, harbour.approach, { ...props, layer: 'harbour-approach', width: harbour.navigationWidth });
+    for (const [i,q] of harbour.quays.entries()) polygon(`${harbour.id}:quay:${i}`, q.ring, { ...props, layer: 'quay' });
+    for (const [i,b] of harbour.breakwaters.entries()) polygon(`${harbour.id}:breakwater:${i}`, b.ring, { ...props, layer: 'breakwater', width: b.width });
+    for (const [i,p] of harbour.access.entries()) line(`${harbour.id}:access:${i}`, p, { ...props, layer: 'harbour-access' });
+    for (const [i,f] of harbour.fixtures.entries()) point(`${harbour.id}:fixture:${i}`, f.at, { ...props, layer: 'harbour-fixture', kind: f.kind, bearing_deg: f.angle });
+  }
   for (const [i, w] of L.walls.entries()) {
     for (const [j, p] of w.polylines.entries()) line(`wall:${i}:${j}`, p, { layer: 'wall', material: w.material });
     for (const [j, g] of w.gates.entries()) line(`gate:${i}:${j}`, [g.p1, g.p2], { layer: 'entrance', route_ids: g.routeIds });
@@ -86,5 +97,6 @@ export function exportSettlement(model: SettlementModel): SettlementGeoJson {
   for (const b of L.bridges ?? []) line(b.id, b.path, { layer: 'bridge', width: b.width });
   return { type: 'FeatureCollection', features, metadata: { schema: 'settlemaker/physical-plan', schema_version: 1, coordinate_system: 'local_metres_y_down', coordinate_units: 'metres',
     local_bounds: { ...model.scene.bounds }, scale: { meters_per_unit: 1, source: 'physical_layout_v1' }, residents: structuredClone(model.residents),
-    development: { ...model.development }, seed: model.seed } };
+    development: { ...model.development }, seed: model.seed,
+    ...(model.placement ? { placement: structuredClone(model.placement) } : {}) } };
 }

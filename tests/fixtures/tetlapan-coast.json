@@ -1,0 +1,24 @@
+{
+  "v": 1,
+  "burg": {
+    "name": "Tetlapan",
+    "population": 16973,
+    "port": true,
+    "citadel": true,
+    "walls": true,
+    "plaza": true,
+    "temple": false,
+    "shanty": false,
+    "capital": true,
+    "roadBearings": [{"bearing_deg": 87.53188208617183, "route_id": "11", "kind": "royal", "group": "roads", "through": false, "relief": "ridge", "followsRiver": false}],
+    "oceanBearing": 316.7261996488179,
+    "harbourSize": "large",
+    "biome": "Temperate deciduous forest",
+    "culture": "Nawatli",
+    "elevation": 4,
+    "temperature": 18,
+    "urbanDensity": 10,
+    "trade": true
+  },
+  "seed": 2527250714
+}

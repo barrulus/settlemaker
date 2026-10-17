@@ -5,7 +5,7 @@ export const SHIFT_FACTOR = 0.4;
 export const SHIFT_HYSTERESIS = 0.1;
 export const MAX_SHIFT_MULTIPLIER = 3.0;
 
-export type OriginShiftSource = 'coast_pull' | 'coast_too_far' | 'none';
+export type OriginShiftSource = 'coast_pull' | 'coast_too_far' | 'riverfront' | 'none';
 
 export interface OriginShift {
   dx: number;

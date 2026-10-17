@@ -35,6 +35,16 @@ export interface SettlementDistrict {
   areaM2?: number;
 }
 
+/** The generated town can sit beside its river while the source burg marker,
+ * water geometry and survey origin remain in their original coordinate frame. */
+export interface SettlementPlacement {
+  kind: 'riverfront';
+  riverId?: string;
+  offsetM: ScenePoint;
+  originalBankDistanceM: number;
+  targetBankDistanceM: number;
+}
+
 /** Authoritative output geometry. Every coordinate and length is in local metres. */
 export interface SettlementModel {
   version: 1;
@@ -54,6 +64,7 @@ export interface SettlementModel {
     rural?: ResidentAccount;
   };
   diagnostics: string[];
+  placement?: SettlementPlacement;
   waterContextResult?: WaterContextResult;
   degradedFlags?: DegradedFlag[];
 }
