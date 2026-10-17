@@ -1,50 +1,26 @@
 # Library API
 
-The [shared physical planner](settlement-planning.md) adds
-`development` presets, resident accounting and one metre-based output model.
-The legacy API and contracts documented below remain available.
-
-The normal entry point is `generateSettlement(burg, options?)`. It returns
-synchronously and selects the planner explicitly or, by default, by population. Import functions and types
-from `settlemaker`; the published declarations are the complete reference.
+All public generation uses the shared physical planner. `generateSettlement`,
+`planSettlement`, `createSettlementModel` and `createSettlementSession` accept the
+same options. See [migration from the retired API](migration-physical.md).
 
 ## Engine selection
 
-| Entry point | Planner | Result |
-| --- | --- | --- |
-| `generateSettlement(burg, options)` | `burg.engine` or `options.engine`; automatic by default (village ≤1,000, city above) | Discriminated result: `kind: 'village'` or `'settlement'`. |
-| `generateFromBurg(burg, options)` | City, regardless of population | City result without a `kind` discriminator. |
-| `generateVillage(burg, seed)` | Village | `VillageModel`; call `renderVillage` and `generateVillageGeoJson` separately. |
-
-Set `burg.engine` to `'auto'`, `'village'` or `'city'`. `options.engine` overrides
-that saved choice for one call; `'auto'` restores population-based selection.
-For example, `{ population: 2000, engine: 'village' }` selects the village planner,
-and `{ population: 800, engine: 'city' }` selects the city planner. Population
-still drives demand. Unknown selectors throw rather than silently choosing an engine.
-The lower-level entry points always use their own planner. For compatibility,
-small direct `generateFromBurg` calls retain the earlier compact layout unless
-`burg.engine: 'city'` explicitly enables urban plots and native city building art.
-`GenerationParams.cityLayout` exposes this choice for manually constructed models.
-Keep `result.kind === 'settlement'` checks for cities; that existing discriminator
-has not changed. Coordinate units follow the selected engine, not population.
-
-Use positive populations. The high-level API is typed but is not a complete
-validator of arbitrary input JSON. Validate external data in your application;
-water context and skin definitions have their own explicit validation gates.
+`development.preset` explicitly selects `village` or `city`. Otherwise
+`options.engine` overrides `burg.engine`; `auto` chooses village through 1,000
+people and city above it. This selects a layout technique, not a different output
+contract. All results have `kind: 'planned'`, a `SettlementModel`, SVG and physical
+GeoJSON in local metres.
 
 ## Retained rendering sessions
 
-`createSettlementSession(burg, options)` generates once and keeps the model for
-viewport rendering, appearance changes and exports. Its options are the existing
-`GenerateSettlementOptions`, or `SettlementOptions` with an explicit
-`development` preset. It does not create SVG or GeoJSON until requested.
+`createSettlementSession(burg, options?)` generates once and retains a physical
+scene. SVG and GeoJSON are created only when requested.
 
 ```js
 import { createSettlementSession, BUILD_INFO } from 'settlemaker';
 
-const session = createSettlementSession(burg, {
-  seed: 42, development: { preset: 'city' },
-});
+const session = createSettlementSession(burg, { seed: 42 });
 const preview = session.renderView({ width: 1200, detail: 'auto' });
 const recoloured = session.renderView({ appearance: { theme: 'blueprint' } });
 const fullSvg = session.renderFull();
@@ -52,47 +28,16 @@ const geojson = session.exportGeoJson();
 console.log(session.metadata, BUILD_INFO);
 ```
 
-`renderView` accepts `bounds: {min_x,min_y,max_x,max_y}` in the session's output
-coordinate system, display `width`, and `detail: 'auto' | 'full'`. Optional
-`appearance` accepts a named `theme` (`null` restores natural biome colours) and
-partial `style` overrides. Appearance applies to that call; it does not change
-the retained model or later calls. Changing skins requires a new session because
-a skin can change the generation biome. Automatic views apply a 1.5-display-pixel
-minimum to important road depiction; `overviewRoadMinPixels: 0` disables it.
-Physical street widths and full exports are unaffected.
+`renderView` accepts metre-based `bounds: {min_x,min_y,max_x,max_y}`, display
+`width`, and `detail: 'auto' | 'full'`. Appearance changes apply to that call;
+`theme: null` restores natural biome colours. `overviewRoadMinPixels: 0` disables
+the default 1.5-display-pixel road minimum. Full exports retain physical widths.
 
-`renderFull(appearance?)` returns all artwork at the original generated bounds,
-independent of the current camera or preview detail. `exportGeoJson()` is lazy.
-The session metadata includes resolved seed, planner, build and schema revisions,
-coordinate/scale provenance, original bounds, diagnostics, resident accounts when
-available and measured generation/index stages. Timing observations are outside
-the deterministic geometry model; nested stages must not be summed as independent
-work. Scene revisions identify one retained session and are not persistent IDs.
-
-Physical plans use metres. Legacy city scenes retain mesh coordinates and their
-estimated metre scale. Legacy villages retain the separate full SVG renderer;
-`supportsViewport` is false, `originalBounds` describes its zero-based SVG frame,
-and `villageTransform` records the metre-to-SVG conversion. Do not infer units
-from population or translate a city estimate into a surveyed measurement.
-
-Native city/physical artwork uses an immutable spatial index with measured glyph
-bounds. Current queries retain complete water/wall structures. Unbounded custom
-skins/asset sets conservatively retain all geometry instead of risking clipped
-artwork. Treat `session.scene` as read-only; mutating retained geometry invalidates
-its index. Viewport queries account for current appearance, including changed
-shadow offsets, and retain crossing roads and linked building footprints.
-
-`BUILD_INFO` supplies worker-protocol, scene and engine versions plus a source
-content digest in `build:lib` artifacts. Hosts should compare the actual worker
-and page values before using them. Plain TypeScript/source builds expose a clearly
-labelled `source-<package version>` fallback, not a unique artifact digest.
-Workers must recreate skins from their JSON definitions in their own module.
-
-For lower-level legacy usage, `createCityModel(burg, options?)` preserves the
-city's coastal probing, output origin and degradation ladder without creating
-outputs. `createLegacySettlementModel(burg, options?)` adds automatic/explicit
-village selection and returns a `kind` discriminator with the retained model.
-Existing convenience functions keep their original result shapes and outputs.
+`renderFull(appearance?)` exports all artwork at the original bounds. GeoJSON
+always covers the complete model, independent of the camera. Treat `session.scene`
+as read-only. Sessions support viewports for both layouts and report resident
+accounts, diagnostics, timing, build identity and physical coordinate metadata.
+`BUILD_INFO` lets a host verify that page and worker use the same artifact.
 
 ## Burg input
 
@@ -115,11 +60,11 @@ Azgaar map or database to use it.
 | `roadBearings` | `RoadBearingInput[]` | Optional; actual external approaches. See [roads](#roads). |
 | `oceanBearing` | `number` | Optional compass bearing for a generated coast when explicit water does not take precedence. |
 | `harbourSize` | `'large'` or `'small'` | Optional city harbour scale, used with `port: true`. |
-| `urbanDensity` | `number` | Optional positive occupancy input; alters the population/building budget. |
-| `coreCapacity` | `number` | Optional city core-population input; default 10,000. It is a planning input, not a certified housed population. |
-| `coastlineGeometry` | `{x, y}[][]` | Optional filled water polygons; **village metres or city mesh units**, never lon/lat. |
-| `rivers` | `{centreline, widthM, meander?}[]` | Optional village river surveys in metres. City generation does not use this field. |
-| `waterContext` | `WaterContextV1` | Optional measured/unknown-unit water mode; supported for villages only. |
+| `urbanDensity` | `number` | Retired budget input; accepted with a diagnostic. Use development occupancy controls. |
+| `coreCapacity` | `number` | Retired core limit; accepted with a diagnostic. Use development.corePopulation. |
+| `coastlineGeometry` | `{x, y}[][]` | Optional filled water polygons; **local metres**, never lon/lat. |
+| `rivers` | `{centreline, widthM, meander?}[]` | Optional river surveys in metres for both layouts. |
+| `waterContext` | `WaterContextV1` | Optional measured/unknown-unit water mode for both layouts. |
 | `trade` | `boolean` | Optional city trade-centre/market request. |
 | `culture`, `elevation`, `temperature` | `string`, `number`, `number` | Accepted optional source metadata. No general culture, elevation or climate simulation is exposed by these fields. |
 
@@ -167,97 +112,56 @@ a village while approach provenance remains available in GeoJSON.
 using simple rings with at least three distinct points. Closure is implicit;
 repeating the first point is also accepted. Input rings are combined as filled
 water rather than interpreted as outer/hole pairs. Send banks, not a shoreline
-polyline. Use burg-local x-east/y-south coordinates with the correct engine's units.
+polyline. Use burg-local x-east/y-south coordinates in metres.
 
 A nonempty polygon array takes precedence over the legacy `oceanBearing` coast.
 Without `waterContext`, an empty array does not declare a measured dry survey.
-Village `rivers` add channel polygons from at least two centreline points and a
+`rivers` add channel polygons from at least two centreline points and a
 positive `widthM`. Generated meanders are on by default; `meander: false` preserves
 the surveyed centreline. Do not send the same river in both input fields.
 
 For physical distance/coverage guarantees, use [water context v1](water-context-v1.md).
-An empty measured survey suppresses a legacy coast; `unknown-units` reports missing
-scale rather than inventing a survey. A city call with `waterContext` throws
-`WaterContextError`, including a direct `generateFromBurg` call. City polygon units
-must not be guessed from the village metre convention.
+An empty measured survey suppresses a generated coast; `unknown-units` reports missing
+scale rather than inventing a survey. Both physical layouts use the shared site
+reader and coverage validation.
 
 ## Generation options
 
-| Option | Used by | Meaning |
-| --- | --- | --- |
-| `seed` | Both | Explicit numeric seed; otherwise derived from the settlement name. |
-| `engine` | Both | Overrides `burg.engine` for `generateSettlement`. |
-| `theme` | Both | A `ThemeName` such as `night` or `blueprint`; omitted uses natural biome colours. |
-| `style` | Both | Partial `RenderTheme` colour overrides after palette/skin and `svg.theme`. |
-| `skin` | Both | A validated handle from `createSkin`; selects artwork/materials and custom biome inheritance. |
-| `village.pxPerMetre` | Village | SVG display scale; default 4. Model and GeoJSON stay in metres. |
-| `village.theme` | Village | A complete `VillageTheme`; use `villageThemeFor` to start from a preset. |
-| `svg.palette` | Both | A custom `Palette` or `PALETTES` entry; takes precedence over named `theme`. |
-| `svg.theme` | Both | Legacy location for shared colour overrides; city geometry style fields remain city-specific. |
-| `svg.assetSet` | City | Explicit low-level artwork set; overrides skin artwork. |
-| `svg.symbols` | City | Defaults true; false hides placed symbols/marks and exposes building polygons. Vegetation remains. |
-| `svg.padding` | City | Bounds padding in local units; default 20. |
-| `svg.clipId` | City | Frame clipping ID. Does not namespace all other SVG IDs. |
-| `svg.skin`, `svg.skinBiome` | Both | Lower-level skin selection; prefer the top-level `skin` for shared generation. |
-| `geojson.generatedAt` | City | Override the output timestamp. |
-| `geojson.padding` | City | Bounds padding; match `svg.padding` if you change it. |
-| `geojson.settlemakerVersion` | City | Metadata override for specialised consumers; normally leave it alone. |
+| Option | Meaning |
+| --- | --- |
+| `seed` | Safe integer; omitted derives a seed from the settlement input. |
+| `engine` | `auto`, `village` or `city`; shorthand for layout selection. |
+| `development` | Explicit preset, core/rural population and occupancy controls; see [planning](settlement-planning.md). |
+| `theme` | Named colour treatment; omitted uses natural biome colours. |
+| `style` | Partial `RenderTheme` overrides. |
+| `skin` | Validated handle from `createSkin`. |
+| `render` | Display width, bounds and detail level for the convenience SVG result. |
+| `onStageTiming` | Observer for generation and output timing. |
 
-Colour controls are shared. Geometry-specific options stay with their planner:
-village road widths come from physical road classes, while city `arteryWidth`,
-`roadWidth`, `casingDelta` and `seamStroke` are drawing controls. Shared `shoreWidth`
-is interpreted in each renderer's local units; village `shadowOffset` is in metres.
-`village.theme` is a legacy complete override for village ground, water, shadows
-and any tokens it specifies; it is applied last. `svg.shift` is a low-level city
-option; high-level generation supplies its calculated `originShift`.
-
-Named themes are `default`, `classic`, `parchment`, `blueprint`, `bw`, `ink`,
-`night`, `ancient`, `colour`, `simple`. `default` explicitly selects parchment;
-omitting the theme selects natural regional colours. Named palettes recolour
-native material tokens and procedural artwork in both planners. Fine-grained
-`style` fields only affect their documented roles; they are not arbitrary CSS.
-
-The shared biome API is `BIOMES`, `normaliseBiome` and `biomeThemeFor`.
-The five natural appearances are `temperate`, `desert`, `tundra`, `tropical`,
-`coastal`. The old `VILLAGE_BIOMES`, `normaliseVillageBiome` and `villageThemeFor`
-exports remain aliases. FMG names such as `hot desert` and `taiga` are normalised
-in both planners. `steppe` retains its planning meaning and uses temperate colours.
-
-See [shared appearance](appearance.md) for precedence, examples and visual review.
+Legacy `svg`, `geojson` and `village` option objects are retired. Use
+`renderSettlement` for lower-level rendering settings and `exportSettlement` for
+physical GeoJSON. See [appearance](appearance.md) for themes and skins.
 
 ## Results and diagnostics
 
-`svg`, `geojson`, `model`, `degradedFlags` and `originShift` are present on both
-high-level branches. Narrow `result.kind` before using planner-specific model fields.
-`waterContextResult` is optional and belongs to the measured village-water path.
-
-City `degradedFlags` reports dropped `walls`/`citadel` requests. Villages return
-`[]`; that is not a guarantee that every supplied city-oriented flag was honoured.
-City `metadata.building_capacity` reports the ordinary-building target, placement
-and any shortfall. Village `metadata.diagnostics` reports its own planner diagnostics.
-See [GeoJSON](geojson.md) before treating building counts as population accounting.
-
-Fatal measured-water errors throw `WaterContextError`, whose
-`waterContextResult` contains the issue code and any required survey radius.
-Other generation errors should also be surfaced by your application rather than
-replaced with a successful-looking empty map.
+Results contain `{kind: 'planned', model, svg, geojson}`. The model carries
+`development`, `residents`, `buildings`, `districts`, `scene`, `diagnostics`,
+optional `degradedFlags` and optional `waterContextResult`. Resident accounts report
+requested, capacity, assigned and unassigned totals; inspect them for shortfalls.
+Fatal measured-water errors throw `WaterContextError` with `waterContextResult`.
 
 ## Reproducibility and versioning
 
-Keep the full input, resolved seed, package version, options and skin definition.
-Seeded geometry and SVG output are deterministic within that configuration and
-version. GeoJSON's `generated_at` timestamp is deliberately time-dependent.
-Feature IDs are deterministic within a build, not permanent IDs across upgrades.
-The city's generation hash and the village's literal `'village'` metadata value
-are not substitutes for recording the package version and skin configuration.
+Store the input, resolved seed, package/build version, options and skin definition.
+Physical GeoJSON has no changing timestamp. Geometry and IDs are deterministic
+within a generator version; IDs are not promised permanent across releases.
+Check `metadata.schema === 'settlemaker/physical-plan'` and `schema_version === 1`.
 
 ## Lower-level entry points
 
-- `mapToGenerationParams`, `Model`, `buildScene`, `assembleSvg`, `generateSvg`,
-  `generateGeoJson`: [city scene and rendering](scene-schema.md).
-- `generateVillage`, `renderVillage`, `generateVillageGeoJson`: village stages.
+- `createSettlementModel`, `renderSettlement`, `exportSettlement`: generate once,
+  render and export as needed.
+- `assembleSvg`, `createSceneIndex`: shared scene rendering and spatial queries.
 - `createSkin`, `skinBiomeFor`, `SKIN_SLOTS`, `SKIN_TOKENS`: [skin authoring](skins.md).
-- `encodeBurgParam`, `decodeBurgParam`, `encodeJsonParam`, `decodeJsonParam`,
-  `parseSettlementUrl`: [URL integration](url-api.md).
-- `parseSvgViewBox`, `declaredMetersPerUnit`, `computeTileInfo`, `cropSvgToTile`,
-  `enumerateTiles`, `totalTileCount`: [tiling](geojson.md#tiling).
+- URL codec and `parseSettlementUrl`: [URL integration](url-api.md).
+- SVG bounds and tile helpers: [tiling](geojson.md#tiling).

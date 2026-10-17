@@ -3,7 +3,9 @@ import {
   mapToGenerationParams, corePatchCount, extramuralShare, DEFAULT_CORE_CAPACITY, MAX_PATCHES,
 } from '../src/input/azgaar-input.js';
 import { parseSettlementUrl } from '../src/url/params.js';
-import { generateFromBurg, WardType, type AzgaarBurgInput } from '../src/index.js';
+import { generateFromBurg } from './helpers/layout-output.js';
+import { WardType } from '../src/types/interfaces.js';
+import { type AzgaarBurgInput } from '../src/index.js';
 
 function burg(population: number, coreCapacity?: number): AzgaarBurgInput {
   return {

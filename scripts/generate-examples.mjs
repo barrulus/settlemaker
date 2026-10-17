@@ -32,7 +32,7 @@ const copperline = createSkin(JSON.parse(readFileSync(new URL('docs/examples/cop
 const manifest = [];
 for (const fixture of fixtures) {
   const result = generateSettlement(fixture.burg, { seed: fixture.seed, ...(fixture.skin ? { skin: copperline } : {}) });
-  assert.equal(result.kind, fixture.burg.population <= 1000 ? 'village' : 'settlement');
+  assert.equal(result.kind, 'planned');
   assert.ok(result.geojson.features.length > 0);
   assert.doesNotMatch(result.svg, /NaN|Infinity/);
   writeFileSync(new URL(`${fixture.id}.svg`, out), result.svg);
@@ -40,15 +40,15 @@ for (const fixture of fixtures) {
   const rasterSvg = result.svg.replace(/var\(--[^,]+,\s*([^\)]+)\)/g, '$1');
   await sharp(Buffer.from(rasterSvg)).resize({ width: 1200 }).png({ palette: true, quality: 90, effort: 10 }).toFile(fileURLToPath(new URL(`${fixture.id}.png`, out)));
   const previewUrl = fixture.skin ? undefined : `https://settlemaker.com/fmg?i=${await encodeBurgParam(fixture.burg, fixture.seed)}`;
-  manifest.push({ ...fixture, engine: result.kind, ...(previewUrl ? { previewUrl } : {}) });
+  manifest.push({ ...fixture, engine: result.model.development.preset, ...(previewUrl ? { previewUrl } : {}) });
   console.log(`${fixture.id}: ${result.kind}, ${result.geojson.features.length} features`);
 }
 // A palette example shares the exact city input and seed with the default image.
 const city = fixtures.find(f => f.id === 'temperate-city');
-const night = generateSettlement(city.burg, { seed: city.seed, svg: { palette: PALETTES.night } });
+const night = generateSettlement(city.burg, { seed: city.seed, theme: 'night' });
 writeFileSync(new URL('temperate-city-night.svg', out), night.svg);
 await sharp(Buffer.from(night.svg.replace(/var\(--[^,]+,\s*([^\)]+)\)/g, '$1'))).resize({ width: 1200 }).png({ palette: true, quality: 90, effort: 10 }).toFile(fileURLToPath(new URL('temperate-city-night.png', out)));
 writeFileSync(new URL('fixtures.json', out), JSON.stringify({ generatorVersion: SETTLEMAKER_VERSION, fixtures: manifest }, null, 2) + '\n');
-const intro = `# Gallery\n\nThese maps were generated with SettleMaker ${SETTLEMAKER_VERSION} through the public\n\`generateSettlement\` API. PNG previews and full SVGs come from the same output.\nThe gallery covers all five built-in artwork biomes in both engines, plus Copperline.\n\n[Exact inputs and seeds](examples/gallery/fixtures.json) · [Regenerate the gallery](development.md#documentation-checks)\n\nHosted preview links carry the saved inputs; the website's deployed generator may\ndiffer from this package version. Skins are loaded by the library API, so the\nCopperline examples link to their SVGs rather than an unsupported skin URL.\n\n`;
+const intro = `# Gallery\n\nThese maps were generated with SettleMaker ${SETTLEMAKER_VERSION} through the public\n\`generateSettlement\` API. PNG previews and full SVGs come from the same output.\nThe gallery covers all five built-in artwork biomes in both physical layouts, plus Copperline.\n\n[Exact inputs and seeds](examples/gallery/fixtures.json) · [Regenerate the gallery](development.md#documentation-checks)\n\nHosted preview links carry the saved inputs; the website's deployed generator may\ndiffer from this package version. Skins are loaded by the library API, so the\nCopperline examples link to their SVGs rather than an unsupported skin URL.\n\n`;
 const cards = manifest.map(f => `## ${f.title}\n\n${f.description}\n\nPopulation **${f.burg.population}** · seed **${f.seed}** · engine **${f.engine}**\n\n[![${f.title}](examples/gallery/${f.id}.png)](examples/gallery/${f.id}.svg)\n\n[Full SVG](examples/gallery/${f.id}.svg)${f.previewUrl ? ` · [Hosted preview](${f.previewUrl})` : ' · [Skin JSON](examples/copperline.skin.json)'}\n`).join('\n');
-writeFileSync(new URL('docs/gallery.md', root), intro + cards + '\n## One layout, another palette\n\nThornwall with the same inputs and seed, using `svg.palette: PALETTES.night`.\nCity palettes alter presentation; they do not replace all native material tokens.\nUse a skin for complete artwork and material control.\n\n[![Thornwall with the night palette](examples/gallery/temperate-city-night.png)](examples/gallery/temperate-city-night.svg)\n');
+writeFileSync(new URL('docs/gallery.md', root), intro + cards + '\n## One layout, another palette\n\nThornwall with the same inputs and seed, using `theme: "night"`.\nCity palettes alter presentation; they do not replace all native material tokens.\nUse a skin for complete artwork and material control.\n\n[![Thornwall with the night palette](examples/gallery/temperate-city-night.png)](examples/gallery/temperate-city-night.svg)\n');

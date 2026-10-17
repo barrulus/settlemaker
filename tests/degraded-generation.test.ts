@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { Model, mapToGenerationParams, generateFromBurg, SETTLEMAKER_VERSION, WardType, type AzgaarBurgInput } from '../src/index.js';
+import { Model } from '../src/generator/model.js';
+import { mapToGenerationParams } from '../src/input/azgaar-input.js';
+import { generateFromBurg } from './helpers/layout-output.js';
+import { SETTLEMAKER_VERSION, type AzgaarBurgInput } from '../src/index.js';
+import { WardType } from '../src/types/interfaces.js';
 import type { FeatureCollection } from 'geojson';
 
 function meta(fc: FeatureCollection): Record<string, unknown> {

@@ -1,16 +1,15 @@
 # Shared settlement planning
 
-Available in SettleMaker 3.1 as an explicit opt-in API.
+The physical planner is the sole public generation pipeline.
 
 The physical planner combines village frontage plots and city blocks in a common
 pipeline. Population specifies demand. The development preset controls building
 spacing, architecture and residential capacity. Fields, vegetation, rendering,
 resident accounting and GeoJSON export use one model in local metres.
 
-Existing calls without `development` retain their legacy result types and
-coordinates. Selecting `development` explicitly opts into the new `planned`
-result and physical output contract. This avoids silently changing coordinates
-for existing integrations.
+Calls without `development` choose a physical layout from the engine selector or
+population. All calls return `kind: 'planned'` and local metres. See
+[migration](migration-physical.md) for the retired model and coordinate contracts.
 
 ## Generate a village or city
 
@@ -219,7 +218,7 @@ non-residential scene buildings export zero capacity and residents.
 ```js
 import { renderSettlement, exportSettlement, PALETTES } from 'settlemaker';
 
-// Use a model returned by planSettlement or generateSettlement with development.
+// Use a model returned by planSettlement or generateSettlement.
 const svg = renderSettlement(capital.model, { palette: PALETTES.night });
 const geojson = exportSettlement(capital.model);
 ```
@@ -269,12 +268,11 @@ Zoom by changing `bounds` and rendering again: native artwork returns as its
 displayed size increases. Magnifying an already exported overview SVG cannot
 restore omitted detail. `detail: 'full'` retains every visible glyph regardless
 of display size; using it for an entire large city produces a much heavier SVG.
-Legacy renderers retain their existing full-artwork behaviour.
 
 Input coastline polygons and rivers also use metres for both presets. Measured
 water uses the shared site reader and survey-coverage checks. A supplied coastline
 is not shifted towards the settlement. Large settlements can require a larger
-survey. The new planner does not change the legacy water or URL adapter contracts.
+survey. Measured water supports both layouts; URL engine selectors choose physical presets.
 
 ## CLI
 

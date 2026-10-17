@@ -12,7 +12,7 @@ import { SCENE_VERSION, type Scene, type ScenePoint } from '../scene/scene.js';
 import { Point } from '../types/point.js';
 import { WardType } from '../types/interfaces.js';
 import { generateVillage } from '../village/village-model.js';
-import { generateVillageGeoJson } from '../village/geojson.js';
+import { inkExtent } from '../village/glyphs.js';
 import { roadCrossSection } from '../village/cross-section.js';
 import { villageWall, villageWallBoundary } from '../village/walls.js';
 import { buildSite } from '../village/site.js';
@@ -138,7 +138,6 @@ export function blockLayout(input: AzgaarBurgInput, seed: number, profile: Devel
 
 export function frontageLayout(input: AzgaarBurgInput, seed: number, profile: DevelopmentProfile): Layout {
   const village = generateVillage({ ...input, engine: 'village' }, seed, undefined, { landscape: false, occupancy: profile.edgeOccupancy });
-  const features = generateVillageGeoJson(village).features;
   const scene: Scene = { version: SCENE_VERSION, seed, name: input.name, population: input.population,
     biome: village.site.biome, metersPerUnit: 1,
     bounds: { min_x: village.frame.minX, min_y: village.frame.minY, max_x: village.frame.maxX, max_y: village.frame.maxY },
@@ -149,8 +148,14 @@ export function frontageLayout(input: AzgaarBurgInput, seed: number, profile: De
   // Water-routed approaches already encode their bank/bridge constraints.
   if (!village.site.water.length) L.roads = shapeVillageApproaches(L.roads,seed);
   for (const b of village.buildings) L.symbols.push({ id: b.glyph, at: { ...b.position }, scale: b.footprint[0], scaleY: b.footprint[1], rotationDeg: b.bearingDeg, zBand: 'structure', buildingId: b.id });
-  for (const f of features) if (f.properties?.layer === 'building' && f.geometry.type === 'Polygon') {
-    L.buildings.push({ id: f.properties.building_id, ring: f.geometry.coordinates[0].slice(0, -1).map(([x,y]) => ({x,y})), kind: 'Craftsmen', landmark: f.properties.occupancy === 0, glyphBacked: true });
+  for (const b of village.buildings) {
+    const ink = inkExtent(b.glyph, b.footprint);
+    const hw = ink.width / 2, hd = ink.depth / 2;
+    const angle = b.bearingDeg * Math.PI / 180, c = Math.cos(angle), s = Math.sin(angle);
+    const ring = [[-hw,-hd],[hw,-hd],[hw,hd],[-hw,hd]].map(([x,y]) => ({
+      x: b.position.x + x*c - y*s, y: b.position.y + x*s + y*c,
+    }));
+    L.buildings.push({ id: b.id, ring, kind: 'Craftsmen', landmark: b.occupancy === 0, glyphBacked: true });
   }
   const green = village.green;
   const outline = green.outline ?? Array.from({ length: 32 }, (_, i) => new Point(green.centre.x + Math.cos(i * Math.PI / 16) * green.diameter / 2, green.centre.y + Math.sin(i * Math.PI / 16) * green.diameter / 2));

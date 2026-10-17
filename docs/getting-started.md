@@ -29,7 +29,7 @@ const burg = {
 const result = generateSettlement(burg, { seed: 42 });
 await writeFile('thornwall.svg', result.svg);
 await writeFile('thornwall.geojson', JSON.stringify(result.geojson, null, 2));
-console.log(result.kind, result.degradedFlags);
+console.log(result.kind, result.model.degradedFlags);
 ```
 
 ```sh
@@ -69,15 +69,13 @@ const burg: AzgaarBurgInput = {
   temple: true, shanty: false, capital: false,
 };
 const result = generateSettlement(burg, { seed: 2 });
-if (result.kind === 'village') {
-  console.log(result.model.buildings.length); // VillageModel
-} else {
-  console.log(result.model.patches.length);   // city Model
-}
+console.log(result.kind); // 'planned'
+console.log(result.model.buildings.length, result.model.residents);
+console.log(result.model.development.preset); // 'village'
 ```
 
-`GenerationParams` is an interface, not a constructor. For the city pipeline use
-`mapToGenerationParams(burg, seed)` before `new Model(params).generate()`.
+Use `createSettlementModel(burg, options)` to generate without rendering, then
+`renderSettlement(model)` and `exportSettlement(model)` as needed.
 See [lower-level rendering](scene-schema.md#render-an-existing-city-model).
 
 ## Appearance and planner choice
@@ -88,8 +86,8 @@ Pass `{ theme: 'night' }` as a generation option to theme either planner; omit i
 for shared natural biome colours. See [appearance and engine selection](appearance.md)
 for examples, compatibility details and the local visual review.
 
-For the opt-in metre-based model and resident accounting, pass a `development`
-preset as described in [shared settlement planning](settlement-planning.md).
+All generation uses the metre-based model and resident accounting. Customize a
+`development` preset as described in [shared settlement planning](settlement-planning.md).
 
 ## Browser applications
 
@@ -160,8 +158,7 @@ serialize or move the runtime handle between independently loaded bundles.
 Store the complete burg input, explicit seed, package version, rendering options
 and skin definition/version. The same configuration reproduces the geometry and
 SVG within a package version. Geometry and feature IDs may change on upgrades.
-GeoJSON includes a creation timestamp, so complete JSON strings will differ even
-when the geometry is identical. The city-only `geojson.generatedAt` option can
-fix that timestamp; the village generator has no corresponding option.
+Physical GeoJSON has no generation timestamp and is repeatable for the same input
+and generator version. See the [migration guide](migration-physical.md).
 
 [Full API](api.md) · [Output coordinates](geojson.md) · [Skin authoring](skins.md)

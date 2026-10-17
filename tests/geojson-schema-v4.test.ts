@@ -1,8 +1,8 @@
+// Historical exporter regressions for retained layout internals; public exports use physical-plan v1.
 import { describe, it, expect } from 'vitest';
-import {
-  generateFromBurg, GEOJSON_SCHEMA_VERSION, SETTLEMAKER_VERSION,
-  type AzgaarBurgInput,
-} from '../src/index.js';
+import { generateFromBurg } from './helpers/layout-output.js';
+import { GEOJSON_SCHEMA_VERSION } from '../src/output/geojson-builder.js';
+import { SETTLEMAKER_VERSION, type AzgaarBurgInput } from '../src/index.js';
 import type { Feature, FeatureCollection } from 'geojson';
 
 function makeBurg(overrides: Partial<AzgaarBurgInput> = {}): AzgaarBurgInput {

@@ -1,6 +1,8 @@
 import {describe,it,expect} from 'vitest';
 import {readFileSync} from 'node:fs';
-import {generateSettlement,buildScene,Point} from '../src/index.js';
+import { generateSettlement } from './helpers/layout-output.js';
+import { buildScene } from '../src/scene/build-scene.js';
+import { Point } from '../src/index.js';
 import {selectFloraAt} from '../src/assets/landscape-placement.js';
 import {ARTWORK_GLYPHS,ARTWORK_MANIFEST,BIOMES} from '../src/assets/artwork.js';
 import {greenGround} from '../src/assets/greens-art.js';

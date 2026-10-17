@@ -12,7 +12,8 @@
  * Run: nix develop --command bash -c "npx tsx scripts/calibrate-density.ts"
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { generateFromBurg, mapToGenerationParams, type AzgaarBurgInput } from '../src/index.js';
+import { generateFromBurg } from './internal-layout-review.js';
+import { mapToGenerationParams, type AzgaarBurgInput } from '../src/input/azgaar-input.js';
 import { CommonWard } from '../src/wards/common-ward.js';
 
 const BUDGET_EXEMPT = new Set(['castle', 'cathedral', 'market', 'harbour', 'park']);

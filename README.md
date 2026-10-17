@@ -9,9 +9,10 @@ for compatibility and layout changes.
 
 SettleMaker is a procedural map engine for Node.js and browsers. Give it a
 settlement's population, roads, terrain and seed; get an SVG map, local GeoJSON
-and a model you can inspect. The new physical planner combines dispersed village
+and a model you can inspect. The physical planner combines dispersed village
 plots and dense city blocks with shared landscape, rendering, resident accounting
-and GeoJSON in metres. Legacy entry points remain available.
+and GeoJSON in metres. All public generation uses this planner.
+See the [migration guide](docs/migration-physical.md) for the retired API.
 
 The bundled artwork depicts medieval settlements. Portable **skins** can replace
 buildings, vegetation, field textures and material colours for your own setting,
@@ -62,7 +63,8 @@ const burg = {
 const result = generateSettlement(burg, { seed: 2 });
 await writeFile('ashford.svg', result.svg);
 await writeFile('ashford.geojson', JSON.stringify(result.geojson, null, 2));
-console.log(result.kind); // 'village'
+console.log(result.kind); // 'planned'
+console.log(result.model.development.preset); // 'village'
 ```
 
 For a city of any size, set `engine: 'city'` on the burg. Set `engine: 'village'`
@@ -70,8 +72,7 @@ to keep a large settlement rural. Omitting it retains automatic selection at
 1,000 people. `walls`, `citadel`,
 `plaza` and `temple` describe requested features; their treatment depends on the
 planner and available geometry. Use `generateSettlement` as your normal entry
-point. `generateFromBurg` explicitly invokes the city planner, even for a small
-population.
+point. `planSettlement` is an equivalent explicit planning entry point.
 
 CommonJS callers can use `await import('settlemaker')` inside an async function.
 In a browser app, import from `settlemaker` through your bundler, or serve the
@@ -85,20 +86,18 @@ The engine needs no rendering service or runtime artwork downloads.
 | Output | What you can use it for |
 | --- | --- |
 | `svg` | A complete vector map with embedded artwork; display, save or rasterize it. |
-| `geojson` | Buildings, streets, water and engine-specific features in **local coordinates**, with version and scale metadata. These are not longitude/latitude coordinates. |
-| `model` | The generated `VillageModel` or city `Model`, selected by `result.kind`. |
-| `degradedFlags` | City requests such as walls or citadel that generation had to drop. The village branch returns an empty array. |
-| `originShift` | The city's optional coastal output translation; zero for villages. |
-| `waterContextResult` | Diagnostics when using the supported measured village-water contract. |
+| `geojson` | Buildings, streets, water and shared physical features in **local metres**, with version and scale metadata. These are not longitude/latitude coordinates. |
+| `model` | A `SettlementModel` with physical geometry, development settings and resident accounting. |
+| `model.degradedFlags` | Requested features that generation could not place. |
+| `model.waterContextResult` | Diagnostics when using the measured-water contract. |
 
 With `engine: 'auto'` (the default), population **1–1,000** selects the village
 planner; larger populations select the city planner. Explicit selection removes
-that boundary: villages build roads, lots, dwellings, greens and landscape in
-metres, while cities build wards, fortifications and outskirts in mesh units. Both return
-SVG and GeoJSON, but their feature sets, IDs and model types differ.
+that boundary. Both layouts return the same physical model and GeoJSON contract in
+local metres. Use `development` for explicit density and resident allocation settings.
 
 Layouts and SVGs are repeatable for the same inputs, seed, rendering options and
-package version. GeoJSON includes a changing `generated_at` timestamp. Save the
+package version. Physical GeoJSON has no changing timestamp. Save the
 input, seed, package version and any skin alongside output you want to reproduce.
 
 [API and input reference](https://github.com/barrulus/settlemaker/blob/v3.1.0/docs/api.md)
@@ -123,9 +122,8 @@ opposite exit. Use route IDs to retain provenance through shared streets and cit
 gates.
 
 Water can come from filled polygons, village river centrelines, or a generated
-coast from `oceanBearing`. The measured `waterContext` contract is supported only
-by the village planner. Cities reject that mode; their legacy polygon input uses
-city-local units. `port` requests infrastructure, rather than controlling whether
+coast from `oceanBearing`. Both physical layouts support measured `waterContext`
+and polygon/river input in local metres. `port` requests infrastructure, rather than controlling whether
 water is visible.
 
 [Road and water inputs](https://github.com/barrulus/settlemaker/blob/v3.1.0/docs/api.md#roads)

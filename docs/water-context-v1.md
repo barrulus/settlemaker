@@ -1,9 +1,8 @@
 # Water context v1 — implementation contract
 
-Supported by the **village library**, through
-both direct generation and the compressed URL input. This is the normative
-contract for coverage, precision, precedence and diagnostics. City calls reject
-`waterContext`; legacy city polygons remain in city-local units.
+Supported by both physical development presets through direct generation and
+compressed URL input. This is the contract for coverage, precision, precedence
+and diagnostics. All input and output geometry uses local metres.
 
 The hosted renderer is a separate deployment. A host must display the library's
 errors and warnings and verify the deployed version before enabling measured
@@ -11,12 +10,11 @@ inputs. See the [URL adapter contract](url-api.md) and [library API](api.md).
 
 ## Scope and wire format
 
-This implementation serves the **village engine**. Automatic selection uses it
-through population 1,000. The explicit `engine: 'village'` option in 3.1 also
-allows larger villages; use sufficient survey coverage for their planning area.
-The selected planner determines support and coordinate units, not population. Add `waterContext`
-to `AzgaarBurgInput` in a direct library call or the compressed `i=` payload. The enclosing URL payload
-version remains `1`; the new object has its own version discriminator.
+The shared site reader serves village and city layouts. Supply sufficient survey
+coverage for the planning area. Add `waterContext` to `AzgaarBurgInput` in a direct
+library call or compressed `i=` payload. URL envelope version 1 is independent of
+the water object's version discriminator. Older releases supported this contract
+only for villages; verify the deployed generator when sharing measured inputs.
 
 ```ts
 type WaterContextV1 =
@@ -315,11 +313,11 @@ interface WaterContextResult {
 
 `approximate` identifies a measured-distance ocean without explicit bank polygons.
 A geometry conflict is an issue on a geometry-backed result, not permission to
-switch modes. Coverage, required-geometry, unsupported-engine and invalid-context
+switch modes. Coverage, required-geometry and invalid-context
 errors do not return a falsely complete rendered map. Legacy input omits this
 new result entirely. Fatal errors throw `WaterContextError`, carrying this result on
 `error.waterContextResult`. Successful `generateSettlement` calls expose it as
-`result.waterContextResult`; village models also expose it on the site. It does
+`result.model.waterContextResult`. It does
 not introduce an iframe message protocol or an HTTP API.
 
 The host must preserve `waterContext` when building links. If compression is
@@ -336,9 +334,9 @@ Roll out in this order:
 1. Implement and test the Settlemaker decoder, water preparation, bounded planning,
    precedence, canonical/union-boundary queries, precision, visible diagnostics
    and output semantics described here.
-2. Publish/pin a release explicitly supporting **water-context v1 for villages**.
-3. Enable FMG's measured village payload against that release. Verify both preview
-   and external-open URLs. Keep city and legacy paths separate during rollout.
+2. Publish/pin a release explicitly supporting **water-context v1 for both physical layouts**.
+3. Enable FMG's measured payload against that release. Verify both preview
+   and external-open URLs for city and village layouts.
 
 Older decoders ignore unrecognized fields; therefore merely adding this object
 to an older deployed renderer's URL is **not** a compatibility check. Do not enable the FMG
@@ -362,7 +360,7 @@ Both implementations must test:
 - Survey too small for the protocol, and a valid survey exceeded by actual layout
   or planning → explicit errors, never a falsely dry region.
 - Measured lake without sufficient geometry → `water-geometry-required`.
-- New context on a city → unsupported-engine error; legacy city output unchanged.
+- Measured context on both layouts → metre-based geometry and shared coverage checks.
 - URL-budget/compression fallback cannot discard measured or unknown state.
 - No-context URLs retain existing compatibility behavior.
 - Real iframe and external-open flows for coverage errors, unknown units, geometry

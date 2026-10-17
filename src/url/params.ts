@@ -2,7 +2,7 @@ import { resolveSettlementEngine, type SettlementEngine } from '../input/settlem
 import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import type { RenderTheme } from '../output/render-theme.js';
 import { decodeBurgParam, decodeJsonParam, UrlCodecError } from './codec.js';
-import { VILLAGE_BIOMES } from '../village/theme.js';
+import { BIOMES, biomeThemeFor } from '../appearance/biomes.js';
 import { ROUTE_CLASS_ORDER, type RouteType } from '../village/route-class.js';
 
 export interface ParsedSettlementUrl {
@@ -12,16 +12,6 @@ export interface ParsedSettlementUrl {
   paletteName?: string;
   /** style= decoded overrides, merged over the palette-derived theme. */
   themeOverrides?: Partial<RenderTheme>;
-  /**
-   * villageTheme= an explicit village look, e.g. 'desert'. Village branch
-   * only: pass it through `villageThemeFor` into `generateSettlement`'s
-   * `village.theme`. Deliberately distinct from `biome=`, which also picks
-   * the dwelling/field/canopy decks, and from `theme=`, which is the shared
-   * colour palette. Parsed for both branches so a caller need not know which engine
-   * will run; ignored by the settlement branch. Left UNDEFINED when absent so
-   * the renderer's own `villageThemeFor(site.biome)` default still applies.
-   */
-  villageThemeName?: string;
   /** True when no data params were present and a demo burg was synthesized. */
   random: boolean;
 }
@@ -257,21 +247,23 @@ export async function parseSettlementUrl(
   catch (error) { throw new UrlCodecError('engine', (error as Error).message); }
 
   const style = params.get('style');
-  const themeOverrides = style !== null
+  let themeOverrides = style !== null
     ? sanitizeThemeOverrides(await decodeJsonParam(style))
     : undefined;
   const paletteName = params.get('theme') ?? undefined;
   const villageThemeName = params.get('villageTheme') ?? undefined;
-  // Validated HERE, not left to each consumer (ruling 2026-09-07). An unknown
-  // name that quietly rendered temperate would be indistinguishable from
-  // passing nothing — the exact "looks live, does nothing" failure the biome
-  // normalisation in this release exists to remove. Throwing means every
-  // consumer, including ones that have not migrated yet, gets the error free
-  // and none of them can forget to look. The legal set is the shipped themes.
-  if (villageThemeName !== undefined
-      && !(VILLAGE_BIOMES as readonly string[]).includes(villageThemeName)) {
-    throw new UrlCodecError('villageTheme',
-      `villageTheme="${villageThemeName}" — known village themes: ${VILLAGE_BIOMES.join(', ')}`);
+  // Old shared links retain their surface colours through the common style API.
+  if (villageThemeName !== undefined) {
+    if (!(BIOMES as readonly string[]).includes(villageThemeName)) {
+      throw new UrlCodecError('villageTheme',
+        `villageTheme="${villageThemeName}" — known regional themes: ${BIOMES.join(', ')}`);
+    }
+    const regional = biomeThemeFor(villageThemeName);
+    themeOverrides = {
+      paper: regional.ground, water: regional.water, waterEdge: regional.waterEdge,
+      shadowColor: regional.shadowColor, shadowOpacity: regional.shadowOpacity,
+      ...themeOverrides,
+    };
   }
 
   return {
@@ -279,7 +271,6 @@ export async function parseSettlementUrl(
     ...(seedOverride !== undefined ? { seedOverride } : {}),
     ...(paletteName !== undefined ? { paletteName } : {}),
     ...(themeOverrides !== undefined ? { themeOverrides } : {}),
-    ...(villageThemeName !== undefined ? { villageThemeName } : {}),
     random,
   };
 }

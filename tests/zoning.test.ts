@@ -1,6 +1,9 @@
 // tests/zoning.test.ts
 import { describe, it, test, expect } from 'vitest';
-import { generateFromBurg, mapToGenerationParams, WardType, type AzgaarBurgInput } from '../src/index.js';
+import { generateFromBurg } from './helpers/layout-output.js';
+import { mapToGenerationParams } from '../src/input/azgaar-input.js';
+import { WardType } from '../src/types/interfaces.js';
+import { type AzgaarBurgInput } from '../src/index.js';
 import { MAX_PATCHES } from '../src/input/azgaar-input.js';
 
 function metropolis(roadBearings: number[]): AzgaarBurgInput {

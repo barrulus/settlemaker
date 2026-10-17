@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 beforeEach(() => { vi.useFakeTimers({toFake:['Date']}); vi.setSystemTime(new Date('2026-10-15T00:00:00Z')); });
 afterEach(() => vi.useRealTimers());
-import { createSettlementSession, createLegacySettlementModel, generateSettlement, createSettlementModel, renderSettlement, BUILD_INFO, type AzgaarBurgInput } from '../src/index.js';
+import { createSettlementSession, generateSettlement, createSettlementModel, renderSettlement, BUILD_INFO, type AzgaarBurgInput } from '../src/index.js';
 import { createBoundsIndex, createSceneIndex, scanSceneInView } from '../src/scene/spatial-index.js';
 import type { Scene } from '../src/scene/scene.js';
 import { assembleSvg } from '../src/output/assemble-svg.js';
@@ -17,30 +17,29 @@ function fixture():Scene {
 }
 
 describe('retained rendering sessions',()=>{
-  it.each(['city','village'] as const)('preserves legacy %s full exports without convenience outputs',engine=>{
-    const options={engine,seed:73};
+  it.each(['city','village'] as const)('preserves physical %s full exports without convenience outputs',engine=>{
+    const options={engine,seed:73,render:{detail:'full' as const}};
     const expected=generateSettlement(input,options);
     const session=createSettlementSession(input,options);
     expect(session.renderFull()).toBe(expected.svg);
     expect(session.exportGeoJson()).toEqual(expected.geojson);
     expect(session.metadata.seed).toBe(73);
-    expect(session.metadata.supportsViewport).toBe(engine==='city');
+    expect(session.metadata.supportsViewport).toBe(true);
+    expect(session.metadata.planner).toBe(`physical-${engine}`);
     expect(JSON.parse(JSON.stringify(session.metadata))).toMatchObject({engineVersion:BUILD_INFO.engineVersion});
-    const retained=createLegacySettlementModel(input,options);
+    const retained=createSettlementModel(input,options);
     expect(retained).not.toHaveProperty('svg');expect(retained).not.toHaveProperty('geojson');
-    if(engine==='village'){
-      expect(session.metadata.coordinateSystem).toBe('legacy_village_svg_y_down');
-      expect(session.metadata.metersPerUnit).toBe(.25);
-      expect(session.metadata.originalBounds.min_x).toBe(0);
-    }
+    expect(session.metadata.coordinateSystem).toBe('local_metres_y_down');
+    expect(session.metadata.metersPerUnit).toBe(1);
+    expect(session.exportGeoJson().metadata.residents).toEqual(retained.residents);
   });
   it('preserves the city coastal output frame and named-palette changes without generation',()=>{
     const burg={...input,population:3000,coastlineGeometry:[[{x:300,y:-1000},{x:2000,y:-1000},{x:2000,y:1000},{x:300,y:1000}]]};
-    const options={engine:'city' as const,seed:2};
+    const options={engine:'city' as const,seed:2,render:{detail:'full' as const}};
     const expected=generateSettlement(burg,options);
     const session=createSettlementSession(burg,options);
     expect(session.renderFull()).toBe(expected.svg);
-    expect(session.metadata.originShift).toEqual(expected.originShift);
+    expect(session.metadata.originalBounds).toEqual(expected.model.scene.bounds);
     const before=JSON.stringify(session.scene);
     expect(session.renderFull({theme:'blueprint'})).toBe(generateSettlement(burg,{...options,theme:'blueprint'}).svg);
     expect(JSON.stringify(session.scene)).toBe(before);

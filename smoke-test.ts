@@ -1,99 +1,36 @@
-import { generateFromBurg, type AzgaarBurgInput } from './src/index.js';
-import { writeFileSync } from 'fs';
-import type { FeatureCollection } from 'geojson';
+import { strict as assert } from 'node:assert';
+import { writeFileSync } from 'node:fs';
+import { generateSettlement, createSettlementSession, type AzgaarBurgInput } from './src/index.js';
 
-function test(name: string, pop: number, flags: Partial<AzgaarBurgInput> = {}) {
-  const burg: AzgaarBurgInput = {
-    name, population: pop,
-    port: false, citadel: false, walls: false, plaza: false,
-    temple: false, shanty: false, capital: false,
-    ...flags,
-  };
+const burg = (name: string, population: number, flags: Partial<AzgaarBurgInput> = {}): AzgaarBurgInput => ({
+  name, population, port: false, citadel: false, walls: false, plaza: false,
+  temple: false, shanty: false, capital: false, ...flags,
+});
 
-  const result = generateFromBurg(burg, { seed: 42 });
-  const wards = new Map<string, number>();
-  for (const p of result.model.patches) {
-    if (p.ward) {
-      const l = p.ward.getLabel() ?? 'Empty';
-      wards.set(l, (wards.get(l) ?? 0) + 1);
-    }
-  }
-
-  console.log(`${name} (pop=${pop}, patches=${result.model.patches.length}, inner=${result.model.inner.length}, gates=${result.model.gates.length})`);
-  console.log(`  ${[...wards.entries()].map(([k, v]) => `${k}:${v}`).join(', ')}`);
-  return result;
+for (const population of [50, 500, 3000, 15000, 80000]) {
+  const result = generateSettlement(burg(`Population ${population}`, population), { seed: 42 });
+  assert.equal(result.kind, 'planned');
+  assert.equal(result.geojson.metadata.schema, 'settlemaker/physical-plan');
+  assert.equal(result.geojson.metadata.coordinate_units, 'metres');
+  assert.equal(result.model.residents.requested, population);
+  assert.equal(result.model.residents.assigned + result.model.residents.unassigned, population);
+  console.log(`Population ${population}: ${result.model.development.preset}, ${result.model.buildings.length} buildings, ${result.model.residents.assigned} residents assigned`);
 }
 
-console.log('=== Size Variations ===');
-test('Hamlet', 50);
-test('Village', 500, { walls: true, plaza: true });
-test('Town', 3000, { walls: true, plaza: true, citadel: true, temple: true });
-test('City', 15000, { walls: true, plaza: true, citadel: true, temple: true, capital: true });
-test('Metropolis', 80000, { walls: true, plaza: true, citadel: true, temple: true, capital: true, shanty: true });
+const input = burg('Thornwall', 5000, { citadel: true, walls: true, plaza: true, temple: true });
+const first = generateSettlement(input, { seed: 12345 });
+const again = generateSettlement(input, { seed: 12345 });
+assert.equal(first.svg, again.svg);
+assert.deepEqual(first.geojson, again.geojson);
+assert.notEqual(first.svg, generateSettlement(input, { seed: 99999 }).svg);
+const session = createSettlementSession(input, { seed: 12345 });
+assert.deepEqual(session.exportGeoJson(), first.geojson);
+writeFileSync('test-output.svg', first.svg);
+writeFileSync('test-output.geojson', JSON.stringify(first.geojson, null, 2));
+console.log('Determinism and retained physical exports passed');
 
-console.log('\n=== Determinism Check ===');
-const r1 = generateFromBurg({ name: 'Test', population: 5000, port: false, citadel: true, walls: true, plaza: true, temple: true, shanty: false, capital: false }, { seed: 12345 });
-const r2 = generateFromBurg({ name: 'Test', population: 5000, port: false, citadel: true, walls: true, plaza: true, temple: true, shanty: false, capital: false }, { seed: 12345 });
-console.log('Same seed same SVG:', r1.svg === r2.svg ? 'PASS' : 'FAIL');
-console.log('Same seed same GeoJSON count:', r1.geojson.features.length === r2.geojson.features.length ? 'PASS' : 'FAIL');
-
-const r3 = generateFromBurg({ name: 'Test', population: 5000, port: false, citadel: true, walls: true, plaza: true, temple: true, shanty: false, capital: false }, { seed: 99999 });
-console.log('Different seed different SVG:', r1.svg !== r3.svg ? 'PASS' : 'FAIL');
-
-// Write full-featured city SVG
-const city = generateFromBurg({
-  name: 'Thornwall', population: 15000,
-  port: false, citadel: true, walls: true, plaza: true,
-  temple: true, shanty: false, capital: true,
-}, { seed: 42 });
-writeFileSync('test-output.svg', city.svg);
-console.log(`\nSVG written: ${city.svg.length} chars`);
-
-// Port city with ocean to the east + large harbour
-console.log('\n=== Port City ===');
-const port = generateFromBurg({
-  name: 'Seahaven', population: 10000,
-  port: true, citadel: false, walls: true, plaza: true,
-  temple: true, shanty: false, capital: false,
-  oceanBearing: 90,
-  harbourSize: 'large',
-}, { seed: 42 });
+const port = generateSettlement(burg('Seahaven', 10000, {
+  port: true, walls: true, plaza: true, temple: true, oceanBearing: 90, harbourSize: 'large',
+}), { seed: 42 });
 writeFileSync('test-output-port.svg', port.svg);
-const harbourWard = port.model.harbour?.ward;
-const harbourLabel = harbourWard?.getLabel() ?? 'none';
-const pierCount = harbourWard && 'piers' in harbourWard ? (harbourWard as any).piers.length : 0;
-console.log(`Port city: ${port.model.waterbody.length} water patches, ${port.model.wall?.segments.filter(s => !s).length ?? 0} inactive wall segments`);
-console.log(`Harbour: ${harbourLabel}, piers: ${pierCount}`);
-console.log(`Port SVG written: ${port.svg.length} chars`);
-
-function dumpPoiCounts(label: string, fc: FeatureCollection): void {
-  const counts = new Map<string, number>();
-  for (const f of fc.features) {
-    if (f.properties?.['layer'] !== 'poi') continue;
-    const kind = f.properties!['kind'] as string;
-    counts.set(kind, (counts.get(kind) ?? 0) + 1);
-  }
-  const sorted = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  console.log(`[${label}] POIs:`, sorted.map(([k, n]) => `${k}=${n}`).join(', ') || '(none)');
-}
-
-console.log('\n=== POI counts per regime ===');
-for (const [label, population, port] of [
-  ['hamlet', 100, false] as const,
-  ['town',   500, false] as const,
-  ['city',   20000, true] as const,
-]) {
-  const { geojson } = generateFromBurg({
-    name: label,
-    population,
-    port,
-    citadel: false,
-    walls: population >= 300,
-    plaza: population >= 300,
-    temple: population >= 5000,
-    shanty: false,
-    capital: population >= 10000,
-    ...(port ? { oceanBearing: 90, harbourSize: 'large' as const } : {}),
-  }, { seed: 99 });
-  dumpPoiCounts(label, geojson);
-}
+console.log(`Port: ${port.model.scene.layers.water.rings.length} water rings, ${port.model.scene.layers.piers.length} piers`);

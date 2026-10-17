@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { Model, mapToGenerationParams, type AzgaarBurgInput } from '../src/index.js';
+import { Model } from '../src/generator/model.js';
+import { mapToGenerationParams } from '../src/input/azgaar-input.js';
+import { type AzgaarBurgInput } from '../src/index.js';
 import { selectPois } from '../src/poi/poi-selector.js';
 import { IdAllocator } from '../src/output/id-allocator.js';
 import type { Polygon } from '../src/geom/polygon.js';

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { generateFromBurg, mapToGenerationParams } from '../src/index.js';
+import { generateFromBurg } from './helpers/layout-output.js';
+import { mapToGenerationParams } from '../src/input/azgaar-input.js';
 import type { AzgaarBurgInput } from '../src/index.js';
 import { Harbour } from '../src/wards/harbour.js';
 

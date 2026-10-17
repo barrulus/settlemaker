@@ -1,13 +1,14 @@
+import { computeTileInfo } from '../../src/output/settlement-tiler.js';
 /**
  * `settlement-tiler` had only ever seen the city renderer's output. A village
  * shares its `data-bg="paper"` crop contract but is otherwise a different
  * document: a water band, and alignment attributes on the root element.
  */
 import { describe, expect, it } from 'vitest';
-import {
-  generateVillage, renderVillage, generateFromBurg,
-  parseSvgViewBox, computeTileInfo, cropSvgToTile, declaredMetersPerUnit,
-} from '../../src/index.js';
+import { generateVillage } from '../../src/village/village-model.js';
+import { renderVillage } from '../../src/village/render.js';
+import { generateFromBurg } from '../helpers/layout-output.js';
+import { parseSvgViewBox, cropSvgToTile, declaredMetersPerUnit } from '../../src/index.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 
 const flags = { port: false, citadel: false, walls: false, plaza: false, temple: false, shanty: false, capital: false };

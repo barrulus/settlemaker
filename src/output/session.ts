@@ -1,21 +1,15 @@
-import { createLegacySettlementModel, type GenerateSettlementOptions } from './legacy-model.js';
 import { createSettlementModel, type SettlementOptions } from '../settlement/generate.js';
-import { renderPhysicalScene, exportSettlement } from '../settlement/output.js';
+import { renderPhysicalScene, exportSettlement, type SettlementGeoJson } from '../settlement/output.js';
 import type { SettlementModel } from '../settlement/model.js';
-import { mapToGenerationParams, type AzgaarBurgInput } from '../input/azgaar-input.js';
+import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import { paletteForTheme, type ThemeName } from './palette.js';
 import type { RenderTheme } from './render-theme.js';
-import { assembleSvg, type AssembleOptions } from './assemble-svg.js';
-import { buildScene } from '../scene/build-scene.js';
+import type { AssembleOptions } from './assemble-svg.js';
 import { createSceneIndex } from '../scene/spatial-index.js';
 import { SCENE_VERSION, type Scene } from '../scene/scene.js';
-import { SETTLEMAKER_VERSION, GEOJSON_SCHEMA_VERSION, generateGeoJson } from './geojson-builder.js';
-import { renderVillage } from '../village/render.js';
-import { generateVillageGeoJson } from '../village/geojson.js';
+import { SETTLEMAKER_VERSION } from '../version.js';
 import type { LocalBounds } from '../generator/bounds.js';
 import type { WaterContextResult } from '../input/water-context.js';
-import type { OriginShift } from '../generator/origin-shift.js';
-import type { FeatureCollection } from 'geojson';
 import type { GenerationStageTiming } from '../generator/timing.js';
 
 declare const __SETTLEMAKER_BUILD_REVISION__: string;
@@ -39,39 +33,35 @@ export interface SessionViewOptions {
   overviewRoadMinPixels?: number;
 }
 export interface SettlementSessionMetadata {
-  kind: 'planned' | 'settlement' | 'village';
+  kind: 'planned';
   sceneRevision: string;
   engineVersion: string;
   protocolVersion: number;
   buildRevision: string;
-  sceneVersion?: number;
-  modelVersion?: number;
+  sceneVersion: number;
+  modelVersion: number;
   generatorRevision?: string;
-  exportSchema: {name:string;version:number};
-  planner: 'physical-city' | 'physical-village' | 'legacy-city' | 'legacy-village';
+  exportSchema: {name:'settlemaker/physical-plan';version:1};
+  planner: 'physical-city' | 'physical-village';
   seed: number;
-  coordinateSystem: 'local_metres_y_down' | 'legacy_city_mesh_y_down' | 'legacy_village_svg_y_down';
-  scaleProvenance: 'physical_layout_v1' | 'legacy_city_estimate' | 'village_render_scale';
-  metersPerUnit: number;
+  coordinateSystem: 'local_metres_y_down';
+  scaleProvenance: 'physical_layout_v1';
+  metersPerUnit: 1;
   originalBounds: LocalBounds;
-  /** Legacy city internal-to-output translation; never relabelled as metres. */
-  originShift?: OriginShift;
-  /** Village SVG x=(metres-originX)*pixelsPerMetre, likewise y. */
-  villageTransform?: {originX:number;originY:number;pixelsPerMetre:number};
-  supportsViewport: boolean;
+  supportsViewport: true;
   diagnostics: string[];
   degradedFlags: string[];
   waterContextResult?: WaterContextResult;
-  residents?: SettlementModel['residents'];
+  residents: SettlementModel['residents'];
   timings: GenerationStageTiming[];
 }
 export interface SettlementSession {
   readonly metadata: SettlementSessionMetadata;
   /** Treat as immutable; model mutations invalidate spatial indexes. */
-  readonly scene?: Scene;
+  readonly scene: Scene;
   renderView(options?: SessionViewOptions): string;
   renderFull(appearance?: SessionAppearance): string;
-  exportGeoJson(): FeatureCollection;
+  exportGeoJson(): SettlementGeoJson;
 }
 let sessionSequence=0;
 function inputFingerprint(input: unknown): string {
@@ -87,73 +77,45 @@ const checkView=(bounds:LocalBounds,width:number,detail:string)=>{
 
 /** Retain generation once; viewport, appearance and export requests never regenerate.
  * Sessions belong to one module/worker and should be discarded after replacement. */
-export function createSettlementSession(input: AzgaarBurgInput, options: GenerateSettlementOptions | SettlementOptions = {}): SettlementSession {
+export function createSettlementSession(input: AzgaarBurgInput, options: SettlementOptions = {}): SettlementSession {
   const started=performance.now();
-  const physical='development' in options;
-  const legacyOptions=options as GenerateSettlementOptions;
   const stages:GenerationStageTiming[]=[];
-  const physicalOptions=options as SettlementOptions;
-  const physicalModel=physical?createSettlementModel(input,{...physicalOptions,onStageTiming:timing=>{stages.push(timing);physicalOptions.onStageTiming?.(timing);}}):undefined;
-  const legacy=physical?undefined:createLegacySettlementModel(input,legacyOptions);
+  const model=createSettlementModel(input,{...options,onStageTiming:timing=>{stages.push(timing);options.onStageTiming?.(timing);}});
   const modelDuration=performance.now()-started;
-  const svgOptions=physical?{}:legacyOptions.svg??{};
-  const skin=options.skin??svgOptions.skin;
-  const skinBiome=svgOptions.skinBiome??input.biome;
-  const base:AssembleOptions={...svgOptions,skin,skinBiome,
-    palette:svgOptions.palette??(options.theme===undefined?undefined:paletteForTheme(options.theme)),
-    theme:{...svgOptions.theme,...options.style}};
+  const base:AssembleOptions={skin:options.skin,skinBiome:input.biome,
+    palette:options.theme===undefined?undefined:paletteForTheme(options.theme),
+    theme:options.style};
   const appearance=(change?:SessionAppearance):AssembleOptions=>({...base,
     ...(change&&Object.hasOwn(change,'theme')?{palette:change.theme==null?undefined:paletteForTheme(change.theme)}:{}),
     theme:{...base.theme,...change?.style}});
-  const scene=physicalModel?.scene??(legacy?.kind==='settlement'?buildScene(legacy.model,{shift:legacy.originShift,padding:svgOptions.padding}):undefined);
-  const index=scene?createSceneIndex(scene):undefined;
-  const px=legacyOptions.village?.pxPerMetre??4;
-  const frame=legacy?.kind==='village'?legacy.model.frame:undefined;
-  const originalBounds=scene?{...scene.bounds}:{min_x:0,min_y:0,max_x:(frame!.maxX-frame!.minX)*px,max_y:(frame!.maxY-frame!.minY)*px};
-  const metadata:SettlementSessionMetadata={kind:physical?'planned':legacy!.kind,
+  const scene=model.scene;
+  const index=createSceneIndex(scene);
+  const originalBounds={...scene.bounds};
+  const metadata:SettlementSessionMetadata={kind:'planned',
     sceneRevision:`${BUILD_INFO.revision}:${inputFingerprint({input,options})}:session:${++sessionSequence}`,
     engineVersion:BUILD_INFO.engineVersion,protocolVersion:BUILD_INFO.protocolVersion,buildRevision:BUILD_INFO.revision,
-    ...(scene?{sceneVersion:scene.version}:{}),
-    ...(physicalModel?{modelVersion:physicalModel.version,generatorRevision:physicalModel.generatorRevision}:{}),
-    exportSchema:physicalModel?{name:'settlemaker/physical-plan',version:1}:{name:'settlemaker/local-geojson',version:GEOJSON_SCHEMA_VERSION},
-    planner:physical?`physical-${(options as SettlementOptions).development.preset}`:legacy!.kind==='village'?'legacy-village':'legacy-city',
-    seed:physicalModel?.seed??scene?.seed??options.seed??mapToGenerationParams(input).seed,
-    coordinateSystem:physical?'local_metres_y_down':scene?'legacy_city_mesh_y_down':'legacy_village_svg_y_down',
-    scaleProvenance:physical?'physical_layout_v1':scene?'legacy_city_estimate':'village_render_scale',
-    metersPerUnit:scene?.metersPerUnit??1/px,originalBounds,supportsViewport:!!scene,
-    ...(legacy?{originShift:{...legacy.originShift}}:{}),
-    ...(frame?{villageTransform:{originX:frame.minX,originY:frame.minY,pixelsPerMetre:px}}:{}),
-    diagnostics:physicalModel?[...physicalModel.diagnostics]:legacy!.kind==='village'?[...legacy!.model.diagnostics]:legacy!.degradedFlags.map(f=>`layout could not place ${f}`),
-    degradedFlags:physicalModel?[...(physicalModel.degradedFlags??[])]:[...legacy!.degradedFlags],
-    waterContextResult:physicalModel?.waterContextResult??legacy?.waterContextResult,
-    ...(physicalModel?{residents:structuredClone(physicalModel.residents)}:{}),
+    sceneVersion:scene.version,modelVersion:model.version,generatorRevision:model.generatorRevision,
+    exportSchema:{name:'settlemaker/physical-plan',version:1},
+    planner:`physical-${model.development.preset}`,
+    seed:model.seed,coordinateSystem:'local_metres_y_down',scaleProvenance:'physical_layout_v1',
+    metersPerUnit:1,originalBounds,supportsViewport:true,
+    diagnostics:[...model.diagnostics],degradedFlags:[...(model.degradedFlags??[])],
+    waterContextResult:model.waterContextResult,residents:structuredClone(model.residents),
     timings:[...stages,{stage:'model',durationMs:modelDuration},{stage:'scene-index',durationMs:performance.now()-started-modelDuration}],
   };
   const full=(change?:SessionAppearance):string=>{
-    const a=appearance(change);
-    if(physicalModel){
-      const fullAppearance={...a,pixelsPerUnit:undefined,overviewRoadMinPixels:undefined};
-      return renderPhysicalScene(index!.query(originalBounds,fullAppearance),fullAppearance);
-    }
-    if(scene)return assembleSvg(scene,{...a,pixelsPerUnit:undefined,overviewRoadMinPixels:undefined});
-    const village=legacy!;
-    if(village.kind!=='village')throw new Error('Unsupported retained model');
-    return renderVillage(village.model,px,legacyOptions.village?.theme,{skin,skinBiome,palette:a.palette,style:a.theme});
+    const a={...appearance(change),pixelsPerUnit:undefined,overviewRoadMinPixels:undefined};
+    return renderPhysicalScene(index.query(originalBounds,a),a);
   };
   return {metadata,scene,renderFull:full,
     renderView(view={}) {
-      const bounds=view.bounds??originalBounds,width=view.width??1200,detail=view.detail??'auto';
+      const bounds=view.bounds??options.render?.bounds??originalBounds;
+      const width=view.width??options.render?.width??1200,detail=view.detail??options.render?.detail??'auto';
       checkView(bounds,width,detail);
       const minimum=view.overviewRoadMinPixels??1.5;
       if(!Number.isFinite(minimum)||minimum<0)throw new RangeError('overviewRoadMinPixels must be nonnegative and finite');
-      if(!scene)return full(view.appearance);
       const a={...appearance(view.appearance),preciseBounds:true,cullOffscreenArtwork:true,pixelsPerUnit:detail==='full'?undefined:width/(bounds.max_x-bounds.min_x),overviewRoadMinPixels:detail==='full'?undefined:minimum};
-      const visible=index!.query(bounds,a);
-      return physicalModel?renderPhysicalScene(visible,a):assembleSvg(visible,a);
+      return renderPhysicalScene(index.query(bounds,a),a);
     },
-    exportGeoJson() {
-      if(physicalModel)return exportSettlement(physicalModel);
-      if(legacy!.kind==='village')return generateVillageGeoJson(legacy!.model);
-      return generateGeoJson(legacy!.model,{...legacyOptions.geojson,shift:legacy!.originShift});
-    }};
+    exportGeoJson() { return exportSettlement(model); }};
 }

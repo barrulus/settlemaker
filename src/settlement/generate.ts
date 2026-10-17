@@ -1,5 +1,6 @@
 import type { AzgaarBurgInput } from '../input/azgaar-input.js';
-import { mapToGenerationParams } from '../input/azgaar-input.js';
+import { seedFromString } from '../input/azgaar-input.js';
+import { resolveSettlementEngine, type SettlementEngine } from '../input/settlement-engine.js';
 import { paletteForTheme, type ThemeName } from '../output/palette.js';
 import type { RenderTheme } from '../output/render-theme.js';
 import type { SettlementSkin } from '../assets/skins.js';
@@ -13,7 +14,10 @@ import { timeGenerationStage, type GenerationTimingObserver } from '../generator
 import { exportSettlement, renderSettlement, type SettlementGeoJson, type SettlementRenderOptions } from './output.js';
 
 export interface SettlementOptions {
-  development: DevelopmentOptions;
+  /** Physical layout and occupancy controls. Defaults to the selected engine preset. */
+  development?: DevelopmentOptions;
+  /** Preset shorthand when development is omitted; overrides input.engine. */
+  engine?: SettlementEngine;
   seed?: number;
   theme?: ThemeName;
   style?: Partial<RenderTheme>;
@@ -22,6 +26,7 @@ export interface SettlementOptions {
   /** Optional profiling events, excluded from deterministic model/export data. */
   onStageTiming?: GenerationTimingObserver;
 }
+export type GenerateSettlementOptions = SettlementOptions;
 export interface PlannedSettlement {
   kind: 'planned';
   model: SettlementModel;
@@ -31,10 +36,16 @@ export interface PlannedSettlement {
 
 /** One physical planning pipeline. The development preset selects a layout
  * technique, followed by common resident, landscape, rendering and export stages. */
-export function createSettlementModel(input: AzgaarBurgInput, options: SettlementOptions): SettlementModel {
-  const development = resolveDevelopment(input.population, input.walls, options.development);
+export function createSettlementModel(input: AzgaarBurgInput, options: SettlementOptions = {}): SettlementModel {
+  for (const key of ['svg', 'geojson', 'village'] as const) {
+    if ((options as Record<string, unknown>)[key] !== undefined) {
+      throw new TypeError(`The ${key} generation option is retired. Use theme, style, skin and render for physical output; GeoJSON always uses settlemaker/physical-plan.`);
+    }
+  }
+  const preset = resolveSettlementEngine(input.population, options.engine ?? input.engine);
+  const development = resolveDevelopment(input.population, input.walls, options.development ?? { preset });
   if (options.theme !== undefined) paletteForTheme(options.theme);
-  const seed = options.seed ?? mapToGenerationParams(input).seed;
+  const seed = options.seed ?? seedFromString(input.name);
   if (!Number.isSafeInteger(seed)) throw new RangeError('seed must be a safe integer');
   const effective = options.skin ? { ...input, biome: skinBiomeFor(options.skin, input.biome).base } : input;
   const urbanInput = development.ruralPopulation ? { ...effective, population: input.population-development.ruralPopulation } : effective;
@@ -64,6 +75,8 @@ export function createSettlementModel(input: AzgaarBurgInput, options: Settlemen
   residents = timeGenerationStage('residents', observe, () => allocateResidents(layout.buildings, input.population, development.corePopulation, development.ruralPopulation));
   timeGenerationStage('landscape', observe, () => dressSettlement(layout, seed));
   const diagnostics = [...layout.diagnostics];
+  if (input.urbanDensity !== undefined) diagnostics.push('urbanDensity is retired and ignored; use development.centreOccupancy and development.edgeOccupancy for physical building capacities.');
+  if (input.coreCapacity !== undefined) diagnostics.push('coreCapacity is retired and ignored; use development.corePopulation to request residents inside walls.');
   if (residents.unassigned) diagnostics.push(`${residents.unassigned} residents could not be accommodated within the requested enclosure and available land`);
   const model: SettlementModel = { version: 1, generatorRevision: 'physical-layout-7', name: input.name, seed, development, coordinateSystem: 'local_metres_y_down',
     scene: layout.scene, buildings: layout.buildings, districts: layout.districts, residents, diagnostics,
@@ -73,7 +86,7 @@ export function createSettlementModel(input: AzgaarBurgInput, options: Settlemen
 }
 
 /** Convenience outputs; use createSettlementModel when exports are not needed. */
-export function planSettlement(input: AzgaarBurgInput, options: SettlementOptions): PlannedSettlement {
+export function planSettlement(input: AzgaarBurgInput, options: SettlementOptions = {}): PlannedSettlement {
   const model = createSettlementModel(input, options);
   const palette = options.theme === undefined ? undefined : paletteForTheme(options.theme);
   return { kind: 'planned', model,

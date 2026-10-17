@@ -1,5 +1,6 @@
 import { describe, test, expect } from 'vitest';
-import { Model, mapToGenerationParams } from '../src/index.js';
+import { Model } from '../src/generator/model.js';
+import { mapToGenerationParams } from '../src/input/azgaar-input.js';
 import { Point } from '../src/types/point.js';
 
 function connectedComponents(polylines: Point[][]): number {

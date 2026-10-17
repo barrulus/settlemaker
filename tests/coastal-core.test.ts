@@ -1,5 +1,7 @@
 import { describe, test, expect } from 'vitest';
-import { Model, mapToGenerationParams, Point } from '../src/index.js';
+import { Model } from '../src/generator/model.js';
+import { mapToGenerationParams } from '../src/input/azgaar-input.js';
+import { Point } from '../src/index.js';
 import { activeWallPolylines } from '../src/scene/build-scene.js';
 import type { AzgaarBurgInput } from '../src/index.js';
 

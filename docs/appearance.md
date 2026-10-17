@@ -4,9 +4,9 @@ SettleMaker 3.1 adds shared appearance controls and explicit village/city
 selection. The examples below use the 3.1 API; the local review compares
 planners and themes at the same scale.
 
-For the new metre-based model, density profiles and explicit resident allocations,
+For the shared metre-based model, density profiles and explicit resident allocations,
 see [shared settlement planning](settlement-planning.md). The `engine` controls
-below retain the legacy planner models and coordinate contracts.
+below select physical development presets; both return the same model and units.
 
 ## Choose the planner independently
 
@@ -27,33 +27,23 @@ const city = generateSettlement(
   { ...burg, population: 800, engine: 'city' },
   { seed: 2, theme: 'blueprint' },
 );
-console.log(village.kind, city.kind); // 'village', 'settlement'
+console.log(village.model.development.preset, city.model.development.preset); // 'village', 'city'
 ```
 
 | Choice | Behaviour |
 | --- | --- |
-| Omitted or `auto` | Village through 1,000 people, city above it; existing integrations retain their selection. |
+| Omitted or `auto` | Village through 1,000 people, city above it; both use the physical planner. |
 | `village` | Rural roads, individual dwellings, greens and agricultural surroundings; population still drives demand. |
 | `city` | Urban wards, city building plots, fortifications and outskirts; population still drives demand. |
 
-`options.engine` overrides a saved `burg.engine` for one call. Set the option to
-`auto` to restore automatic selection. Direct `generateVillage` and
-`generateFromBurg` calls always select their own planner. Explicit city selection
-also enables urban plot allocation, city building artwork and capacity metadata
-below 1,000 people. Small legacy direct city calls without that selection retain
-their earlier compact layout.
+`options.engine` overrides `burg.engine`; `auto` restores population-based selection.
+An explicit `development.preset` takes precedence over either selector.
+All output geometry uses metres, x east and y south. Measured `waterContext`
+uses the shared site reader for both layouts. Population remains demand; available
+land and bounded planning can leave residents unassigned.
 
-Choosing a planner does not rescale external geometry. Village inputs use metres;
-city polygons use mesh units. Measured `waterContext` follows the village planner,
-even above 1,000 people, and is rejected for a city even below 1,000. Larger
-villages can need a survey beyond the minimum 3,000 m; the existing coverage error
-reports a required radius. Limits from available land, road access and bounded
-planning still apply: explicit selection is not a guarantee of unlimited capacity.
-
-URL adapters can send `engine=city&pop=800` or `engine=village&pop=2000`. Compressed
-`i=` inputs store the same property in `burg.engine` and take precedence over
-flat data fields. URL envelope version 1 and result discriminator `'settlement'`
-are retained. Update the host's library before enabling its selector.
+Old `engine=city` and `engine=village` URLs select these physical presets.
+The URL envelope remains version 1; results now always have `kind: 'planned'`.
 
 ## Biome, theme and skin
 
@@ -78,22 +68,17 @@ returns the corresponding `Palette`; `PALETTES` remains available for pickers.
 
 A theme changes colours while retaining regional shapes and the same generated
 geometry. A desert city remains a desert city in blueprint colours. Biome or
-engine changes can alter geometry. The planners keep their different densities,
-features and scales; shared colours do not make their models interchangeable.
+engine changes can alter geometry. The layouts retain different densities and features within one physical model.
 
 `BIOMES`, `normaliseBiome` and `biomeThemeFor` expose the shared regional defaults.
-The original village-prefixed exports remain compatibility aliases.
+Use these shared exports for both development presets.
 
 ## Precedence
 
 1. The effective biome supplies natural colours and artwork.
-2. A skin supplies replacements, shared material tokens and its renderer-specific
-   `village`/`city` settings. Custom biome settings override the skin defaults.
-3. An explicit named `theme` recolours material tokens and drawing surfaces.
-   `svg.palette`, if provided, overrides that named palette.
-4. Shared `svg.theme` colour overrides apply, followed by top-level `style`.
-5. Legacy `village.theme` applies last on villages: its ground, water and shadow
-   fields replace those colours, and supplied tokens override the resolved tokens.
+2. A skin supplies replacements and material tokens.
+3. An explicit named `theme` recolours materials and drawing surfaces.
+4. Top-level `style` applies specific colour overrides.
 
 A palette recolours tokenised custom artwork as well as stock artwork. Literal
 colours in replacement SVGs remain literal: use `var(--token, #fallback)` when
@@ -112,26 +97,11 @@ overrides remain available for custom presentation.
 Physical village road widths remain driven by road class, with the themed casing
 painted inside that footprint. City-only drawing widths (`arteryWidth`,
 `roadWidth`, `casingDelta`, `seamStroke`) do not redefine village roads.
-`shoreWidth` follows local renderer units; village `shadowOffset` is in metres.
+`shoreWidth` and `shadowOffset` use local metres for both layouts.
 
-Existing integrations passing `svg.palette` and `svg.theme` now theme villages
-as well as cities. Low-level village rendering accepts the same palette:
-
-```js
-import { generateVillage, renderVillage, PALETTES } from 'settlemaker';
-
-const model = generateVillage({
-  name: 'Snowmere', population: 300, biome: 'tundra',
-  port: false, citadel: false, walls: false, plaza: true,
-  temple: true, shanty: false, capital: false,
-  roadBearings: [20, 145, 270],
-}, 2);
-const svg = renderVillage(model, 4, undefined, {
-  palette: PALETTES.night,
-  style: { paper: '#101820', smInk: '#ddddcc' },
-});
-console.log(svg.length);
-```
+For an existing model, use `renderSettlement(model, { palette: PALETTES.night })`.
+For interactive recolouring, use `session.renderView({appearance:{theme:'night'}})`.
+See [the migration guide](migration-physical.md) for retired options.
 
 ## Review and test
 
@@ -155,6 +125,6 @@ npm test -- tests/shared-appearance.test.ts tests/settlement-engine.test.ts --ma
 ```
 
 The tests cover regional/palette parity, unchanged themed geometry, skin and
-legacy option precedence, larger villages, smaller cities, measured-water engine
+physical rendering, larger villages, smaller cities, measured-water engine
 validation and URL round trips. Before a release, run the full suite and
 `npm run docs:check`, update the package version, and regenerate the release gallery.

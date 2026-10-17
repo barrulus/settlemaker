@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateFromBurg } from '../src/index.js';
+import { generateFromBurg } from './helpers/layout-output.js';
 import { buildScene } from '../src/scene/build-scene.js';
 import { SCENE_VERSION } from '../src/scene/scene.js';
 import { toprak } from './fixtures/toprak.js';

@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { mkdirSync, writeFileSync } from 'fs';
-import { generateFromBurg, type AzgaarBurgInput } from '../src/index.js';
+import { generateSettlement, type AzgaarBurgInput } from '../src/index.js';
 
 const pool = new pg.Pool({
   host: 'localhost',
@@ -182,18 +182,18 @@ async function main() {
 
     const t0 = performance.now();
     try {
-      const result = generateFromBurg(burg);
+      const result = generateSettlement(burg);
       const elapsed = (performance.now() - t0).toFixed(0);
-      const nGates = result.model.border?.gates.length ?? 0;
+      const nGates = result.model.scene.layers.walls.reduce((n, wall) => n + wall.gates.length, 0);
       const filename = `${burg.name}-${row.burg_id}.svg`;
       writeFileSync(`output/${filename}`, result.svg);
       const bearingStr = roadBearings
         ? `bearings=[${roadBearings.map(b => b.toFixed(0)).join(',')}]`
         : 'no bearings';
       const oceanStr = oceanBearing != null ? `, ocean=${oceanBearing.toFixed(0)}°` : '';
-      const nWater = result.model.waterbody.length;
+      const nWater = result.model.scene.layers.water.rings.length;
       const waterStr = nWater > 0 ? `, water=${nWater}` : '';
-      const harbourStr = result.model.harbour ? `, harbour=${harbourSize}` : '';
+      const harbourStr = result.model.scene.layers.piers.length ? `, harbour=${harbourSize}` : '';
       console.log(`  ${burg.name} (pop=${burg.population}, gates=${nGates}, ${bearingStr}${oceanStr}${waterStr}${harbourStr}) — ${elapsed}ms`);
       successes++;
     } catch (err) {

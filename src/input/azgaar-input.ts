@@ -33,6 +33,7 @@ export type RoadBearingInput =
  * Input data from Azgaar's Fantasy Map Generator (maps_burgs table).
  */
 export interface AzgaarBurgInput {
+  /** Measured survey coverage or explicit unknown units, supported by both physical layouts. */
   waterContext?: WaterContextV1;
   name: string;
   population: number;
@@ -58,12 +59,12 @@ export interface AzgaarBurgInput {
   oceanBearing?: number;
   /** Harbour size for port cities — 'large' for major sea routes + big pop, 'small' otherwise */
   harbourSize?: 'large' | 'small';
-  /** People per household — FMG's urbanDensityInput. Drives the building budget. */
+  /** @deprecated Retained for old inputs. Use development.centreOccupancy and
+   * development.edgeOccupancy; the physical planner reports this ignored field. */
   urbanDensity?: number;
   /**
-   * People the walled core may hold. Population beyond this grows outside
-   * the walls along roads. Default DEFAULT_CORE_CAPACITY (10 000) — walls
-   * historically enclosed a core, not an entire metropolis.
+   * @deprecated Retained for old inputs. Use development.corePopulation;
+   * the physical planner reports this ignored field.
    */
   coreCapacity?: number;
   /** Azgaar biome name (e.g. "desert", "temperate") — selects default asset set + palette. */
@@ -71,18 +72,19 @@ export interface AzgaarBurgInput {
   /** Trade-center burg — guarantees a market/plaza ward (Azgaar wishlist). */
   trade?: boolean;
   /**
-   * Water polygons surrounding the burg, in burg-local coordinates (origin at
-   * burg centre; x east, y south). Villages use metres; cities use local mesh
-   * units. Each entry describes a filled water polygon (ocean, lake, river,
+   * Water polygons surrounding the burg, in burg-local metres (origin at
+   * burg centre; x east, y south) for both village and city layouts.
+   * Each entry describes a filled water polygon (ocean, lake, river,
    * cove, etc.), not a shoreline or river centreline. Rings close implicitly.
    *
-   * When set, this replaces the `oceanBearing` half-plane heuristic with
-   * fidelity-preserving classification against the actual world geometry.
+   * A nonempty array replaces the `oceanBearing` fallback with supplied geometry.
+   * With measured waterContext, an explicit empty array declares no ocean/lake
+   * water in the survey; without waterContext, an empty array allows the fallback.
    * `oceanBearing` remains an acceptable fallback when vector coastlines are
    * not available.
    */
   coastlineGeometry?: Array<Array<{ x: number; y: number }>>;
-  /** Village rivers in burg-local metres. Added to water polygons. The
+  /** River surveys in burg-local metres for both layouts, added to water polygons. The
    * generator bends coarse centrelines unless meander is explicitly false. */
   rivers?: Array<{ centreline: Array<{ x: number; y: number }>; widthM: number; meander?: boolean }>;
 }
@@ -208,7 +210,7 @@ export function mapToGenerationParams(
   burg: AzgaarBurgInput,
   seedOverride?: number,
 ): GenerationParams {
-  const seed = seedOverride ?? hashString(burg.name);
+  const seed = seedOverride ?? seedFromString(burg.name);
 
   const roadEntryPoints: RoadEntry[] | undefined = burg.roadBearings?.map(b => {
     const bearingDeg = typeof b === 'number' ? b : b.bearing_deg;
@@ -273,8 +275,8 @@ export function mapToGenerationParams(
   };
 }
 
-/** Simple string hash (djb2) for deterministic seeding */
-function hashString(s: string): number {
+/** Stable default seed for a settlement name, shared by clients and generation. */
+export function seedFromString(s: string): number {
   let hash = 5381;
   for (let i = 0; i < s.length; i++) {
     hash = ((hash << 5) + hash + s.charCodeAt(i)) & 0x7fffffff;

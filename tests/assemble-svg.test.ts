@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { generateFromBurg, generateSvg } from '../src/index.js';
+import { generateFromBurg } from './helpers/layout-output.js';
+import { generateSvg } from '../src/output/svg-builder.js';
 import { toprak } from './fixtures/toprak.js';
 
 const GROUP_ORDER = ['fields', 'greens', 'water', 'roads', 'shadows', 'buildings', 'landmarks', 'walls'];

@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { buildScene, generateSettlement, generateSvg, Point, WardType, type AzgaarBurgInput } from '../src/index.js';
+import { buildScene } from '../src/scene/build-scene.js';
+import { generateSettlement } from './helpers/layout-output.js';
+import { generateSvg } from '../src/output/svg-builder.js';
+import { Point, type AzgaarBurgInput } from '../src/index.js';
+import { WardType } from '../src/types/interfaces.js';
 import { cityLocalStreets, cityRoadReservations } from '../src/generator/city-streets.js';
 import { blocksAccess, nearestOnSegment, polygonsOverlap, segmentInside } from '../src/generator/city-frontage.js';
 import * as cityStreets from '../src/generator/city-streets.js';

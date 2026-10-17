@@ -81,10 +81,8 @@ silhouette. `tokens` work in both engines; use `village` and `city` to style the
 respective geometry. An explicit shared theme or palette recolours native and custom material
 tokens in both engines. Shared `style` fields apply after that palette. Existing
 skin `city` and `village` overrides remain specific to their renderer; without
-an explicit palette they take precedence over regional defaults. A complete
-legacy `VillageTheme` applies last to village surface/shadow colours and merges
-its supplied tokens over the selected skin/theme. Omitted tokens retain their
-resolved values. Literal colours drawn directly into custom glyphs are retained;
+an explicit palette they take precedence over regional defaults. Retired complete `VillageTheme` generation overrides are no longer accepted; use
+shared `style` and material tokens. Omitted tokens retain their resolved values. Literal colours drawn directly into custom glyphs are retained;
 use material `var(--token, #fallback)` values for artwork that responds to themes.
 See [appearance precedence](appearance.md#precedence).
 
@@ -158,11 +156,10 @@ base. A different biome base can change layout through its existing dwelling and
 landscape rules. Novel terrain algorithms or new placement categories require
 engine extensions beyond skin version 1.
 
-`generateFromBurg(burg, {skin})` also supports skins directly. For existing models:
+`generateSettlement(burg, {skin})` supports skins for both layouts. For existing models:
 
 ```ts
-generateSvg(cityModel, { skin, skinBiome: 'moon-wastes' });
-renderVillage(villageModel, 4, undefined, { skin, skinBiome: 'moon-wastes' });
+renderSettlement(model, { skin, skinBiome: 'moon-wastes' });
 assembleSvg(scene, { skin, skinBiome: 'moon-wastes' });
 ```
 

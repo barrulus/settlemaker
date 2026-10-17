@@ -1,13 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import {
-  generateFromBurg,
-  generateGeoJson,
-  parseSvgViewBox,
-  GEOJSON_SCHEMA_VERSION,
-  SETTLEMAKER_VERSION,
-  type AzgaarBurgInput,
-  type RoadBearingInput,
-} from '../src/index.js';
+import { generateFromBurg } from './helpers/layout-output.js';
+import { generateGeoJson, GEOJSON_SCHEMA_VERSION } from '../src/output/geojson-builder.js';
+import { parseSvgViewBox, SETTLEMAKER_VERSION, type AzgaarBurgInput, type RoadBearingInput } from '../src/index.js';
 import type { Feature, FeatureCollection } from 'geojson';
 
 function makeBurg(overrides: Partial<AzgaarBurgInput> = {}): AzgaarBurgInput {

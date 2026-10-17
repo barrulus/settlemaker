@@ -7,7 +7,7 @@
  */
 import fs from 'node:fs';
 import sharp from 'sharp';
-import { generateFromBurg } from '../src/index.js';
+import { generateSettlement } from '../src/index.js';
 import type { AzgaarBurgInput } from '../src/input/azgaar-input.js';
 
 const OUT = '/home/barrulus/settlemaker-village-gate';
@@ -15,11 +15,8 @@ const base = {
   port: false, citadel: false, walls: false, plaza: false,
   temple: false, shanty: false, capital: false,
 };
-// City coordinates are SETTLEMENT UNITS, not metres: a pop-6000 walled burg
-// has a border radius of ~49, so a coastline must sit tens of units out, not
-// hundreds. A coast at x=260 is simply beyond the map and draws nothing —
-// which is how the first pass of this sweep produced a "port" with no water.
-const COAST = [[{ x: 55, y: -400 }, { x: 400, y: -400 }, { x: 400, y: 400 }, { x: 55, y: 400 }]];
+// Coastline coordinates use the same local metres as every physical plan.
+const COAST = [[{ x: 260, y: -3000 }, { x: 3000, y: -3000 }, { x: 3000, y: 3000 }, { x: 260, y: 3000 }]];
 
 const CASES: Array<{ name: string; burg: AzgaarBurgInput }> = [
   { name: 'town-1200', burg: { ...base, name: 'Marchford', population: 1200, roadBearings: [0, 120, 240] } as AzgaarBurgInput },
@@ -32,14 +29,13 @@ const CASES: Array<{ name: string; burg: AzgaarBurgInput }> = [
 async function main(): Promise<void> {
   fs.mkdirSync(OUT, { recursive: true });
   for (const { name, burg } of CASES) {
-    const r = generateFromBurg(burg, { seed: 1 });
+    const r = generateSettlement(burg, { seed: 1 });
     fs.writeFileSync(`${OUT}/city-${name}.svg`, r.svg);
     await sharp(Buffer.from(r.svg), { density: 96 }).png().toFile(`${OUT}/city-${name}.png`);
-    const wards = r.model.patches.filter((p) => p.ward).length;
-    const buildings = r.model.patches.reduce((n, p) => n + (p.ward?.geometry.length ?? 0), 0);
+    const buildings = r.model.scene.layers.buildings.length;
     process.stdout.write(
-      `${name.padEnd(28)} patches ${String(r.model.patches.length).padStart(4)}  wards ${String(wards).padStart(4)}`
-      + `  buildings ${String(buildings).padStart(5)}  degraded [${r.degradedFlags.join(',')}]  svg ${(r.svg.length / 1024).toFixed(0)}k\n`,
+      `${name.padEnd(28)} districts ${String(r.model.districts.length).padStart(4)}`
+      + `  buildings ${String(buildings).padStart(5)}  housed ${r.model.residents.assigned}  degraded [${r.model.degradedFlags?.join(',') ?? ''}]  svg ${(r.svg.length / 1024).toFixed(0)}k\n`,
     );
   }
 }

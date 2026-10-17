@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import {
-  BIOMES, PALETTES, biomeThemeFor, createSkin, generateFromBurg, generateSettlement,
-  generateSvg, generateVillage, renderVillage, themeFrom, type AzgaarBurgInput,
-} from '../src/index.js';
+import { BIOMES, PALETTES, biomeThemeFor, createSkin, themeFrom, type AzgaarBurgInput } from '../src/index.js';
+import { generateFromBurg, generateSettlement } from './helpers/layout-output.js';
+import { generateSvg } from '../src/output/svg-builder.js';
+import { generateVillage } from '../src/village/village-model.js';
+import { renderVillage } from '../src/village/render.js';
 import { themedMaterial } from '../src/appearance/resolve.js';
 import { resolveVarFallbacks } from '../src/assets/refined-style.js';
 

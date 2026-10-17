@@ -1,6 +1,7 @@
-import { resolveSettlementEngine, type SettlementEngine } from './settlement-engine.js';
+import type { SettlementEngine } from './settlement-engine.js';
 import type { AzgaarBurgInput } from './azgaar-input.js';
 
+/** Survey metadata shared by the physical village and city layouts. */
 export type WaterContextV1 = {
   version: 1; status: 'measured'; coordinateSpace: 'burg-local-metres';
   surveyRadiusM: number; geometryErrorM: number;
@@ -43,8 +44,6 @@ export function validateWaterContext(input: AzgaarBurgInput, engine?: Settlement
   const c: unknown = input.waterContext;
   if (!record(c) || c.version !== 1) invalid('Unsupported or malformed waterContext version.');
   if (!finite(input.population) || input.population < 1) invalid('Measured water requires a positive population.');
-  if (resolveSettlementEngine(input.population, engine ?? input.engine) === 'city') throw new WaterContextError('water-context-unsupported-engine',
-    'Measured water is supported by the village engine only; select engine: village to use burg-local metres.');
   if (c.status === 'unknown-units') {
     if (typeof c.sourceUnit !== 'string' || !c.sourceUnit.trim()) invalid('Unknown units require a sourceUnit label.');
     if (Object.hasOwn(input, 'coastlineGeometry') || Object.hasOwn(input, 'rivers')) invalid('Unknown units cannot include metric water geometry.');

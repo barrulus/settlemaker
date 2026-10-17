@@ -1,42 +1,71 @@
 import { describe, it, expect } from 'vitest';
-import {
-  generateVillage, renderVillage, VILLAGE_POP_CEILING, Model, mapToGenerationParams,
-  type AzgaarBurgInput, type VillageModel,
-} from '../../src/index.js';
+import * as api from '../../src/index.js';
+import type { AzgaarBurgInput } from '../../src/index.js';
 
 const burg: AzgaarBurgInput = {
-  name: 'Optin', population: 300, port: false, citadel: false, walls: false,
+  name: 'Physical village', population: 300, port: false, citadel: false, walls: false,
   plaza: false, temple: false, shanty: false, capital: false,
   roadBearings: [{ bearing_deg: 225, kind: 'road' }],
 };
 
-describe('village engine is reachable from the public API', () => {
-  it('exports generateVillage and produces a model', () => {
-    const m: VillageModel = generateVillage(burg, 1);
-    expect(m.buildings.length).toBeGreaterThan(0);
-    expect(m.lanes.length).toBeGreaterThan(0);
+describe('physical public API', () => {
+  it('does not expose the retired generation or output contracts', () => {
+    for (const name of ['generateFromBurg', 'createCityModel', 'createLegacySettlementModel',
+      'generateVillage', 'renderVillage', 'generateVillageGeoJson', 'generateGeoJson',
+      'generateSvg', 'Model', 'GEOJSON_SCHEMA_VERSION']) {
+      expect(api, name).not.toHaveProperty(name);
+    }
   });
 
-  it('exports renderVillage and produces an svg', () => {
-    const svg = renderVillage(generateVillage(burg, 1));
-    expect(svg.startsWith('<svg')).toBe(true);
-    expect(svg).toContain('data-bg="paper"');
+  it('uses the same physical defaults for all public generation entry points', () => {
+    const model = api.createSettlementModel(burg);
+    const result = api.generateSettlement(burg);
+    const plan = api.planSettlement(burg);
+    expect(result.kind).toBe('planned');
+    expect(result.model).toEqual(model);
+    expect(plan).toEqual(result);
+    expect(model.development.preset).toBe('village');
+    expect(model.residents.assigned).toBe(burg.population);
+    expect(result.geojson).toEqual(api.exportSettlement(model));
+    expect(result.svg).toBe(api.renderSettlement(model));
   });
 
-  it('declares the band it serves without routing to it', () => {
-    expect(VILLAGE_POP_CEILING).toBe(1000);
+  it.each(['city', 'village'] as const)('applies shared appearance to physical %s output without changing exported geometry', engine => {
+    const natural = api.generateSettlement(burg, {seed:2,engine});
+    const skin = api.createSkin({version:1,id:'empty',name:'Empty skin'});
+    const styled = api.generateSettlement(burg, {seed:2,engine,skin,theme:'night',style:{paper:'#123456',smInk:'#abcdef'}});
+    expect(styled.svg).toContain('fill="#123456"');
+    expect(styled.svg).toContain('--sm-ink:#abcdef');
+    expect(styled.svg === natural.svg).toBe(false);
+    expect(styled.geojson).toEqual(natural.geojson);
   });
-});
 
-describe('the opt-in does not change default behaviour', () => {
-  it('mapToGenerationParams still targets the existing engine', () => {
-    // A burg well inside the village band must still map to the old engine's
-    // params, because nothing routes by population yet. If this ever fails,
-    // routing was wired without the capabilities that must precede it —
-    // GeoJSON, themed SVG, and pass 5.
-    const params = mapToGenerationParams(burg);
-    expect(params).toBeDefined();
-    const model = new Model(params).generate();
-    expect(model.patches.length).toBeGreaterThan(0);
+  it.each([{ urbanDensity: 2 }, { coreCapacity: 400 }])('explains retired tuning fields %o without changing physical geometry', retired => {
+    const input = { ...burg, ...retired };
+    const baseline = api.createSettlementModel(burg, {seed:2});
+    const result = api.generateSettlement(input, {seed:2});
+    expect(result.model.buildings).toEqual(baseline.buildings);
+    expect(result.model.development).toEqual(baseline.development);
+    expect(result.model.diagnostics.join(' ')).toMatch(/urbanDensity|coreCapacity/);
+    expect(result.model.diagnostics.join(' ')).toContain('development.');
+    expect(api.createSettlementSession(input, {seed:2}).metadata.diagnostics).toEqual(result.model.diagnostics);
+  });
+
+  it.each(['svg', 'geojson', 'village'])('rejects obsolete %s output options instead of silently ignoring them', key => {
+    const options = { [key]: {} } as unknown as api.SettlementOptions;
+    for (const generate of [api.generateSettlement, api.planSettlement, api.createSettlementModel, api.createSettlementSession]) {
+      expect(() => generate(burg, options)).toThrow(TypeError);
+    }
+  });
+
+  it('retains local metre coordinates and physical exports in a default session', () => {
+    const session = api.createSettlementSession(burg);
+    const result = api.generateSettlement(burg);
+    expect(session.scene).toEqual(result.model.scene);
+    expect(session.metadata).toMatchObject({ planner: 'physical-village', metersPerUnit: 1,
+      coordinateSystem: 'local_metres_y_down', supportsViewport: true });
+    expect(session.metadata).not.toHaveProperty('originShift');
+    expect(session.metadata).not.toHaveProperty('villageTransform');
+    expect(session.exportGeoJson()).toEqual(result.geojson);
   });
 });

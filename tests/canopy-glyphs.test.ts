@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { Model, mapToGenerationParams, type AzgaarBurgInput } from '../src/index.js';
+import { Model } from '../src/generator/model.js';
+import { mapToGenerationParams } from '../src/input/azgaar-input.js';
+import { type AzgaarBurgInput } from '../src/index.js';
 import { buildScene } from '../src/scene/build-scene.js';
 import { assembleSvg } from '../src/output/assemble-svg.js';
 import { canopyKindsFor, assetSetFor } from '../src/assets/asset-sets.js';

@@ -148,7 +148,7 @@ function artworkScaleReview(symbols, metresPerUnit) {
         componentToNearbyHomeWidth: neighbours.nearbyHomePaintedShortSideMedianMetres ? minimumComponentRoofWidthMetres/neighbours.nearbyHomePaintedShortSideMedianMetres : null});
     }
   }
-  return { measurement:'guarded painted bounds for wells/houses; authored component bounds for courtyard wings; legacy metres remain estimated', wells,courtyards };
+  return { measurement:'guarded painted bounds for wells/houses; authored component bounds for courtyard wings; physical coordinates are metres', wells,courtyards };
 }
 
 /** Guarded canopy rectangles are deliberately labelled envelopes, not opaque leaf coverage. */
@@ -356,9 +356,9 @@ for (const fixture of fixtures.filter(f=>!fixtureId||f.id===fixtureId)) {
     const selected = [...entries].sort((a,b)=>name==='scale-well' ? b[score]-a[score] : a[score]-b[score])[0];
     const radius = 35/metresPerUnit, p=selected.at;
     frames[fixture.id][name] ??= {bounds:{min_x:p.x-radius,max_x:p.x+radius,min_y:p.y-radius,max_y:p.y+radius},detail:'full',
-      framing:'fixed first-review site; 70 metre width (legacy estimated)',focus:selected};
+      framing:'fixed first-review site; 70 metre width (physical metres)',focus:selected};
     if (name === 'scale-courtyard') frames[fixture.id][`${name}-current`] = {bounds:{min_x:p.x-radius,max_x:p.x+radius,min_y:p.y-radius,max_y:p.y+radius},detail:'full',
-      framing:'current smallest component/home ratio site; fixed 70 metre width (legacy estimated)',focus:selected};
+      framing:'current smallest component/home ratio site; fixed 70 metre width (physical metres)',focus:selected};
   }
   await writeFile(`${out}/${fixture.id}-full.svg`, full);
   const report = {

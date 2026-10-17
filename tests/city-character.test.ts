@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Point, mapToGenerationParams } from '../src/index.js';
+import { Point } from '../src/index.js';
+import { mapToGenerationParams } from '../src/input/azgaar-input.js';
 import { Model } from '../src/generator/model.js';
 import { Patch } from '../src/generator/patch.js';
 import { buildAdjacency } from '../src/generator/adjacency.js';

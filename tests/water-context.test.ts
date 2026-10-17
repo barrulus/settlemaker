@@ -25,19 +25,19 @@ describe('water-context v1', () => {
       const b = burg({ oceanBearing: 92.49, waterContext: measured([{kind:'ocean',distanceM:11115,bearingDeg:92.49}]),
         ...(polygons ? { coastlineGeometry: polygons } : {}) });
       const result = generateSettlement(b, {seed:3});
-      expect(result.kind).toBe('village');
-      expect(result.waterContextResult).toEqual({version:1,status:'measured',issues:[]});
-      expect(result.svg).not.toContain('data-band="water"');
+      expect(result.kind).toBe('planned');
+      expect(result.model.waterContextResult).toEqual({version:1,status:'measured',issues:[]});
+      expect(result.svg).not.toContain('id="water"');
     }
   });
   it('renders a measured 40m beach without inventing harbour infrastructure', () => {
     const result = generateSettlement(coast(), {seed:3});
-    expect(result.waterContextResult?.issues).toEqual([]);
-    expect(result.svg).toContain('data-shore="union"');
-    if (result.kind !== 'village') throw Error('wrong engine');
-    expect(inAnyWater(new Point(39,0), result.model.site.water)).toBe(false);
-    expect(inAnyWater(new Point(41,0), result.model.site.water)).toBe(true);
-    expect(result.model.pois.some(p=>p.kind==='boathouse')).toBe(false);
+    expect(result.model.waterContextResult?.issues).toEqual([]);
+    expect(result.svg).toContain('class="shore"');
+    const site = buildSite(coast());
+    expect(inAnyWater(new Point(39,0), site.water)).toBe(false);
+    expect(inAnyWater(new Point(41,0), site.water)).toBe(true);
+    expect(result.model.scene.layers.symbols.some(s=>s.id.includes('boathouse'))).toBe(false);
   });
   it('retains polygons and reports inconsistent summaries', () => {
     const b = coast(); (b.waterContext as any).bodies[0].distanceM = 1;
@@ -75,8 +75,8 @@ describe('water-context v1', () => {
     const r=generateSettlement(burg({coastlineGeometry:pieces,waterContext:measured([{kind:'ocean',distanceM:180,bearingDeg:0,polygonIndices:[0,1,2,3]}])}),{seed:2});
     const water=r.geojson.features.filter(f=>f.properties?.layer==='water');
     expect(water).toHaveLength(1);
-    expect(water[0].geometry.type).toBe('Polygon');
-    if(water[0].geometry.type==='Polygon') expect(water[0].geometry.coordinates).toHaveLength(2);
+    expect(water[0].geometry.type).toBe('MultiPolygon');
+    if(water[0].geometry.type==='MultiPolygon') expect(water[0].geometry.coordinates[0]).toHaveLength(2);
   });
   it('dissolves an overlapping river mouth rather than exposing its ocean seam', () => {
     const water=[box(40,-3000,3000,3000),box(-100,80,100,90)];
@@ -109,7 +109,7 @@ describe('water-context v1', () => {
   });
   it('reports a port without nearby water and places no dock', () => {
     const r=generateSettlement(burg({port:true}),{seed:2});
-    expect(r.waterContextResult?.issues).toContainEqual({code:'water-context-conflict'});
+    expect(r.model.waterContextResult?.issues).toContainEqual({code:'water-context-conflict'});
   });
   it.each([null,{}, {version:2}, {...measured(),surveyRadiusM:2999}, {...measured(),geometryErrorM:.6}])('rejects invalid contexts at both decoder and direct entry',async context=>{
     const b=burg({waterContext:context as any});
@@ -120,8 +120,9 @@ describe('water-context v1', () => {
     const b=coast(); (b.waterContext as any).bodies[0].polygonIndices=[0,0];
     expect(()=>buildSite(b)).toThrow('water-context-invalid');
   });
-  it('supports 1000 but rejects 1001 before entering the city engine',()=>{
-    expect(()=>validateWaterContext(burg({population:1000}))).not.toThrow();
-    expect(()=>generateSettlement(burg({population:1001}))).toThrow('water-context-unsupported-engine');
+  it.each([1000, 1001])('supports measured water for population %s across the layout boundary', population=>{
+    const result = generateSettlement(burg({population}), {seed:2});
+    expect(result.model.waterContextResult?.status).toBe('measured');
+    expect(result.geojson.metadata.coordinate_units).toBe('metres');
   });
 });

@@ -119,26 +119,23 @@ fallback when the field is absent.
 
 ## Water and physical units
 
-The full [water-context v1 specification](water-context-v1.md) remains the
-normative contract for the **village engine**, including explicitly selected
-villages above 1,000 people. A city input with
-`waterContext` is rejected with `water-context-unsupported-engine`; the host must
-not strip the object and silently reinterpret its metre geometry as city units.
+The [water-context v1 specification](water-context-v1.md) applies to both physical
+layouts through their shared site reader.
 
-| Input | Village | City |
-| --- | --- | --- |
-| `coastlineGeometry` | Filled polygons in burg-local metres | Filled polygons in city-local mesh units |
-| `rivers` | Centreline, positive `widthM`, optional `meander: false` | Not consumed by city generation |
-| `oceanBearing` | Generated coast when explicit/measured inputs do not supersede it | Legacy generated coast fallback |
-| `waterContext` | Validated survey/unknown-unit mode | Rejected |
+| Input | Both layouts |
+| --- | --- |
+| `coastlineGeometry` | Filled polygons in burg-local metres |
+| `rivers` | Centreline, positive `widthM`, optional `meander: false` |
+| `oceanBearing` | Generated coast fallback |
+| `waterContext` | Validated survey/unknown-unit mode |
 
 Positive x points east and positive y south. Do not send geographic coordinates
-or assume city-local units are metres. `port` controls infrastructure, not water
+or old city mesh coordinates. `port` controls infrastructure, not water
 visibility. A `coastal` biome chooses artwork but does not itself add an ocean.
 
 A nonempty `coastlineGeometry` array represents **filled areas**, not bank lines.
 Include all relevant water polygons and preserve narrow channels and bends. For
-village rivers, supply a centreline with width or a filled polygon, not duplicate
+rivers, supply a centreline with width or a filled polygon, not duplicate
 representations. `followsRiver` alone creates no water.
 
 For measured water, carry summaries, polygon associations, declared geometry
@@ -199,12 +196,10 @@ by `sanitizeThemeOverrides`. Accepted material keys include `smInk`, `smStone`,
 `smTimber`, `smVoid`, `smCanopy1`, `smCanopy2`, alongside the geometry style fields in
 [RenderTheme](../src/output/render-theme.ts). This is not arbitrary CSS.
 
-`villageTheme` changes ground, water, shadows and material tokens without changing
-the input biome's dwelling/landscape selection. An invalid name is a
-`UrlCodecError` with reason `villageTheme`, even when the city engine would run.
-`theme` and colour `style` fields now affect both engines. Legacy `villageTheme`
-applies last on villages; it remains ignored on cities. Physical village roads
-keep their road-class widths; city drawing widths do not change those dimensions.
+Historical `villageTheme` links are translated into shared regional surface
+colours in `themeOverrides`. Unknown names still throw a `villageTheme` error.
+New integrations should use `biome`, `theme` and `style`. Explicit `style` fields
+take precedence over migrated regional colours. All generation is physical.
 
 **Skins are a direct library feature.** There is no `skin=` URL option, remote skin
 fetch, or embedded skin definition in this protocol. A host that offers a skin
@@ -214,24 +209,16 @@ library API. There is also no `symbols=` or `fit=` URL option in this parser.
 ## Implementing a renderer
 
 ```js
-import {
-  parseSettlementUrl, generateSettlement, PALETTES, villageThemeFor,
-} from 'settlemaker';
+import { parseSettlementUrl, generateSettlement } from 'settlemaker';
 
 // In a browser page:
 const parsed = await parseSettlementUrl(new URLSearchParams(location.search));
-const palette = parsed.paletteName === undefined ? undefined : PALETTES[parsed.paletteName];
-if (parsed.paletteName !== undefined && !Object.hasOwn(PALETTES, parsed.paletteName)) {
-  throw new Error(`Unknown palette: ${parsed.paletteName}`);
-}
 const result = generateSettlement(parsed.burg, {
   seed: parsed.seedOverride,
-  svg: { palette, theme: parsed.themeOverrides },
-  village: parsed.villageThemeName
-    ? { theme: villageThemeFor(parsed.villageThemeName) }
-    : undefined,
+  theme: parsed.paletteName,
+  style: parsed.themeOverrides,
 });
-// Display result.svg and any result.waterContextResult diagnostics.
+// Display result.svg and result.model.waterContextResult diagnostics.
 ```
 
 Wrap parsing/generation in your page's error handler. `UrlCodecError.reason` can

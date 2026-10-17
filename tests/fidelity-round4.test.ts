@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { createHash } from 'node:crypto';
-import { generateFromBurg, mapToGenerationParams, Model, WardType, type AzgaarBurgInput } from '../src/index.js';
+import { generateFromBurg } from './helpers/layout-output.js';
+import { mapToGenerationParams } from '../src/input/azgaar-input.js';
+import { Model } from '../src/generator/model.js';
+import { WardType } from '../src/types/interfaces.js';
+import { type AzgaarBurgInput } from '../src/index.js';
 import { perPatchDensity, densityCurve } from '../src/generator/generation-params.js';
 import { MAX_PATCHES } from '../src/input/azgaar-input.js';
 import { CommonWard } from '../src/wards/common-ward.js';

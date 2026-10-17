@@ -1,14 +1,7 @@
+import { computeSettlementScale, computeTileInfo } from '../src/output/settlement-tiler.js';
 import { describe, it, expect } from 'vitest';
-import {
-  parseSvgViewBox,
-  computeSettlementScale,
-  computeTileInfo,
-  cropSvgToTile,
-  enumerateTiles,
-  totalTileCount,
-  generateFromBurg,
-  type AzgaarBurgInput,
-} from '../src/index.js';
+import { parseSvgViewBox, computeTileInfo as computePhysicalTileInfo, cropSvgToTile, enumerateTiles, totalTileCount, type AzgaarBurgInput } from '../src/index.js';
+import { generateFromBurg } from './helpers/layout-output.js';
 
 describe('parseSvgViewBox', () => {
   it('parses a standard viewBox', () => {
@@ -296,5 +289,29 @@ describe('Round-trip integration', () => {
       const count = totalTileCount(scale.maxZoom);
       expect(count).toBe(enumerateTiles(scale.maxZoom).length);
     }
+  });
+});
+
+
+describe('public physical tile scale', () => {
+  const viewBox = {x:-480,y:-240,width:960,height:480};
+  it('uses metres and derives zoom from extent independently of population', () => {
+    const info = computePhysicalTileInfo(viewBox);
+    expect(info.metersPerUnit).toBe(1);
+    expect(info.maxZoom).toBe(5);
+    expect(info.squareViewBox).toEqual({x:-480,y:-480,width:960,height:960});
+    expect(computePhysicalTileInfo(viewBox, 50)).toEqual(info);
+    expect(computePhysicalTileInfo(viewBox, 100000)).toEqual(info);
+  });
+
+  it('honours an explicit non-metre artwork scale', () => {
+    const info = computePhysicalTileInfo(viewBox, 100000, .25);
+    expect(info.metersPerUnit).toBe(.25);
+    expect(info.maxZoom).toBe(3);
+    expect(computePhysicalTileInfo(viewBox, undefined, .25)).toEqual(info);
+  });
+
+  it('keeps a tiny physical extent at zoom zero', () => {
+    expect(computePhysicalTileInfo({x:0,y:0,width:12,height:8}).maxZoom).toBe(0);
   });
 });

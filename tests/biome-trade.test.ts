@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { generateFromBurg, WardType, type AzgaarBurgInput } from '../src/index.js';
+import { generateFromBurg } from './helpers/layout-output.js';
+import { WardType } from '../src/types/interfaces.js';
+import { type AzgaarBurgInput } from '../src/index.js';
 import { buildScene } from '../src/scene/build-scene.js';
 import { paletteForBiome } from '../src/output/palette.js';
 import { PALETTES } from '../src/output/palette.js';

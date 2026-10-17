@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { generateSettlement, buildScene, generateGeoJson, Point, Polygon } from '../src/index.js';
+import { generateSettlement } from './helpers/layout-output.js';
+import { buildScene } from '../src/scene/build-scene.js';
+import { generateGeoJson } from '../src/output/geojson-builder.js';
+import { Point, Polygon } from '../src/index.js';
 import type { AzgaarBurgInput } from '../src/index.js';
 import { placeCityGlyphs, fitCityGlyph } from '../src/generator/city-glyphs.js';
 import { ARTWORK_INK as REFINED_INK, ARTWORK_MANIFEST as REFINED_MANIFEST } from '../src/assets/artwork.js';

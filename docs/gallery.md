@@ -2,7 +2,7 @@
 
 These maps were generated with SettleMaker 3.1.0 through the public
 `generateSettlement` API. PNG previews and full SVGs come from the same output.
-The gallery covers all five built-in artwork biomes in both engines, plus Copperline.
+The gallery covers all five built-in artwork biomes in both physical layouts, plus Copperline.
 
 [Exact inputs and seeds](examples/gallery/fixtures.json) · [Regenerate the gallery](development.md#documentation-checks)
 
@@ -24,7 +24,7 @@ Population **300** · seed **2** · engine **village**
 
 Native city buildings, denser central wards, greener outskirts and defensive walls.
 
-Population **10000** · seed **2** · engine **settlement**
+Population **10000** · seed **2** · engine **city**
 
 [![Thornwall — walled city](examples/gallery/temperate-city.png)](examples/gallery/temperate-city.svg)
 
@@ -44,7 +44,7 @@ Population **300** · seed **2** · engine **village**
 
 Urban desert architecture, religious buildings and courtyards.
 
-Population **10000** · seed **2** · engine **settlement**
+Population **10000** · seed **2** · engine **city**
 
 [![Qasr — desert city](examples/gallery/desert-city.png)](examples/gallery/desert-city.svg)
 
@@ -64,7 +64,7 @@ Population **300** · seed **2** · engine **village**
 
 Northern roofs, fortifications and biome-specific ground.
 
-Population **10000** · seed **2** · engine **settlement**
+Population **10000** · seed **2** · engine **city**
 
 [![Frosthold — tundra city](examples/gallery/tundra-city.png)](examples/gallery/tundra-city.svg)
 
@@ -84,7 +84,7 @@ Population **300** · seed **2** · engine **village**
 
 Tropical architecture and vegetation in the city engine.
 
-Population **10000** · seed **2** · engine **settlement**
+Population **10000** · seed **2** · engine **city**
 
 [![Palmreach — tropical city](examples/gallery/tropical-city.png)](examples/gallery/tropical-city.svg)
 
@@ -104,7 +104,7 @@ Population **300** · seed **2** · engine **village**
 
 Port infrastructure beside a generated coastline. This is a bearing-based coast, not a measured survey.
 
-Population **12000** · seed **2** · engine **settlement**
+Population **12000** · seed **2** · engine **city**
 
 [![Saltmouth — port city](examples/gallery/coastal-city.png)](examples/gallery/coastal-city.svg)
 
@@ -124,7 +124,7 @@ Population **250** · seed **2** · engine **village**
 
 Copperline machinery and brass materials on the existing city layout and semantic feature types.
 
-Population **2000** · seed **2** · engine **settlement**
+Population **2000** · seed **2** · engine **city**
 
 [![Brassworks — steampunk city](examples/gallery/copperline-city.png)](examples/gallery/copperline-city.svg)
 
@@ -132,7 +132,7 @@ Population **2000** · seed **2** · engine **settlement**
 
 ## One layout, another palette
 
-Thornwall with the same inputs and seed, using `svg.palette: PALETTES.night`.
+Thornwall with the same inputs and seed, using `theme: "night"`.
 City palettes alter presentation; they do not replace all native material tokens.
 Use a skin for complete artwork and material control.
 

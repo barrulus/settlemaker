@@ -26,7 +26,8 @@
  *
  * Run: nix develop --command bash -c "npx tsx scripts/calibrate-yield.ts"
  */
-import { mapToGenerationParams, Model, type AzgaarBurgInput } from '../src/index.js';
+import { Model } from '../src/generator/model.js';
+import { mapToGenerationParams, type AzgaarBurgInput } from '../src/input/azgaar-input.js';
 import { perPatchDensity } from '../src/generator/generation-params.js';
 import { CommonWard } from '../src/wards/common-ward.js';
 

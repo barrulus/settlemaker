@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { generateFromBurg, WardType, type AzgaarBurgInput, type Model } from '../src/index.js';
+import { generateFromBurg } from './helpers/layout-output.js';
+import { WardType } from '../src/types/interfaces.js';
+import { type AzgaarBurgInput } from '../src/index.js';
+import { type Model } from '../src/generator/model.js';
 import { buildingBudget } from '../src/generator/model.js';
 import { densityCurve } from '../src/generator/generation-params.js';
 

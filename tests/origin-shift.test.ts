@@ -1,3 +1,4 @@
+import { computeTileInfo } from '../src/output/settlement-tiler.js';
 import { describe, it, expect } from 'vitest';
 import { Point } from '../src/types/point.js';
 import {
@@ -106,14 +107,9 @@ describe('constants', () => {
   it('MAX_SHIFT_MULTIPLIER = 3.0', () => expect(MAX_SHIFT_MULTIPLIER).toBe(3.0));
 });
 
-import {
-  generateFromBurg,
-  computeLocalBounds,
-  parseSvgViewBox,
-  computeTileInfo,
-  enumerateTiles,
-  type AzgaarBurgInput,
-} from '../src/index.js';
+import { generateFromBurg } from './helpers/layout-output.js';
+import { computeLocalBounds } from '../src/generator/bounds.js';
+import { parseSvgViewBox, enumerateTiles, type AzgaarBurgInput } from '../src/index.js';
 // SHIFT_FACTOR already imported at top of file.
 
 function coastalBurg(overrides: Partial<AzgaarBurgInput> = {}): AzgaarBurgInput {

@@ -20,10 +20,9 @@ for (const fixture of fixtures) {
     const input = { ...fixture.input, temple };
     const start = performance.now();
     const result = generateSettlement(input, { seed: fixture.seed });
-    if (result.kind !== 'village') continue;
     const m = result.model;
-    const stats = { id, input, seed: fixture.seed, runtimeMs: Math.round(performance.now() - start), trees: m.vegetation.length,
-      henges: m.pois.filter(p => p.kind === 'stone-circle').length, diagnostics: m.diagnostics };
+    const stats = { id, input, seed: fixture.seed, runtimeMs: Math.round(performance.now() - start), trees: m.scene.layers.vegetation.length,
+      henges: m.scene.layers.symbols.filter(s => s.id.includes('henge') || s.id.includes('stone-circle')).length, diagnostics: m.diagnostics };
     console.log(JSON.stringify(stats));
     writeFileSync(`${out}/${id}.svg`, result.svg);
     writeFileSync(`${out}/${id}.json`, JSON.stringify({ ...stats, model: m }));

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  generateSettlement, generateFromBurg, generateVillage, resolveSettlementEngine,
+  generateSettlement, createSettlementModel, resolveSettlementEngine,
   encodeBurgParam, decodeBurgParam, parseSettlementUrl, type AzgaarBurgInput,
 } from '../src/index.js';
 
@@ -26,36 +26,52 @@ describe('explicit settlement engine', () => {
     const input = { ...burg, population: 2000, waterContext: { ...measured, surveyRadiusM: 6000 } };
     const before = JSON.stringify(input);
     const result = generateSettlement(input, { seed: 2, engine: 'village' });
-    expect(result.kind).toBe('village');
-    if (result.kind !== 'village') throw Error('wrong planner');
-    expect(result.model.buildings.reduce((sum, b) => sum + b.occupancy, 0)).toBeGreaterThanOrEqual(2000);
-    expect(result.waterContextResult).toEqual({ version: 1, status: 'measured', issues: [] });
+    expect(result.kind).toBe('planned');
+    expect(result.model.development.preset).toBe('village');
+    expect(result.model.residents.assigned).toBe(2000);
+    expect(result.model.waterContextResult).toEqual({ version: 1, status: 'measured', issues: [] });
     expect(JSON.stringify(input)).toBe(before);
   }, 20000);
 
-  it('generates an 800-person city, preserving the existing result discriminator', () => {
+  it('generates an 800-person city with the shared physical contract', () => {
     const result = generateSettlement({ ...burg, engine: 'city' }, { seed: 2 });
-    expect(result.kind).toBe('settlement');
-    expect(result.degradedFlags).toEqual([]);
-    expect(result.svg.includes('glyph-sm-city-row-house')).toBe(true);
-    expect((result.geojson as typeof result.geojson & { metadata: { building_capacity?: unknown } }).metadata.building_capacity).toBeDefined();
-    expect(result.svg === generateFromBurg({ ...burg, engine: 'city' }, { seed: 2 }).svg).toBe(true);
+    expect(result.kind).toBe('planned');
+    expect(result.model.development.preset).toBe('city');
+    expect(result.model.residents.assigned).toBe(800);
+    expect(result.geojson.metadata).toMatchObject({ schema: 'settlemaker/physical-plan', schema_version: 1, coordinate_units: 'metres' });
     const viaOption = generateSettlement({ ...burg, engine: 'auto' }, { seed: 2, engine: 'city' });
-    expect(viaOption.svg === result.svg).toBe(true);
-    const metadata = (geojson: typeof result.geojson) => (geojson as typeof geojson & { metadata: { settlement_generation_version: string } }).metadata;
-    expect(metadata(result.geojson).settlement_generation_version).not.toBe(metadata(generateFromBurg(burg, { seed: 2 }).geojson).settlement_generation_version);
+    expect(viaOption.svg).toBe(result.svg);
+    expect(viaOption.geojson).toEqual(result.geojson);
   });
 
   it('lets an option override a saved choice and lets auto restore population selection', () => {
     const result = generateSettlement({ ...burg, population: 10, engine: 'city' }, { engine: 'auto', seed: 2 });
-    expect(result.kind).toBe('village');
+    expect(result.kind).toBe('planned');
+    expect(result.model.development.preset).toBe('village');
   });
 
-  it('rejects measured water in every city entry point even below the automatic boundary', () => {
-    expect(() => generateSettlement({ ...burg, engine: 'city', waterContext: measured })).toThrow('water-context-unsupported-engine');
-    expect(() => generateSettlement({ ...burg, engine: 'village', waterContext: measured }, { engine: 'city' })).toThrow('water-context-unsupported-engine');
-    expect(() => generateFromBurg({ ...burg, engine: 'village', waterContext: measured })).toThrow('water-context-unsupported-engine');
-    expect(() => generateVillage({ ...burg, population: 10, engine: 'city', waterContext: measured }, 2)).not.toThrow();
+  it('uses an explicit development preset before the engine selector', () => {
+    const result = generateSettlement({ ...burg, engine: 'city' }, { seed: 2, engine: 'city', development: { preset: 'village' } });
+    expect(result.model.development.preset).toBe('village');
+  });
+
+  it.each(['city', 'village'] as const)('accepts measured water for physical %s layouts', engine => {
+    const model = createSettlementModel({ ...burg, engine, waterContext: measured }, { seed: 2 });
+    expect(model.waterContextResult).toEqual({ version: 1, status: 'measured', issues: [] });
+    expect(model.coordinateSystem).toBe('local_metres_y_down');
+  });
+
+  it('exports measured city water in the supplied metre coordinate frame', () => {
+    const coastlineGeometry = [[{x:180,y:-3000},{x:3000,y:-3000},{x:3000,y:3000},{x:180,y:3000}]];
+    const result = generateSettlement({ ...burg, engine: 'city', coastlineGeometry,
+      waterContext: { ...measured, bodies: [{kind:'ocean',distanceM:180,bearingDeg:90,polygonIndices:[0]}] } }, {seed:2});
+    expect(result.model.waterContextResult).toEqual({version:1,status:'measured',issues:[]});
+    const water = result.geojson.features.find(f => f.properties?.layer === 'water');
+    expect(water?.geometry.type).toBe('MultiPolygon');
+    if (water?.geometry.type !== 'MultiPolygon') throw Error('Missing physical city water');
+    const coordinates = water.geometry.coordinates.flat(2);
+    expect(Math.min(...coordinates.map(p => p[0]))).toBe(180);
+    expect(result.model.scene.layers.water.rings.flat().every(p => p.x >= 180)).toBe(true);
   });
 
   it('round-trips an explicit large village through the compressed URL contract', async () => {

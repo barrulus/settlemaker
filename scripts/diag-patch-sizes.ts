@@ -5,7 +5,9 @@
  *
  *   nix develop --command bash -c "npx tsx scripts/diag-patch-sizes.ts"
  */
-import { Model, mapToGenerationParams, computeLocalBounds } from '../src/index.js';
+import { Model } from '../src/generator/model.js';
+import { mapToGenerationParams } from '../src/input/azgaar-input.js';
+import { computeLocalBounds } from '../src/generator/bounds.js';
 import type { AzgaarBurgInput } from '../src/index.js';
 
 const CROSSROADS = [0, 120, 240];

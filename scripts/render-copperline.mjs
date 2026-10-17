@@ -19,7 +19,7 @@ for (const biome of Object.keys(definition.biomes)) {
   assert.equal(skinBiomeFor(skin, biome).base, 'temperate');
   for (const population of [400, 2500]) {
     const result = generateSettlement({ ...burg, biome, population }, { seed: 42, skin });
-    assert.equal(result.kind, population === 400 ? 'village' : 'settlement');
+    assert.equal(result.kind, 'planned');
     const label = population === 400 ? 'village' : 'city';
     const ids = [...result.svg.matchAll(/<(?:g|symbol) id="(?:glyph-)?(sm-[^"]+)"/g)]
       .map(m=>m[1]).filter(id => !id.endsWith('-sil'));

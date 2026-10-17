@@ -1,55 +1,40 @@
-/**
- * `villageTheme=` — an explicit village look, independent of `biome=`.
- *
- * WHY a separate param (owner ruling 2026-09-07): `biome=` already reaches the
- * village, but it is a DATA param — it selects the dwelling deck, the field
- * deck, the canopy deck and the plot-edge treatment as well as the ground. A
- * caller who only wants a different look must not silently rebuild the village
- * out of different houses. `theme=` was unavailable: it already names the city
- * palette.
- *
- * Parsed for both branches and surfaced unconditionally; it has effect only on
- * the village branch. That matches the contract's existing habits —
- * `harbourSize` is meaningless without `port`, `oceanBearing` is ignored
- * inland, neither errors — and it means FMG can build one legal URL without
- * first knowing which side of VILLAGE_POP_CEILING the burg falls on.
- */
 import { describe, it, expect } from 'vitest';
 import { parseSettlementUrl } from '../src/url/params.js';
 import { UrlCodecError } from '../src/url/codec.js';
-import { VILLAGE_BIOMES } from '../src/village/theme.js';
+import { BIOMES, biomeThemeFor } from '../src/appearance/biomes.js';
+import { encodeJsonParam } from '../src/url/codec.js';
 
 const parse = (q: string) => parseSettlementUrl(new URLSearchParams(q));
 
-describe('villageTheme= URL param', () => {
-  it('is surfaced as villageThemeName', async () => {
+describe('migration of villageTheme= links to shared appearance', () => {
+  it('becomes common appearance overrides', async () => {
     const p = await parse('name=Ashford&pop=400&villageTheme=desert');
-    expect(p.villageThemeName).toBe('desert');
+    expect(p.themeOverrides?.paper).toBe(biomeThemeFor('desert').ground);
+    expect(p).not.toHaveProperty('villageThemeName');
   });
 
   it('is absent when not supplied, rather than defaulted', async () => {
-    // Absent must stay absent: renderVillage's own default is
-    // villageThemeFor(site.biome), and a value here would override it.
     const p = await parse('name=Ashford&pop=400');
-    expect(p.villageThemeName).toBeUndefined();
-    expect('villageThemeName' in p).toBe(false);
+    expect(p.themeOverrides).toBeUndefined();
+    expect(p).not.toHaveProperty('villageThemeName');
   });
 
-  it('is accepted on a city-sized burg too, and simply has no effect there', async () => {
+  it('applies the same surface colours to a city-sized burg', async () => {
     const p = await parse('name=Teli&pop=9000&villageTheme=tundra');
-    expect(p.villageThemeName).toBe('tundra');
+    expect(p.themeOverrides?.paper).toBe(biomeThemeFor('tundra').ground);
   });
 
   it('is independent of biome=, which stays a data param', async () => {
     const p = await parse('name=Ashford&pop=400&biome=hot+desert&villageTheme=tundra');
     expect(p.burg.biome).toBe('hot desert');   // untouched; the engine normalises
-    expect(p.villageThemeName).toBe('tundra');
+    expect(p.themeOverrides?.paper).toBe(biomeThemeFor('tundra').ground);
   });
 
-  it('is independent of theme=, which stays the city palette', async () => {
+  it('is independent of the shared theme= palette', async () => {
     const p = await parse('name=Ashford&pop=400&theme=night&villageTheme=desert');
     expect(p.paletteName).toBe('night');
-    expect(p.villageThemeName).toBe('desert');
+    expect(p.themeOverrides?.paper).toBe(biomeThemeFor('desert').ground);
+    expect(p).not.toHaveProperty('villageThemeName');
   });
 
   it('rejects an unknown theme loudly instead of rendering temperate', async () => {
@@ -64,7 +49,7 @@ describe('villageTheme= URL param', () => {
   it('names the legal set in the error, so the caller can fix it', async () => {
     const err = await parse('name=Ashford&pop=400&villageTheme=desrt').catch(e => e);
     expect(err.reason).toBe('villageTheme');
-    for (const b of VILLAGE_BIOMES) expect(err.message).toContain(b);
+    for (const b of BIOMES) expect(err.message).toContain(b);
     expect(err.message).toContain('desrt');
   });
 
@@ -74,13 +59,20 @@ describe('villageTheme= URL param', () => {
   });
 
   it('accepts every shipped theme', async () => {
-    for (const b of VILLAGE_BIOMES) {
+    for (const b of BIOMES) {
       const p = await parse(`name=Ashford&pop=400&villageTheme=${b}`);
-      expect(p.villageThemeName).toBe(b);
+      expect(p.themeOverrides).toMatchObject({ paper: biomeThemeFor(b).ground, water: biomeThemeFor(b).water });
     }
   });
 
-  it('does not on its own count as a data param', async () => {
+  it('lets explicit style colours override migrated regional colours', async () => {
+    const style = await encodeJsonParam({ paper: '#123456' });
+    const p = await parseSettlementUrl(new URLSearchParams({ villageTheme: 'desert', style }));
+    expect(p.themeOverrides?.paper).toBe('#123456');
+    expect(p.themeOverrides?.water).toBe(biomeThemeFor('desert').water);
+  });
+
+  it('does not on its own count as a data param' , async () => {
     // Presence of only presentation params must still yield the random demo
     // burg, exactly as `theme=`/`style=` do.
     const p = await parse('villageTheme=desert');
