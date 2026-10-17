@@ -1,31 +1,22 @@
-# City scene and rendering contract
+# Scene and rendering
 
-Since 3.1.0, the [shared physical planner](settlement-planning.md) adds
-`development` presets, resident accounting and one metre-based output model.
-The legacy API and contracts documented below remain available.
-
-`Scene` version **2** is the semantic rendering representation of the legacy **city**
-planner and physical plans. Legacy villages use `VillageModel` and `renderVillage`; they do not pass through
-`buildScene`. Use [GeoJSON](geojson.md) for exported feature data from both planners,
-and [skins](skins.md) for portable artwork that works in both.
+Both physical layouts use `SettlementModel.scene`, a shared Scene v2 in local
+metres. Rendering and GeoJSON derive from this model:
 
 ```text
-City:     Model → buildScene → Scene v2 → assembleSvg → SVG
-Village:  VillageModel → renderVillage → SVG
+createSettlementModel → SettlementModel.scene → renderSettlement → SVG
+                      SettlementModel       → exportSettlement → GeoJSON
 ```
 
-The scene stores geometry, semantic kinds, saved glyph selections and material
-variant indices. It does not contain SVG fragment bodies or a complete theme.
-`assembleSvg` supplies the artwork and appearance. The complete declarations live
-in [src/scene/scene.ts](../src/scene/scene.ts).
+The scene contains geometry and saved glyph placement; rendering supplies artwork
+and appearance. Treat retained session scenes as read-only.
 
 ## Render an existing city model
 
-This complete example uses the high-level city generator to retain its coastal
-shift and degradation behaviour, then renders the saved model in another palette:
+The same API renders either development preset:
 
 ```js
-import { generateFromBurg, buildScene, assembleSvg, PALETTES } from 'settlemaker';
+import { generateSettlement, renderSettlement, PALETTES } from 'settlemaker';
 
 const burg = {
   name: 'Thornwall', population: 5000, biome: 'temperate',
@@ -33,32 +24,22 @@ const burg = {
   temple: true, shanty: false, capital: false,
   roadBearings: [20, 145, 270],
 };
-const result = generateFromBurg(burg, { seed: 42 });
-const scene = buildScene(result.model, { shift: result.originShift, padding: 20 });
-const svg = assembleSvg(scene, { palette: PALETTES.night });
+const result = generateSettlement(burg, { seed: 42 });
+const scene = result.model.scene;
+const svg = renderSettlement(result.model, { palette: PALETTES.night });
 console.log(scene.version, svg.length);
 ```
 
-`generateSvg(model, options)` is a convenience wrapper around those two stages.
-When rerendering a model from `generateFromBurg`, pass its `originShift` if you
-want the same output coordinate frame. When generating SVG and GeoJSON separately,
-use the same shift and padding for both.
-
-For direct control over city generation:
+Generate once without allocating SVG or GeoJSON:
 
 ```js
-import { mapToGenerationParams, Model, generateSvg, generateGeoJson } from 'settlemaker';
+import { createSettlementModel, renderSettlement, exportSettlement } from 'settlemaker';
 
 // burg is the complete object from the preceding example.
-const params = mapToGenerationParams(burg, 42);
-const model = new Model(params).generate();
-const svg = generateSvg(model);
-const geojson = generateGeoJson(model);
+const model = createSettlementModel(burg, { seed: 42 });
+const svg = renderSettlement(model);
+const geojson = exportSettlement(model);
 ```
-
-`GenerationParams` is a TypeScript interface. It cannot be called with `new`.
-This direct path does not reproduce the two-pass coastal output translation
-performed by `generateFromBurg`; use that high-level function when you want it.
 
 ## Scene fields
 
@@ -67,7 +48,7 @@ performed by `generateFromBurg`; use that high-level function when you want it.
 | `version` | Literal 2. |
 | `seed`, `population`, optional `name`, `biome` | Generating context. |
 | `bounds` | Local output bounds. |
-| `metersPerUnit` | Optional city scale estimate for rendering, not a survey. |
+| `metersPerUnit` | 1 for physical models; geometry uses metres. |
 | `buildingCapacity` | Optional ordinary-building budget accounting. |
 | `layers` | The geometry and instance arrays described below. |
 
@@ -93,9 +74,9 @@ and downloadable authoring assets can use other dimensions. There is no universa
 
 ## Appearance and artwork
 
-`assembleSvg(scene, options)` accepts `palette`, partial `theme`, `skin`,
-`skinBiome`, `assetSet`, `symbols` and `clipId`. `generateSvg` also accepts scene
-`padding` and `shift`.
+`renderSettlement(model, options)` accepts shared assembly appearance options,
+including `palette`, partial `theme`, `skin`, `skinBiome`, `assetSet`, `symbols`
+and `clipId`, plus physical viewport `bounds`, display `width` and `detail`.
 
 The default asset set is **`SETTLEMENT_SET`**, containing the current native biome
 artwork. `REFINED_SET` and `SCHEMATIC_SET` remain explicit lower-level alternatives.

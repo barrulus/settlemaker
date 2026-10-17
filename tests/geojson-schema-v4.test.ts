@@ -1,8 +1,8 @@
+// Historical exporter regressions for retained layout internals; public exports use physical-plan v1.
 import { describe, it, expect } from 'vitest';
-import {
-  generateFromBurg, GEOJSON_SCHEMA_VERSION, SETTLEMAKER_VERSION,
-  type AzgaarBurgInput,
-} from '../src/index.js';
+import { generateFromBurg } from './helpers/layout-output.js';
+import { GEOJSON_SCHEMA_VERSION } from '../src/output/geojson-builder.js';
+import { SETTLEMAKER_VERSION, type AzgaarBurgInput } from '../src/index.js';
 import type { Feature, FeatureCollection } from 'geojson';
 
 function makeBurg(overrides: Partial<AzgaarBurgInput> = {}): AzgaarBurgInput {
@@ -22,12 +22,12 @@ function layer(fc: FeatureCollection, name: string): Feature[] {
 }
 
 describe('GeoJSON schema v4 — metadata', () => {
-  it('emits schema_version 4 and version 3.1.0', () => {
+  it('emits schema_version 4 and version 4.0.0', () => {
     const { geojson } = generateFromBurg(makeBurg(), { seed: 1 });
     expect(GEOJSON_SCHEMA_VERSION).toBe(4);
-    expect(SETTLEMAKER_VERSION).toBe('3.1.0');
+    expect(SETTLEMAKER_VERSION).toBe('4.0.0');
     expect(metadata(geojson).schema_version).toBe(4);
-    expect(metadata(geojson).settlemaker_version).toBe('3.1.0');
+    expect(metadata(geojson).settlemaker_version).toBe('4.0.0');
   });
 
   it('emits stable_ids.prefixes with exactly four entries', () => {

@@ -11,7 +11,7 @@ import { SETTLEMAKER_VERSION, SKIN_SLOTS, decodeBurgParam } from '../dist/index.
 const root = fileURLToPath(new URL('../', import.meta.url));
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 const read = path => readFileSync(resolve(root, path), 'utf8');
-const pages = ['README.md', 'docs/README.md', 'docs/getting-started.md', 'docs/api.md',
+const pages = ['docs/migration-physical.md', 'README.md', 'docs/README.md', 'docs/getting-started.md', 'docs/api.md',
   'docs/appearance.md', 'docs/settlement-planning.md', 'docs/geojson.md', 'docs/scene-schema.md', 'docs/url-api.md', 'docs/water-context-v1.md',
   'docs/skins.md', 'docs/current-symbol-library.md', 'docs/artwork-integration.md',
   'docs/fmg-embed-zoom.md', 'docs/development.md', 'docs/test-urls.md', 'docs/gallery.md',
@@ -55,7 +55,7 @@ assert.equal(Object.keys(SKIN_SLOTS).length, 693);
 const gallery = JSON.parse(read('docs/examples/gallery/fixtures.json'));
 assert.equal(gallery.generatorVersion, pkg.version, 'Regenerate the gallery for this release');
 for (const fixture of gallery.fixtures) {
-  assert.equal(fixture.engine, fixture.burg.population <= 1000 ? 'village' : 'settlement');
+  assert.equal(fixture.engine, fixture.burg.population <= 1000 ? 'village' : 'city');
   for (const ext of ['svg', 'png']) assert.ok(existsSync(join(root, `docs/examples/gallery/${fixture.id}.${ext}`)));
   if (fixture.previewUrl) {
     assert.ok(!fixture.skin, 'The URL codec does not carry skins');
@@ -90,7 +90,7 @@ run('lower-level', burg + '\n' + scene[1]);
 run('tiles', quick[0] + '\n' + blocks('docs/geojson.md', 'js')[0] + '\nif (!rootTileSvg.includes("<svg")) throw new Error("No tile");');
 const url = blocks('docs/url-api.md', 'js');
 run('url-encode', url[0]);
-run('url-renderer', 'const location = {search: "?name=Docs&pop=300&plaza=1&seed=2&roads=20,140,270"};\n' + url[1] + '\nif (result.kind !== "village") throw new Error("Wrong URL engine");');
+run('url-renderer', 'const location = {search: "?name=Docs&pop=300&plaza=1&seed=2&roads=20,140,270"};\n' + url[1] + '\nif (result.kind !== "planned") throw new Error("Wrong URL engine");');
 const typeFiles = [];
 for (const page of ['docs/getting-started.md', 'docs/api.md']) {
   for (const [i, code] of blocks(page, 'ts').entries()) {

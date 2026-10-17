@@ -1,3 +1,4 @@
+import { computeTileInfo } from '../src/output/settlement-tiler.js';
 import { describe, it, expect } from 'vitest';
 import { Point } from '../src/types/point.js';
 import {
@@ -106,14 +107,9 @@ describe('constants', () => {
   it('MAX_SHIFT_MULTIPLIER = 3.0', () => expect(MAX_SHIFT_MULTIPLIER).toBe(3.0));
 });
 
-import {
-  generateFromBurg,
-  computeLocalBounds,
-  parseSvgViewBox,
-  computeTileInfo,
-  enumerateTiles,
-  type AzgaarBurgInput,
-} from '../src/index.js';
+import { generateFromBurg } from './helpers/layout-output.js';
+import { computeLocalBounds } from '../src/generator/bounds.js';
+import { parseSvgViewBox, enumerateTiles, type AzgaarBurgInput } from '../src/index.js';
 // SHIFT_FACTOR already imported at top of file.
 
 function coastalBurg(overrides: Partial<AzgaarBurgInput> = {}): AzgaarBurgInput {
@@ -243,11 +239,11 @@ describe('GeoJSON output reflects shift', () => {
     expect(meta.local_origin_shift.dx).toBeLessThan(0);
   });
 
-  it('emits schema_version=4 and settlemaker_version=3.1.0', () => {
+  it('emits schema_version=4 and settlemaker_version=4.0.0', () => {
     const result = generateFromBurg(coastalBurg());
     const meta = (result.geojson as unknown as { metadata: { schema_version: number; settlemaker_version: string } }).metadata;
     expect(meta.schema_version).toBe(4);
-    expect(meta.settlemaker_version).toBe('3.1.0');
+    expect(meta.settlemaker_version).toBe('4.0.0');
   });
 
   it('shifts wall feature coordinates toward the coast', () => {

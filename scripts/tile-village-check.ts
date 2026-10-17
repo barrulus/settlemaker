@@ -1,17 +1,8 @@
-/**
- * Run `settlement-tiler` against a VILLAGE — it has only ever seen the city
- * renderer's output.
- *
- * The village SVG shares the `data-bg="paper"` crop contract but is otherwise
- * a different document: a water band, and three alignment attributes on the
- * root element that the city path does not emit.
- *
- *   nix develop --command bash -c "npx tsx scripts/tile-village-check.ts"
- */
+/** Exercise SVG tiling against the public physical village planner. */
 import fs from 'node:fs';
 import sharp from 'sharp';
 import {
-  generateVillage, renderVillage,
+  generateSettlement,
   parseSvgViewBox, computeTileInfo, cropSvgToTile, enumerateTiles, totalTileCount,
 } from '../src/index.js';
 import type { AzgaarBurgInput } from '../src/input/azgaar-input.js';
@@ -30,11 +21,10 @@ const CASES: Array<{ name: string; burg: AzgaarBurgInput }> = [
 
 async function main(): Promise<void> {
   for (const { name, burg } of CASES) {
-    const model = generateVillage(burg, 1);
-    const svg = renderVillage(model);
+    const { svg } = generateSettlement(burg, { seed: 1, engine: 'village' });
     const vb = parseSvgViewBox(svg);
     if (!vb) throw new Error(`${name}: the tiler cannot read the village viewBox`);
-    const info = computeTileInfo(vb, burg.population);
+    const info = computeTileInfo(vb, burg.population, 1);
     process.stdout.write(
       `\n${name}: viewBox ${vb.width.toFixed(0)}x${vb.height.toFixed(0)} -> maxZoom ${info.maxZoom}, `
       + `${totalTileCount(info.maxZoom)} tiles, ${info.metersPerUnit.toFixed(4)} m/unit\n`,

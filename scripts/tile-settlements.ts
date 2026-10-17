@@ -13,13 +13,12 @@ import pg from 'pg';
 import sharp from 'sharp';
 import pLimit from 'p-limit';
 import {
-  generateFromBurg,
+  generateSettlement,
   parseSvgViewBox,
   computeTileInfo,
   cropSvgToTile,
   enumerateTiles,
   totalTileCount,
-  computeSettlementScale,
   type AzgaarBurgInput,
   type TileInfo,
 } from '../src/index.js';
@@ -146,7 +145,7 @@ async function renderTile(
 }
 
 function writeTilesetJson(burgDir: string, row: BurgRow, tileInfo: TileInfo): void {
-  const scale = computeSettlementScale(row.population);
+  const diameterMeters = Math.max(tileInfo.originalViewBox.width, tileInfo.originalViewBox.height) * tileInfo.metersPerUnit;
   const tilesAtMaxZoom = Math.pow(2, tileInfo.maxZoom);
   const metersPerPixelAtMaxZoom = (tileInfo.squareViewBox.width * tileInfo.metersPerUnit) / (tilesAtMaxZoom * TILE_SIZE);
 
@@ -155,7 +154,7 @@ function writeTilesetJson(burgDir: string, row: BurgRow, tileInfo: TileInfo): vo
     burg: { id: row.burg_id, name: row.name, population: row.population },
     tiles: { tileSize: TILE_SIZE, minZoom: 0, maxZoom: tileInfo.maxZoom, format: 'png' },
     scale: {
-      diameterMeters: Math.round(scale.diameterMeters * 10) / 10,
+      diameterMeters: Math.round(diameterMeters * 10) / 10,
       metersPerUnit: Math.round(tileInfo.metersPerUnit * 100) / 100,
       metersPerPixelAtMaxZoom: Math.round(metersPerPixelAtMaxZoom * 1000) / 1000,
     },
@@ -226,7 +225,7 @@ async function processBurg(row: BurgRow): Promise<{ tiles: number; errors: numbe
   const burg = rowToBurg(row);
 
   // 1. Generate SVG
-  const result = generateFromBurg(burg);
+  const result = generateSettlement(burg);
   const svg = result.svg;
 
   // 2. Parse viewBox and compute tile info
@@ -235,7 +234,7 @@ async function processBurg(row: BurgRow): Promise<{ tiles: number; errors: numbe
     console.error(`  SKIP ${row.name} (burg ${row.burg_id}): no viewBox in SVG`);
     return { tiles: 0, errors: 1 };
   }
-  const tileInfo = computeTileInfo(viewBox, row.population);
+  const tileInfo = computeTileInfo(viewBox, row.population, 1);
 
   // 3. Set up output directory
   const burgDir = path.join(OUT_DIR, String(row.burg_id));

@@ -5,7 +5,9 @@ import { buildScene } from '../src/scene/build-scene.js';
 import { SCENE_VERSION, type Scene } from '../src/scene/scene.js';
 import { Point } from '../src/types/point.js';
 import type { OriginShift } from '../src/generator/origin-shift.js';
-import { Model, mapToGenerationParams, type AzgaarBurgInput, SCHEMATIC_SET } from '../src/index.js';
+import { Model } from '../src/generator/model.js';
+import { mapToGenerationParams } from '../src/input/azgaar-input.js';
+import { type AzgaarBurgInput, SCHEMATIC_SET } from '../src/index.js';
 
 // Canonical test-model helper (pattern from tests/degraded-generation.test.ts).
 function mk(population: number, seed: number, overrides: Partial<AzgaarBurgInput> = {}): Model {

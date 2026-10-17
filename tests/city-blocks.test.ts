@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { generateSettlement, buildScene, Point, Polygon } from '../src/index.js';
+import { generateSettlement } from './helpers/layout-output.js';
+import { buildScene } from '../src/scene/build-scene.js';
+import { Point, Polygon } from '../src/index.js';
 import { planCityBlock, coalesceCityRuns } from '../src/generator/city-blocks.js';
 import { blocksAccess, nearestOnSegment, overlapsWater } from '../src/generator/city-frontage.js';
 import type { WardLane } from '../src/wards/ward.js';

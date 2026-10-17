@@ -1,5 +1,6 @@
 import { describe, test, expect } from 'vitest';
-import { Model, mapToGenerationParams } from '../src/index.js';
+import { Model } from '../src/generator/model.js';
+import { mapToGenerationParams } from '../src/input/azgaar-input.js';
 
 function convexHullCompactness(vertices: {x:number;y:number}[]): number {
   // Andrew's monotone chain -> hull area & perimeter -> 4πA/P²

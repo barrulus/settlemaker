@@ -1,3 +1,4 @@
+import { setImmediate as yieldToRunner } from 'node:timers/promises';
 /**
  * Task 8: the spec's structural invariants (5.6), asserted on the FINISHED
  * model rather than on the network in isolation.
@@ -48,11 +49,13 @@ const SEEDS = [1, 2, 3];
 const input = (roads: AzgaarBurgInput['roadBearings'], population: number): AzgaarBurgInput =>
   ({ name: 'Struct', population, ...flags, roadBearings: roads } as AzgaarBurgInput);
 
-function each(fn: (m: VillageModel, label: string, roads: AzgaarBurgInput['roadBearings']) => void): void {
+async function each(fn: (m: VillageModel, label: string, roads: AzgaarBurgInput['roadBearings']) => void): Promise<void> {
   for (const { name, roads } of SCENARIOS) {
     for (const pop of POPS) {
       for (const seed of SEEDS) {
         fn(generateVillage(input(roads, pop), seed), `${name} pop ${pop} seed ${seed}`, roads);
+        // Long sweeps must let Vitest receive and acknowledge progress messages.
+        await yieldToRunner();
       }
     }
   }
@@ -79,7 +82,7 @@ function crosses(a: Point[], b: Point[]): boolean {
 // the global `testTimeout` in `vitest.config.ts`, which carries the
 // measurement and the reasoning.
 describe('spec 5.6 structural invariants, on the shipped model', () => {
-  it('(a) every FMG route is carried by the network, matched on whole ids', () => {
+  it('(a) every FMG route is carried by the network, matched on whole ids', async () => {
     // Was a SUBSTRING test (`t.id.includes(id)`), which in the `fan`
     // scenario -- whose route ids are single letters -- passed route 'a'
     // against `trunk-trail-e` and `trunk-local-d`. Several routes were
@@ -90,7 +93,7 @@ describe('spec 5.6 structural invariants, on the shipped model', () => {
     // legitimately splits one road into `<id>` and `<id>~x<other>` halves,
     // and a merged road reports its several routes on `sourceRouteIds`.
     // Uniqueness of the CARRIER is asserted by the id-uniqueness bar.
-    each((m, label, roads) => {
+    await each((m, label, roads) => {
       const trunks = m.lanes.filter((l) => isTrunk(l.id));
       for (const road of roads as Array<{ route_id?: string }>) {
         const id = road.route_id!;
@@ -107,8 +110,8 @@ describe('spec 5.6 structural invariants, on the shipped model', () => {
     });
   });
 
-  it('(b) every route still meets the contract circle at its exact bearing', () => {
-    each((m, label, roads) => {
+  it('(b) every route still meets the contract circle at its exact bearing', async () => {
+    await each((m, label, roads) => {
       const trunks = m.lanes.filter((l) => isTrunk(l.id) && l.points.length >= 2);
       for (const road of roads as Array<{ bearing_deg: number; route_id?: string; through?: boolean }>) {
         const wanted = [road.bearing_deg];
@@ -129,8 +132,8 @@ describe('spec 5.6 structural invariants, on the shipped model', () => {
     });
   });
 
-  it('(c) no two lanes cross without a junction', () => {
-    each((m, label) => {
+  it('(c) no two lanes cross without a junction', async () => {
+    await each((m, label) => {
       const lanes = m.lanes.filter((l) => l.points.length >= 2);
       let found = '';
       for (let i = 0; i < lanes.length && !found; i++) {
@@ -145,7 +148,7 @@ describe('spec 5.6 structural invariants, on the shipped model', () => {
     });
   });
 
-  it('(d) a trail terminates ON the network, never on its own in the middle', () => {
+  it('(d) a trail terminates ON the network, never on its own in the middle', async () => {
     // Ruling 4: "trail-class entries terminate on the network between houses
     // or on the route -- they never demand their own line to the centre."
     //
@@ -156,7 +159,7 @@ describe('spec 5.6 structural invariants, on the shipped model', () => {
     // the main road exactly as ruling 4 wants, and the green being there is
     // Task 7 doing its job. What ruling 4 forbids is a trail running to the
     // middle and stopping with nothing to stop against.
-    each((m, label) => {
+    await each((m, label) => {
       if (m.greenRelation === 'terminal') return;
       const lanes = m.lanes.filter((l) => l.points.length >= 2);
       const trails = lanes.filter(
@@ -173,7 +176,7 @@ describe('spec 5.6 structural invariants, on the shipped model', () => {
     });
   });
 
-  it('(e) the same seed gives the same village, end to end', () => {
+  it('(e) the same seed gives the same village, end to end', async () => {
     for (const { name, roads } of SCENARIOS) {
       for (const pop of POPS) {
         const a = generateVillage(input(roads, pop), 2);
@@ -182,6 +185,7 @@ describe('spec 5.6 structural invariants, on the shipped model', () => {
         expect(JSON.stringify(a.buildings), `${name} pop ${pop}: buildings`)
           .toBe(JSON.stringify(b.buildings));
         expect(a.greenRelation).toBe(b.greenRelation);
+        await yieldToRunner();
       }
     }
   });

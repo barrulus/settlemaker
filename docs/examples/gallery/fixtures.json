@@ -1,5 +1,5 @@
 {
-  "generatorVersion": "3.1.0",
+  "generatorVersion": "4.0.0",
   "fixtures": [
     {
       "id": "temperate-village",
@@ -72,7 +72,7 @@
         "biome": "temperate"
       },
       "seed": 2,
-      "engine": "settlement",
+      "engine": "city",
       "previewUrl": "https://settlemaker.com/fmg?i=dZDBasMwEET_Zc4qNKakRcd-Q24hmE28jUVkSUjrmNbk37tqa5cGqpNGzJsd7Ywr7MbgOOYz7IwUs8C-kS9scHJCHXtYyaPKibwvi0iePmgRwkPyvKjSU5D33xRKmrOm5EjdK1N24axh-xnHb9F2rA02LwYXFzpYDOQCqn8Ubl19CVquf6gBuJl78KlZSYnTHVn0-h_ZbJ9X0seTNv2DTlzkhzwYBBr0n9j1MYe6D_WmmEZP4mLQFo96dJsuftnqXjiTsE5FYda85vYJ"
     },
     {
@@ -146,7 +146,7 @@
         "biome": "desert"
       },
       "seed": 2,
-      "engine": "settlement",
+      "engine": "city",
       "previewUrl": "https://settlemaker.com/fmg?i=dZBRi8IwEIT_yz5HOIt4kkf_gc8iZTV7GtwmIdlatPS_u7279jjBPGXCfMNkeriBXRo4tvkMtocUs4D9Qi5k4OQFHTFYya3KDpnLJBLjAych1CSmSZULBrn_pWDSHJ51jui2hNmHs6btezj-iNqRVlhuDFx9cGChQR9g9LdCtR9fgra7LMYAGMwruKpmUmL3Qha9viOr9edMcjxp1X9oR0V-yYOBgI1-FHZYstpSTC2j-Bi0wIceXdLHb4ejQrrloHsQaU41PAE"
     },
     {
@@ -220,7 +220,7 @@
         "biome": "tundra"
       },
       "seed": 2,
-      "engine": "settlement",
+      "engine": "city",
       "previewUrl": "https://settlemaker.com/fmg?i=dZDRTsMwDEX_xc9BYhUClEce-AmEJm_x1gg3jhKHCqr9O-6gnTaJPOVEPjc3meAT_MbBrpUj-AmyFAV_QK7kYB8VAzF4Lc1wROa6QGb8xgWUhsy0UO0x6dclBbPl8MpFMLwQlpiOlvY2we4XtoGswubZwUdMATwMGBPM801pG-eTZO36uzkATu5WfOhWU2W8Matt_zO7x6fVZNlb1St1pKp_5ruDhIM9FF6LVO2Fg81myY1RoyRrcW_LvjPKeUxbCgXtSqhEFtadfgA"
     },
     {
@@ -309,7 +309,7 @@
         "biome": "tropical"
       },
       "seed": 2,
-      "engine": "settlement",
+      "engine": "city",
       "previewUrl": "https://settlemaker.com/fmg?i=dZDRisIwEEX_ZZ4jaBGVPPoFvouUsZ21wWkSkqllt_Tfne5uu6xgnnLDnMPNDPAAuzFw7dIN7AAxJAH7gZzJQOUEa2KwkjqNPTLnOUTGL5yDUBuZ5pQb9PL5Z8GoHl5yClgfCZPzN7WdB7j-hLImrbA5GLg7X4OFFp2Hab4TKt304rVds5oEMJpXcFsspIT-hcx6fUcWu_1Ccqi06j-0pyy_5MWAx1Y_CifkNhFWjc7GEDtGccFri7UeXacL32OSQnSTcdS1EKmuGJ8"
     },
     {
@@ -368,7 +368,7 @@
         "oceanBearing": 90
       },
       "seed": 2,
-      "engine": "settlement",
+      "engine": "city",
       "previewUrl": "https://settlemaker.com/fmg?i=RY69DsIwDITfxXOGUCYy8godEYNpTRvJjaP8gGjVd8dFFMY7n7-7BR7gDgZuNQ3gFoiSCriSKhnofMGeGNwdOat-InPej5Fxxl0UmiLTrvKIobx-bx1GBf0xSbA_EyYfBqVdGmvN0dqrgYCTMqBFLpPUMoK2SKyMxUvQlZq0utTLJ9YJ5g1rYMR0k5paP28-YxpIXekIw7cH3MmuOoyoB9esbw"
     },
     {
@@ -443,7 +443,7 @@
         "biome": "steampunk"
       },
       "seed": 2,
-      "engine": "settlement"
+      "engine": "city"
     }
   ]
 }

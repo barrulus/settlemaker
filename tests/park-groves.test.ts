@@ -1,5 +1,6 @@
 import {describe,expect,it,vi} from 'vitest';
-import {createCityModel,createSettlementModel,parseSettlementUrl} from '../src/index.js';
+import { createCityModel } from '../src/output/legacy-model.js';
+import { createSettlementModel, parseSettlementUrl } from '../src/index.js';
 import {ARTWORK_MANIFEST,ARTWORK_INK,cityGlyph} from '../src/assets/artwork.js';
 import {floraCanopyRadius,selectParkTreeAt} from '../src/assets/landscape-placement.js';
 import {cityMetersPerUnit} from '../src/generator/city-glyphs.js';

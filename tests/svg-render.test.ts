@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { generateFromBurg, themeFrom, type AzgaarBurgInput } from '../src/index.js';
+import { generateFromBurg } from './helpers/layout-output.js';
+import { themeFrom, type AzgaarBurgInput } from '../src/index.js';
 import { generateSvg } from '../src/output/svg-builder.js';
 import { WardType } from '../src/types/interfaces.js';
 import { buildScene } from '../src/scene/build-scene.js';

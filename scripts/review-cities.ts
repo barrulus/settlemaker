@@ -5,7 +5,7 @@ import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import sharp from 'sharp';
-import * as current from '../src/index.js';
+import * as current from './internal-layout-review.js';
 import { buildingBudget } from '../src/generator/model.js';
 import { REFINED_GLYPHS } from '../src/assets/refined-glyphs.js';
 import { REFINED_INK } from '../src/assets/refined-ink.js';

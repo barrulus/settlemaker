@@ -6,7 +6,9 @@ import { pointInPolygon } from '../src/geom/point-in-polygon.js';
 import { CommonWard } from '../src/wards/common-ward.js';
 import { Farm } from '../src/wards/farm.js';
 import { buildScene } from '../src/scene/build-scene.js';
-import { Model, mapToGenerationParams, type AzgaarBurgInput } from '../src/index.js';
+import { Model } from '../src/generator/model.js';
+import { mapToGenerationParams } from '../src/input/azgaar-input.js';
+import { type AzgaarBurgInput } from '../src/index.js';
 import { WardType } from '../src/types/interfaces.js';
 import { scoreBuildings, scoringReference } from '../src/poi/poi-selector.js';
 

@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { Model, mapToGenerationParams, generateFromBurg, SETTLEMAKER_VERSION, WardType, type AzgaarBurgInput } from '../src/index.js';
+import { Model } from '../src/generator/model.js';
+import { mapToGenerationParams } from '../src/input/azgaar-input.js';
+import { generateFromBurg } from './helpers/layout-output.js';
+import { SETTLEMAKER_VERSION, type AzgaarBurgInput } from '../src/index.js';
+import { WardType } from '../src/types/interfaces.js';
 import type { FeatureCollection } from 'geojson';
 
 function meta(fc: FeatureCollection): Record<string, unknown> {
@@ -196,10 +200,10 @@ describe('degraded_flags in GeoJSON metadata', () => {
     expect(meta(result.geojson).degraded_flags).toEqual([]);
   });
 
-  it('bumps settlemaker_version to 3.1.0', () => {
-    expect(SETTLEMAKER_VERSION).toBe('3.1.0');
+  it('bumps settlemaker_version to 4.0.0', () => {
+    expect(SETTLEMAKER_VERSION).toBe('4.0.0');
     const result = generateFromBurg(burg({ name: 'V', population: 5000 }));
-    expect(meta(result.geojson).settlemaker_version).toBe('3.1.0');
+    expect(meta(result.geojson).settlemaker_version).toBe('4.0.0');
   });
 });
 

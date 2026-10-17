@@ -2,9 +2,7 @@
 import {mkdirSync,writeFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import sharp from 'sharp';
-import {generateSettlement,buildScene} from '../dist/index.js';
-import {cityUrbanity} from '../dist/generator/city-character.js';
-import {CommonWard} from '../dist/wards/common-ward.js';
+import {generateSettlement} from '../dist/index.js';
 const out=fileURLToPath(new URL('../output/art-integration/',import.meta.url));
 mkdirSync(out,{recursive:true});
 const base={name:'Artwork integration',walls:true,plaza:true,temple:true,port:false,citadel:true,shanty:false,capital:true,roadBearings:[{bearing_deg:18,kind:'main',route_id:'a'},{bearing_deg:142,kind:'town',route_id:'b'},{bearing_deg:267,kind:'local',route_id:'c'}]};
@@ -16,20 +14,21 @@ examples.push({name:'tropical-rice',label:'Tropical river village / rice paddies
 const summary=[];
 for(const e of examples){
   const r=generateSettlement(e.input,{seed:e.seed});
-  let character;
-  if(r.kind==='settlement'){
-    const bands=[{name:'centre',min:.7,max:1.01},{name:'middle',min:.3,max:.7},{name:'edge',min:0,max:.3}].map(b=>{
-      const patches=r.model.patches.filter(p=>p.withinCity&&p.ward instanceof CommonWard&&cityUrbanity(r.model,p)>=b.min&&cityUrbanity(r.model,p)<b.max);
-      const roofs=patches.reduce((n,p)=>n+p.ward.geometry.reduce((s,b)=>s+Math.abs(b.square),0),0),land=patches.reduce((n,p)=>n+Math.abs(p.shape.square),0);
-      return {name:b.name,wards:patches.length,roofCoverage:land?Number((roofs/land).toFixed(3)):0};
-    });
-    const scene=buildScene(r.model);
-    character={bands,parks:r.model.patches.filter(p=>p.ward?.type==='park').length,greens:scene.layers.greens.length,ruralHomes:r.model.symbols.filter(s=>s.id.startsWith('sm-house')).length,roofColours:[...new Set(r.model.symbols.map(s=>s.materialVariant??0))].length};
-  }
+  const {model}=r, scene=model.scene;
+  const bands=[{name:'centre',min:.7,max:1.01},{name:'middle',min:.3,max:.7},{name:'edge',min:0,max:.3}].map(b=>{
+    const districts=model.districts.filter(d=>d.urbanity>=b.min&&d.urbanity<b.max);
+    const roofs=districts.reduce((n,d)=>n+(d.occupiedAreaM2??0),0),land=districts.reduce((n,d)=>n+(d.areaM2??0),0);
+    return {name:b.name,districts:districts.length,roofCoverage:land?Number((roofs/land).toFixed(3)):0};
+  });
+  const character={bands,greens:scene.layers.greens.length,ruralHomes:model.buildings.filter(b=>b.settlementRole==='rural').length};
   writeFileSync(`${out}/${e.name}.svg`,r.svg);
   writeFileSync(`${out}/${e.name}.geojson`,JSON.stringify(r.geojson));
   await sharp(Buffer.from(r.svg.replace(/var\(--[^,]+,\s*([^\)]+)\)/g,'$1'))).resize({width:1400}).png().toFile(`${out}/${e.name}.png`);
-  summary.push({name:e.name,engine:r.kind,...(character?{character}:{}),...(r.kind==='village'?{buildings:r.model.buildings.length,housed:r.model.buildings.reduce((n,b)=>n+b.occupancy,0),fields:r.model.fields.length,plants:r.model.vegetation.length,bridges:r.model.bridges.length,gates:r.model.wall?.gates.length??0}:{buildings:r.model.countOrdinaryBuildingsPublic(),glyphs:r.model.symbols.filter(s=>s.building).length})});
+  summary.push({name:e.name,preset:model.development.preset,character,
+    buildings:scene.layers.buildings.length,housed:model.residents.assigned,
+    fields:scene.layers.fields.length,plants:scene.layers.vegetation.length,
+    bridges:scene.layers.bridges?.length??0,gates:scene.layers.walls.reduce((n,w)=>n+w.gates.length,0),
+    glyphs:scene.layers.symbols.length});
   console.log(`Rendered ${e.name}`);
 }
 writeFileSync(`${out}/summary.json`,JSON.stringify(summary,null,2));

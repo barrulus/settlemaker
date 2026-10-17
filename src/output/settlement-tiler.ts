@@ -114,6 +114,21 @@ export function computeTileInfo(
   };
 }
 
+/** Tile a physical SVG using its measured extent. All public generation uses
+ * one metre per SVG unit. The second argument is retained for call-site
+ * compatibility; population does not determine physical scale or zoom.
+ * The optional third argument supports externally rescaled SVGs. */
+export function computePhysicalTileInfo(
+  viewBox: SvgViewBox, _population?: number, metersPerUnitOverride?: number | null,
+): TileInfo {
+  const metersPerUnit = metersPerUnitOverride ?? 1;
+  if (!Number.isFinite(metersPerUnit) || metersPerUnit <= 0) {
+    throw new RangeError('metersPerUnit must be positive and finite');
+  }
+  const info = computeTileInfo(viewBox, 1, metersPerUnit);
+  return { ...info, maxZoom: Math.max(0, Math.ceil(Math.log2(info.squareExtent * metersPerUnit / 30))) };
+}
+
 /**
  * Crop an SVG string to a specific tile extent.
  * Replaces/injects viewBox, width, and height attributes via regex.

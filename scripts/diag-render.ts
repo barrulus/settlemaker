@@ -4,7 +4,9 @@
  */
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { Model, mapToGenerationParams, generateSvg } from '../src/index.js';
+import { Model } from '../src/generator/model.js';
+import { mapToGenerationParams } from '../src/input/azgaar-input.js';
+import { generateSvg } from '../src/output/svg-builder.js';
 import type { AzgaarBurgInput } from '../src/index.js';
 
 const outdir = process.argv[2] ?? 'diag-out';

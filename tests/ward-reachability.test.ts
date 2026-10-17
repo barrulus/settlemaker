@@ -9,7 +9,9 @@
 // walled city expects all three, they must appear in (nearly) every run,
 // not a lucky minority.
 import { describe, it, expect } from 'vitest';
-import { generateFromBurg, WardType, type AzgaarBurgInput } from '../src/index.js';
+import { generateFromBurg } from './helpers/layout-output.js';
+import { WardType } from '../src/types/interfaces.js';
+import { type AzgaarBurgInput } from '../src/index.js';
 
 const SEEDS = 20;
 const POPULATION = 20000;

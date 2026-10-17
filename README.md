@@ -2,16 +2,18 @@
 
 **Generate settlement maps. Bring your own world.**
 
-Version 3.1 adds the [shared physical planner](https://github.com/barrulus/settlemaker/blob/v3.1.0/docs/settlement-planning.md),
-[shared themes and explicit engine selection](https://github.com/barrulus/settlemaker/blob/v3.1.0/docs/appearance.md), and retained
-sessions for viewport rendering. See the [3.1.0 release notes](https://github.com/barrulus/settlemaker/blob/v3.1.0/docs/releases/3.1.0.md)
-for compatibility and layout changes.
+Version 4 uses one [physical planner](https://github.com/barrulus/settlemaker/blob/v4.0.0/docs/settlement-planning.md)
+for every village and city, with shared rendering, resident accounting and GeoJSON
+in local metres. The legacy APIs are retired. See the
+[4.0.0 release notes](https://github.com/barrulus/settlemaker/blob/v4.0.0/docs/releases/4.0.0.md)
+and [migration guide](https://github.com/barrulus/settlemaker/blob/v4.0.0/docs/migration-physical.md).
 
 SettleMaker is a procedural map engine for Node.js and browsers. Give it a
 settlement's population, roads, terrain and seed; get an SVG map, local GeoJSON
-and a model you can inspect. The new physical planner combines dispersed village
+and a model you can inspect. The physical planner combines dispersed village
 plots and dense city blocks with shared landscape, rendering, resident accounting
-and GeoJSON in metres. Legacy entry points remain available.
+and GeoJSON in metres. All public generation uses this planner.
+See the [migration guide](docs/migration-physical.md) for the retired API.
 
 The bundled artwork depicts medieval settlements. Portable **skins** can replace
 buildings, vegetation, field textures and material colours for your own setting,
@@ -20,13 +22,13 @@ examples. The city generator builds on
 [watabou's TownGeneratorOS](https://github.com/watabou/TownGeneratorOS).
 
 <p align="center">
-  <a href="https://raw.githubusercontent.com/barrulus/settlemaker/v3.1.0/docs/examples/gallery/temperate-village.svg"><img src="https://raw.githubusercontent.com/barrulus/settlemaker/v3.1.0/docs/examples/gallery/temperate-village.png" width="420" alt="Ashford: a generated temperate village with individual homes, roads and fields" /></a>
-  <a href="https://raw.githubusercontent.com/barrulus/settlemaker/v3.1.0/docs/examples/gallery/temperate-city.svg"><img src="https://raw.githubusercontent.com/barrulus/settlemaker/v3.1.0/docs/examples/gallery/temperate-city.png" width="420" alt="Thornwall: a generated walled city using the current city artwork" /></a>
+  <a href="https://raw.githubusercontent.com/barrulus/settlemaker/v4.0.0/docs/examples/gallery/temperate-village.svg"><img src="https://raw.githubusercontent.com/barrulus/settlemaker/v4.0.0/docs/examples/gallery/temperate-village.png" width="420" alt="Ashford: a generated temperate village with individual homes, roads and fields" /></a>
+  <a href="https://raw.githubusercontent.com/barrulus/settlemaker/v4.0.0/docs/examples/gallery/temperate-city.svg"><img src="https://raw.githubusercontent.com/barrulus/settlemaker/v4.0.0/docs/examples/gallery/temperate-city.png" width="420" alt="Thornwall: a generated walled city using the current city artwork" /></a>
 </p>
 
 Ashford, population 300, and Thornwall, population 10,000. Both are real
 `generateSettlement` outputs, seed 2. Click an image for the full SVG.
-[Explore the gallery and exact inputs](https://github.com/barrulus/settlemaker/blob/v3.1.0/docs/gallery.md).
+[Explore the gallery and exact inputs](https://github.com/barrulus/settlemaker/blob/v4.0.0/docs/gallery.md).
 
 ## Install and generate a map
 
@@ -62,7 +64,8 @@ const burg = {
 const result = generateSettlement(burg, { seed: 2 });
 await writeFile('ashford.svg', result.svg);
 await writeFile('ashford.geojson', JSON.stringify(result.geojson, null, 2));
-console.log(result.kind); // 'village'
+console.log(result.kind); // 'planned'
+console.log(result.model.development.preset); // 'village'
 ```
 
 For a city of any size, set `engine: 'city'` on the burg. Set `engine: 'village'`
@@ -70,39 +73,36 @@ to keep a large settlement rural. Omitting it retains automatic selection at
 1,000 people. `walls`, `citadel`,
 `plaza` and `temple` describe requested features; their treatment depends on the
 planner and available geometry. Use `generateSettlement` as your normal entry
-point. `generateFromBurg` explicitly invokes the city planner, even for a small
-population.
+point. `planSettlement` is an equivalent explicit planning entry point.
 
 CommonJS callers can use `await import('settlemaker')` inside an async function.
 In a browser app, import from `settlemaker` through your bundler, or serve the
 standalone ESM file `node_modules/settlemaker/dist/settlemaker.browser.js` yourself.
 The engine needs no rendering service or runtime artwork downloads.
 
-[Node, browser and TypeScript setup](https://github.com/barrulus/settlemaker/blob/v3.1.0/docs/getting-started.md)
+[Node, browser and TypeScript setup](https://github.com/barrulus/settlemaker/blob/v4.0.0/docs/getting-started.md)
 
 ## What the engine produces
 
 | Output | What you can use it for |
 | --- | --- |
 | `svg` | A complete vector map with embedded artwork; display, save or rasterize it. |
-| `geojson` | Buildings, streets, water and engine-specific features in **local coordinates**, with version and scale metadata. These are not longitude/latitude coordinates. |
-| `model` | The generated `VillageModel` or city `Model`, selected by `result.kind`. |
-| `degradedFlags` | City requests such as walls or citadel that generation had to drop. The village branch returns an empty array. |
-| `originShift` | The city's optional coastal output translation; zero for villages. |
-| `waterContextResult` | Diagnostics when using the supported measured village-water contract. |
+| `geojson` | Buildings, streets, water and shared physical features in **local metres**, with version and scale metadata. These are not longitude/latitude coordinates. |
+| `model` | A `SettlementModel` with physical geometry, development settings and resident accounting. |
+| `model.degradedFlags` | Requested features that generation could not place. |
+| `model.waterContextResult` | Diagnostics when using the measured-water contract. |
 
 With `engine: 'auto'` (the default), population **1–1,000** selects the village
 planner; larger populations select the city planner. Explicit selection removes
-that boundary: villages build roads, lots, dwellings, greens and landscape in
-metres, while cities build wards, fortifications and outskirts in mesh units. Both return
-SVG and GeoJSON, but their feature sets, IDs and model types differ.
+that boundary. Both layouts return the same physical model and GeoJSON contract in
+local metres. Use `development` for explicit density and resident allocation settings.
 
 Layouts and SVGs are repeatable for the same inputs, seed, rendering options and
-package version. GeoJSON includes a changing `generated_at` timestamp. Save the
+package version. Physical GeoJSON has no changing timestamp. Save the
 input, seed, package version and any skin alongside output you want to reproduce.
 
-[API and input reference](https://github.com/barrulus/settlemaker/blob/v3.1.0/docs/api.md)
-· [GeoJSON, scale and identity](https://github.com/barrulus/settlemaker/blob/v3.1.0/docs/geojson.md)
+[API and input reference](https://github.com/barrulus/settlemaker/blob/v4.0.0/docs/api.md)
+· [GeoJSON, scale and identity](https://github.com/barrulus/settlemaker/blob/v4.0.0/docs/geojson.md)
 
 ## Biomes, roads and water
 
@@ -112,9 +112,9 @@ changing a biome can change the generated layout. A coastal artwork choice alone
 does not supply a shoreline: provide water geometry or `oceanBearing`.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/barrulus/settlemaker/v3.1.0/docs/examples/gallery/desert-village.png" width="280" alt="Qasra: desert village with native buildings and field textures" />
-  <img src="https://raw.githubusercontent.com/barrulus/settlemaker/v3.1.0/docs/examples/gallery/tundra-village.png" width="280" alt="Snowmere: tundra village with snowy roofs and natural ground" />
-  <img src="https://raw.githubusercontent.com/barrulus/settlemaker/v3.1.0/docs/examples/gallery/tropical-village.png" width="280" alt="Reedbank: tropical village beside a supplied river" />
+  <img src="https://raw.githubusercontent.com/barrulus/settlemaker/v4.0.0/docs/examples/gallery/desert-village.png" width="280" alt="Qasra: desert village with native buildings and field textures" />
+  <img src="https://raw.githubusercontent.com/barrulus/settlemaker/v4.0.0/docs/examples/gallery/tundra-village.png" width="280" alt="Snowmere: tundra village with snowy roofs and natural ground" />
+  <img src="https://raw.githubusercontent.com/barrulus/settlemaker/v4.0.0/docs/examples/gallery/tropical-village.png" width="280" alt="Reedbank: tropical village beside a supplied river" />
 </p>
 
 Supply every real road approach independently, using clockwise bearings from
@@ -123,13 +123,12 @@ opposite exit. Use route IDs to retain provenance through shared streets and cit
 gates.
 
 Water can come from filled polygons, village river centrelines, or a generated
-coast from `oceanBearing`. The measured `waterContext` contract is supported only
-by the village planner. Cities reject that mode; their legacy polygon input uses
-city-local units. `port` requests infrastructure, rather than controlling whether
+coast from `oceanBearing`. Both physical layouts support measured `waterContext`
+and polygon/river input in local metres. `port` requests infrastructure, rather than controlling whether
 water is visible.
 
-[Road and water inputs](https://github.com/barrulus/settlemaker/blob/v3.1.0/docs/api.md#roads)
-· [Measured-water contract](https://github.com/barrulus/settlemaker/blob/v3.1.0/docs/water-context-v1.md)
+[Road and water inputs](https://github.com/barrulus/settlemaker/blob/v4.0.0/docs/api.md#roads)
+· [Measured-water contract](https://github.com/barrulus/settlemaker/blob/v4.0.0/docs/water-context-v1.md)
 
 ## Shared themes and independent population
 
@@ -190,8 +189,8 @@ The downloadable default artwork contains **852 drawings**; catalogue drawings
 and runtime slots serve different purposes.
 
 <p align="center">
-  <a href="https://raw.githubusercontent.com/barrulus/settlemaker/v3.1.0/docs/examples/gallery/copperline-village.svg"><img src="https://raw.githubusercontent.com/barrulus/settlemaker/v3.1.0/docs/examples/gallery/copperline-village.png" width="420" alt="Copperline industrial artwork applied to the village engine" /></a>
-  <a href="https://raw.githubusercontent.com/barrulus/settlemaker/v3.1.0/docs/examples/gallery/copperline-city.svg"><img src="https://raw.githubusercontent.com/barrulus/settlemaker/v3.1.0/docs/examples/gallery/copperline-city.png" width="420" alt="Copperline steampunk artwork applied to the city engine" /></a>
+  <a href="https://raw.githubusercontent.com/barrulus/settlemaker/v4.0.0/docs/examples/gallery/copperline-village.svg"><img src="https://raw.githubusercontent.com/barrulus/settlemaker/v4.0.0/docs/examples/gallery/copperline-village.png" width="420" alt="Copperline industrial artwork applied to the village engine" /></a>
+  <a href="https://raw.githubusercontent.com/barrulus/settlemaker/v4.0.0/docs/examples/gallery/copperline-city.svg"><img src="https://raw.githubusercontent.com/barrulus/settlemaker/v4.0.0/docs/examples/gallery/copperline-city.png" width="420" alt="Copperline steampunk artwork applied to the city engine" /></a>
 </p>
 
 Copperline covers all runtime slots and supplies `industrial`, `steampunk` and
@@ -200,22 +199,22 @@ they do not add new planning algorithms, occupancy rules or GeoJSON categories.
 Some roads, walls and bridges are generated geometry rather than replaceable SVG
 slots. Read the authoring guide for the supported controls and limits.
 
-[Create a skin](https://github.com/barrulus/settlemaker/blob/v3.1.0/docs/skins.md)
-· [JSON schema](https://github.com/barrulus/settlemaker/blob/v3.1.0/docs/skins.schema.json)
-· [Copperline](https://github.com/barrulus/settlemaker/blob/v3.1.0/symbols/copperline/README.md)
-· [Artwork catalogue](https://github.com/barrulus/settlemaker/blob/v3.1.0/docs/current-symbol-library.md)
+[Create a skin](https://github.com/barrulus/settlemaker/blob/v4.0.0/docs/skins.md)
+· [JSON schema](https://github.com/barrulus/settlemaker/blob/v4.0.0/docs/skins.schema.json)
+· [Copperline](https://github.com/barrulus/settlemaker/blob/v4.0.0/symbols/copperline/README.md)
+· [Artwork catalogue](https://github.com/barrulus/settlemaker/blob/v4.0.0/docs/current-symbol-library.md)
 
 ## Choose your integration
 
 | Task | Guide |
 | --- | --- |
-| Generate and save maps in Node or a browser app | [Getting started](https://github.com/barrulus/settlemaker/blob/v3.1.0/docs/getting-started.md) |
-| Understand every input and rendering option | [Library API](https://github.com/barrulus/settlemaker/blob/v3.1.0/docs/api.md) |
-| Join features, place output on a map or crop tiles | [GeoJSON and coordinates](https://github.com/barrulus/settlemaker/blob/v3.1.0/docs/geojson.md) |
-| Embed the separately hosted renderer in an iframe | [URL adapter contract](https://github.com/barrulus/settlemaker/blob/v3.1.0/docs/url-api.md) |
-| Render an existing city scene | [Scene and rendering contract](https://github.com/barrulus/settlemaker/blob/v3.1.0/docs/scene-schema.md) |
-| Draw a complete alternative setting | [Skin authoring](https://github.com/barrulus/settlemaker/blob/v3.1.0/docs/skins.md) |
-| Build, test or regenerate documentation | [Development](https://github.com/barrulus/settlemaker/blob/v3.1.0/docs/development.md) |
+| Generate and save maps in Node or a browser app | [Getting started](https://github.com/barrulus/settlemaker/blob/v4.0.0/docs/getting-started.md) |
+| Understand every input and rendering option | [Library API](https://github.com/barrulus/settlemaker/blob/v4.0.0/docs/api.md) |
+| Join features, place output on a map or crop tiles | [GeoJSON and coordinates](https://github.com/barrulus/settlemaker/blob/v4.0.0/docs/geojson.md) |
+| Embed the separately hosted renderer in an iframe | [URL adapter contract](https://github.com/barrulus/settlemaker/blob/v4.0.0/docs/url-api.md) |
+| Render an existing city scene | [Scene and rendering contract](https://github.com/barrulus/settlemaker/blob/v4.0.0/docs/scene-schema.md) |
+| Draw a complete alternative setting | [Skin authoring](https://github.com/barrulus/settlemaker/blob/v4.0.0/docs/skins.md) |
+| Build, test or regenerate documentation | [Development](https://github.com/barrulus/settlemaker/blob/v4.0.0/docs/development.md) |
 
 The npm library runs in your application. The website at
 [settlemaker.com](https://settlemaker.com) is a separate application with its own
@@ -225,13 +224,13 @@ codec does not transport skins or fetch arbitrary skin files.
 ## License and attribution
 
 The engine is **GPL-3.0-only**. See
-[LICENSE](https://github.com/barrulus/settlemaker/blob/v3.1.0/LICENSE) and
-[NOTICE](https://github.com/barrulus/settlemaker/blob/v3.1.0/NOTICE) for the terms,
+[LICENSE](https://github.com/barrulus/settlemaker/blob/v4.0.0/LICENSE) and
+[NOTICE](https://github.com/barrulus/settlemaker/blob/v4.0.0/NOTICE) for the terms,
 upstream attribution and dependency notices.
 
 The six default artwork collections are distributed under **CC BY 4.0 with a
 rendered-output exception**, described in
-[symbols/LICENSE](https://github.com/barrulus/settlemaker/blob/v3.1.0/symbols/LICENSE).
-Their [credits](https://github.com/barrulus/settlemaker/blob/v3.1.0/symbols/CREDITS)
+[symbols/LICENSE](https://github.com/barrulus/settlemaker/blob/v4.0.0/symbols/LICENSE).
+Their [credits](https://github.com/barrulus/settlemaker/blob/v4.0.0/symbols/CREDITS)
 ship with the package. **Copperline is GPL-3.0-only** and is outside that artwork
 exception. Keep each collection's terms with redistributed artwork.

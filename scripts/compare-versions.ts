@@ -11,7 +11,8 @@
  * Remove: git worktree remove .worktrees/baseline-pre-fidelity
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { generateFromBurg as generateNew, type AzgaarBurgInput } from '../src/index.js';
+import { generateFromBurg as generateNew } from './internal-layout-review.js';
+import type { AzgaarBurgInput } from '../src/index.js';
 // eslint-disable-next-line import/no-relative-packages
 import { generateFromBurg as generateOld } from './.worktrees/baseline-pre-fidelity/src/index.js';
 import { toprak } from './tests/fixtures/toprak.js';

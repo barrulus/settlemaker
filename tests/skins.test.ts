@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { ARTWORK_MANIFEST } from '../src/assets/artwork.js';
-import {
-  createSkin, generateSettlement, generateFromBurg, renderVillage, generateSvg,
-  skinBiomeFor, SKIN_SLOTS, PALETTES, themeFrom, type AzgaarBurgInput,
-} from '../src/index.js';
+import { createSkin, skinBiomeFor, SKIN_SLOTS, PALETTES, themeFrom, type AzgaarBurgInput } from '../src/index.js';
+import { generateSettlement, generateFromBurg } from './helpers/layout-output.js';
+import { renderVillage } from '../src/village/render.js';
+import { generateSvg } from '../src/output/svg-builder.js';
 
 const burg: AzgaarBurgInput = {
   name: 'Skin test', population: 250, port: false, citadel: false,

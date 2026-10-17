@@ -1,5 +1,6 @@
 import {describe,expect,it} from 'vitest';
-import {createCityModel,parseSettlementUrl} from '../src/index.js';
+import { createCityModel } from '../src/output/legacy-model.js';
+import { parseSettlementUrl } from '../src/index.js';
 import {CommonWard} from '../src/wards/common-ward.js';
 import {cityUrbanity} from '../src/generator/city-character.js';
 import {cityMetersPerUnit} from '../src/generator/city-glyphs.js';

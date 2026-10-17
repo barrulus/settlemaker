@@ -1,12 +1,5 @@
-/**
- * Ship plan Phase 5 — population routing.
- *
- * Two engines now exist. A caller should not have to know that: they hand
- * over a burg and get a settlement back. Which engine ran is an
- * implementation detail, reported for diagnostics but never asked for.
- */
 import { describe, expect, it } from 'vitest';
-import { generateSettlement, VILLAGE_POP_CEILING } from '../../src/index.js';
+import { generateSettlement } from '../../src/index.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 
 const burg = (population: number): AzgaarBurgInput => ({
@@ -18,11 +11,11 @@ const burg = (population: number): AzgaarBurgInput => ({
   ],
 } as AzgaarBurgInput);
 
-describe('Phase 5: one entry point, routed by population', () => {
-  it('sends the small ones to the village engine and the big ones to the old one', () => {
-    expect(generateSettlement(burg(VILLAGE_POP_CEILING - 1), { seed: 1 }).kind).toBe('village');
-    expect(generateSettlement(burg(VILLAGE_POP_CEILING), { seed: 1 }).kind).toBe('village');
-    expect(generateSettlement(burg(VILLAGE_POP_CEILING + 1), { seed: 1 }).kind).toBe('settlement');
+describe('physical planning selected by population', () => {
+  it.each([[999, 'village'], [1000, 'village'], [1001, 'city']] as const)('selects the %s-person physical layout', (population, preset) => {
+    const result = generateSettlement(burg(population), { seed: 1 });
+    expect(result.kind).toBe('planned');
+    expect(result.model.development.preset).toBe(preset);
   });
 
   it('gives a consumer the same shape on both sides of the boundary', () => {
@@ -35,23 +28,21 @@ describe('Phase 5: one entry point, routed by population', () => {
       expect(r.svg, `pop ${population}: tiler crop contract`).toContain('data-bg="paper"');
       expect(r.geojson.type, `pop ${population}: geojson`).toBe('FeatureCollection');
       expect(r.geojson.features.length, `pop ${population}: no features`).toBeGreaterThan(0);
-      expect(Array.isArray(r.degradedFlags), `pop ${population}: degradedFlags`).toBe(true);
+      expect(Array.isArray(r.model.degradedFlags), `pop ${population}: degradedFlags`).toBe(true);
     }
   });
 
-  it('preserves shared metadata and documents optional city capacity separately', () => {
-    const small = generateSettlement(burg(400), { seed: 1 });
-    const large = generateSettlement(burg(4000), { seed: 1 });
-    const meta = (r: typeof small) =>
-      (r.geojson as unknown as { metadata: Record<string, unknown> }).metadata;
-    // Shared metadata remains available from both engines. The additive city
-    // building-budget report is optional: villages have their own census and
-    // must not acquire the city budget's different occupancy semantics.
-    expect(meta(large).building_capacity).toMatchObject({ basis: 'ordinary-building-budget' });
-    expect(meta(small).building_capacity).toBeUndefined();
-    for (const k of Object.keys(meta(large))) {
-      if (k === 'building_capacity') continue;
-      expect(meta(small)[k], `village metadata is missing '${k}'`).toBeDefined();
+  it('exports the same metre schema and resident accounting on both sides', () => {
+    for (const population of [400, 4000]) {
+      const result = generateSettlement(burg(population), { seed: 1 });
+      expect(result.geojson.metadata).toMatchObject({
+        schema: 'settlemaker/physical-plan', schema_version: 1,
+        coordinate_system: 'local_metres_y_down', coordinate_units: 'metres',
+        scale: { meters_per_unit: 1 }, residents: { requested: population, assigned: population },
+      });
+      const buildings = result.geojson.features.filter(f => f.properties?.layer === 'building');
+      expect(buildings.reduce((total, f) => total + Number(f.properties?.residents), 0)).toBe(population);
+      expect(buildings.every(f => f.geometry.type === 'Polygon')).toBe(true);
     }
   });
 
@@ -84,13 +75,14 @@ describe('Phase 5: one entry point, routed by population', () => {
     }
   });
 
-  it('hands back the engine-specific model for callers that want it', () => {
-    const v = generateSettlement(burg(400), { seed: 1 });
-    const s = generateSettlement(burg(4000), { seed: 1 });
-    if (v.kind !== 'village') throw new Error('expected a village');
-    if (s.kind !== 'settlement') throw new Error('expected a settlement');
-    expect(v.model.green).toBeDefined();
-    expect(v.model.lanes.length).toBeGreaterThan(0);
-    expect(s.model.patches.length).toBeGreaterThan(0);
+  it('returns the same retained physical model shape for both layouts', () => {
+    for (const population of [400, 4000]) {
+      const result = generateSettlement(burg(population), { seed: 1 });
+      expect(result.model.buildings.length).toBeGreaterThan(0);
+      expect(result.model.scene.layers.roads.length).toBeGreaterThan(0);
+      expect(result.model.districts.length).toBeGreaterThan(0);
+      expect(result.model).not.toHaveProperty('patches');
+      expect(result.model).not.toHaveProperty('lanes');
+    }
   });
 });

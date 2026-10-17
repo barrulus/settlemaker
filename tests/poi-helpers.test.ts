@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { generateFromBurg, type AzgaarBurgInput } from '../src/index.js';
+import { generateFromBurg } from './helpers/layout-output.js';
+import { type AzgaarBurgInput } from '../src/index.js';
 import { isWaterAdjacent, regimeFor } from '../src/poi/poi-selector.js';
 
 function makeBurg(overrides: Partial<AzgaarBurgInput> = {}): AzgaarBurgInput {

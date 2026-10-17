@@ -1,15 +1,8 @@
-/**
- * Phase 4 acceptance: a village goes out through the same door as a
- * settlement, and both of its outputs are pinned.
- *
- * The golden files here are structural — feature counts per layer, the
- * metadata keys a consumer gates on, the SVG's contract attributes — rather
- * than a byte hash of the whole output. A hash of 400 features would fail on
- * every unrelated tuning change and teach us nothing; these pin the CONTRACT,
- * which is the thing consumers actually depend on.
- */
+/** Historical layout renderer/exporter parity; the public API uses the physical plan schema. */
 import { describe, expect, it } from 'vitest';
-import { generateVillage, renderVillage, generateVillageGeoJson } from '../../src/index.js';
+import { generateVillage } from '../../src/village/village-model.js';
+import { renderVillage } from '../../src/village/render.js';
+import { generateVillageGeoJson } from '../../src/village/geojson.js';
 import { parseSvgViewBox } from '../../src/output/settlement-tiler.js';
 import type { AzgaarBurgInput } from '../../src/input/azgaar-input.js';
 

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { generateFromBurg, Point } from '../src/index.js';
+import { generateFromBurg } from './helpers/layout-output.js';
+import { Point } from '../src/index.js';
 import { pointInPolygon } from '../src/geom/point-in-polygon.js';
 import type { AzgaarBurgInput } from '../src/index.js';
 

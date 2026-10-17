@@ -1,7 +1,9 @@
 import {describe,it,expect} from 'vitest';
 import {readFileSync} from 'node:fs';
 import sharp from 'sharp';
-import {generateSettlement,buildScene,Point,SeededRandom} from '../src/index.js';
+import { generateSettlement } from './helpers/layout-output.js';
+import { buildScene } from '../src/scene/build-scene.js';
+import { Point, SeededRandom } from '../src/index.js';
 import {ARTWORK_GLYPHS,ARTWORK_MANIFEST,fieldKinds,floraKinds,BIOMES} from '../src/assets/artwork.js';
 import {SETTLEMENT_SET,assetSetFor} from '../src/assets/asset-sets.js';
 import {cityArchitecture} from '../src/generator/city-glyphs.js';

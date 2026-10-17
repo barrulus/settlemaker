@@ -1,16 +1,18 @@
 # SettleMaker documentation
 
-These guides describe the 3.1 library. The declarations shipped in `dist/`
+These guides describe SettleMaker 4.0 after legacy API retirement. The declarations shipped in `dist/`
 and the corresponding [source](../src/index.ts) are the complete type reference.
 
 ## Start here
+
+- [Migration to physical planning](migration-physical.md): breaking API and coordinate changes.
 
 - [Shared physical planner](settlement-planning.md): development presets, mixed density, resident accounting, metre-based output and the expanded review.
 
 - [Getting started](getting-started.md): install, generate a map, use TypeScript or a browser.
 - [Gallery](gallery.md): current output across five biomes and both planners, plus Copperline.
 - [Library API](api.md): input fields, engine selection, options, errors and reproducibility.
-- [GeoJSON and coordinates](geojson.md): schema 4, local units, IDs, road geometry and tiling.
+- [GeoJSON and coordinates](geojson.md): physical schema 1, local metres, IDs, road geometry and tiling.
 
 - [Shared appearance and engine selection](appearance.md): themes for both planners and explicit village/city controls.
 
@@ -26,13 +28,14 @@ and the corresponding [source](../src/index.ts) are the complete type reference.
 
 - [URL adapter contract](url-api.md): compressed inputs and presentation parameters for `/fmg` hosts.
 - [Water context v1](water-context-v1.md): measured village water, precision, precedence and errors.
-- [Scene and rendering](scene-schema.md): city Scene v2, appearance controls and SVG embedding.
+- [Scene and rendering](scene-schema.md): shared physical Scene v2, appearance controls and SVG embedding.
 - [Embedding and zoom](fmg-embed-zoom.md): responsive previews and host-owned navigation.
 
 ## Maintain the project
 
 - [Development](development.md): build, checks, documentation images and release workflow.
 - [Example URLs](test-urls.md): reproducible fixtures for integration checks.
+- [4.0.0 release notes](releases/4.0.0.md): physical-only public APIs and migration.
 - [3.1.0 release notes](releases/3.1.0.md): new planning and rendering APIs, artwork improvements and upgrade considerations.
 - Earlier releases: [3.0.1](releases/3.0.1.md) and [3.0.0](releases/3.0.0.md).
 
@@ -40,11 +43,10 @@ and the corresponding [source](../src/index.ts) are the complete type reference.
 
 | Contract | Current value | Meaning |
 | --- | --- | --- |
-| npm package | 3.1.0 | A specific engine and documentation release. |
-| Legacy GeoJSON `metadata.schema_version` | 4 | Original village and city output structure. |
+| npm package | 4.0.0 | A specific engine and documentation release. |
 | Physical GeoJSON `metadata.schema_version` | 1 | Separate `settlemaker/physical-plan` contract in local metres. |
 | `SettlementModel.version` | 1 | Physical planner model structure; generator revision is recorded separately. |
-| `Scene.version` | 2 | Legacy city and shared physical scenes; legacy villages use their own model. |
+| `Scene.version` | 2 | Shared physical scene for both layouts. |
 | URL envelope `v` | 1 | Compressed burg input for a URL adapter. |
 | Skin `version` | 1 | Portable artwork and biome definition. |
 | `waterContext.version` | 1 | Measured village-water input. |

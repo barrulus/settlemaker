@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { generateSettlement } from '../src/index.js';
+import { generateSettlement } from './internal-layout-review.js';
 import { roadCrossSection } from '../src/village/cross-section.js';
 import { angularGap, arcLengths, bearingOf, dist, polylineLength, sampleAt } from '../src/village/geometry.js';
 import { renderVillage } from '../src/village/render.js';

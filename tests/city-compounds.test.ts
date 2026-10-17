@@ -4,7 +4,10 @@ import {Polygon} from '../src/geom/polygon.js';
 import {reserveCityCompound,retainUsefulCompoundNeighbours} from '../src/generator/city-compounds.js';
 import {planCityBlock,coalesceCityRuns} from '../src/generator/city-blocks.js';
 import {blocksAccess} from '../src/generator/city-frontage.js';
-import {createCityModel,parseSettlementUrl,mapToGenerationParams,Model} from '../src/index.js';
+import { createCityModel } from '../src/output/legacy-model.js';
+import { parseSettlementUrl } from '../src/index.js';
+import { mapToGenerationParams } from '../src/input/azgaar-input.js';
+import { Model } from '../src/generator/model.js';
 import polygonClipping from 'polygon-clipping';
 
 const polygon=(xy:number[][])=>new Polygon(xy.map(([x,y])=>new Point(x,y)));

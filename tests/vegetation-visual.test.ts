@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateFromBurg } from '../src/index.js';
+import { generateFromBurg } from './helpers/layout-output.js';
 
 describe('vegetation visual output', () => {
   it('parkville renders trees in SVG', () => {
