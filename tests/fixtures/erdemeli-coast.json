@@ -1,0 +1,52 @@
+{
+  "v": 1,
+  "burg": {
+    "name": "Erdemeli",
+    "population": 173976,
+    "port": true,
+    "citadel": true,
+    "walls": true,
+    "plaza": true,
+    "temple": true,
+    "shanty": true,
+    "capital": true,
+    "roadBearings": [
+      {
+        "bearing_deg": 97.75003642291989,
+        "route_id": "462",
+        "kind": "trail",
+        "group": "trails",
+        "through": true,
+        "relief": "flat",
+        "followsRiver": false
+      },
+      {
+        "bearing_deg": 135.89318032818716,
+        "route_id": "0",
+        "kind": "royal",
+        "group": "roads",
+        "through": false,
+        "relief": "flat",
+        "followsRiver": true
+      },
+      {
+        "bearing_deg": 187.04071658700474,
+        "route_id": "462",
+        "kind": "trail",
+        "group": "trails",
+        "through": true,
+        "relief": "flat",
+        "followsRiver": false
+      }
+    ],
+    "oceanBearing": 343.6929945836881,
+    "harbourSize": "large",
+    "biome": "Tropical rainforest",
+    "culture": "Rohand (Human)",
+    "elevation": 9,
+    "temperature": 22,
+    "urbanDensity": 10,
+    "trade": true
+  },
+  "seed": 482699515
+}
