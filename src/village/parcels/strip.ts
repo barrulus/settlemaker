@@ -4,9 +4,10 @@ import { unit } from '../geometry.js';
 /**
  * Offset a polyline sideways by `distanceM`. `side` is +1 for the right of
  * the direction of travel, -1 for the left. Corners use the angle bisector
- * so both legs stay parallel to their originals.
+ * so both legs stay parallel to their originals. A distance profile supplies
+ * one offset per vertex, continuously joining a channel with varying widths.
  */
-export function offsetPolyline(points: Point[], distanceM: number, side: 1 | -1): Point[] {
+export function offsetPolyline(points: Point[], distanceM: number | readonly number[], side: 1 | -1): Point[] {
   if (points.length < 2) return [];
   const normals: Point[] = [];
   for (let i = 0; i < points.length - 1; i++) {
@@ -15,6 +16,7 @@ export function offsetPolyline(points: Point[], distanceM: number, side: 1 | -1)
   }
   const out: Point[] = [];
   for (let i = 0; i < points.length; i++) {
+    const width = typeof distanceM === 'number' ? distanceM : distanceM[i];
     const before = normals[Math.max(0, i - 1)];
     const after = normals[Math.min(i, normals.length - 1)];
     const bisector = unit(before.x + after.x, before.y + after.y);
@@ -24,8 +26,8 @@ export function offsetPolyline(points: Point[], distanceM: number, side: 1 | -1)
     const scale = cos === 0 ? 1 : 1 / cos;
     const miter = Math.min(Math.abs(scale), 4) * Math.sign(scale || 1);
     out.push(new Point(
-      points[i].x + bisector.x * distanceM * miter,
-      points[i].y + bisector.y * distanceM * miter,
+      points[i].x + bisector.x * width * miter,
+      points[i].y + bisector.y * width * miter,
     ));
   }
   return out;

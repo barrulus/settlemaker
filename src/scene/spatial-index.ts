@@ -96,6 +96,10 @@ function prepareSceneQuery(scene: Scene, indexed: boolean): SceneIndex {
   const roads=index(L.roads,r=>expand(pointsBounds(r.path),(r.width??0)/2));
   const piers=index(L.piers,p=>pointsBounds(p.ring));
   const bridges=index(L.bridges??[],b=>expand(pointsBounds(b.path),b.width*2));
+  const harbours=index(L.harbours??[],h=>expand(pointsBounds([
+    ...h.basin, ...h.quays.flatMap(q=>q.ring), ...h.breakwaters.flatMap(b=>b.ring),
+    ...h.berths.flatMap(b=>b.ring), ...h.fixtures.map(f=>f.at),
+  ]),12));
   return {query(bounds,options={}) {
     const skin=options.skin?resolveSkin(options.skin,options.skinBiome??scene.biome):undefined;
     const theme=resolveAppearance(scene.biome,options.palette,options.theme,skin).city;
@@ -106,6 +110,7 @@ function prepareSceneQuery(scene: Scene, indexed: boolean): SceneIndex {
       theme.arteryWidth+theme.casingDelta*2,theme.roadWidth+theme.casingDelta*2,theme.shoreWidth,screenRoad);
     const view=expand(bounds,padding);
     return {...scene,bounds,layers:{...L,buildings:buildings(view),symbols:symbols(view),vegetation:vegetation(view),
-      fields:fields(view),greens:greens(view),roads:roads(view),piers:piers(view),bridges:bridges(view)}};
+      fields:fields(view),greens:greens(view),roads:roads(view),piers:piers(view),bridges:bridges(view),
+      ...(L.harbours ? { harbours: harbours(view) } : {})}};
   }};
 }

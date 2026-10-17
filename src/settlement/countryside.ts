@@ -9,6 +9,8 @@ import { radialExtent } from '../village/dressing/extent.js';
 import { convexHull } from '../village/dressing/parcel-cut.js';
 import type { Lot } from '../village/types.js';
 import type { Layout } from './layouts.js';
+import { reachableDryGround } from './countryside-access.js';
+import { polygonArea } from '../village/dressing/parcel-cut.js';
 
 export function buildingLots(layout: Layout): Lot[] {
   return layout.scene.layers.buildings.map((b,i)=> {
@@ -42,9 +44,10 @@ function prepare(layout: Layout, seed: number) {
   });
   plan.cultivatedBoundary=cultivatedBoundary;
   plan.region=convexHull(cultivatedBoundary);
-  const farmable=(point:Point,margin=0)=>pointInPolygon(point,cultivatedBoundary)&&!pointInPolygon(point,plan.belt)
+  const accessible=reachableDryGround(plan.region,layout.site.water,centre,layout.scene.layers.roads,layout.scene.layers.bridges);
+  const farmable=(point:Point,margin=0)=>accessible(point)&&pointInPolygon(point,cultivatedBoundary)&&!pointInPolygon(point,plan.belt)
     && (margin<=0 || Math.min(...cultivatedBoundary.map((b,i)=>Point.distance(point,nearestOnSegment(point,cultivatedBoundary[(i+n-1)%n],b))))>margin);
-  return {plan,urbanLots,farmable};
+  return {plan,urbanLots,farmable,accessible};
 }
 
 const plans=new WeakMap<Layout,ReturnType<typeof prepare>>();
@@ -53,4 +56,36 @@ export function countrysidePlan(layout: Layout,seed:number):ReturnType<typeof pr
   let plan=plans.get(layout);
   if(!plan){plan=prepare(layout,seed);plans.set(layout,plan);}
   return plan;
+}
+
+/** Existing farm wards must obey the same access rule as later farmsteads.
+ * Run before allocating residents so removed capacity is never counted. */
+export function pruneUnreachableRural(layout: Layout, seed: number): void {
+  if (!layout.site.water.length || !layout.buildings.some(b => b.settlementRole === 'rural')) return;
+  const { accessible } = countrysidePlan(layout, seed);
+  const removed = new Set(layout.buildings.filter(b => b.settlementRole === 'rural'
+    && b.footprint.some(p => !accessible(new Point(p.x, p.y)))).map(b => b.id));
+  if (!removed.size) return;
+  layout.buildings = layout.buildings.filter(b => !removed.has(b.id));
+  const layers = layout.scene.layers;
+  layers.buildings = layers.buildings.filter(b => !b.id || !removed.has(b.id));
+  const lostGlyphs = new Set<string>();
+  layers.symbols = layers.symbols.filter(symbol => {
+    const linked = [...(symbol.buildingId ? [symbol.buildingId] : []), ...(symbol.buildingIds ?? [])];
+    if (!linked.some(id => removed.has(id))) return true;
+    for (const id of linked) if (!removed.has(id)) lostGlyphs.add(id);
+    return false;
+  });
+  // Shared compound artwork can cover several roofs. If one inaccessible
+  // roof invalidates it, surviving roofs retain their ordinary footprint art.
+  for (const building of layers.buildings) if (building.id && lostGlyphs.has(building.id)) delete building.glyphBacked;
+  layout.districts = layout.districts.filter(district => {
+    if (district.settlementRole !== 'rural') return true;
+    const members = layout.buildings.filter(b => b.districtId === district.id);
+    if (!members.length) return false;
+    district.occupiedAreaM2 = members.reduce((area, building) => area
+      + polygonArea(building.footprint.map(p => new Point(p.x, p.y))), 0);
+    return true;
+  });
+  layout.diagnostics.push(`${removed.size} rural buildings omitted because their bank has no usable crossing to the town`);
 }

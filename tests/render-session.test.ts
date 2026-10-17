@@ -17,6 +17,12 @@ function fixture():Scene {
 }
 
 describe('retained rendering sessions',()=>{
+  it('publishes measured coverage for viewport limits without treating legacy coasts as surveyed',()=>{
+    const measured=createSettlementSession({...input,engine:'city',waterContext:{version:1,status:'measured',
+      coordinateSpace:'burg-local-metres',surveyRadiusM:3000,geometryErrorM:0,bodies:[]}}, {seed:2});
+    expect(measured.metadata.surveyRadiusM).toBe(3000);
+    expect(createSettlementSession({...input,engine:'city',oceanBearing:90},{seed:2}).metadata.surveyRadiusM).toBeUndefined();
+  });
   it.each(['city','village'] as const)('preserves physical %s full exports without convenience outputs',engine=>{
     const options={engine,seed:73,render:{detail:'full' as const}};
     const expected=generateSettlement(input,options);

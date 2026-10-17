@@ -15,6 +15,9 @@ import { refinedStyle, resolveVarFallbacks } from '../assets/refined-style.js';
 import { linkedBuildingIds } from '../scene/symbol-buildings.js';
 import { WALL_GATE_CLEARANCE, wallTowerCanvas } from '../assets/fortification-dimensions.js';
 import { artworkPaintRadius } from '../assets/artwork-bounds.js';
+import { waterInView } from '../scene/water-view.js';
+import { harbourArtwork } from './harbour-artwork.js';
+import { harbourSolidRings } from '../scene/harbours.js';
 
 const NORMAL_STROKE = 0.15;
 const THICK_STROKE = 1.8;
@@ -141,8 +144,9 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   const b = scene.bounds;
   const w = b.max_x - b.min_x, h = b.max_y - b.min_y;
   const frame = (value: number) => value.toFixed(options.preciseBounds ? 6 : 1);
-  const L = scene.layers;
+  const L = { ...scene.layers, water: waterInView(scene.layers.water, b) };
   const pixels = options.pixelsPerUnit;
+  const harbours = (L.harbours ?? []).map(h => harbourArtwork(h, theme, pixels));
   const detailedTree = (scale: number) => pixels === undefined || scale * pixels >= 16;
   const fieldDetail = pixels === undefined || 16 / (scene.metersPerUnit ?? 1) * pixels >= 12;
 
@@ -267,9 +271,12 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     const d = L.water.rings.map(ringPath).join(' ');
     parts.push(`<g id="water" clip-path="url(#${clipId})">`);
     parts.push(`<path class="fill" d="${d}" fill-rule="evenodd"/>`);
-    if (theme.waterEdge !== null) parts.push(`<path class="shore" d="${d}"/>`);
+    const shore = L.water.shorelines?.map(linePath).join(' ') ?? d;
+    if (theme.waterEdge !== null && shore) parts.push(`<path class="shore" d="${shore}"/>`);
     parts.push('</g>');
   }
+
+  if (harbours.length) parts.push(`<g id="harbour-ground" clip-path="url(#${clipId})">${harbours.map(h=>h.ground).join('')}</g>`);
 
   if (L.roads.length > 0) {
     // Roads/arteries/streets no longer expand computeLocalBounds (they're
@@ -277,7 +284,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     // clip — don't rely on the outermost <svg>'s UA-default overflow:hidden,
     // which a consumer's CSS reset can override.
     const landMask=`${clipId}-road-land`;
-    if(L.water.rings.length)parts.push(`<defs><mask id="${landMask}" maskUnits="userSpaceOnUse" x="${b.min_x}" y="${b.min_y}" width="${w}" height="${h}"><rect x="${b.min_x}" y="${b.min_y}" width="${w}" height="${h}" fill="white"/><path d="${L.water.rings.map(ringPath).join(' ')}" fill="black" fill-rule="evenodd"/></mask></defs>`);
+    if(L.water.rings.length)parts.push(`<defs><mask id="${landMask}" maskUnits="userSpaceOnUse" x="${b.min_x}" y="${b.min_y}" width="${w}" height="${h}"><rect x="${b.min_x}" y="${b.min_y}" width="${w}" height="${h}" fill="white"/><path d="${L.water.rings.map(ringPath).join(' ')}" fill="black" fill-rule="evenodd"/>${harbourSolidRings(L.harbours).map(r=>`<path d="${ringPath(r)}" fill="white"/>`).join('')}</mask></defs>`);
     parts.push(`<g id="roads" clip-path="url(#${clipId})"${L.water.rings.length?` mask="url(#${landMask})"`:''}>`);
     const lanes = L.roads.map(r => {
       const key = r.kind === 'artery' ? 'arteryWidth' : r.kind === 'road' ? 'roadWidth' : undefined;
@@ -326,7 +333,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   if (ordinary.length > 0 || L.piers.length > 0) {
     parts.push('<g id="buildings">');
     for (const bld of ordinary) parts.push(`<path class="${bld.kind}"${buildingAttribute(bld.id)}${bld.landmark?'':roofStyle(bld)} d="${ringPath(bld.ring)}"/>`);
-    for (const pier of L.piers) parts.push(`<path class="pier" d="${ringPath(pier.ring)}"/>`);
+    for (const pier of L.piers) if (!pier.harbourId) parts.push(`<path class="pier" d="${ringPath(pier.ring)}"/>`);
     parts.push('</g>');
   }
 
@@ -344,6 +351,8 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     }
     parts.push('</g>');
   }
+
+  if (harbours.length) parts.push(`<g id="harbour-fixtures" clip-path="url(#${clipId})">${harbours.map(h=>h.fixtures).join('')}</g>`);
 
   if (L.walls.length > 0) {
     parts.push('<g id="walls">');

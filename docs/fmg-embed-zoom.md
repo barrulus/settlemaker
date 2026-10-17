@@ -33,6 +33,19 @@ iframe does not expose that DOM to its parent. This contract defines no
 `postMessage` zoom, result, or automatic water-resurvey messages. Specific zoom
 limits and input gestures are application choices, not engine guarantees.
 
+The retained renderer's `metadata.originalBounds` defines the initial fit, not
+the limit of viewport rendering. A tiled host must request the whole visible
+viewport, including when zooming out or panning beyond that initial frame;
+otherwise a coastal tile ends abruptly against the host's land background.
+Direction-only generated oceans continue across requested views. Their sampled
+shoreline remains fixed, while artificial offshore closure is kept outside the
+view. This presentation continuation does not change planning or GeoJSON.
+
+Measured sessions also expose `metadata.surveyRadiusM`. Hosts must keep all four
+viewport corners inside that disc, centred on the burg origin, when fitting,
+zooming, panning or resizing. Do not extrapolate measured water or present
+unsurveyed space as dry land. Finite lakes remain finite.
+
 ## Diagnostics remain visible
 
 A renderer must show parse/generation errors and measured-water warnings within

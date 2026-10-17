@@ -48,10 +48,13 @@ export interface SettlementSessionMetadata {
   scaleProvenance: 'physical_layout_v1';
   metersPerUnit: 1;
   originalBounds: LocalBounds;
+  /** Valid geographic coverage, centred on the unchanged burg origin. */
+  surveyRadiusM?: number;
   supportsViewport: true;
   diagnostics: string[];
   degradedFlags: string[];
   waterContextResult?: WaterContextResult;
+  placement?: SettlementModel['placement'];
   residents: SettlementModel['residents'];
   timings: GenerationStageTiming[];
 }
@@ -99,8 +102,10 @@ export function createSettlementSession(input: AzgaarBurgInput, options: Settlem
     planner:`physical-${model.development.preset}`,
     seed:model.seed,coordinateSystem:'local_metres_y_down',scaleProvenance:'physical_layout_v1',
     metersPerUnit:1,originalBounds,supportsViewport:true,
+    ...(input.waterContext?.status === 'measured' ? { surveyRadiusM: input.waterContext.surveyRadiusM } : {}),
     diagnostics:[...model.diagnostics],degradedFlags:[...(model.degradedFlags??[])],
     waterContextResult:model.waterContextResult,residents:structuredClone(model.residents),
+    ...(model.placement ? { placement: structuredClone(model.placement) } : {}),
     timings:[...stages,{stage:'model',durationMs:modelDuration},{stage:'scene-index',durationMs:performance.now()-started-modelDuration}],
   };
   const full=(change?:SessionAppearance):string=>{

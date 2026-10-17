@@ -13,14 +13,22 @@ function physicalUrbanity(model: Model, patch: Patch): number {
     const built=model.patches.filter(p=>['core','suburb','satellite'].includes(p.zone) && !water.has(p));
     const occupied=new Set(built), adjacency=model.adjacency??buildAdjacency(model.patches);
     const edges=built.filter(p=>adjacency.neighboursOf(p).some(n=>!occupied.has(n)));
-    const distances=(seeds:Patch[])=>{
+    const distances=(seeds:Patch[], bridgehead?:Patch)=>{
+      // The reserved road connects the first opposite-bank district to a
+      // city gate. Include that one-step connection when measuring urban
+      // access; otherwise every district beyond water has infinite distance
+      // to the core and is drawn as sparse rural-edge housing.
       const result=new Map(seeds.map(p=>[p,0])), queue=[...seeds];
+      if(bridgehead && occupied.has(bridgehead) && !result.has(bridgehead)) {
+        result.set(bridgehead,1); queue.push(bridgehead);
+      }
       for(let i=0;i<queue.length;i++)for(const n of adjacency.neighboursOf(queue[i])){
-        if(occupied.has(n)&&!result.has(n)){result.set(n,result.get(queue[i])!+1);queue.push(n);}
+        const distance=result.get(queue[i])!+1;
+        if(occupied.has(n)&&distance<(result.get(n)??Infinity)){result.set(n,distance);queue.push(n);}
       }
       return result;
     };
-    const toEdge=distances(edges), toCore=distances(built.filter(p=>p.zone==='core'));
+    const toEdge=distances(edges), toCore=distances(built.filter(p=>p.zone==='core'),model.riverSuburbPatches[0]);
     const values=new Map(built.map(p=>{
       const edge=toEdge.get(p)??0, core=toCore.get(p)??Infinity;
       const t=p.zone==='core'?1:(edge+.25)/(edge+core+.25);

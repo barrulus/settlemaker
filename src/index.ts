@@ -8,7 +8,7 @@ export type {
 } from './settlement/generate.js';
 export { renderSettlement, exportSettlement } from './settlement/output.js';
 export type { SettlementGeoJson, SettlementRenderOptions } from './settlement/output.js';
-export type { SettlementModel, SettlementBuilding, SettlementDistrict, ResidentAccount } from './settlement/model.js';
+export type { SettlementModel, SettlementBuilding, SettlementDistrict, SettlementPlacement, ResidentAccount } from './settlement/model.js';
 export type { DevelopmentOptions, DevelopmentProfile } from './settlement/development.js';
 
 export { BIOMES, normaliseBiome, biomeThemeFor } from './appearance/biomes.js';
@@ -47,7 +47,7 @@ export { SeededRandom } from './utils/random.js';
 
 export { SCENE_VERSION } from './scene/scene.js';
 export type {
-  Scene, ScenePoint, WaterLayer, FieldPlot, Furrow, GreenFeature,
+  Scene, ScenePoint, WaterLayer, FieldPlot, Furrow, GreenFeature, HarbourFeature,
   VegetationInstance, RoadFeature, BuildingFeature, PierFeature,
   WallFeature, WallGate,
 } from './scene/scene.js';

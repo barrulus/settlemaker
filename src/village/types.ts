@@ -30,6 +30,8 @@ export interface Site {
   routes: SiteRoute[];
   /** Closed polygons of water in burg-local metres. */
   water: Point[][];
+  /** Unmeasured ocean only. Shares points with its planning polygon. */
+  syntheticCoast?: { shoreline: Point[]; waterDirection: Point };
   flags: {
     port: boolean; temple: boolean; trade: boolean; walls: boolean;
     capital?: boolean; citadel?: boolean; plaza?: boolean; shanty?: boolean;

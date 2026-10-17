@@ -1,0 +1,94 @@
+{
+  "v": 1,
+  "seed": 2,
+  "burg": {
+    "name": "Representative river mouth",
+    "population": 4000,
+    "port": true,
+    "harbourSize": "large",
+    "harbourWaterKind": "ocean",
+    "walls": true,
+    "citadel": false,
+    "plaza": true,
+    "temple": false,
+    "shanty": false,
+    "capital": false,
+    "roadBearings": [
+      270
+    ],
+    "coastlineGeometry": [
+      [
+        {
+          "x": 200,
+          "y": -4000
+        },
+        {
+          "x": 4000,
+          "y": -4000
+        },
+        {
+          "x": 4000,
+          "y": 4000
+        },
+        {
+          "x": 200,
+          "y": 4000
+        }
+      ]
+    ],
+    "waterContext": {
+      "version": 1,
+      "status": "measured",
+      "coordinateSpace": "burg-local-metres",
+      "surveyRadiusM": 4000,
+      "geometryErrorM": 0.5,
+      "bodies": [
+        {
+          "kind": "ocean",
+          "distanceM": 200,
+          "bearingDeg": 90,
+          "polygonIndices": [
+            0
+          ]
+        }
+      ]
+    },
+    "rivers": [
+      {
+        "id": "7",
+        "centreline": [
+          {
+            "x": -4031,
+            "y": 120
+          },
+          {
+            "x": -1000,
+            "y": 120
+          },
+          {
+            "x": 0,
+            "y": 100
+          },
+          {
+            "x": 1000,
+            "y": 120
+          },
+          {
+            "x": 4031,
+            "y": 138.186
+          }
+        ],
+        "widthsM": [
+          23.938,
+          30,
+          40,
+          40,
+          52.123999999999995
+        ],
+        "widthM": 40,
+        "widthSource": "fmg-local-width-model",
+        "meander": false
+      }
+    ]
+  }
+}

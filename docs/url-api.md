@@ -125,7 +125,7 @@ layouts through their shared site reader.
 | Input | Both layouts |
 | --- | --- |
 | `coastlineGeometry` | Filled polygons in burg-local metres |
-| `rivers` | Centreline, positive `widthM`, optional `meander: false` |
+| `rivers` | Centreline, positive `widthM`, optional per-vertex `widthsM` and `meander: false` |
 | `oceanBearing` | Generated coast fallback |
 | `waterContext` | Validated survey/unknown-unit mode |
 
@@ -137,6 +137,21 @@ A nonempty `coastlineGeometry` array represents **filled areas**, not bank lines
 Include all relevant water polygons and preserve narrow channels and bends. For
 rivers, supply a centreline with width or a filled polygon, not duplicate
 representations. `followsRiver` alone creates no water.
+
+`widthsM`, when present, must contain one positive metre width per centreline
+vertex. `meander: false` preserves supplied bends. FMG flow-model estimates carry
+`widthSource: 'fmg-local-width-model'`; these produce an `approximate` water result
+and a visible `water-river-width-modelled` diagnostic. They do not claim measured
+river-bank accuracy. An optional river `id` retains source identity.
+`courseSource: 'fmg-catmull-rom-0.1'` identifies an adaptively flattened smooth
+FMG course. It is preserved without additional procedural meandering.
+
+For a river-port city, set `port: true`, `harbourWaterKind: 'river'`, and
+`harbourRiverId` matching the associated `rivers[].id`. The physical planner can
+place the town beside that bank while preserving the river's original geometry.
+The source burg stays at `(0, 0)`; output `placement.offsetM` records the generated
+town centre. This metadata is included in the model, preview session and GeoJSON.
+An unmatched river identifier does not select another nearby river.
 
 For measured water, carry summaries, polygon associations, declared geometry
 error and survey coverage together. An empty measured survey suppresses the

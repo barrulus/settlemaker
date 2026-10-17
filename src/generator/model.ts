@@ -1,5 +1,6 @@
 import { connectCityLanes } from './city-streets.js';
 import { VILLAGE_POP_CEILING } from '../input/settlement-engine.js';
+import { WaterContextError } from '../input/water-context.js';
 import { cityUrbanity } from './city-character.js';
 import { neighbourhoodCharacter, suburbanCommons } from './city-neighbourhoods.js';
 import { timeGenerationStage, type GenerationTimingObserver } from './timing.js';
@@ -33,6 +34,8 @@ import { Castle } from '../wards/castle.js';
 import { Farm } from '../wards/farm.js';
 import { Slum } from '../wards/slum.js';
 import { Harbour } from '../wards/harbour.js';
+import { harbourPlanScore } from '../wards/harbour-plan.js';
+import { planRiverSuburb } from './river-suburb.js';
 import { CommonWard } from '../wards/common-ward.js';
 import { CraftsmenWard } from '../wards/craftsmen-ward.js';
 import { MerchantWard } from '../wards/merchant-ward.js';
@@ -42,7 +45,7 @@ import { buildWardDistribution, type WardConstructor } from '../wards/ward-distr
 import type { PlacedSymbol, ClaimedSite } from './symbols.js';
 import { placeCityGlyphs, cityMetersPerUnit } from './city-glyphs.js';
 import { plantCityParks } from './park-planting.js';
-import { overlapsWater } from './city-frontage.js';
+import { overlapsWater, nearestOnSegment } from './city-frontage.js';
 import { stampVillageRows } from './village-rows.js';
 
 const MAX_ATTEMPTS = 20;
@@ -135,6 +138,10 @@ function rescueDetachedPier(pier: Polygon, inWater: (p: Point) => boolean): Poly
 export class Model {
   /** Optional profiling observer; never changes generated state. */
   onStageTiming?: GenerationTimingObserver;
+  /** Optional terrain refinement after harbour reservation, before roads/buildings.
+   * Return a rollback so failed attempts restore their original geography. */
+  onHarbourTerrain?: (ward: Harbour) => (() => void) | void;
+  private rollbackHarbourTerrain?: () => void;
   /** Legacy low-population direct calls keep their original layout unless explicitly selected as cities. */
   get usesCityLayout(): boolean {
     return this.params.cityLayout === true || this.params.population > VILLAGE_POP_CEILING;
@@ -178,6 +185,8 @@ export class Model {
 
   /** Adjacency-hop depth of the farm belt; scales with population. */
   farmRingDepth: number = 1;
+  /** Dry outer wards reached by the explicitly planned river bridge. */
+  riverSuburbPatches: Patch[] = [];
   gates: Point[] = [];
   readonly degradedFlags: Set<DegradedFlag> = new Set();
 
@@ -344,6 +353,7 @@ export class Model {
         this.buildWalls();
         return true;
       } catch (e) {
+        if (e instanceof WaterContextError) throw e;
         this.reset();
       }
     }
@@ -356,6 +366,7 @@ export class Model {
         this.build();
         return true;
       } catch (e) {
+        if (e instanceof WaterContextError) throw e;
         this.reset();
       }
     }
@@ -363,8 +374,11 @@ export class Model {
   }
 
   private reset(): void {
+    this.rollbackHarbourTerrain?.();
+    this.rollbackHarbourTerrain = undefined;
     this.patches = [];
     this.inner = [];
+    this.riverSuburbPatches = [];
     this.waterbody = [];
     this.citadel = null;
     this.plaza = null;
@@ -400,6 +414,8 @@ export class Model {
       this.buildWalls();
       this.classifyWater();
       this.placeHarbour();
+      if (this.harbour?.ward instanceof Harbour)
+        this.rollbackHarbourTerrain = this.onHarbourTerrain?.(this.harbour.ward) || undefined;
     });
     // `buildWalls` towered the circuit against the gate set as it stood then;
     // `classifyWater` drops waterfront road gates and `placeHarbour` adds the
@@ -407,7 +423,15 @@ export class Model {
     // a demoted gate gets its tower back and the harbour gate doesn't get one.
     // Deterministic and gate-driven — a no-op when nothing moved the gates.
     if (this.wall !== null && this.waterbody.length > 0) this.wall.buildTowers();
-    timeGenerationStage('roads', this.onStageTiming, () => this.buildStreets());
+    timeGenerationStage('roads', this.onStageTiming, () => {
+      this.buildStreets();
+      const crossing = planRiverSuburb(this, Math.max(0, this.nPatches - this.inner.length - (this.citadel ? 1 : 0)));
+      if (crossing) {
+        this.riverSuburbPatches = crossing.patches;
+        this.roads.push(crossing.road);
+        this.tidyUpRoads();
+      }
+    });
     timeGenerationStage('neighbourhoods', this.onStageTiming, () => this.createWards());
     timeGenerationStage('plots', this.onStageTiming, () => this.buildGeometry());
   }
@@ -978,10 +1002,25 @@ export class Model {
 
     // Pick the patch with the most waterfront edge length
     candidates.sort((a, b) => b.waterfrontLength - a.waterfrontLength);
-    const best = candidates[0].patch;
+    let best = candidates[0].patch;
+    let ward = new Harbour(this, best, large);
+    if (this.params.development) {
+      // A long mesh edge is not necessarily a usable harbour: reserve dry
+      // working ground, a town connection and navigation before choosing it.
+      if (this.params.harbourShorelines) {
+        const bankDistance = (patch: Patch) => Math.min(...this.params.harbourShorelines!.flatMap(path =>
+          path.slice(1).map((b, i) => Point.distance(patch.shape.center, nearestOnSegment(patch.shape.center, path[i], b)))));
+        candidates.sort((a, b) => bankDistance(a.patch) - bankDistance(b.patch));
+      }
+      const planned = candidates.slice(0, 6).map(({ patch }) => ({ patch, ward: patch === best ? ward : new Harbour(this, patch, large) }))
+        .filter(p => p.ward.plan !== null);
+      planned.sort((a,b) => harbourPlanScore(b.ward.plan!) - harbourPlanScore(a.ward.plan!));
+      if (!planned.length) return;
+      best = planned[0].patch; ward = planned[0].ward;
+    }
 
     best.withinCity = true;
-    best.ward = new Harbour(this, best, large);
+    best.ward = ward;
     this.harbour = best;
 
     // Add a gate where the harbour meets the wall so streets connect to it
@@ -1253,7 +1292,7 @@ export class Model {
       // vertices submerged, several with a WET majority). Require every
       // vertex dry too.
       isBuildable: (p) =>
-        p.ward === null && !this.waterbody.includes(p) &&
+        p.ward === null && !this.waterbody.includes(p) && !this.riverSuburbPatches.includes(p) &&
         !this.isWaterAt(p.shape.center) && !p.shape.vertices.some(v => this.isWaterAt(v)),
       // The citadel patch (when present) sits outside `this.inner` and is
       // never a sprawl candidate (it already has a Castle ward from
@@ -1261,10 +1300,12 @@ export class Model {
       // consumes one of the nPatches total-budget slots. Reserve that slot
       // so core (inner.length) + citadel (1) + sprawl claimed up to this
       // budget never exceeds nPatches (and so MAX_PATCHES).
-      budget: Math.max(0, this.nPatches - this.inner.length - (this.citadel !== null ? 1 : 0)),
+      budget: Math.max(0, this.nPatches - this.inner.length - (this.citadel !== null ? 1 : 0) - this.riverSuburbPatches.length),
       compact: this.params.development !== undefined,
       seed: this.params.seed,
     });
+
+    for (const patch of this.riverSuburbPatches) patch.zone = 'suburb';
 
     // The citadel patch sits outside `this.inner` (buildPatches selects it
     // separately, right after the core) but already carries a Castle ward
@@ -1388,7 +1429,7 @@ export class Model {
     // Extramural fabric: coherent neighbourhood forms follow access and edge depth.
     for (const patch of this.patches) {
       if (patch.ward !== null) continue;
-      if (commons.has(patch)) patch.ward = new Park(this, patch);
+      if (commons.has(patch) && !this.riverSuburbPatches.includes(patch)) patch.ward = new Park(this, patch);
       else if (patch.zone === 'suburb') {
         const character = this.params.development ? neighbourhoodCharacter(this, patch) : 'terraces';
         patch.ward = character === 'workshops' ? new MerchantWard(this, patch)
@@ -1500,6 +1541,9 @@ export class Model {
 
     let addedLane = false;
     for (const cluster of clusters) {
+      // This neighbourhood already has a reserved bridge connection. A second
+      // unrestricted topology path would create an unplanned water crossing.
+      if (cluster.some(p => this.riverSuburbPatches.includes(p))) continue;
       let cx = 0;
       let cy = 0;
       for (const p of cluster) {
@@ -1578,7 +1622,22 @@ export class Model {
         && !this.waterbody.includes(p)).map(p => p.ward as CommonWard);
       const areas = wards.map(w => Math.abs(w.getCityBlock().square) * (.85 + .3 * cityUrbanity(this,w.patch)));
       const total = areas.reduce((a, b) => a + b, 0);
-      wards.forEach((w, i) => { w.cityBuildingTarget = total > 0 ? Math.max(0, budget - fixed(inside)) * areas[i] / total : 0; });
+      const available = Math.max(0, budget - fixed(inside));
+      // A permanent bridge supports a substantial second neighbourhood.
+      // Reserve most of the existing outer demand there, without borrowing
+      // from the requested walled population or increasing the census. Scale
+      // the reservation down when the far bank has little usable land.
+      const far = wards.map(w => this.riverSuburbPatches.includes(w.patch));
+      const farArea = areas.reduce((sum, area, i) => sum + (far[i] ? area : 0), 0);
+      if (!inside && farArea > 0 && total > 0) {
+        const share = farArea === total ? 1 : Math.min(.7, farArea / total * 1.5);
+        wards.forEach((w, i) => {
+          const groupArea = far[i] ? farArea : total - farArea;
+          w.cityBuildingTarget = groupArea > 0 ? available * (far[i] ? share : 1 - share) * areas[i] / groupArea : 0;
+        });
+      } else {
+        wards.forEach((w, i) => { w.cityBuildingTarget = total > 0 ? available * areas[i] / total : 0; });
+      }
     }
   }
 
@@ -1778,6 +1837,11 @@ export class Model {
     const rings = this.params.coastlineGeometry?.filter(r => r.length >= 3) ?? [];
     if (rings.length > 0) return rings;
     return this.syntheticCoast ?? [];
+  }
+
+  /** Open real-bank paths supplied by the physical site reader. */
+  getWaterShorelines(): Point[][] {
+    return this.params.waterShorelines ?? this.getWaterRings().map(r => [...r, r[0]]);
   }
 
   /** Even-odd test against getWaterRings() — same rule as classifyWater. */

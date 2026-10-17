@@ -22,6 +22,30 @@ function grid(radius: number) {
 }
 
 describe('physical city outskirts', () => {
+  it('carries urban access across a reserved bridge into the opposite-bank neighbourhood', () => {
+    for (const bridged of [false, true]) {
+      const params = mapToGenerationParams({ name: 'Two banks', population: 10000 }, 2);
+      params.development = { coreBuildings: 100, texturePopulation: 10000, metresPerUnit: 3, landScale: 1 };
+      const model = new Model(params);
+      model.patches = grid(6);
+      for (const p of model.patches) {
+        const { x, y } = p.shape.centroid;
+        p.zone = x < -1 && Math.abs(y) < 3 ? 'core'
+          : x > 1 && x < 5 && Math.abs(y) < 3 ? 'suburb' : 'wilderness';
+      }
+      model.adjacency = buildAdjacency(model.patches);
+      const far = model.patches.filter(p => p.zone === 'suburb');
+      const landing = far.find(p => p.shape.centroid.x === 1.5 && p.shape.centroid.y === .5)!;
+      if (bridged) model.riverSuburbPatches = [landing, ...far.filter(p => p !== landing)];
+      const values = far.map(p => cityUrbanity(model, p));
+      if (bridged) {
+        expect(cityUrbanity(model, landing)).toBeGreaterThan(0);
+        expect(Math.max(...values)).toBeGreaterThan(.2);
+        expect(Math.max(...values)).toBeLessThan(1);
+      } else expect(values.every(value => value === 0)).toBe(true);
+    }
+  });
+
   it('tapers every boundary of an asymmetric city, including its short sides', () => {
     const params = mapToGenerationParams({ name: 'Uneven city', population: 200000 }, 2);
     params.development = { coreBuildings: 100, texturePopulation: 10000, metresPerUnit: 3, landScale: 1 };

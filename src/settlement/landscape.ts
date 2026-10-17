@@ -10,17 +10,20 @@ import { drySegments, overlapsWater, polygonsOverlap } from '../generator/city-f
 import type { Lane } from '../village/types.js';
 import type { Layout } from './layouts.js';
 import polygonClipping from 'polygon-clipping';
-import { waterFillPolygons } from '../village/water-boundary.js';
+import { waterFillPolygons, waterBoundaryPaths } from '../village/water-boundary.js';
 import { growApronPath } from '../village/skeleton/apron.js';
 import { Polygon } from '../geom/polygon.js';
 import { roadCorridor } from '../geom/road-corridor.js';
 import { PlacementIndex, placementBounds } from '../generator/placement-index.js';
+import { harbourSolidRings } from '../scene/harbours.js';
+import { coverageExceeded } from '../input/water-context.js';
 
 /** Both layout techniques hand their occupied ground to the same field and
  * woodland planner. No pixel scale or population-to-diameter conversion. */
 export function dressSettlement(layout: Layout, seed: number): void {
   const { scene, site, green } = layout;
   const L = scene.layers;
+  const harbourGround = harbourSolidRings(L.harbours);
   if (site.water.length) {
     const supplied = waterFillPolygons(site.water);
     const rings = site.water.map(r => [r.map(p => [p.x, p.y] as [number, number])]);
@@ -28,6 +31,11 @@ export function dressSettlement(layout: Layout, seed: number): void {
       .map(poly => poly.map(r => r.map(([x, y]) => new Point(x, y))));
     L.water.polygons = polygons;
     L.water.rings = polygons.flat();
+    if (supplied) L.water.shorelines = waterBoundaryPaths(site.water);
+    if (site.syntheticCoast) {
+      L.water.synthetic = true;
+      L.water.oceanContinuation = { ...site.syntheticCoast, otherWater: site.water.slice(1) };
+    }
   }
   const lots=buildingLots(layout);
   const ruralIds=new Set(layout.buildings.filter(b=>b.settlementRole==='rural').map(b=>b.id));
@@ -40,13 +48,13 @@ export function dressSettlement(layout: Layout, seed: number): void {
   // Extend external approaches before fields reserve ground; their final cut
   // happens after the landscape establishes the drawing boundary.
   for (const road of L.roads) if (road.kind === 'road' && road.path.length >= 2) {
-    if (Math.hypot(road.path[0].x, road.path[0].y) > Math.hypot(road.path.at(-1)!.x, road.path.at(-1)!.y)) road.path.reverse();
+    if (Point.distance(road.path[0] as Point, green.centre) > Point.distance(road.path.at(-1)! as Point, green.centre)) road.path.reverse();
   }
   // The final apron must honour the same occupied/protected ground as rural
   // placement, including a road which rural growth previously stopped.
   const approachClaims = new PlacementIndex<Polygon>();
   const claim = (p: Polygon) => { if (p.length>2) approachClaims.insert(placementBounds(p.vertices),p); };
-  for (const ring of [...L.buildings.map(b=>b.ring),...L.greens.map(g=>g.ring),...L.piers.map(p=>p.ring)])
+  for (const ring of [...L.buildings.map(b=>b.ring),...L.greens.map(g=>g.ring),...L.piers.map(p=>p.ring),...harbourGround])
     claim(new Polygon(ring.map(p=>new Point(p.x,p.y))));
   for (const wall of L.walls) for (const path of wall.polylines) for (let i=1;i<path.length;i++)
     claim(roadCorridor(path[i-1],path[i],3));
@@ -69,7 +77,7 @@ export function dressSettlement(layout: Layout, seed: number): void {
     }
   }
   const lanes: Lane[] = L.roads.map((r, i) => ({ id: `street:${i}`, type: 'local', points: r.path.map(p => new Point(p.x, p.y)), widthM: r.width ?? 3 }));
-  const reservations = [...L.greens.map(g => g.ring), ...L.piers.map(p => p.ring),
+  const reservations = [...L.greens.map(g => g.ring), ...L.piers.map(p => p.ring), ...harbourGround,
     ...L.buildings.filter(b => b.id && ruralIds.has(b.id)).map(b => b.ring)].map(r => r.map(p => new Point(p.x, p.y)));
   const farmClaims=L.buildings.filter(b=>b.id?.startsWith('building:rural:')).map(b=>b.ring.map(p=>new Point(p.x,p.y)));
   for(const road of L.roads.filter(r=>r.id?.startsWith('street:rural:')))for(let i=1;i<road.path.length;i++) {
@@ -79,6 +87,7 @@ export function dressSettlement(layout: Layout, seed: number): void {
   const rng = new SeededRandom(seed ^ 0x51f15e);
   const fields = buildFields(site, green, lanes, urbanLots, [], rng, new Set(urbanLots.map(l => l.id)), reservations, {
     regionPlan: countryside.plan,
+    accessible: countryside.accessible,
     ...(farmClaims.length?{refineAround:{claims:farmClaims,targetAreaM2:1200,maxDepth:5}}:{}),
     parcelAreaM2: 1200 * Math.max(1, site.population / 20000),
     maxCutDepth: 20,
@@ -101,12 +110,17 @@ export function dressSettlement(layout: Layout, seed: number): void {
   for (const v of L.vegetation) include(v.at.x, v.at.y, v.scale / 2);
   for (const s of L.symbols) include(s.at.x, s.at.y, Math.hypot(s.scale, s.scaleY ?? s.scale) / 2);
   for (const w of L.walls) for (const r of w.polylines) for (const p of r) include(p.x, p.y, 5);
+  for (const p of harbourGround.flat()) include(p.x, p.y, 2);
+  for (const h of L.harbours ?? []) for (const f of h.fixtures) include(f.at.x, f.at.y, 6);
   scene.bounds = { min_x: minX - 20, min_y: minY - 20, max_x: maxX + 20, max_y: maxY + 20 };
   const frame = { minX: scene.bounds.min_x, minY: scene.bounds.min_y, maxX: scene.bounds.max_x, maxY: scene.bounds.max_y };
   for (const r of L.roads) r.path = clipPolylineToRect(r.path.map(p => new Point(p.x, p.y)), frame);
   L.roads = L.roads.filter(r => r.path.length > 1);
   if (site.surveyRadiusM !== undefined) {
     const radius = Math.max(...[frame.minX, frame.maxX].flatMap(x => [frame.minY, frame.maxY].map(y => Math.hypot(x, y))));
-    if (radius + 1000 > site.surveyRadiusM) throw new RangeError(`water survey must cover at least ${Math.ceil(radius + 1000)} metres`);
+    const harbourReach = Math.max(0, ...(L.harbours ?? []).flatMap(h => [...h.basin, ...h.approach]
+      .map(p => Math.hypot(p.x, p.y) + h.navigationWidth / 2)));
+    const required = Math.max(radius + 1000, harbourReach);
+    if (required > site.surveyRadiusM) coverageExceeded(required);
   }
 }
