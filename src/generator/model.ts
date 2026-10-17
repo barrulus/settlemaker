@@ -1002,8 +1002,33 @@ export class Model {
 
     // Pick the patch with the most waterfront edge length
     candidates.sort((a, b) => b.waterfrontLength - a.waterfrontLength);
+    // A harbour/wall corner is not necessarily an entrance: when only one
+    // inner patch meets it, both inward edges can be blocked wall segments.
+    // Open each candidate provisionally and require the same inward route
+    // that buildStreets will use, before reserving the harbour district.
+    const entranceFor = (patch: Patch): Point | null => {
+      if (!this.border) return null;
+      const wasWithinCity = patch.withinCity;
+      const originalGates = this.gates;
+      patch.withinCity = true;
+      try {
+        for (const gate of this.border.shape.vertices.filter(v => patch.shape.contains(v))) {
+          if (this.isWaterAt(gate)) continue;
+          this.gates = originalGates.includes(gate) ? originalGates : [...originalGates, gate];
+          const topology = new Topology(this);
+          const end = this.plaza !== null
+            ? minBy(this.plaza.shape.vertices, v => Point.distance(v, gate)) : this.center;
+          if (topology.buildPath(gate, end, topology.outer)) return gate;
+        }
+      } finally {
+        patch.withinCity = wasWithinCity;
+        this.gates = originalGates;
+      }
+      return null;
+    };
     let best = candidates[0].patch;
     let ward = new Harbour(this, best, large);
+    let harbourGate: Point | null = null;
     if (this.params.development) {
       // A long mesh edge is not necessarily a usable harbour: reserve dry
       // working ground, a town connection and navigation before choosing it.
@@ -1016,7 +1041,24 @@ export class Model {
         .filter(p => p.ward.plan !== null);
       planned.sort((a,b) => harbourPlanScore(b.ward.plan!) - harbourPlanScore(a.ward.plan!));
       if (!planned.length) return;
-      best = planned[0].patch; ward = planned[0].ward;
+      let connected: typeof planned[number] | undefined;
+      for (const candidate of planned) {
+        harbourGate = entranceFor(candidate.patch);
+        if (harbourGate) { connected = candidate; break; }
+      }
+      if (!connected) return;
+      best = connected.patch; ward = connected.ward;
+    } else {
+      let connected: typeof candidates[number] | undefined;
+      for (const candidate of candidates) {
+        harbourGate = entranceFor(candidate.patch);
+        if (harbourGate) { connected = candidate; break; }
+      }
+      if (!connected) return;
+      if (connected.patch !== best) {
+        best = connected.patch;
+        ward = new Harbour(this, best, large);
+      }
     }
 
     best.withinCity = true;
@@ -1026,7 +1068,6 @@ export class Model {
     // Add a gate where the harbour meets the wall so streets connect to it
     if (this.border !== null) {
       const wallVerts = this.border.shape.vertices;
-      const harbourGate = wallVerts.find(v => best.shape.contains(v));
       if (harbourGate) {
         if (!this.gates.includes(harbourGate)) this.gates.push(harbourGate);
         // Also register on the wall's own gate list. `CurtainWall.buildTowers`

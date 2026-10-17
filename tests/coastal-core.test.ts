@@ -82,11 +82,18 @@ describe('coastal wall is a closed shoreline circuit', () => {
       for (const params of [portBurg(seed), smallPort(seed)]) {
         const m = new Model(params).generate();
         if (m.harbour === null) continue;
-        const wallVerts = m.border!.shape.vertices;
-        const gate = wallVerts.find(v => m.harbour!.shape.contains(v));
+        const gate = m.border!.gates.find(v => m.harbour!.shape.contains(v)
+          && m.border!.gateMeta.get(v)?.routes.some(route => route.kind === 'sea'));
         expect(gate).toBeDefined();
         expect(m.gates.includes(gate!)).toBe(true);
         expect(m.border!.gateMeta.get(gate!)?.kind).toBe('sea');
+        // A shared wall corner may have only blocked wall edges inward.
+        // The selected entrance must actually connect to the plaza while
+        // keeping the street inside the core, rather than detouring outside.
+        // Street smoothing can change which plaza corner is nearest, so
+        // inspect reachability rather than recomputing that earlier choice.
+        expect(m.plaza!.shape.vertices.some(end =>
+          m.topology!.buildPath(gate!, end, m.topology!.outer) !== null)).toBe(true);
         // The quay itself stays OUTSIDE the walled core.
         expect(m.inner.includes(m.harbour!)).toBe(false);
         // Pin the RENDERED contract, not just the model-level bookkeeping:
