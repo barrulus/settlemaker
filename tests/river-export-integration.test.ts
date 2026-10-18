@@ -101,10 +101,14 @@ describe('FMG river export integration', () => {
     const model = createSettlementModel(input, { seed: exported.seed });
     expect(model.waterContextResult?.issues).toContainEqual({ code: 'water-river-width-modelled' });
     expect(model.residents.unassigned).toBe(0);
-    // The supplied sea is beyond this site's viable working waterfront. Its
-    // river has usable banks, but claiming one as an ocean harbour is false.
-    expect(model.scene.layers.harbours ?? []).toEqual([]);
-    expect(model.waterContextResult?.issues).toContainEqual({ code: 'water-context-conflict' });
+    // The sea is beyond the compact core, but an outer harbour now has a
+    // connected land route. Its quay must still berth on that sea bank,
+    // rather than relabelling the closer river as an ocean harbour.
+    const harbour=model.scene.layers.harbours![0];
+    expect(harbour.kind).toBe('protected');
+    expect(harbour.quays.flatMap(q=>q.edge).every(p=>Math.abs(p.x-200)<1)).toBe(true);
+    expect(harbour.berths.every(b=>b.ring.some(p=>p.x>200))).toBe(true);
+    expect(model.waterContextResult?.issues.some(i=>i.code==='water-context-conflict'||i.code==='water-harbour-unavailable')).toBe(false);
     for (const p of [{ x: 0, y: 100 }, { x: 205, y: 104 }])
       expect(model.scene.layers.water.rings.filter(r => pointInPolygon(p, r)).length % 2).toBe(1);
     for (const b of model.scene.layers.buildings) for (const p of b.ring)

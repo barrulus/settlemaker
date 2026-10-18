@@ -77,7 +77,7 @@ export async function decodeBurgParam(value: string): Promise<{ burg: AzgaarBurg
   if (typeof payload !== 'object' || payload === null) {
     throw new UrlCodecError('shape', 'payload is not an object');
   }
-  const env = payload as { v?: unknown; burg?: unknown; seed?: unknown };
+  const env = payload as { v?: unknown; burg?: unknown; seed?: unknown; geometryEncoding?: unknown };
   if (env.v !== URL_PAYLOAD_VERSION) {
     throw new UrlCodecError('version', `unsupported payload version ${String(env.v)} (expected ${URL_PAYLOAD_VERSION})`);
   }
@@ -85,6 +85,28 @@ export async function decodeBurgParam(value: string): Promise<{ burg: AzgaarBurg
   if (typeof burg !== 'object' || burg === null ||
       typeof burg.name !== 'string' || typeof burg.population !== 'number') {
     throw new UrlCodecError('shape', 'payload has no plausible burg (name + population required)');
+  }
+  if (env.geometryEncoding !== undefined) {
+    if (env.geometryEncoding !== 'xy-tuples') throw new UrlCodecError('shape', 'unsupported geometry encoding');
+    const points = (value: unknown): Array<{ x: number; y: number }> => {
+      if (!Array.isArray(value)) throw new UrlCodecError('shape', 'compact geometry must be an array');
+      return value.map(p => {
+        if (!Array.isArray(p) || p.length !== 2 || !p.every(n => typeof n === 'number' && Number.isFinite(n)))
+          throw new UrlCodecError('shape', 'compact points must contain two finite coordinates');
+        return { x: p[0], y: p[1] };
+      });
+    };
+    if (burg.coastlineGeometry !== undefined) {
+      if (!Array.isArray(burg.coastlineGeometry)) throw new UrlCodecError('shape', 'compact coast must be an array');
+      burg.coastlineGeometry = burg.coastlineGeometry.map(points);
+    }
+    if (burg.rivers !== undefined) {
+      if (!Array.isArray(burg.rivers)) throw new UrlCodecError('shape', 'compact rivers must be an array');
+      burg.rivers = burg.rivers.map(r => {
+        if (!r || typeof r !== 'object') throw new UrlCodecError('shape', 'invalid compact river');
+        return { ...r, centreline: points(r.centreline) };
+      });
+    }
   }
   try { resolveSettlementEngine(burg.population, burg.engine); }
   catch (error) { throw new UrlCodecError('engine', (error as Error).message); }

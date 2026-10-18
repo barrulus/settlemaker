@@ -3,7 +3,8 @@ import { Point } from '../types/point.js';
 import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import type { Site, SiteRoute } from './types.js';
 import { fromLegacyKind, toLegacyKind, type RouteType, ROUTE_CLASS_ORDER } from './route-class.js';
-import { bearingVector } from './geometry.js';
+import { bearingVector, closestPointOnSegment, dist } from './geometry.js';
+import { prepareWaterBoundary, waterBoundaryPaths } from './water-boundary.js';
 import { normaliseVillageBiome } from './theme.js';
 import { riverPolygons } from './rivers.js';
 import { SeededRandom } from '../utils/random.js';
@@ -242,7 +243,24 @@ export function buildSite(input: AzgaarBurgInput, seed = 0): Site {
     .concat(ocean, riverPolygons(input, seed));
 
   checkMeasuredWater(original, water, prepared.result);
+  const measured = original.waterContext?.status === 'measured' ? original.waterContext : undefined;
+  const bodies = measured?.bodies ?? [];
+  const shoreWaterKind = ocean.length || bodies.some(b => b.kind === 'ocean') ? 'ocean'
+    : bodies.some(b => b.kind === 'lake') ? 'lake'
+      : input.harbourWaterKind === 'ocean' || input.harbourWaterKind === 'lake' ? input.harbourWaterKind : undefined;
+  let shorelines: Point[][] | undefined;
+  if (shoreWaterKind) {
+    prepareWaterBoundary(water, measured?.surveyRadiusM ?? Infinity);
+    const owned = bodies.length ? bodies.flatMap(b => b.polygonIndices ?? []).map(i => water[i])
+      : water.slice(0, (input.coastlineGeometry?.length ?? 0) + ocean.length);
+    shorelines = waterBoundaryPaths(water).flatMap(path => path.slice(1).flatMap((b, i) => {
+      const a = path[i], middle = a.add(b).scale(.5);
+      return owned.some(ring => ring.some((p, j) => dist(middle, closestPointOnSegment(middle, p, ring[(j + 1) % ring.length])) < 1e-5))
+        ? [[a, b]] : [];
+    }));
+  }
   return {
+    ...(shorelines?.length ? { shorelines, shoreWaterKind } : {}),
     ...(!original.waterContext && ocean.length ? { syntheticCoast: {
       shoreline: ocean[0].slice(0, -2), waterDirection: bearingVector(input.oceanBearing!),
     } } : {}),

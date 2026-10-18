@@ -13,11 +13,14 @@ export type WaterContextV1 = {
 } | { version: 1; status: 'unknown-units'; sourceUnit: string };
 export type WaterIssueCode = 'water-coverage-exceeded' | 'water-geometry-required'
   | 'water-context-conflict' | 'water-units-unknown' | 'water-context-unsupported-engine'
-  | 'water-context-invalid' | 'water-river-local-width-unavailable' | 'water-river-width-modelled';
+  | 'water-context-invalid' | 'water-river-local-width-unavailable' | 'water-river-width-modelled'
+  | 'water-frontage-inferred' | 'water-harbour-unavailable';
 export interface WaterContextResult {
   version: 1;
   status: 'measured' | 'approximate' | 'unknown-units' | 'error';
   issues: Array<{ code: WaterIssueCode; requiredSurveyRadiusM?: number }>;
+  adjustments?: Array<{ kind: 'river' | 'ocean' | 'lake'; sourceId?: string;
+    offsetM: { x: number; y: number }; rotationDeg?: number }>;
 }
 export class WaterContextError extends Error {
   readonly waterContextResult: WaterContextResult;
@@ -51,6 +54,14 @@ function validateRivers(rivers: unknown): void {
 
 /** Validate at both the URL and direct-library boundaries. Never downgrade a new context to legacy. */
 export function validateWaterContext(input: AzgaarBurgInput, engine?: SettlementEngine): void {
+  if (input.waterfront !== undefined) {
+    const w: unknown = input.waterfront;
+    if (!record(w) || (!w.riverId && !w.shoreKind)
+      || (w.riverId !== undefined && (typeof w.riverId !== 'string' || !w.riverId.trim()))
+      || (w.shoreKind !== undefined && w.shoreKind !== 'ocean' && w.shoreKind !== 'lake')
+      || (w.shoreFeatureId !== undefined && (!w.shoreKind || typeof w.shoreFeatureId !== 'string' || !w.shoreFeatureId.trim())))
+      invalid('Invalid waterfront association.');
+  }
   if (input.harbourRiverId !== undefined && (typeof input.harbourRiverId !== 'string' || !input.harbourRiverId.trim()))
     invalid('harbourRiverId must be a nonempty source river identifier.');
   // Width profiles/provenance are explicit survey contracts even when a legacy

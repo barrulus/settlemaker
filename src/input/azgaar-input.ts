@@ -35,6 +35,9 @@ export type RoadBearingInput =
 export interface AzgaarBurgInput {
   /** Measured survey coverage or explicit unknown units, supported by both physical layouts. */
   waterContext?: WaterContextV1;
+  /** FMG cell adjacency is a settlement relationship, not a surveyed marker offset.
+   * Explicitly permits local waterfront inference while retaining source identity. */
+  waterfront?: { riverId?: string; shoreKind?: 'ocean' | 'lake'; shoreFeatureId?: string };
   name: string;
   population: number;
   /** Defaults to auto: village through 1000 people, city above it. */

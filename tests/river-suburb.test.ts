@@ -63,7 +63,7 @@ describe('connected opposite-bank river suburbs', () => {
     }
   });
 
-  it('does not reserve a suburb without an outer population budget or explicit river-port intent', () => {
+  it('does not reserve a suburb without an outer population budget or associated river banks', () => {
     expect(planRiverSuburb({ params: { development: {}, harbourWaterKind: 'river', harbourSize: 'small' } } as unknown as Model, 0)).toBeNull();
     expect(planRiverSuburb({ params: { development: {}, harbourWaterKind: 'lake', harbourSize: 'small' } } as unknown as Model, 4)).toBeNull();
     expect(planRiverSuburb({ params: { development: {}, harbourWaterKind: 'river' } } as unknown as Model, 4)).toBeNull();
@@ -71,7 +71,6 @@ describe('connected opposite-bank river suburbs', () => {
 });
 
 it.each([
-  { port: false, harbourWaterKind: 'river', widthM: 40 },
   { port: true, harbourWaterKind: 'river', widthM: 160 },
   { port: true, harbourWaterKind: 'river', widthM: 40, harbourRiverId: 'missing' },
 ])('does not force an unsupported cross-river suburb (%j)', extra => {

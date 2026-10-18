@@ -1,6 +1,8 @@
 import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import { seedFromString } from '../input/azgaar-input.js';
 import { resolveSettlementEngine, type SettlementEngine } from '../input/settlement-engine.js';
+import { inferWaterfront } from '../input/waterfront.js';
+import { coverageExceeded, WaterContextError } from '../input/water-context.js';
 import { paletteForTheme, type ThemeName } from '../output/palette.js';
 import type { RenderTheme } from '../output/render-theme.js';
 import type { SettlementSkin } from '../assets/skins.js';
@@ -48,50 +50,71 @@ export function createSettlementModel(input: AzgaarBurgInput, options: Settlemen
   if (options.theme !== undefined) paletteForTheme(options.theme);
   const seed = options.seed ?? seedFromString(input.name);
   if (!Number.isSafeInteger(seed)) throw new RangeError('seed must be a safe integer');
-  const effective = options.skin ? { ...input, biome: skinBiomeFor(options.skin, input.biome).base } : input;
-  const urbanInput = development.ruralPopulation ? { ...effective, population: input.population-development.ruralPopulation } : effective;
-  const observe = options.onStageTiming;
-  const supply = { core: 1, outer: 1 };
-  let land = 1;
-  const createLayout = (attempt: number) => timeGenerationStage('layout', observe, () => {
-    const layout = development.preset === 'village'
-      ? frontageLayout(urbanInput, seed, development) : blockLayout(urbanInput, seed, development, supply, land,
-        observe ? timing => observe({ ...timing, attempt }) : undefined);
-    // Access pruning may initialize the shared countryside plan. Its demand
-    // includes the rural residents who will be placed after the urban layout.
-    layout.site.population = input.population;
-    pruneUnreachableRural(layout, seed);
-    return layout;
-  }, attempt);
-  let layout = createLayout(0);
-  let residents = allocateResidents(layout.buildings, input.population, development.corePopulation, development.ruralPopulation);
-  // Supply and land are increased before acceptance. Existing capacities are
-  // never inflated to hide under-production or a constrained site.
-  for (let attempt = 0; development.preset === 'city' && (residents.urban?.unassigned ?? residents.unassigned) > 0 && attempt < 4; attempt++) {
-    for (const [key, account] of [['core', residents.insideWalls], ['outer', residents.outsideWalls]] as const) {
-      const requested = account.requested - (key === 'outer' && development.ruralPopulation ? development.ruralPopulation : 0);
-      const capacity = account.capacity - (key === 'outer' && development.ruralPopulation ? residents.rural?.capacity ?? 0 : 0);
-      if (requested > capacity) supply[key] *= Math.min(2, Math.max(1.08, requested / Math.max(1, capacity) * 1.04));
+  const frontage = inferWaterfront(input, development, seed);
+  try {
+    const effective = options.skin ? { ...frontage.input, biome: skinBiomeFor(options.skin, input.biome).base } : frontage.input;
+    const urbanInput = development.ruralPopulation ? { ...effective, population: input.population-development.ruralPopulation } : effective;
+    const observe = options.onStageTiming;
+    const supply = { core: 1, outer: 1 };
+    let land = 1;
+    const createLayout = (attempt: number) => timeGenerationStage('layout', observe, () => {
+      const layout = development.preset === 'village'
+        ? frontageLayout(urbanInput, seed, development) : blockLayout(urbanInput, seed, development, supply, land,
+          observe ? timing => observe({ ...timing, attempt }) : undefined);
+      // Access pruning may initialize the shared countryside plan. Its demand
+      // includes the rural residents who will be placed after the urban layout.
+      layout.site.population = input.population;
+      pruneUnreachableRural(layout, seed);
+      return layout;
+    }, attempt);
+    let layout = createLayout(0);
+    let residents = allocateResidents(layout.buildings, input.population, development.corePopulation, development.ruralPopulation);
+    // Supply and land are increased before acceptance. Existing capacities are
+    // never inflated to hide under-production or a constrained site.
+    for (let attempt = 0; development.preset === 'city' && (residents.urban?.unassigned ?? residents.unassigned) > 0 && attempt < 4; attempt++) {
+      for (const [key, account] of [['core', residents.insideWalls], ['outer', residents.outsideWalls]] as const) {
+        const requested = account.requested - (key === 'outer' && development.ruralPopulation ? development.ruralPopulation : 0);
+        const capacity = account.capacity - (key === 'outer' && development.ruralPopulation ? residents.rural?.capacity ?? 0 : 0);
+        if (requested > capacity) supply[key] *= Math.min(2, Math.max(1.08, requested / Math.max(1, capacity) * 1.04));
+      }
+      land *= 1.12;
+      layout = createLayout(attempt+1);
+      residents = allocateResidents(layout.buildings, input.population, development.corePopulation, development.ruralPopulation);
     }
-    land *= 1.12;
-    layout = createLayout(attempt+1);
-    residents = allocateResidents(layout.buildings, input.population, development.corePopulation, development.ruralPopulation);
+    layout.site.population = input.population;
+    layout.scene.population = input.population;
+    timeGenerationStage('rural', observe, () => addRuralHousing(layout, development, seed));
+    residents = timeGenerationStage('residents', observe, () => allocateResidents(layout.buildings, input.population, development.corePopulation, development.ruralPopulation));
+    timeGenerationStage('landscape', observe, () => dressSettlement(layout, seed));
+    const diagnostics = [...layout.diagnostics];
+    if (frontage.adjustments.length) {
+      const result = layout.site.waterContextResult ??= { version: 1, status: 'approximate', issues: [] };
+      result.status = 'approximate';
+      result.issues.push({ code: 'water-frontage-inferred' });
+      result.adjustments = frontage.adjustments;
+    }
+    if (input.urbanDensity !== undefined) diagnostics.push('urbanDensity is retired and ignored; use development.centreOccupancy and development.edgeOccupancy for physical building capacities.');
+    if (input.coreCapacity !== undefined) diagnostics.push('coreCapacity is retired and ignored; use development.corePopulation to request residents inside walls.');
+    if (residents.unassigned) diagnostics.push(`${residents.unassigned} residents could not be accommodated within the requested enclosure and available land`);
+    const model: SettlementModel = { version: 1, generatorRevision: 'physical-layout-17', name: input.name, seed, development, coordinateSystem: 'local_metres_y_down',
+      scene: layout.scene, buildings: layout.buildings, districts: layout.districts, residents, diagnostics,
+      ...(layout.placement ? { placement: layout.placement } : {}),
+      ...(layout.site.waterContextResult ? { waterContextResult: layout.site.waterContextResult } : {}),
+      degradedFlags: layout.degradedFlags ?? [] };
+    return model;
+  } catch (error) {
+    if (error instanceof WaterContextError && input.waterContext?.status === 'measured'
+      && frontage.input.waterContext?.status === 'measured') {
+      const allowance = input.waterContext.surveyRadiusM - frontage.input.waterContext.surveyRadiusM;
+      const issue = error.waterContextResult.issues.find(i => i.code === 'water-coverage-exceeded');
+      if (allowance > 0 && issue?.requiredSurveyRadiusM !== undefined) {
+        // The sender expands the original survey, whereas planners query the
+        // smaller circle guaranteed after moving the associated coastline.
+        coverageExceeded(issue.requiredSurveyRadiusM + allowance);
+      }
+    }
+    throw error;
   }
-  layout.site.population = input.population;
-  layout.scene.population = input.population;
-  timeGenerationStage('rural', observe, () => addRuralHousing(layout, development, seed));
-  residents = timeGenerationStage('residents', observe, () => allocateResidents(layout.buildings, input.population, development.corePopulation, development.ruralPopulation));
-  timeGenerationStage('landscape', observe, () => dressSettlement(layout, seed));
-  const diagnostics = [...layout.diagnostics];
-  if (input.urbanDensity !== undefined) diagnostics.push('urbanDensity is retired and ignored; use development.centreOccupancy and development.edgeOccupancy for physical building capacities.');
-  if (input.coreCapacity !== undefined) diagnostics.push('coreCapacity is retired and ignored; use development.corePopulation to request residents inside walls.');
-  if (residents.unassigned) diagnostics.push(`${residents.unassigned} residents could not be accommodated within the requested enclosure and available land`);
-  const model: SettlementModel = { version: 1, generatorRevision: 'physical-layout-16', name: input.name, seed, development, coordinateSystem: 'local_metres_y_down',
-    scene: layout.scene, buildings: layout.buildings, districts: layout.districts, residents, diagnostics,
-    ...(layout.placement ? { placement: layout.placement } : {}),
-    ...(layout.site.waterContextResult ? { waterContextResult: layout.site.waterContextResult } : {}),
-    degradedFlags: layout.degradedFlags ?? [] };
-  return model;
 }
 
 /** Convenience outputs; use createSettlementModel when exports are not needed. */

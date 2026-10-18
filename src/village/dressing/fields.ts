@@ -837,10 +837,10 @@ export interface FieldRegionPlan {
 }
 
 export function planFieldRegion(site: Site, green: Green, lots: Lot[], crofts: Croft[], rng: SeededRandom,
-  housedLotIds?: ReadonlySet<string>, maxRegionDepthM?: number): FieldRegionPlan {
+  housedLotIds?: ReadonlySet<string>, maxRegionDepthM?: number, cropDemandFraction = 1): FieldRegionPlan {
   const fabricRadius=computeFabricRadius(green,lots,crofts,housedLotIds);
   const belt=beltPolygon(green,builtEdgeExtent(green,lots,crofts,housedLotIds),rng);
-  const region=regionHull(green,belt,Math.max(0,site.population)*FIELD_M2_PER_CAPITA/FIELD_REGION_EFFICIENCY,rng,maxRegionDepthM);
+  const region=regionHull(green,belt,Math.max(0,site.population)*cropDemandFraction*FIELD_M2_PER_CAPITA/FIELD_REGION_EFFICIENCY,rng,maxRegionDepthM);
   return {belt,region,fabricRadius};
 }
 

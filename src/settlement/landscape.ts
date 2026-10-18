@@ -87,7 +87,7 @@ export function dressSettlement(layout: Layout, seed: number): void {
   const rng = new SeededRandom(seed ^ 0x51f15e);
   const fields = buildFields(site, green, lanes, urbanLots, [], rng, new Set(urbanLots.map(l => l.id)), reservations, {
     regionPlan: countryside.plan,
-    accessible: countryside.accessible,
+    accessible: countryside.cultivable,
     ...(farmClaims.length?{refineAround:{claims:farmClaims,targetAreaM2:1200,maxDepth:5}}:{}),
     parcelAreaM2: 1200 * Math.max(1, site.population / 20000),
     maxCutDepth: 20,
