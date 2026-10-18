@@ -481,6 +481,10 @@ export interface GenerationParams {
   waterShorelines?: Point[][];
   /** Optional exposed banks belonging to the port's declared water body kind. */
   harbourShorelines?: Point[][];
+  /** Associated river banks, independently of whether the settlement has a port. */
+  riverShorelines?: Point[][];
+  /** Ocean/lake waterfront attracting connected residential neighbourhoods. */
+  coastalShorelines?: Point[][];
   /** Geographic planning limit in mesh units, centred on the burg origin. */
   waterSurveyRadius?: number;
   /** Offset from original survey origin, in physical metres, for coverage errors. */

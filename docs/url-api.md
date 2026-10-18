@@ -84,6 +84,18 @@ burg name. The decoder checks the envelope, a plausible name/population, the opt
 water context. It is not complete validation of every burg field. Validate
 untrusted integration data before calling generation.
 
+An optional envelope field `geometryEncoding: 'xy-tuples'` packs each point in
+`burg.coastlineGeometry` and `burg.rivers[].centreline` as `[x, y]`. The decoder
+expands these lossless coordinate arrays before validating the normal input.
+Widths, river identifiers, body associations and all other fields are unchanged.
+Envelopes without this marker retain object points `{x, y}`.
+
+The hosted viewer also accepts compressed input in `#i=...`, keeping large water
+surveys out of the HTTP request target. Fragment input takes precedence over
+query input; presentation options remain in the query. Changing the fragment
+regenerates the displayed settlement. Older viewer deployments must be updated
+before an integration starts emitting fragment links or compact geometry.
+
 `i=` takes precedence over **all flat data fields**, including a flat `seed` or `engine`.
 A malformed `i=` is an error, not permission to retry with flat fields.
 Presentation parameters remain separate and apply after input decoding.
@@ -152,6 +164,16 @@ place the town beside that bank while preserving the river's original geometry.
 The source burg stays at `(0, 0)`; output `placement.offsetM` records the generated
 town centre. This metadata is included in the model, preview session and GeoJSON.
 An unmatched river identifier does not select another nearby river.
+
+FMG cell adjacency can instead express the semantic relationship
+`waterfront: { riverId?, shoreKind?: 'ocean' | 'lake', shoreFeatureId? }`.
+This explicitly authorizes local waterfront inference: marker offsets do not
+separate the settlement from its associated water. It works for hamlets, villages
+and cities independently of `port`, and can request both river and coast.
+Associated source geometry must be included even when the cartographic marker
+lies outside that river's normal survey reach. The result reports approximate
+placement and the applied transformations. Exact surveyed inputs without this
+relationship continue to retain their water coordinates.
 
 For measured water, carry summaries, polygon associations, declared geometry
 error and survey coverage together. An empty measured survey suppresses the

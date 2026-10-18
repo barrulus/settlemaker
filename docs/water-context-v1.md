@@ -228,7 +228,7 @@ Do not send a river twice through `rivers` and `coastlineGeometry`; include rive
 polygons in the latter only when that river is not also supplied as a survey.
 `port` and `harbourSize` control infrastructure, never water visibility or distance.
 A port without an accessible nearby real shoreline produces a nonfatal
-`water-context-conflict` and no dock/jetty placement. Keep water at its supplied
+`water-harbour-unavailable` and no dock/jetty placement. Keep water at its supplied
 location; do not pull a coast inward to satisfy `port`. The explicit river-port
 placement rule below may move the generated town within this coordinate frame.
 
@@ -252,6 +252,32 @@ burg cell's river association. A downstream lake used as the port's navigation
 feature does not replace that local river association.
 
 ### Riverfront town placement
+
+FMG's coarse cell relationships can be supplied independently of port status:
+`waterfront: { riverId?, shoreKind?: 'ocean' | 'lake', shoreFeatureId? }`.
+A river in the burg cell or an adjacent cell means a waterfront settlement;
+a coastal cell means housing belongs beside that shore. When both are supplied,
+the local plan connects its associated river to its shore. This applies to both
+physical layouts, including non-port villages. `port` still requests working
+harbour infrastructure rather than controlling waterfront geography.
+
+This is an explicit inference contract. The generator brings the selected
+shore and river close to the local settlement origin, retaining source identity
+and the upstream width profile. Regional river courses may receive local bends
+at settlement scale. A coastal river may be rotated toward its mouth, extended
+to the shore, and widened into a smooth estuary. These inferred banks become
+physical water before roads, harbours and buildings are planned. Where a curved
+coast needs different joins on each bank, local bank polygons round the mouth;
+these derived polygons stay internal and do not change the transport format.
+It does not claim that the cartographic marker's kilometre-scale offset is a
+precise settlement location. Source inputs are not mutated;
+`waterContextResult.status` is `approximate`, with `water-frontage-inferred` and
+`adjustments` recording source IDs, translations and optional rotations.
+River adjustments also report `courseRefined` and `mouthFlared` when local
+shaping goes beyond that translation and rotation.
+Coast translation conservatively reduces available survey coverage, so FMG
+exports extra coverage and an independently centred associated river reach.
+Inputs without `waterfront` retain their exact-water behaviour below.
 
 A physical city explicitly marked `port: true` and `harbourWaterKind: 'river'`
 can move its generated centre toward its associated river bank. This corrects
@@ -278,7 +304,7 @@ not corrections to the supplied geographic measurements. A diagnostic reports
 the displacement. Ordinary inland settlements and lake/ocean ports do not use
 this riverfront relocation rule.
 
-For a river-port city with an outer residential budget, the planner can reserve
+For a city with an associated river and an outer residential budget, the planner can reserve
 a connected neighbourhood on the opposite bank before houses are placed.
 Its road starts at an existing town gate, crosses one bounded river span with
 dry landings, and continues into the reserved neighbourhood. The bridge span
@@ -289,8 +315,10 @@ and housing demand is reserved for this neighbourhood, subject to available
 land. The bridge also carries urban access into its density calculation, so
 the opposite bank can develop streets and a denser interior. Residents come
 from the existing outer population allocation rather than being added to the
-census, and explicit walled population targets are preserved. Unsupported wide
-crossings do not receive a speculative bridge or ferry.
+census, and explicit walled population targets are preserved. Crossing capacity
+scales with population from 80 to 400 metres. Longer crossings still require
+verified banks, dry approaches and a connected road; unsupported crossings do
+not receive a decorative bridge or an invented ferry.
 
 Farmland and rural houses share a dry-ground connectivity check. Water divides
 the bounded countryside into components; only components connected to the town
@@ -299,10 +327,20 @@ does not establish access. Inaccessible existing farm buildings are excluded
 before resident allocation, and new farmsteads and fields use the same rule.
 Where no crossing fits, the opposite bank remains uncultivated.
 
+Ocean and lake banks also attract connected residential growth along the
+waterfront. Fishing and shore trade reduce the illustrated crop hinterland
+without changing the census or building capacities. The remaining farm depth
+favours the inland side, and a narrow shore strip stays clear of farm plots.
+This is a landscape allocation rule, not a simulated food-production balance;
+unclassified legacy water polygons do not imply a fishing economy.
+
 ### Quays and navigation
 
 The planner fits a dry working quay, warehouse lots and connected cart access to
-the available shoreline. A large open-water port receives a compact basin,
+the available shoreline. A shoreline district outside the compact historic
+core can host the harbour when a dry cart road connects it to an existing gate.
+Failure to place that infrastructure produces `water-harbour-unavailable`, not
+a claim that surveyed geography conflicts. A large open-water port receives a compact basin,
 shore-connected enclosing arms, an offset entrance and a clear approach where
 space permits. Basin depth follows berth and manoeuvring clearance; additional
 empty water area is not a reason to extend the walls farther offshore.

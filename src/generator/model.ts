@@ -17,7 +17,7 @@ import { CurtainWall } from './curtain-wall.js';
 import { Topology } from './topology.js';
 import { pointInPolygon } from '../geom/point-in-polygon.js';
 import type { GenerationParams, DegradedFlag } from './generation-params.js';
-import { densityCurve, perPatchDensity, baseScaleForYield, patchAreaForDemand, rowHousing, DENSIFY_MIN_TEXTURE_SCALE } from './generation-params.js';
+import { densityCurve, perPatchDensity, baseScaleForYield, patchAreaForDemand, rowHousing, DENSIFY_MIN_TEXTURE_SCALE, edgeInsetScale } from './generation-params.js';
 import { WardType } from '../types/interfaces.js';
 import type { Street } from '../types/interfaces.js';
 
@@ -27,7 +27,7 @@ import type { UrbanisationField } from './urbanisation.js';
 import { routeWeights } from './route-weight.js';
 import { MAX_PATCHES } from '../input/azgaar-input.js';
 
-import { Ward } from '../wards/ward.js';
+import { Ward, MAIN_STREET } from '../wards/ward.js';
 import { GateWard } from '../wards/gate-ward.js';
 import { Market } from '../wards/market.js';
 import { Castle } from '../wards/castle.js';
@@ -45,7 +45,9 @@ import { buildWardDistribution, type WardConstructor } from '../wards/ward-distr
 import type { PlacedSymbol, ClaimedSite } from './symbols.js';
 import { placeCityGlyphs, cityMetersPerUnit } from './city-glyphs.js';
 import { plantCityParks } from './park-planting.js';
-import { overlapsWater, nearestOnSegment } from './city-frontage.js';
+import { overlapsWater, nearestOnSegment, polygonsOverlap } from './city-frontage.js';
+import { roadCorridor } from '../geom/road-corridor.js';
+import { PlacementIndex, placementBounds } from './placement-index.js';
 import { stampVillageRows } from './village-rows.js';
 
 const MAX_ATTEMPTS = 20;
@@ -187,6 +189,9 @@ export class Model {
   farmRingDepth: number = 1;
   /** Dry outer wards reached by the explicitly planned river bridge. */
   riverSuburbPatches: Patch[] = [];
+  /** The validated cross-river road; only this road may export a long bridge. */
+  riverSuburbRoad: Polygon | null = null;
+  private harbourRoad: Polygon | null = null;
   gates: Point[] = [];
   readonly degradedFlags: Set<DegradedFlag> = new Set();
 
@@ -379,6 +384,8 @@ export class Model {
     this.patches = [];
     this.inner = [];
     this.riverSuburbPatches = [];
+    this.riverSuburbRoad = null;
+    this.harbourRoad = null;
     this.waterbody = [];
     this.citadel = null;
     this.plaza = null;
@@ -425,9 +432,14 @@ export class Model {
     if (this.wall !== null && this.waterbody.length > 0) this.wall.buildTowers();
     timeGenerationStage('roads', this.onStageTiming, () => {
       this.buildStreets();
+      if (this.harbourRoad) {
+        this.roads.push(this.harbourRoad);
+        this.tidyUpRoads();
+      }
       const crossing = planRiverSuburb(this, Math.max(0, this.nPatches - this.inner.length - (this.citadel ? 1 : 0)));
       if (crossing) {
         this.riverSuburbPatches = crossing.patches;
+        this.riverSuburbRoad = crossing.road;
         this.roads.push(crossing.road);
         this.tidyUpRoads();
       }
@@ -998,7 +1010,7 @@ export class Model {
     }
 
     const candidates = straddling.length > 0 ? straddling : adjacent;
-    if (candidates.length === 0) return;
+    if (candidates.length === 0) return this.placeOuterHarbour();
 
     // Pick the patch with the most waterfront edge length
     candidates.sort((a, b) => b.waterfrontLength - a.waterfrontLength);
@@ -1040,13 +1052,19 @@ export class Model {
       const planned = candidates.slice(0, 6).map(({ patch }) => ({ patch, ward: patch === best ? ward : new Harbour(this, patch, large) }))
         .filter(p => p.ward.plan !== null);
       planned.sort((a,b) => harbourPlanScore(b.ward.plan!) - harbourPlanScore(a.ward.plan!));
-      if (!planned.length) return;
+      if (!planned.length) return this.placeOuterHarbour();
       let connected: typeof planned[number] | undefined;
       for (const candidate of planned) {
         harbourGate = entranceFor(candidate.patch);
         if (harbourGate) { connected = candidate; break; }
       }
-      if (!connected) return;
+      if (!connected) return this.placeOuterHarbour();
+      // A large port need not settle for a small core-edge landing when a
+      // connected outer waterfront can accommodate its navigation basin.
+      if (large && connected.ward.plan!.kind === 'landing') {
+        this.placeOuterHarbour(true);
+        if (this.harbour) return;
+      }
       best = connected.patch; ward = connected.ward;
     } else {
       let connected: typeof candidates[number] | undefined;
@@ -1102,6 +1120,40 @@ export class Model {
           ...(existing?.routeId != null ? { routeId: existing.routeId } : {}),
           matchDeltaDeg: 0,
         });
+      }
+    }
+  }
+
+  /** A port may occupy a later waterfront neighbourhood beyond the compact
+   * historic core. Reserve its real quay and a dry cart road before housing,
+   * rather than demanding that every harbour touch the city wall. */
+  private placeOuterHarbour(requireBasin = false): void {
+    if (!this.params.development || !this.border || !this.params.harbourSize) return;
+    const k = this.params.development.metresPerUnit;
+    const water = this.getWaterRings(), banks = this.params.harbourShorelines ?? this.getWaterShorelines();
+    const reach = Math.max(this.border.getRadius() * 3, Math.sqrt(this.params.population) * 8 / k);
+    const distance = (patch: Patch) => Math.min(Infinity, ...banks.flatMap(path => path.slice(1)
+      .map((b,i) => Point.distance(patch.shape.center,nearestOnSegment(patch.shape.center,path[i],b)))));
+    const candidates = this.patches.filter(p => !p.withinCity && !p.ward && !this.waterbody.includes(p)
+      && p.shape.center.length <= reach && distance(p) <= Math.max(...p.shape.vertices.map(v => Point.distance(v,p.shape.center))))
+      .sort((a,b) => a.shape.center.length-b.shape.center.length);
+    const topology = new Topology(this);
+    const planned = candidates.slice(0,16).map(patch => ({patch,ward:new Harbour(this,patch,this.params.harbourSize === 'large')}))
+      .filter(candidate => candidate.ward.plan !== null && (!requireBasin || candidate.ward.plan.kind !== 'landing'))
+      .sort((a,b) => harbourPlanScore(b.ward.plan!)-harbourPlanScore(a.ward.plan!) || a.patch.shape.center.length-b.patch.shape.center.length);
+    for (const {patch,ward} of planned) {
+      // The second access path connects the local patch entrance to its quay.
+      const entry = ward.plan!.access[1]?.[0];
+      if (!entry) continue;
+      const gates = this.gates.slice().sort((a,b) => Point.distance(a,entry)-Point.distance(b,entry));
+      for (const gate of gates) {
+        const path = topology.buildPath(entry,gate,topology.inner);
+        if (!path || path.length<2 || path.slice(1).some((b,i) => overlapsWater(roadCorridor(path[i],b,3.5/k),water))) continue;
+        patch.withinCity = true;
+        patch.ward = ward;
+        this.harbour = patch;
+        this.harbourRoad = new Polygon(path);
+        return;
       }
     }
   }
@@ -1344,6 +1396,7 @@ export class Model {
       budget: Math.max(0, this.nPatches - this.inner.length - (this.citadel !== null ? 1 : 0) - this.riverSuburbPatches.length),
       compact: this.params.development !== undefined,
       seed: this.params.seed,
+      shorelines: this.params.coastalShorelines,
     });
 
     for (const patch of this.riverSuburbPatches) patch.zone = 'suburb';
@@ -1530,7 +1583,10 @@ export class Model {
       if (patch.withinCity || patch.ward !== null || this.waterbody.includes(patch)) continue;
 
       const depth = patch.ringDepth;
-      const inBelt = depth > 0 && depth <= this.farmRingDepth;
+      const coastDistance = Math.min(Infinity, ...(this.params.coastalShorelines ?? []).flatMap(path =>
+        path.slice(1).map((b,i) => Point.distance(patch.shape.center,nearestOnSegment(patch.shape.center,path[i],b)))))
+        * (this.params.development?.metresPerUnit ?? 1);
+      const inBelt = depth > 0 && depth <= this.farmRingDepth && coastDistance >= 45;
       // A single draw per patch keeps the outer edge ragged rather than a
       // uniform offset curve; the outermost ring is sparser than the inner.
       if (inBelt && rng.bool(depth === this.farmRingDepth ? 0.6 : 0.95)) {
@@ -1627,6 +1683,7 @@ export class Model {
     }
     this.refineDensity();
     this.removeDrownedGeometry();
+    this.reserveWaterfrontRoadGeometry();
     this.pretrimOrdinaryCount = this.countOrdinaryBuildings();
     this.pretrimCoreOrdinaryCount = this.patches.some(p => p.zone === 'suburb' || p.zone === 'satellite')
       ? this.countCoreOrdinaryBuildings()
@@ -1939,6 +1996,25 @@ export class Model {
           return rescued ? [rescued] : [];
         });
       }
+    }
+  }
+
+  /** Concave block setbacks can leave a roof corner across a reserved access
+   * road. Remove those lots before counting capacity or placing their art. */
+  private reserveWaterfrontRoadGeometry(): void {
+    const routes = [this.harbourRoad,this.riverSuburbRoad].filter((p): p is Polygon => p !== null);
+    if (!routes.length) return;
+    const index = new PlacementIndex<Polygon>();
+    const width = MAIN_STREET * edgeInsetScale(this.params.development?.texturePopulation ?? this.params.population);
+    for (const route of routes) for (let i=1;i<route.length;i++) {
+      const corridor = roadCorridor(route.vertices[i-1],route.vertices[i],width);
+      index.insert(placementBounds(corridor.vertices),corridor);
+    }
+    for (const patch of this.patches) {
+      const ward = patch.ward;
+      if (!(ward instanceof CommonWard || ward instanceof Farm)) continue;
+      ward.geometry = ward.geometry.filter(building => !index.query(placementBounds(building.vertices))
+        .some(corridor => polygonsOverlap(building,corridor)));
     }
   }
 

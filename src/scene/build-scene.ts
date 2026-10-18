@@ -78,10 +78,12 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
       ...(model.usesCityLayout ? { width: MAIN_STREET * edgeInsetScale(model.params.development?.texturePopulation ?? model.params.population) } : {}),
     } as RoadFeature);
   }
+  const plannedCrossings = new Set<RoadFeature>();
   for (const road of model.roads) {
     scene.layers.roads.push({ path: ring(road.vertices), kind: 'road', role: 'approach',
       ...(model.usesCityLayout ? { width: MAIN_STREET * edgeInsetScale(model.params.development?.texturePopulation ?? model.params.population) } : {}),
     } as RoadFeature);
+    if (road === model.riverSuburbRoad) plannedCrossings.add(scene.layers.roads.at(-1)!);
   }
 
   for (const street of cityLocalStreets(model)) {
@@ -182,7 +184,7 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
     });
   }
 
-  scene.layers.bridges = cityCrossings(scene.layers.roads, scene.layers.water.rings);
+  scene.layers.bridges = cityCrossings(scene.layers.roads, scene.layers.water.rings, plannedCrossings);
   scatterVegetation(model, scene, sc);
 
   return scene;

@@ -35,6 +35,9 @@ export type RoadBearingInput =
 export interface AzgaarBurgInput {
   /** Measured survey coverage or explicit unknown units, supported by both physical layouts. */
   waterContext?: WaterContextV1;
+  /** FMG cell adjacency is a settlement relationship, not a surveyed marker offset.
+   * Explicitly permits local waterfront inference while retaining source identity. */
+  waterfront?: { riverId?: string; shoreKind?: 'ocean' | 'lake'; shoreFeatureId?: string };
   name: string;
   population: number;
   /** Defaults to auto: village through 1000 people, city above it. */
@@ -90,7 +93,8 @@ export interface AzgaarBurgInput {
    */
   coastlineGeometry?: Array<Array<{ x: number; y: number }>>;
   /** River surveys in burg-local metres for both layouts, added to water polygons. The
-   * generator bends coarse centrelines unless meander is explicitly false. */
+   * generator bends coarse centrelines unless meander is explicitly false.
+   * An explicit waterfront association separately permits local course and mouth inference. */
   rivers?: Array<{
     id?: string;
     centreline: Array<{ x: number; y: number }>;

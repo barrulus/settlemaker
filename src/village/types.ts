@@ -22,6 +22,9 @@ export interface SiteRoute {
 
 /** Pass 1 output. Everything in metres, origin at the burg centre. */
 export interface Site {
+  /** Exposed ocean/lake banks, excluding river banks and survey cuts. */
+  shorelines?: Point[][];
+  shoreWaterKind?: 'ocean' | 'lake';
   freshwaterIrrigation?: boolean;
   waterContextResult?: WaterContextResult;
   surveyRadiusM?: number;

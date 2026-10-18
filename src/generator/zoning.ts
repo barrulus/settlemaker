@@ -1,6 +1,7 @@
 import type { Patch } from './patch.js';
 import type { PatchAdjacency } from './adjacency.js';
 import { Point } from '../types/point.js';
+import { nearestOnSegment } from './city-frontage.js';
 import { createUrbanisationField, radialProfile, SATELLITE_POP_THRESHOLD, type UrbanisationField } from './urbanisation.js';
 import type { WeightedRoad } from './route-weight.js';
 
@@ -59,6 +60,8 @@ export interface SprawlArgs {
   /** Physical city districts grow contiguously before following distant roads. */
   compact?: boolean;
   seed?: number;
+  /** Working/fishing waterfront, kept distinct from inland river obstacles. */
+  shorelines?: Point[][];
 }
 
 /**
@@ -116,7 +119,12 @@ export function assignSprawl(args: SprawlArgs): UrbanisationField {
         const across=c.x*road.direction.y-c.y*road.direction.x;
         return along<=0 ? best : Math.max(best,Math.sqrt(road.weight)*Math.exp(-Math.pow(across/(cityRadius*.28),2)));
       },0);
-      const growth = .8+1.1*corridor+.06*Math.sin(2*angle+phase)+.04*Math.sin(3*angle-phase);
+      const shoreDistance = Math.min(Infinity, ...(args.shorelines ?? []).flatMap(path =>
+        path.slice(1).map((b, i) => Point.distance(c, nearestOnSegment(c, path[i], b)))));
+      // A coastal town grows connected streets along its working shore before
+      // spending the same residential demand on an inland fan of road ribbons.
+      const waterfront = Number.isFinite(shoreDistance) ? Math.exp(-shoreDistance / Math.max(1, cityRadius * .22)) : 0;
+      const growth = .8+1.1*corridor+1.1*waterfront+.06*Math.sin(2*angle+phase)+.04*Math.sin(3*angle-phase);
       return [p,c.length/growth] as const;
     }));
     const frontier = new Set<Patch>();

@@ -34,7 +34,7 @@ function crossing(path: Point[], water: Point[][]): WetRun | null {
 
 /** Minimise the structural span locally; the mesh only supplies the dry road
  * approaches. A perpendicular bank projection avoids long diagonal bridges. */
-function shortestBridge(path: Point[], run: WetRun, banks: Point[][], water: Point[][], k: number, forbidden: Polygon[], border: Polygon): Point[] | null {
+function shortestBridge(path: Point[], run: WetRun, banks: Point[][], water: Point[][], k: number, maxSpan: number, forbidden: Polygon[], border: Polygon): Point[] | null {
   const direction = run.end.subtract(run.start).norm();
   const segments = banks.flatMap(bank => bank.slice(1).map((b, i) => ({ a: bank[i], b })));
   const near = segments.filter(s => Point.distance(run.start, nearestOnSegment(run.start, s.a, s.b)) < 50 / k);
@@ -48,7 +48,7 @@ function shortestBridge(path: Point[], run: WetRun, banks: Point[][], water: Poi
   const pairs: Array<{ a: Point; b: Point; length: number }> = [];
   for (const station of stations.slice(0, 24)) for (const s of far) {
     const b = nearestOnSegment(station.at, s.a, s.b), span = b.subtract(station.at), length = span.length;
-    if (length < run.length * .5 || length > 80 / k || Point.distance(b, run.end) > 50 / k) continue;
+    if (length < run.length * .5 || length > maxSpan || Point.distance(b, run.end) > 50 / k) continue;
     const axis = span.norm(), tangent = s.b.subtract(s.a).norm();
     if (axis.dot(direction) < .5 || Math.abs(axis.dot(station.tangent)) > .35 || Math.abs(axis.dot(tangent)) > .35) continue;
     pairs.push({ a: station.at, b, length });
@@ -76,15 +76,22 @@ function shortestBridge(path: Point[], run: WetRun, banks: Point[][], water: Poi
   return null;
 }
 
-/** Reserve one modest river bridge and a connected outer neighbourhood before
+/** Larger towns can support a longer bridge, but still need surveyed banks,
+ * dry landings and a real connected road. This is a total crossing length,
+ * rather than an unsupported single arch or a decorative bridge symbol. */
+export function riverCrossingLimitM(population: number): number {
+  return Math.min(400, Math.max(80, Math.sqrt(population) * 1.1));
+}
+
+/** Reserve one river bridge and a connected outer neighbourhood before
  * drawing its houses. The walled core remains on its original dry bank. */
 export function planRiverSuburb(model: Model, budget: number): { road: Polygon; patches: Patch[] } | null {
-  if (!model.params.development || model.params.harbourWaterKind !== 'river'
-    || !model.params.harbourSize || !model.topology || !model.border || budget < 2
-    || model.params.harbourShorelines?.length === 0) return null;
+  const banks = model.params.riverShorelines ?? (model.params.harbourWaterKind === 'river'
+    && model.params.harbourSize ? model.params.harbourShorelines ?? model.getWaterShorelines?.() : undefined);
+  if (!model.params.development || !banks?.length || !model.topology || !model.border || budget < 2) return null;
   const k = model.params.development.metresPerUnit, water = model.getWaterRings();
   const radius = model.border!.getRadius(), origin = new Point(0, 0);
-  const wetLimit = 80 / k, landing = 10 / k;
+  const wetLimit = riverCrossingLimitM(model.params.population) / k, landing = 10 / k;
   const viable = model.patches.filter(p => !p.withinCity && !p.ward && !model.waterbody.includes(p)
     && p.shape.center.length < radius * 3 && !overlapsWater(p.shape, water));
   const across = viable.filter(p => {
@@ -105,8 +112,7 @@ export function planRiverSuburb(model: Model, budget: number): { road: Polygon; 
         if (!path || path.length < 2) continue;
         let run = crossing(path, water);
         if (!run || run.length > wetLimit || run.before < landing || run.after < landing) continue;
-        const banks = model.params.harbourShorelines ?? model.getWaterShorelines();
-        path = shortestBridge(run.straightened, crossing(run.straightened, water) ?? run, banks, water, k, forbidden, model.border.shape);
+        path = shortestBridge(run.straightened, crossing(run.straightened, water) ?? run, banks, water, k, wetLimit, forbidden, model.border.shape);
         if (!path) continue;
         run = crossing(path, water);
         if (!run || run.length > wetLimit) continue;

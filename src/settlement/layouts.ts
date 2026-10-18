@@ -130,6 +130,8 @@ export function blockLayout(input: AzgaarBurgInput, seed: number, profile: Devel
   prepareWaterBoundary(site.water, site.surveyRadiusM ?? Infinity);
   params.coastlineGeometry = waterFillRings(site.water)!.map(r => r.map(p => new Point(p.x / k, p.y / k)));
   params.waterShorelines = waterBoundaryPaths(site.water).map(r => r.map(p => new Point(p.x / k, p.y / k)));
+  if (syntheticOcean) site.shorelines = belongingBanks(waterBoundaryPaths(site.water), [site.water[0]]);
+  params.coastalShorelines = site.shorelines?.map(path => path.map(p => p.scale(1 / k)));
   params.waterSurveyRadius = site.surveyRadiusM === undefined ? undefined : site.surveyRadiusM / k;
   const bodies = input.waterContext?.status === 'measured' ? input.waterContext.bodies : [];
   params.harbourWaterKind = input.harbourWaterKind ?? (site.syntheticCoast ? 'ocean'
@@ -138,7 +140,10 @@ export function blockLayout(input: AzgaarBurgInput, seed: number, profile: Devel
   // its sea bank. Keep every bank for collision checks and filter only the
   // candidate berthing edges by the caller's explicit body associations.
   const owned = bodies.filter(b => b.kind === params.harbourWaterKind).flatMap(b => b.polygonIndices ?? []);
-  const portBanks = owned.length ? owned.map(i => site.water[i]) : portRiverBanks(input, seed);
+  const riverBanks = portRiverBanks(input, seed);
+  if (riverBanks) params.riverShorelines = belongingBanks(waterBoundaryPaths(site.water), riverBanks)
+    .map(path => path.map(p => p.scale(1 / k)));
+  const portBanks = owned.length ? owned.map(i => site.water[i]) : params.harbourWaterKind === 'river' ? riverBanks : undefined;
   if (portBanks) params.harbourShorelines = belongingBanks(waterBoundaryPaths(site.water), portBanks)
     .map(path => path.map(p => p.scale(1 / k)));
   const radius = input.port && input.harbourWaterKind === 'river'
@@ -150,6 +155,8 @@ export function blockLayout(input: AzgaarBurgInput, seed: number, profile: Devel
     params.coastlineGeometry = shift(params.coastlineGeometry!);
     params.waterShorelines = shift(params.waterShorelines!);
     if (params.harbourShorelines) params.harbourShorelines = shift(params.harbourShorelines);
+    if (params.riverShorelines) params.riverShorelines = shift(params.riverShorelines);
+    if (params.coastalShorelines) params.coastalShorelines = shift(params.coastalShorelines);
     if (site.surveyRadiusM !== undefined) {
       params.waterSurveyRadius = Math.max(0, site.surveyRadiusM - offset.length) / k;
       params.waterSurveyOriginOffsetM = offset.length;
@@ -188,16 +195,21 @@ export function blockLayout(input: AzgaarBurgInput, seed: number, profile: Devel
       // The shoulders add dry ground around the existing working bank. Keep
       // the successful mesh and reserve its final harbour before any buildings.
       const originalGeometry = params.coastlineGeometry, originalBanks = params.waterShorelines;
+      const originalCoastalBanks = params.coastalShorelines, originalSiteBanks = site.shorelines;
       site.water = candidateWater;
       site.syntheticCoast!.shoreline = shoreline;
+      site.shorelines = belongingBanks(waterBoundaryPaths(candidateWater), [candidateWater[0]]);
       params.coastlineGeometry = water;
       params.waterShorelines = banks;
+      params.coastalShorelines = site.shorelines.map(path => path.map(p => p.scale(1 / k)));
       ward.plan = plan;
       return () => {
         site.water = originalWater;
         site.syntheticCoast!.shoreline = originalShore;
         params.coastlineGeometry = originalGeometry;
         params.waterShorelines = originalBanks;
+        params.coastalShorelines = originalCoastalBanks;
+        site.shorelines = originalSiteBanks;
         ward.plan = originalPlan;
       };
     };
@@ -246,8 +258,8 @@ export function blockLayout(input: AzgaarBurgInput, seed: number, profile: Devel
     const harbour = scene.layers.harbours?.[0];
     if (!harbour) {
       diagnostics.push('Harbour requested, but no accessible waterfront with room for a quay could be placed.');
-      if (site.waterContextResult && !site.waterContextResult.issues.some(i => i.code === 'water-context-conflict'))
-        site.waterContextResult.issues.push({ code: 'water-context-conflict' });
+      if (site.waterContextResult && !site.waterContextResult.issues.some(i => i.code === 'water-harbour-unavailable'))
+        site.waterContextResult.issues.push({ code: 'water-harbour-unavailable' });
     } else if (input.harbourSize === 'large' && harbour.kind === 'landing') {
       diagnostics.push('The available waterfront fits a landing, but not a navigable harbour basin.');
     }

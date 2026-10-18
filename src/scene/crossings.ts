@@ -4,7 +4,7 @@ import type { Scene, RoadFeature, ScenePoint } from './scene.js';
 
 /** Only bounded wet runs between two dry road segments become bridges. Roads
  * terminating in open water are not silently converted into ocean viaducts. */
-export function cityCrossings(roads:RoadFeature[],rings:ScenePoint[][]):NonNullable<Scene['layers']['bridges']>{
+export function cityCrossings(roads:RoadFeature[],rings:ScenePoint[][], plannedRoads:ReadonlySet<RoadFeature> = new Set()):NonNullable<Scene['layers']['bridges']>{
   const water=rings.map(r=>r.map(p=>new Point(p.x,p.y))),out:NonNullable<Scene['layers']['bridges']>=[];
   for(const [ri,road]of roads.entries()){
     if(road.kind==='alley')continue;
@@ -18,7 +18,7 @@ export function cityCrossings(roads:RoadFeature[],rings:ScenePoint[][]):NonNulla
       if(!runs[i].wet)continue;
       const start=i,points=[runs[i].a];let length=0;
       while(i<runs.length&&runs[i].wet){length+=Point.distance(runs[i].a,runs[i].b);points.push(runs[i].b);i++;}
-      if(start===0||i===runs.length||length>40||length<.1)continue;
+      if(start===0||i===runs.length||(!plannedRoads.has(road)&&length>40)||length<.1)continue;
       const c=points[Math.floor(points.length/2)];
       if(out.some(b=>b.path.some(p=>Math.hypot(p.x-c.x,p.y-c.y)<1)))continue;
       const width=road.width??(road.kind==='artery'?1.8:1.2);

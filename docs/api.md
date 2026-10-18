@@ -50,6 +50,7 @@ Azgaar map or database to use it.
 | `population` | `number` | Required; drives the building budget and automatic planner selection. |
 | `engine` | `'auto'`, `'village'`, `'city'` | Optional saved planner choice; default `auto`. |
 | `port` | `boolean` | Required; requests harbour/jetty infrastructure. Does not supply water. |
+| `waterfront` | `{ riverId?, shoreKind?, shoreFeatureId? }` | Optional FMG cell relationship authorizing inferred placement beside a river, ocean or lake, independently of port status. Supply the associated geometry. |
 | `citadel` | `boolean` | Required; requests a city citadel. |
 | `walls` | `boolean` | Required; requests fortifications. Village and city wall planners differ. |
 | `plaza` | `boolean` | Required; city plaza request. Villages have their own green planner. |

@@ -9,11 +9,12 @@ import { drySegments, nearestOnSegment } from '../generator/city-frontage.js';
 /** The declared river's original metric banks. Ambiguous/missing associations
  * never select an unrelated nearby channel. */
 export function portRiverBanks(input: AzgaarBurgInput, seed: number): Point[][] | undefined {
-  if (input.harbourWaterKind !== 'river') return undefined;
+  if (!input.waterfront?.riverId && input.harbourWaterKind !== 'river') return undefined;
+  const riverId = input.waterfront?.riverId ?? input.harbourRiverId;
   const rivers = input.rivers ?? [];
   const ids = new Set(rivers.map(r => r.id));
-  if (!input.harbourRiverId && (ids.size > 1 || rivers.length > 1 && ids.has(undefined))) return [];
-  const selected = new Set(rivers.flatMap((r, index) => !input.harbourRiverId || r.id === input.harbourRiverId ? [index] : []));
+  if (!riverId && (ids.size > 1 || rivers.length > 1 && ids.has(undefined))) return [];
+  const selected = new Set(rivers.flatMap((r, index) => !riverId || r.id === riverId ? [index] : []));
   if (!selected.size) return [];
   // Keep original indices: legacy hinted rivers seed their meanders by index.
   return riverPolygons(input, seed, selected);
@@ -32,6 +33,7 @@ export function belongingBanks(paths: Point[][], bodies: Point[][]): Point[][] {
 /** Anchor a declared river-port town on its existing dry bank. Only the town
  * moves: authored waterways and their survey origin remain unchanged. */
 export function riverfrontPlacement(input: AzgaarBurgInput, site: Site, wallRadiusM: number, seed: number): SettlementPlacement | undefined {
+  if (input.waterfront) return;
   if (!input.port || input.harbourWaterKind !== 'river') return;
   const banks = portRiverBanks(input, seed);
   if (!banks?.length) return;
