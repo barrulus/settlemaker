@@ -262,12 +262,19 @@ physical layouts, including non-port villages. `port` still requests working
 harbour infrastructure rather than controlling waterfront geography.
 
 This is an explicit inference contract. The generator brings the selected
-shore and river close to the local settlement origin, retaining widths and
-source identity. A coastal river may be rotated toward its mouth and extended
-to the shore. It does not claim that the cartographic marker's kilometre-scale
-offset is a precise settlement location. Source inputs are not mutated;
+shore and river close to the local settlement origin, retaining source identity
+and the upstream width profile. Regional river courses may receive local bends
+at settlement scale. A coastal river may be rotated toward its mouth, extended
+to the shore, and widened into a smooth estuary. These inferred banks become
+physical water before roads, harbours and buildings are planned. Where a curved
+coast needs different joins on each bank, local bank polygons round the mouth;
+these derived polygons stay internal and do not change the transport format.
+It does not claim that the cartographic marker's kilometre-scale offset is a
+precise settlement location. Source inputs are not mutated;
 `waterContextResult.status` is `approximate`, with `water-frontage-inferred` and
 `adjustments` recording source IDs, translations and optional rotations.
+River adjustments also report `courseRefined` and `mouthFlared` when local
+shaping goes beyond that translation and rotation.
 Coast translation conservatively reduces available survey coverage, so FMG
 exports extra coverage and an independently centred associated river reach.
 Inputs without `waterfront` retain their exact-water behaviour below.

@@ -96,16 +96,13 @@ describe('FMG waterfront relationships', () => {
     expect(site.water.every(r => !pointInPolygon(new Point(0, 0), r))).toBe(true);
     expect(distance(site.water[0])).toBeGreaterThan(8);
     expect(distance(site.water[0])).toBeLessThan(30);
-    expect(result.input.rivers![0].widthsM).toEqual(input.rivers![0].widthsM);
-    result.input.rivers![0].centreline.forEach((p, i) => {
-      expect(p.x - input.rivers![0].centreline[i].x).toBeCloseTo(result.adjustments[0].offsetM.x, 8);
-      expect(p.y - input.rivers![0].centreline[i].y).toBeCloseTo(result.adjustments[0].offsetM.y, 8);
-    });
+    expect(result.input.rivers![0].widthsM!.every(w => Math.abs(w - 40) < 1e-8)).toBe(true);
+    expect(result.adjustments[0].courseRefined).not.toBe(true);
   });
 
-  it('finds exposed coast outside adjoining source polygons instead of their internal seam', () => {
+  it.each([0, 1e-7, 5e-6])('finds exposed coast instead of an internal seam with a %s metre numerical gap', gap => {
     const input: AzgaarBurgInput = { ...base, rivers: [], waterfront: { shoreKind: 'ocean' },
-      coastlineGeometry: [-1000, 0].map(x => [{ x, y: -1000 }, { x: x + 1000, y: -1000 },
+      coastlineGeometry: [-1000, gap].map(x => [{ x, y: -1000 }, { x: x + 1000, y: -1000 },
         { x: x + 1000, y: 1000 }, { x, y: 1000 }]),
       waterContext: { ...base.waterContext as Extract<AzgaarBurgInput['waterContext'], { status: 'measured' }>,
         bodies: [{ kind: 'ocean', distanceM: 1000, bearingDeg: 90, polygonIndices: [0, 1] }] } };
@@ -128,7 +125,7 @@ describe('FMG waterfront relationships', () => {
       waterContext: { ...base.waterContext as Extract<AzgaarBurgInput['waterContext'], { status: 'measured' }>,
         bodies: [{ kind: 'ocean', distanceM: 1000, bearingDeg: 90, polygonIndices: [0] }] } };
     const result = inferWaterfront(input, profile), site = buildSite(result.input, 1);
-    expect(result.input.rivers![0].centreline).toHaveLength(3);
+    expect(result.input.rivers![0].centreline.length).toBeGreaterThan(3);
     const mouth = result.input.rivers![0].centreline.at(-1)!;
     expect(pointInPolygon(new Point(mouth.x, mouth.y), site.water[0])).toBe(true);
     expect(site.water.every(r => !pointInPolygon(new Point(0, 0), r))).toBe(true);

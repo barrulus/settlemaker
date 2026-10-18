@@ -4,11 +4,22 @@ import { SeededRandom } from '../utils/random.js';
 import { arcLengths, closestPointOnSegment, dist, sampleAt } from './geometry.js';
 import { offsetPolyline } from './parcels/strip.js';
 
+type River = NonNullable<AzgaarBurgInput['rivers']>[number];
+// Derived banks belong to a single inferred input, never the serialized source
+// survey. Keeping them on the river identity carries the physical geometry
+// through planning without extending the public FMG transport contract.
+const inferredBanks = new WeakMap<River, Point[][]>();
+export function setInferredRiverBanks(river: River, banks: Point[][]): void {
+  inferredBanks.set(river, banks);
+}
+
 /** Coarse river surveys become a sampled channel before roads or lots exist.
  * Detailed coastlineGeometry remains authoritative and is never distorted. */
 export function riverPolygons(input: AzgaarBurgInput, seed: number, selectedIndices?: ReadonlySet<number>): Point[][] {
   return (input.rivers ?? []).flatMap((river, index) => {
     if (selectedIndices && !selectedIndices.has(index)) return [];
+    const derived = inferredBanks.get(river);
+    if (derived) return derived.map(ring => ring.map(p => new Point(p.x, p.y)));
     if (!(river.widthM > 0) || !Number.isFinite(river.widthM)) return [];
     const surveyed = river.centreline.map((p, i) => ({ point: new Point(p.x, p.y), width: river.widthsM?.[i] ?? river.widthM }))
       .filter(({ point, width }) => Number.isFinite(point.x) && Number.isFinite(point.y) && Number.isFinite(width) && width > 0)

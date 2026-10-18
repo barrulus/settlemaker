@@ -2,7 +2,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { createSettlementModel, type AzgaarBurgInput, type SettlementModel } from '../src/index.js';
 import { Point } from '../src/types/point.js';
 import { Polygon } from '../src/geom/polygon.js';
-import { drySegments, overlapsWater, polygonsOverlap } from '../src/generator/city-frontage.js';
+import { drySegments, nearestOnSegment, overlapsWater, polygonsOverlap } from '../src/generator/city-frontage.js';
+import { inferWaterfront } from '../src/input/waterfront.js';
 import { roadCorridor } from '../src/geom/road-corridor.js';
 import { polygonArea } from '../src/village/dressing/parcel-cut.js';
 import { cityCrossings } from '../src/scene/crossings.js';
@@ -72,11 +73,25 @@ it('connects a large non-port river city across a surveyed 270 metre channel', (
   const bridge=L.bridges![0];
   expect(bridge.path).toHaveLength(2);
   const [a,b]=bridge.path.map(point);
+  // Local bends can rotate the crossing; its span and dry landings remain
+  // constrained by the actual channel rather than the source line's axis.
   expect(Point.distance(a,b)).toBeGreaterThan(270);
   expect(Point.distance(a,b)).toBeLessThan(280);
-  expect(Math.abs(a.y-b.y)).toBeLessThan(1e-5);
-  const far=model.buildings.filter(building=>building.footprint.every(p=>p.x>335));
-  expect(far.reduce((sum,building)=>sum+building.residents,0)).toBeGreaterThan(10000);
+  const course=inferWaterfront(river,model.development,2).input.rivers![0].centreline.map(point);
+  const bankSide=(p:Point)=>{
+    let nearest=Infinity,side=0;
+    for(let i=1;i<course.length;i++){
+      const a=course[i-1],b=course[i],q=nearestOnSegment(p,a,b),distance=Point.distance(p,q);
+      if(distance<nearest){nearest=distance;side=(p.x-q.x)*(b.y-a.y)-(p.y-q.y)*(b.x-a.x);}
+    }
+    return Math.sign(side);
+  };
+  const originSide=bankSide(new Point(0,0));
+  expect(originSide).not.toBe(0);
+  const far=model.buildings.filter(building=>building.footprint.every(p=>bankSide(point(p))===-originSide));
+  // Require a substantial neighbourhood, allowing the available bank area to
+  // vary with the inferred bends rather than fixing a straight-river census.
+  expect(far.reduce((sum,building)=>sum+building.residents,0)).toBeGreaterThan(river.population*.09);
   expect(model.residents.assigned).toBe(river.population);
   const water=L.water.rings.map(r=>r.map(point));
   const dry=drySegments(a,b,water);

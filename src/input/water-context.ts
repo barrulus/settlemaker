@@ -20,7 +20,7 @@ export interface WaterContextResult {
   status: 'measured' | 'approximate' | 'unknown-units' | 'error';
   issues: Array<{ code: WaterIssueCode; requiredSurveyRadiusM?: number }>;
   adjustments?: Array<{ kind: 'river' | 'ocean' | 'lake'; sourceId?: string;
-    offsetM: { x: number; y: number }; rotationDeg?: number }>;
+    offsetM: { x: number; y: number }; rotationDeg?: number; courseRefined?: boolean; mouthFlared?: boolean }>;
 }
 export class WaterContextError extends Error {
   readonly waterContextResult: WaterContextResult;
