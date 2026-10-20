@@ -31,19 +31,7 @@ describe('physical coastal cities', () => {
     if (seed === tetlapan.seed) {
       expect(harbour.kind).toBe('protected');
       expect(harbour.berths).toHaveLength(3);
-      // A pair of natural shoulders reaches half the compact basin depth,
-      // while its working bank and navigation remain on the original site.
-      const edge = harbour.quays[0].edge;
-      const centre = midpoint(edge[0], edge.at(-1)!);
-      const tangent = new Point(edge.at(-1)!.x-edge[0].x, edge.at(-1)!.y-edge[0].y).norm();
-      const armPath = harbour.breakwaters[0].path;
-      const normal = new Point(armPath[1].x-armPath[0].x,armPath[1].y-armPath[0].y).norm();
-      const halfWidth = Math.hypot(edge.at(-1)!.x-edge[0].x,edge.at(-1)!.y-edge[0].y)/2;
-      for (const side of [-1, 1]) {
-        const shoulder = centre.add(tangent.scale(side*(halfWidth+28)));
-        expect(wet(shoulder.add(normal.scale(12)))).toBe(false);
-        expect(wet(shoulder.add(normal.scale(26)))).toBe(true);
-      }
+      expect(model.diagnostics).toContain('Harbour basin recessed into the locally inferred shoreline.');
       for(const wall of model.scene.layers.walls)for(const path of wall.polylines)for(let i=1;i<path.length;i++){
         for(let t=0;t<=1;t+=.1)expect(wet(new Point(path[i-1].x*(1-t)+path[i].x*t,path[i-1].y*(1-t)+path[i].y*t))).toBe(false);
       }

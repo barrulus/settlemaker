@@ -1,4 +1,3 @@
-import polygonClipping from 'polygon-clipping';
 import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import { mapToGenerationParams, MAX_PATCHES } from '../input/azgaar-input.js';
 import { Model } from '../generator/model.js';
@@ -24,8 +23,7 @@ import { residentialCapacity, type DevelopmentProfile } from './development.js';
 import type { SettlementBuilding, SettlementDistrict, SettlementPlacement } from './model.js';
 import { shapeVillageApproaches } from './approaches.js';
 import { prepareWaterBoundary, waterBoundaryPaths, waterFillRings } from '../village/water-boundary.js';
-import { harbourInlet } from './harbour-inlet.js';
-import { planHarbour } from '../wards/harbour-plan.js';
+import { recessedHarbour } from './recessed-harbour.js';
 import { belongingBanks, portRiverBanks, riverfrontPlacement } from './waterfront-placement.js';
 
 export interface Layout {
@@ -162,59 +160,15 @@ export function blockLayout(input: AzgaarBurgInput, seed: number, profile: Devel
       params.waterSurveyOriginOffsetM = offset.length;
     }
   }
-  const model = new Model(params);
-  model.onStageTiming = onStageTiming;
-  if (site.syntheticCoast && input.port && input.harbourSize === 'large') {
-    model.onHarbourTerrain = ward => {
-      const originalPlan = ward.plan;
-      if (!originalPlan) return;
-      const originalWater = site.water, originalShore = site.syntheticCoast!.shoreline;
-      const shoreline = harbourInlet(originalShore, originalPlan, k);
-      if (!shoreline) return;
-      const candidateWater = [[...shoreline, ...originalWater[0].slice(-2)], ...originalWater.slice(1)];
-      if (pointInPolygon(new Point(0, 0), candidateWater[0])) return;
-      // Only reclaim water; preserving every previously dry point keeps the
-      // already reserved wall/topology safe across the terrain refinement.
-      const ringCoordinates = (ring: Point[]) => ring.map(p => [p.x, p.y] as [number, number]);
-      const newlyWet = polygonClipping.difference([ringCoordinates(candidateWater[0])], [ringCoordinates(originalWater[0])]);
-      const addedArea = newlyWet.reduce((sum, polygon) => sum + polygon.reduce((area, ring, index) => {
-        const signed = ring.reduce((a, p, i) => { const q = ring[(i + 1) % ring.length]; return a + p[0] * q[1] - q[0] * p[1]; }, 0) / 2;
-        return area + (index === 0 ? 1 : -1) * Math.abs(signed);
-      }, 0), 0);
-      if (addedArea > 1e-6) return;
-      prepareWaterBoundary(candidateWater, Infinity);
-      const water = waterFillRings(candidateWater)!.map(r => r.map(p => new Point(p.x / k, p.y / k)));
-      const banks = waterBoundaryPaths(candidateWater).map(r => r.map(p => new Point(p.x / k, p.y / k)));
-      const plan = planHarbour({
-        patch: ward.patch.shape, water, shorelines: banks,
-        gate: model.border?.shape.vertices.find(v => ward.patch.shape.contains(v)),
-        large: true, waterKind: 'ocean', metresPerUnit: k,
-      });
-      if (!plan || plan.kind !== 'protected' || plan.berths.length < originalPlan.berths.length
-        || plan.warehouses.length < originalPlan.warehouses.length) return;
-      // The shoulders add dry ground around the existing working bank. Keep
-      // the successful mesh and reserve its final harbour before any buildings.
-      const originalGeometry = params.coastlineGeometry, originalBanks = params.waterShorelines;
-      const originalCoastalBanks = params.coastalShorelines, originalSiteBanks = site.shorelines;
-      site.water = candidateWater;
-      site.syntheticCoast!.shoreline = shoreline;
-      site.shorelines = belongingBanks(waterBoundaryPaths(candidateWater), [candidateWater[0]]);
-      params.coastlineGeometry = water;
-      params.waterShorelines = banks;
-      params.coastalShorelines = site.shorelines.map(path => path.map(p => p.scale(1 / k)));
-      ward.plan = plan;
-      return () => {
-        site.water = originalWater;
-        site.syntheticCoast!.shoreline = originalShore;
-        params.coastlineGeometry = originalGeometry;
-        params.waterShorelines = originalBanks;
-        params.coastalShorelines = originalCoastalBanks;
-        site.shorelines = originalSiteBanks;
-        ward.plan = originalPlan;
-      };
-    };
+  const canRecess = input.port && input.harbourSize === 'large' && params.harbourWaterKind === 'ocean'
+    && (site.syntheticCoast !== undefined || input.waterfront?.shoreKind === 'ocean');
+  let model = canRecess ? recessedHarbour(params, site, k, onStageTiming) : null;
+  const recessed = model !== null;
+  if (!model) {
+    model = new Model(params);
+    model.onStageTiming = onStageTiming;
+    model.generate();
   }
-  model.generate();
   const scene = timeGenerationStage('scene', onStageTiming, () => buildScene(model, { shift: { dx: offset.x / k, dy: offset.y / k, source: placement ? 'riverfront' : 'none' } }));
   scene.layers.water.synthetic = syntheticOcean;
   // Outer commons can retain a natural grove rather than a formal civic lawn.
@@ -253,6 +207,9 @@ export function blockLayout(input: AzgaarBurgInput, seed: number, profile: Devel
   }
   const plaza = (model.plaza?.ward?.publicSpace ?? model.plaza?.shape)?.vertices.map(p => new Point(p.x * k + offset.x, p.y * k + offset.y));
   const diagnostics = [...model.degradedFlags].map(f => `layout could not place ${f}`);
+  if (canRecess) diagnostics.push(recessed
+    ? 'Harbour basin recessed into the locally inferred shoreline.'
+    : 'A recessed harbour basin could not fit this waterfront; retained the available shoreline infrastructure.');
   if (placement) diagnostics.push(`River-port town anchored ${Math.round(offset.length)} metres toward its declared river bank; water geography is unchanged.`);
   if (input.port && input.harbourSize) {
     const harbour = scene.layers.harbours?.[0];

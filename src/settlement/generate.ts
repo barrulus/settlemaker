@@ -96,7 +96,7 @@ export function createSettlementModel(input: AzgaarBurgInput, options: Settlemen
     if (input.urbanDensity !== undefined) diagnostics.push('urbanDensity is retired and ignored; use development.centreOccupancy and development.edgeOccupancy for physical building capacities.');
     if (input.coreCapacity !== undefined) diagnostics.push('coreCapacity is retired and ignored; use development.corePopulation to request residents inside walls.');
     if (residents.unassigned) diagnostics.push(`${residents.unassigned} residents could not be accommodated within the requested enclosure and available land`);
-    const model: SettlementModel = { version: 1, generatorRevision: 'physical-layout-18', name: input.name, seed, development, coordinateSystem: 'local_metres_y_down',
+    const model: SettlementModel = { version: 1, generatorRevision: 'physical-layout-19', name: input.name, seed, development, coordinateSystem: 'local_metres_y_down',
       scene: layout.scene, buildings: layout.buildings, districts: layout.districts, residents, diagnostics,
       ...(layout.placement ? { placement: layout.placement } : {}),
       ...(layout.site.waterContextResult ? { waterContextResult: layout.site.waterContextResult } : {}),

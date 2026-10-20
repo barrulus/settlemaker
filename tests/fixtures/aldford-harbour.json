@@ -1,0 +1,1 @@
+{"v":1,"burg":{"name":"Aldford","population":2250,"port":true,"citadel":false,"walls":true,"plaza":true,"temple":false,"shanty":false,"capital":false,"oceanBearing":90,"harbourSize":"large","roadBearings":[{"bearing_deg":42,"kind":"main","through":false},{"bearing_deg":88,"kind":"local","through":false},{"bearing_deg":287,"kind":"town","through":false}]},"seed":190039}
