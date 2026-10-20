@@ -6,6 +6,8 @@ import { createSettlementModel, renderSettlement, exportSettlement } from '../di
 const out = new URL('../output/harbour-review/', import.meta.url);
 await mkdir(out, { recursive: true });
 const tetlapan = JSON.parse(await readFile(new URL('../tests/fixtures/tetlapan-coast.json', import.meta.url), 'utf8'));
+const aldford = JSON.parse(await readFile(new URL('../tests/fixtures/aldford-harbour.json', import.meta.url), 'utf8'));
+const seading = JSON.parse(await readFile(new URL('../tests/fixtures/seading-harbour.json', import.meta.url), 'utf8'));
 const measured = {
   ...tetlapan.burg, name: 'Measured coast', population: 4000, capital: false, citadel: false,
   roadBearings: [270], oceanBearing: 270, harbourWaterKind: 'ocean',
@@ -18,7 +20,10 @@ const boundsOf = (points, pad) => ({
   max_x: Math.max(...points.map(p => p.x)) + pad, max_y: Math.max(...points.map(p => p.y)) + pad,
 });
 const report = [];
-for (const [name, input, seed] of [['tetlapan', tetlapan.burg, tetlapan.seed], ['measured-ocean', measured, 2]]) {
+for (const [name, input, seed] of [
+  ['tetlapan', tetlapan.burg, tetlapan.seed], ['measured-ocean', measured, 2],
+  ['aldford', aldford.burg, aldford.seed], ['seading', seading.burg, seading.seed],
+]) {
   const start = performance.now(), model = createSettlementModel(input, { seed });
   const generationMs = Math.round(performance.now() - start);
   const harbour = model.scene.layers.harbours?.[0];
@@ -27,7 +32,7 @@ for (const [name, input, seed] of [['tetlapan', tetlapan.burg, tetlapan.seed], [
   const harbourPoints = [...harbour.quays.flatMap(q => q.ring), ...harbour.breakwaters.flatMap(b => b.ring),
     ...harbour.berths.flatMap(b => b.ring), ...warehouses.flatMap(b => b.ring)];
   const urbanPoints = model.buildings.filter(b => b.settlementRole !== 'rural').flatMap(b => b.footprint);
-  for (const [view, bounds] of [['harbour', boundsOf(harbourPoints, 25)], ['city', boundsOf(urbanPoints, 100)], ['landscape', model.scene.bounds]]) {
+  for (const [view, bounds] of [['harbour', boundsOf(harbourPoints, 60)], ['city', boundsOf(urbanPoints, 100)], ['landscape', model.scene.bounds]]) {
     if (process.argv.includes('--harbour-only') && view !== 'harbour') continue;
     const svg = renderSettlement(model, { bounds, width: 1600, detail: view === 'harbour' ? 'full' : 'auto' });
     await writeFile(new URL(`${name}-${view}.svg`, out), svg);

@@ -35,11 +35,17 @@ it('keeps Kindum inhabited beside both its river and its working sea harbour', (
   const harbour = model.scene.layers.harbours![0];
   expect(harbour.kind).toBe('protected');
   expect(harbour.berths.length).toBeGreaterThan(0);
+  expect(issues).toContain('water-harbour-recessed');
+  const plannedWater = model.scene.layers.water.rings.map(r => r.map(p => new Point(p.x, p.y)));
   for (const quay of harbour.quays) for (const p of quay.edge) {
-    expect(distanceTo(new Point(p.x, p.y), sea)).toBeLessThan(1);
+    expect(distanceTo(new Point(p.x, p.y), plannedWater)).toBeLessThan(1);
   }
+  // The basin is now excavated inland of the inferred regional coast; its
+  // navigation approach must still reach the declared sea, not the river.
+  for (const p of harbour.basin) expect(sea.some(r => pointInPolygon(p, r))).toBe(false);
+  expect(sea.some(r => pointInPolygon(harbour.approach[0], r))).toBe(true);
   for (const berth of harbour.berths) {
     const middle = berth.ring.reduce((sum, p) => sum.add(new Point(p.x, p.y)), origin).scale(1 / berth.ring.length);
-    expect(sea.some(r => pointInPolygon(middle, r))).toBe(true);
+    expect(plannedWater.filter(r => pointInPolygon(middle, r)).length % 2).toBe(1);
   }
 }, 60000);

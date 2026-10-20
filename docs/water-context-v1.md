@@ -234,12 +234,25 @@ placement rule below may move the generated town within this coordinate frame.
 
 Without measured context or supplied polygons, a direction-only city coast is
 illustrative. Its generated shape is aligned with the physical city enclosure so
-the waterfront is accessible at city housing density. For a large port, generated
-headlands shelter about the inner half of the basin, forming a local inlet around
-the working quay. The city is then laid out against that shoreline, including
-its walls, access and buildings.
-This adjustment never moves supplied polygons, measured shores or independent
-rivers. Direction alone cannot reproduce FMG's displayed coastline.
+the waterfront is accessible at city housing density. Large ocean ports reserve
+an inset basin before the final city is generated. A preliminary mesh identifies
+a working waterfront; the local coast is recessed with smooth shoulders, then
+the walls, streets and buildings are generated against that water boundary.
+The accepted navigation basin must occupy former land and connect to open water.
+Direction alone cannot reproduce FMG's displayed coastline.
+
+The same basin planning applies to supplied ocean geometry with an explicit
+`waterfront.shoreKind: 'ocean'` association. This association already permits
+local interpretation of FMG's regional coast. The input remains immutable;
+the generated water, scene and GeoJSON include the excavation. An existing
+water-context result becomes `approximate` and includes `water-harbour-recessed`.
+Exact supplied shores without a waterfront association retain their geometry.
+River and lake ports do not use this ocean-basin excavation.
+
+If a safe, connected inset layout cannot be generated, the trial is discarded
+and generation retains the available shoreline infrastructure with a diagnostic.
+An attempted basin cannot silently move the original water or leave stale banks
+in the fallback city.
 
 ### Harbour infrastructure
 
@@ -349,16 +362,18 @@ approaches follow the channel. Narrow sites can fall back to a landing with a
 diagnostic instead of claiming a basin that does not fit. These are geometric
 navigation checks; FMG does not supply water depth, wave exposure or tides.
 
-The natural water polygons remain unchanged. Quays, breakwaters and short berths
-are separate built structures. Roofed warehouse artwork, planking, masonry,
+Outside the locally inferred basin described above, the natural water polygons
+remain unchanged. Quays, breakwaters and short berths are separate built
+structures. Roofed warehouse artwork, planking, masonry,
 bollards, cranes and beacons distinguish their uses. The scene's optional
 `layers.harbours` and physical GeoJSON expose the basin, entrance, approach,
 structures and fixtures; piers link back through `harbour_id`.
 
 Run `npm run build && node scripts/review-harbours.mjs` to regenerate close-up,
 city and landscape SVG/PNG views plus physical GeoJSON in `output/harbour-review/`.
-The fixtures include the original Tetlapan link and a measured coastal city whose
-supplied geometry deliberately contradicts its legacy ocean bearing.
+The fixtures include the original Tetlapan link, the exact Aldford and Seading
+recessed-harbour reports, and a measured coastal city whose supplied geometry
+deliberately contradicts its legacy ocean bearing.
 
 ## 3. Physical units and cities
 

@@ -140,10 +140,6 @@ function rescueDetachedPier(pier: Polygon, inWater: (p: Point) => boolean): Poly
 export class Model {
   /** Optional profiling observer; never changes generated state. */
   onStageTiming?: GenerationTimingObserver;
-  /** Optional terrain refinement after harbour reservation, before roads/buildings.
-   * Return a rollback so failed attempts restore their original geography. */
-  onHarbourTerrain?: (ward: Harbour) => (() => void) | void;
-  private rollbackHarbourTerrain?: () => void;
   /** Legacy low-population direct calls keep their original layout unless explicitly selected as cities. */
   get usesCityLayout(): boolean {
     return this.params.cityLayout === true || this.params.population > VILLAGE_POP_CEILING;
@@ -310,6 +306,21 @@ export class Model {
     );
   }
 
+  /** Select working waterfront on a disposable mesh, before committing terrain.
+   * The final city is regenerated against the chosen basin. */
+  probeHarbour(): Harbour | null {
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      try {
+        this.buildTopology();
+        return this.harbour?.ward instanceof Harbour ? this.harbour.ward : null;
+      } catch (error) {
+        if (error instanceof WaterContextError) throw error;
+        this.reset();
+      }
+    }
+    return null;
+  }
+
   /**
    * Cheap alternative to `generate()` for callers that only need
    * `border.getRadius()` (phases 1-3 fully determine it; streets, wards, and
@@ -379,8 +390,6 @@ export class Model {
   }
 
   private reset(): void {
-    this.rollbackHarbourTerrain?.();
-    this.rollbackHarbourTerrain = undefined;
     this.patches = [];
     this.inner = [];
     this.riverSuburbPatches = [];
@@ -415,15 +424,7 @@ export class Model {
     this.roads = [];
     this.plazaRingSegments = new Set();
 
-    timeGenerationStage('topology', this.onStageTiming, () => {
-      this.buildPatches();
-      this.optimizeJunctions();
-      this.buildWalls();
-      this.classifyWater();
-      this.placeHarbour();
-      if (this.harbour?.ward instanceof Harbour)
-        this.rollbackHarbourTerrain = this.onHarbourTerrain?.(this.harbour.ward) || undefined;
-    });
+    timeGenerationStage('topology', this.onStageTiming, () => this.buildTopology());
     // `buildWalls` towered the circuit against the gate set as it stood then;
     // `classifyWater` drops waterfront road gates and `placeHarbour` adds the
     // sea gate, so a coastal wall's gate set is only final here. Re-tower so
@@ -446,6 +447,14 @@ export class Model {
     });
     timeGenerationStage('neighbourhoods', this.onStageTiming, () => this.createWards());
     timeGenerationStage('plots', this.onStageTiming, () => this.buildGeometry());
+  }
+
+  private buildTopology(): void {
+    this.buildPatches();
+    this.optimizeJunctions();
+    this.buildWalls();
+    this.classifyWater();
+    this.placeHarbour();
   }
 
   // Phase 1: Build Voronoi patches

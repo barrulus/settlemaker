@@ -14,7 +14,7 @@ export type WaterContextV1 = {
 export type WaterIssueCode = 'water-coverage-exceeded' | 'water-geometry-required'
   | 'water-context-conflict' | 'water-units-unknown' | 'water-context-unsupported-engine'
   | 'water-context-invalid' | 'water-river-local-width-unavailable' | 'water-river-width-modelled'
-  | 'water-frontage-inferred' | 'water-harbour-unavailable';
+  | 'water-frontage-inferred' | 'water-harbour-unavailable' | 'water-harbour-recessed';
 export interface WaterContextResult {
   version: 1;
   status: 'measured' | 'approximate' | 'unknown-units' | 'error';
