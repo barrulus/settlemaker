@@ -57,9 +57,10 @@ const geojson = exportSettlement(model);
 | `water` | `{rings, synthetic}`; even-odd output rings retain islands. |
 | `fields` | Polygon `ring`, `angleDeg`, optional native `glyph` and `hatch`. Pattern pitch is independent of parcel size. |
 | `furrows` | Deprecated array; current scenes leave it empty and use field direction instead. |
-| `greens` | Polygon rings with optional planned paths and path width. Physical city squares carry `surface: 'paved'`; other open ground retains grass or park artwork. |
+| `greens` | Polygon rings with optional planned paths and path width. City squares and most dense private yards carry `surface: 'paved'`; gardens and parks retain planting. |
+| `ground` | Optional underlying dense-city polygon rings with `surface: 'paved'`. Render before explicit greens, water, roads and buildings. |
 | `vegetation` | Position, glyph/legacy `kind`, scale and rotation. |
-| `symbols` | Glyph `id`, position, scale, optional `scaleY`, `buildingId`, `buildingIds`, `materialVariant`, rotation, and `zBand`. |
+| `symbols` | Glyph `id`, position, scale, optional `scaleY`, `buildingId`, `buildingIds`, `materialVariant`, `artworkVariant`, rotation, and `zBand`. |
 | `roads` | Paths with `kind: 'artery' | 'road' | 'alley'` and optional width. |
 | `buildings` | Polygon, semantic ward `kind`, `landmark`, optional `id` and `glyphBacked`. |
 | `piers` | Polygon rings. |
@@ -71,6 +72,10 @@ come from the selected glyph's view box and anchor. Preserve non-square boxes an
 `scaleY`. Native field tiles may have a 32-unit box, structure slots commonly 64,
 and downloadable authoring assets can use other dimensions. There is no universal
 2×2 authoring rule for current glyphs.
+
+`artworkVariant` selects a saved default housing appearance (0–7 on the current
+temperate housing slots), including its shadow. Omitted or unsupported values
+use the base glyph. Custom skin glyph overrides take precedence over variants.
 
 ## Appearance and artwork
 
@@ -142,7 +147,7 @@ not implemented by importing the generator alone.
 ## Evolution and saved scenes
 
 Optional fields such as `layers.bridges`, field `glyph`, wall `material` and symbol
-`materialVariant` extend Scene v2. Consumers should handle their absence in older
+`materialVariant` / `artworkVariant`, and `layers.ground` extend Scene v2. Consumers should handle their absence in older
 saved scenes. Breaking changes to existing field meaning or structure require a
 scene version change.
 

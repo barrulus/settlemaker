@@ -38,6 +38,7 @@ settlement are emitted. Optional properties depend on the feature and layout.
 | `path` | LineString | `width` |
 | `bridge` | LineString | `width` |
 | `field` | Polygon | `glyph`, `bearing_deg` |
+| `ground` | Polygon | `surface: 'paved'`; underlying dense urban ground |
 | `green` | Polygon | Optional `purpose`, `surface` |
 | `water` | MultiPolygon | Interior rings preserve land islands |
 | `wall` | LineString | `material` |
@@ -51,6 +52,10 @@ points describe placed artwork and can reference one or several building IDs;
 they are not additional residents. A `bridge` line plus width describes its deck.
 An entrance is a line across a gate opening, not the old city point/bearing record.
 There is no separate `poi` layer in the physical contract.
+
+`ground` polygons are base surfaces beneath buildings, roads and explicit gardens;
+their areas overlap those features. Private open spaces in `green` can carry
+`surface: 'paved'` for a yard rather than planted ground.
 
 ## Extraction
 

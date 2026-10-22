@@ -59,6 +59,8 @@ export interface VegetationInstance {
 }
 export interface SymbolInstance {
   materialVariant?: number;
+  /** Seeded default housing appearance; custom skins retain their own artwork. */
+  artworkVariant?: number;
   id: string;          // glyph id, e.g. 'sm-well'
   at: ScenePoint;
   scale: number;       // world-unit art-box width; height defaults to the same
@@ -147,6 +149,8 @@ export interface Scene {
     /** @deprecated Always empty since settlemaker 0.8.0 — fields carry angleDeg instead. */
     furrows: Furrow[];
     greens: GreenFeature[];
+    /** Underlying dense urban surface. Gardens, roads and buildings overlay it. */
+    ground?: Array<{ring:ScenePoint[];surface:'paved'}>;
     vegetation: VegetationInstance[];
     symbols: SymbolInstance[];
     roads: RoadFeature[];

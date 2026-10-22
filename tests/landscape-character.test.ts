@@ -98,8 +98,8 @@ describe('biome landscape character',()=>{
     const scene=buildScene(r.model);
     expect(scene.layers.greens.length).toBeGreaterThan(30);
     // Civic corner parcels now reserve yards too; both public outputs must
-    // include every ward's private ground, not just residential gardens.
-    const gardens=r.model.patches.reduce((n,p)=>n+(p.ward?.gardens.length??0),0);
+    // include every ward's planted ground; paved yards are exported as courts.
+    const gardens=r.model.patches.reduce((n,p)=>n+(p.ward?.gardens.filter(g=>!g.surface).length??0),0);
     expect(r.geojson.features.filter(f=>f.properties?.kind==='garden').length).toBe(gardens);
     expect(scene.layers.greens.filter(g=>g.purpose==='private'&&g.surface!=='paved').length).toBe(gardens);
     expect(r.model.symbols.filter(s=>s.id.startsWith('sm-house')).length).toBeGreaterThan(10);

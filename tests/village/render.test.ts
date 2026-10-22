@@ -5,6 +5,8 @@ import { hasGlyph } from '../../src/village/glyphs.js';
 import { renderVillage } from '../../src/village/render.js';
 import { classRank } from '../../src/village/route-class.js';
 import { generateVillage } from '../../src/village/village-model.js';
+import sharp from 'sharp';
+import { Point } from '../../src/types/point.js';
 
 // Fix round 1 (2026-08-21): field/wedge ids can legitimately carry regex
 // metacharacters (`wedge:<laneIdA>|<laneIdB>`'s `|`, per the fields design
@@ -27,6 +29,30 @@ describe('renderVillage', () => {
    * converts painted pixels back to metres against the same scale. */
   const PX_PER_M = 4;
   const svg = renderVillage(model);
+
+  it('lights rotated village roofs from the same direction as their ground shadows', async () => {
+    for(const rotation of [0,90,180,270])for(const direction of [-1,1]) {
+      const fixture={...model,buildings:[{...model.buildings[0],glyph:'sm-house-tiled',position:new Point(0,0),
+        bearingDeg:rotation,footprint:[64,64] as [number,number]}],pois:[],vegetation:[],fields:[],lanes:[],wall:undefined,
+        frame:{minX:-64,minY:-64,maxX:64,maxY:64}};
+      const shadow={dx:.4*direction,dy:.6*direction};
+      const rendered=renderVillage(fixture,4,undefined,{style:{shadowOffset:shadow}});
+      const {data,info}=await sharp(Buffer.from(rendered.replace(/var\(--[^,]+,\s*([^\)]+)\)/g,'$1')))
+        .removeAlpha().raw().toBuffer({resolveWithObject:true});
+      const angle=rotation*Math.PI/180;
+      const brightness=(y:number)=>{
+        const x=Math.round(256-(y-32)*Math.sin(angle)*4),py=Math.round(256+(y-32)*Math.cos(angle)*4);
+        let sum=0;
+        for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++) {
+          const at=((py+dy)*info.width+x+dx)*info.channels;
+          sum+=(data[at]+data[at+1]+data[at+2])/3;
+        }
+        return sum/49;
+      };
+      const incidence=-shadow.dx*Math.sin(angle)+shadow.dy*Math.cos(angle);
+      expect((brightness(22)-brightness(39))*Math.sign(incidence),`${rotation}°, direction ${direction}`).toBeGreaterThan(2);
+    }
+  });
 
   it('emits a single svg document with the tiler background contract', () => {
     expect(svg.startsWith('<svg')).toBe(true);
@@ -193,7 +219,8 @@ describe('renderVillage', () => {
       ...model.vegetation.map((v) => v.glyph),
     ]);
     for (const id of defIds) {
-      const base = id.endsWith('-sil') ? id.slice(0, -4) : id;
+      // Lit roofs share ordered section definitions belonging to the used glyph.
+      const base = id.replace(/(?:-sil|-roof-\d+)$/, '');
       // every def id must trace back either to a used glyph above or the green fallback glyph
       if (base !== `${model.green.shape}-${model.green.variant}`) {
         expect(usedGlyphs.has(base)).toBe(true);

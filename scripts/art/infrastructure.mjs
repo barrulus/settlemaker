@@ -16,11 +16,11 @@ const path=(d,fill='none',sw=.6,stroke=ink,extra='')=>`<path d="${d}" fill="${fi
 const rect=(x,y,w,h)=>`M${number(x)},${number(y)}h${number(w)}v${number(h)}h${number(-w)}Z`;
 const wrap=body=>`<g stroke-linejoin="round" stroke-linecap="round">${body}</g>`;
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
-function pen(){
+function pen(stroke=ink){
   let body='',sil='';
   return {
-    shape(d,fill,sw=1.8){body+=path(d,fill,sw);sil+=path(d,'currentColor',sw,'currentColor');},
-    detail(d,fill='none',sw=.6,extra=''){body+=path(d,fill,sw,ink,extra);},
+    shape(d,fill,sw=1.8){body+=path(d,fill,sw,stroke);sil+=path(d,'currentColor',sw,'currentColor');},
+    detail(d,fill='none',sw=.6,extra=''){body+=path(d,fill,sw,stroke,extra);},
     circle(x,y,r,fill,sw=.8,casts=false){const d=`M${number(x-r)},${number(y)}a${r},${r} 0 1 0 ${2*r},0a${r},${r} 0 1 0 ${-2*r},0Z`;if(casts)this.shape(d,fill,sw);else this.detail(d,fill,sw);},
     raw(s){body+=s;},
     result(){return {body:wrap(body),sil:wrap(sil)};},
@@ -52,7 +52,8 @@ export function wall(input,{biome='temperate',kind='curtain',width=12,gates=[],d
   if(!palettes[biome]||!wallKinds.includes(kind)||!Number.isFinite(width)||width<4||!Number.isFinite(detailPitch)||detailPitch<2)throw new Error('Invalid wall profile.');
   if(!Array.isArray(input)||input.some(p=>!Array.isArray(p)||p.length!==2||!p.every(Number.isFinite)))throw new Error('Invalid wall points.');
   if(gates.some(g=>!Number.isFinite(g.at)||!Number.isFinite(g.width)||g.width<=0))throw new Error('Invalid wall gate.');
-  const m=metrics(input),half=width/2,p=pen();
+  const wallInk='var(--sm-wall-ink, #756b58)';
+  const m=metrics(input),half=width/2,p=pen(wallInk);
   const blocked=gates.map(g=>[clamp(g.at-g.width/2,0,m.length),clamp(g.at+g.width/2,0,m.length)]).sort((a,b)=>a[0]-b[0]);
   const intervals=[];let start=0;
   for(const[a,b]of blocked){if(a>start)intervals.push([start,a]);start=Math.max(start,b);}if(start<m.length)intervals.push([start,m.length]);
@@ -67,8 +68,8 @@ export function wall(input,{biome='temperate',kind='curtain',width=12,gates=[],d
     const d=section(a,b);
     // The silhouette is the same stroked path. Butt caps keep the gate opening
     // exact; round joins prevent miter spikes at acute boundary corners.
-    p.raw(path(d,'none',width,ink,'stroke-linecap="butt"'));
-    p.raw(path(d,'none',width-2,token(biome,kind==='palisade'?'wood':'stone'),'stroke-linecap="butt"'));
+    p.raw(path(d,'none',width,wallInk,'stroke-linecap="butt"'));
+    p.raw(path(d,'none',width-1.2,token(biome,kind==='palisade'?'wood':'stone'),'stroke-linecap="butt"'));
     p.raw(path(d,'none',kind==='curtain'?width*.34:width*.5,token(biome,kind==='palisade'?'woodLight':'light'),'stroke-linecap="butt"'));
   }
   for(let d=detailPitch/2;d<m.length;d+=kind==='palisade'?3.8:detailPitch){
@@ -95,31 +96,112 @@ export function wall(input,{biome='temperate',kind='curtain',width=12,gates=[],d
   // Gate jambs and open timber leaves make an entrance legible from above.
   // Use the ends of the surviving wall runs, so overlapping gate cuts have
   // just two jambs and gates crossing the closing vertex stay open.
-  const gatePen=pen();
+  const gatePen=pen(wallInk);
   for(const [a,b] of intervals)for(const [at,solid] of [[a,1],[b,-1]]){
     if((at===0||at===m.length)&&!closed)continue;
     if((at===0||at===m.length)&&!blocked.some(([x,y])=>x===0||y===m.length))continue;
     if(!blocked.length)continue;
-    const sample=m.at(at>m.length?at-m.length:at),size=width*.8;
+    const sample=m.at(at>m.length?at-m.length:at),size=width*(kind==='curtain'?1.6:.8);
+    const depth=width*(kind==='curtain'?1.15:.4);
     const loc=(u,v)=>oriented(sample.p,sample.t,u,v);
-    const post=points([loc(0,-size/2),loc(solid*size,-size/2),loc(solid*size,size/2),loc(0,size/2)])+'Z';
+    // Chamfered masonry towers flank a genuinely open passage. Keep every
+    // part on the solid side of the cut; doors line the passage between them.
+    const corner=kind==='curtain'?width*.22:width*.07;
+    const outline=[[0,-depth+corner],[solid*corner,-depth],[solid*(size-corner),-depth],
+      [solid*size,-depth+corner],[solid*size,depth-corner],[solid*(size-corner),depth],
+      [solid*corner,depth],[0,depth-corner]];
+    const post=points(outline.map(([u,v])=>loc(u,v)))+'Z';
     gatePen.raw('<g data-gate="jamb">');
-    gatePen.shape(post,token(biome,kind==='palisade'?'woodLight':'light'),1);
-    // Fold the leaf along the side of the passage, clear of the travelled lane.
-    const leaf=points([loc(solid*size*.25,0),loc(solid*size*.25,width*.72)]);
-    gatePen.shape(leaf, 'none', 2.6);
-    gatePen.detail(leaf,'none',1.2);
+    gatePen.shape(post,token(biome,kind==='palisade'?'woodLight':'stone'),.8);
+    if(kind==='curtain') {
+      gatePen.raw('<g data-gate="tower">');
+      const inset=width*.22;
+      gatePen.detail(points([[solid*inset,-depth+inset],[solid*(size-inset),-depth+inset],
+        [solid*(size-inset),depth-inset],[solid*inset,depth-inset]].map(([u,v])=>loc(u,v)))+'Z',token(biome,'light'),.55);
+      gatePen.detail(points([[solid*width*.4,-depth+width*.4],[solid*(size-width*.4),-depth+width*.4],
+        [solid*(size-width*.4),depth-width*.4],[solid*width*.4,depth-width*.4]].map(([u,v])=>loc(u,v)))+'Z',token(biome,'stone'),.4);
+      // Low crenellations and a timber access hatch make the top readable.
+      for(const side of [-1,1])for(let u=width*.35;u<size-width*.2;u+=width*.45)
+        gatePen.detail(points([[solid*(u-.9),side*(depth-.5)],[solid*(u+.9),side*(depth-.5)],
+          [solid*(u+.9),side*(depth-2.4)],[solid*(u-.9),side*(depth-2.4)]].map(([u,v])=>loc(u,v)))+'Z',token(biome,'light'),.4);
+      gatePen.detail(points([[solid*size*.4,-2],[solid*size*.65,-2],[solid*size*.65,2],[solid*size*.4,2]].map(([u,v])=>loc(u,v)))+'Z',token(biome,'wood'),.45);
+      if(biome==='tundra')gatePen.detail(points([[solid*2,-depth+2],[solid*(size-2),-depth+2],[solid*(size-3),-depth+4],[solid*3,-depth+3]].map(([u,v])=>loc(u,v)))+'Z',snow,0);
+      gatePen.raw('</g>');
+    }
     gatePen.raw('</g>');
+  }
+  // Merge cuts before adding doors: overlapping openings and a gate across
+  // the closing vertex still have exactly two leaves, each able to reach the
+  // midpoint between its hinges. Swing them fully open alongside the road.
+  const cuts=[];
+  for(const [a,b] of blocked) {
+    if(b-a<1e-6)continue;
+    if(cuts.length&&a<=cuts.at(-1)[1])cuts.at(-1)[1]=Math.max(b,cuts.at(-1)[1]);
+    else cuts.push([a,b]);
+  }
+  if(closed&&cuts.length>1&&cuts[0][0]===0&&cuts.at(-1)[1]===m.length) {
+    const first=cuts.shift(),last=cuts.pop();cuts.push([last[0],m.length+first[1]]);
+  }
+  const signedArea=input.slice(1).reduce((area,b,i)=>area+input[i][0]*b[1]-b[0]*input[i][1],0);
+  const inward=closed&&signedArea<0?-1:1, leafPoints=[], gateLeaves=[];
+  const sampleAt=at=>m.at(at>m.length?at-m.length:at);
+  for(const [a,b] of cuts) {
+    // A boundary ending in a cut has only one jamb, so cannot support a pair.
+    if(!closed&&(a===0||b===m.length)||b-a>=m.length)continue;
+    const ends=[sampleAt(a),sampleAt(b)];
+    const normal=ends.map(e=>[-e.t[1]*inward,e.t[0]*inward]);
+    const across=[ends[1].p[0]-ends[0].p[0],ends[1].p[1]-ends[0].p[1]],span=Math.hypot(...across);
+    if(span<1e-6)continue;
+    const fallback=[-across[1]/span*inward,across[0]/span*inward];
+    const source=gates.find(g=>[g.at,g.at+m.length].some(at=>at>=a&&at<=b));
+    let travel=source?.direction??fallback;
+    const magnitude=Math.hypot(...travel);
+    travel=magnitude>1e-6?travel.map(v=>v/magnitude):fallback;
+    if(travel[0]*fallback[0]+travel[1]*fallback[1]<0)travel=travel.map(v=>-v);
+    let incidence=normal.map(n=>n[0]*travel[0]+n[1]*travel[1]);
+    if(Math.min(...incidence)<.25){travel=fallback;incidence=normal.map(n=>n[0]*travel[0]+n[1]*travel[1]);}
+    const depth=width*(kind==='curtain'?1.15:.4);
+    const offset=-(depth-.6)/Math.max(.25,Math.min(...incidence));
+    const hinges=ends.map(e=>[e.p[0]+travel[0]*offset,e.p[1]+travel[1]*offset]);
+    const leafLength=span/2,thickness=width*.18;
+    for(let side=0;side<2;side++) {
+      const hinge=hinges[side],other=hinges[1-side];
+      let out=[-travel[1],travel[0]];
+      if(out[0]*(hinge[0]-other[0])+out[1]*(hinge[1]-other[1])>0)out=out.map(v=>-v);
+      const loc=(along,cross)=>[hinge[0]+travel[0]*along+out[0]*cross,hinge[1]+travel[1]*along+out[1]*cross];
+      const panel=[loc(0,0),loc(leafLength,0),loc(leafLength,thickness),loc(0,thickness)];
+      leafPoints.push(...panel);
+      gateLeaves.push({hinge,tip:loc(leafLength,0),length:leafLength});
+      gatePen.raw('<g data-gate="leaf">');
+      gatePen.shape(points(panel)+'Z',token(biome,'wood'),.7);
+      // Thick oak edges, short planks, iron straps and a diagonal brace remain
+      // legible from above. They frame the lane instead of disappearing under
+      // the tower top or crossing the travelled road. The leaf thickness lies
+      // in the reserved clearance beside the road, clear of adjacent houses.
+      gatePen.detail(points([loc(.5,thickness*.2),loc(leafLength-.5,thickness*.2)]),'none',.65);
+      for(let v=2;v<leafLength-1;v+=2.2)
+        gatePen.detail(points([loc(v,.5),loc(v+.1,thickness-.5)]),'none',.4);
+      for(const v of [1.1,leafLength-1.1]) {
+        gatePen.detail(points([loc(v,.25),loc(v,thickness-.25)]),'none',1);
+        const bolt=loc(v,thickness/2);gatePen.circle(...bolt,.38,wallInk,0);
+      }
+      gatePen.detail(points([loc(1.3,.65),loc(leafLength-1.3,thickness-.65)]),'none',.75);
+      const hingePin=loc(.4,thickness*.5);
+      gatePen.circle(...hingePin,thickness*.38,token(biome,'dark'),.5,true);
+      gatePen.raw('</g>');
+    }
   }
   const gateArt=gatePen.result();
   const result=p.result();
   result.body+=gateArt.body;
   result.sil=wrap(intervals.map(([a,b])=>[width,width-2,kind==='curtain'?width*.34:width*.5]
     .map(w=>path(section(a,b),'none',w,'currentColor','stroke-linecap="butt"')).join('')).join(''))+gateArt.sil;
-  const xs=input.map(p=>p[0]),ys=input.map(p=>p[1]),x0=Math.min(...xs)-half-4,y0=Math.min(...ys)-half-4,
-    x1=Math.max(...xs)+half+4,y1=Math.max(...ys)+half+4;
+  const reach=gates.length&&kind==='curtain'?Math.max(half+4,width*1.15+1):half+4;
+  const xs=input.map(p=>p[0]),ys=input.map(p=>p[1]);
+  const x0=Math.min(Math.min(...xs)-reach,...leafPoints.map(p=>p[0]-1)),y0=Math.min(Math.min(...ys)-reach,...leafPoints.map(p=>p[1]-1)),
+    x1=Math.max(Math.max(...xs)+reach,...leafPoints.map(p=>p[0]+1)),y1=Math.max(Math.max(...ys)+reach,...leafPoints.map(p=>p[1]+1));
   return {...result,viewBox:[x0,y0,x1-x0,y1-y0],anchor:[(x0+x1)/2,(y0+y1)/2],category:'wall',biome,kind,
-    centreline:input,width,length:m.length,gaps:blocked,gateAnchors:gates.map(g=>({at:m.at(g.at).p,tangent:m.at(g.at).t,width:g.width})),
+    centreline:input,width,length:m.length,gaps:blocked,gateLeaves,gateAnchors:gates.map(g=>({at:m.at(g.at).p,tangent:m.at(g.at).t,width:g.width})),
     notes:'Place along the actual boundary; no cardinal snapping. Width and detail spacing are independent of path length.'};
 }
 

@@ -33,7 +33,8 @@ describe('glyph lookups', () => {
 
   it('uses the measured roof and porch extent rather than the legacy family ratio', () => {
     const extent=inkExtent('sm-house',[8,6.6]);
-    expect(extent.width).toBeCloseTo(5.375,5);
+    // Softer roof edges and narrower pen strokes are measured from the new art.
+    expect(extent.width).toBeCloseTo(4.9375,5);
     expect(extent.depth).toBeGreaterThan(6.6*HOUSE_INK_RATIO);
     expect(inkExtent('sm-hut-straw',[6.4,6.4]).width).toBeLessThan(6.4);
   });

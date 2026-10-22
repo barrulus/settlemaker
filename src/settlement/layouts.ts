@@ -49,6 +49,7 @@ function scaleScene(scene: Scene, k: number): void {
   const L = scene.layers;
   L.water.rings.forEach(ring);
   for (const f of L.fields) ring(f.ring);
+  for (const g of L.ground ?? []) ring(g.ring);
   for (const g of L.greens) { ring(g.ring); g.paths?.forEach(ring); if (g.pathWidth !== undefined) g.pathWidth *= k; }
   for (const b of L.buildings) ring(b.ring);
   for (const p of L.piers) ring(p.ring);

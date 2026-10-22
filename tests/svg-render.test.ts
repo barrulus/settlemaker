@@ -85,6 +85,30 @@ describe('svg render: roads', () => {
     expect(firstCore).toBeGreaterThan(lastCasing);
   });
 
+  it('draws surveyed inner streets at full width without borders, including tapered surfaces', () => {
+    const {model}=generateFromBurg(makeBurg({population:1200}),{seed:42});
+    const scene=buildScene(model);
+    for(const role of ['trunk','street','service'] as const) {
+      scene.layers.roads=[{path:[{x:0,y:0},{x:10,y:0}],kind:'alley',role,width:3}];
+      const svg=assembleSvg(scene);
+      expect(svg).not.toContain('class="casing"');
+      expect(svg).not.toContain('class="surface-casing"');
+      expect(svg).toContain('<path class="core" d="M0.00,0.00L10.00,0.00" stroke-width="3.00"/>');
+      scene.layers.roads[0].taper=[3,2];
+      const tapered=assembleSvg(scene);
+      expect(tapered).not.toContain('class="surface-casing"');
+      const surface=tapered.match(/<path class="surface-core" d="([^"]+)"/)!;
+      const points=[...surface[1].matchAll(/[ML]([-\d.]+),([-\d.]+)/g)].map(m=>[Number(m[1]),Number(m[2])]);
+      // The surface helper includes a small antialias overlap at each edge.
+      for(const [x,width] of [[0,3],[10,2]]) {
+        const ys=points.filter(p=>p[0]===x).map(p=>p[1]);
+        const painted=Math.max(...ys)-Math.min(...ys);
+        expect(painted).toBeGreaterThanOrEqual(width);
+        expect(painted).toBeLessThan(width+.1);
+      }
+    }
+  });
+
   it('uses round joins for road strokes', () => {
     const { svg } = generateFromBurg(makeBurg({ population: 12000 }), { seed: 42 });
     expect(svg).toContain('stroke-linejoin:round');
@@ -136,7 +160,8 @@ describe('svg render: shadows, buildings, landmarks', () => {
       const factor = Math.hypot(...parent) === 0 ? 1 : Math.min(1, scale * 0.1 / Math.hypot(...parent));
       actual.forEach((value, i) => expect(value).toBeCloseTo(parent[i] * factor, 3));
       expect(Math.hypot(...actual)).toBeLessThanOrEqual(scale * 0.1 + 0.0001);
-      expect(transform(`${house.id}-sil`)).toBe(transform(house.id));
+      const houseGlyph=`${house.id}${house.artworkVariant!==undefined?`-shape-${house.artworkVariant}`:''}`;
+      expect(transform(`${houseGlyph}-sil`)).toBe(transform(houseGlyph));
     }
   });
 

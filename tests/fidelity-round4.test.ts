@@ -203,7 +203,15 @@ describe('fidelity round 4: probe path', () => {
     // Reviewed final visuals; mesh and ordinary census remain unchanged.
     // Shared road surface styles and visible gate jambs update the SVG.
     // Housing, paths, census and generator RNG retain their geometry.
-    expect(sha256(svg)).toBe('f9460c9041a62158bf88c3e6fe1845e3a14e573f60a22e66f8e82638ecf16de8');
+    // Medieval roof variants, paved urban ground and unoutlined inner streets.
+    // Reviewed the rendered comparison and checked exact repeatability.
+    // Housing, commerce and landmark roofs retain world-space lighting per face.
+    // The remaining seven temperate street forms now share that treatment;
+    // reviewed the rendered fixture and verified identical repeated output.
+    // Medieval rural roofs, soft wall ink and road-sized gate towers now
+    // replace the old suburban art and oversized gaps. Reviewed and repeatable.
+    // Full-length open timber doors now follow each entrance road.
+    expect(sha256(svg)).toBe('576c37a721d5144965d9725df45f7f237cf6557b8502ef3813aed6256a24ef86');
   });
 
   it('pins direct legacy generateFromBurg output at pop 800 (not the village engine)', () => {
@@ -311,7 +319,11 @@ describe('fidelity round 4: probe path', () => {
     // Shared biome ground with paved city roads; urban street corridors and lane mouths are visible.
     // Reviewed both Aldford fixtures and verified exact repeatability before repinning.
     // Shared road surface styles and visible gate jambs update the SVG.
-    expect(sha256(svg)).toBe('70ee2b0142c2d9ed4261ad3faea8c8f2f079c56febc4f1752a38380e62213238');
+    // The shared renderer also gains softer outlines, paving and lit wall towers.
+    // Medieval rural roofs, soft wall ink and substantial gate towers update
+    // artwork; reviewed both fixtures and verified exact repeatability.
+    // Full-length open timber doors now follow each entrance road.
+    expect(sha256(svg)).toBe('ee00450edd2da6eff16983091804b5ea8e55b308cf41bb2ae81834166541b9fe');
   });
 });
 

@@ -22,12 +22,23 @@ code when creating a skin.
   within the footprint, keeping its scale, coverage and street-access checks.
   It uses the same contained-rectangle helper as corner-site planning; it never
   expands across a concave boundary or stretches artwork to match a wedge.
-  Central housing mixes one seeded row-house family with substantial tenements;
+  Temperate row houses, shop houses and tenements have eight saved artwork
+  variations per slot: staggered clay-tile, shingle and slate detail, tapered
+  eaves, offset ridges, small dormers and stepped rear additions. Their shadows
+  follow the same contours. The shared fitting envelope covers every variation;
+  custom skin overrides replace the entire slot without inheriting these shapes.
+  Central housing mixes row houses with substantial tenements;
   selected wealthy blocks reserve full-sized courtyard compounds.
   The physical planner reserves wider tenement sites among narrow attached street
   houses, keeping real frontage access and the same capacity per building.
-  Ordinary houses keep their usual depth with rear gardens; only the wider
-  tenement sites need deeper footprints. Dense
+  Ordinary dense houses retain their surveyed footprints with reserved rear
+  yards; wider tenement sites retain their deeper footprints. The artwork
+  varies eaves and ridges inside each placement envelope. Most
+  dense rear yards are paved courts, with a small seeded share retained as
+  gardens. Dense districts have an underlying paved surface, while parks and
+  suburban gardens retain their planting. Inner-city streets and alleys use
+  their full reserved surface width without outlines; their lighter surface
+  distinguishes them from the surrounding paving. Dense
   art is never shrunk to a tiny cluster to fit a cottage plot: tenements require
   a nominal canvas of at least 10.4 metres (about eight metres of painted frontage),
   while compound wings are sized to the surrounding house frontage. A corner house needs an actual street corner;
@@ -138,3 +149,71 @@ coherence, seams/footprints through the existing asset checks, a closing-vertex
 wall gate, village wall exports, bounded river crossings and henge selection.
 Existing population, street, collision, deterministic scene and GeoJSON tests
 remain part of the regression suite.
+
+## Medieval architecture review
+
+All 34 city families in each of the five biomes use softly irregular outlines,
+rounded details and restrained ink. Shared forms retain connected inn wings,
+loading dormers, guildhall lanterns, open courts and the faith/palace/castle kits.
+Each biome keeps its own construction materials:
+
+- Temperate: clay tile, slate and shingles.
+- Desert: limewashed terraces, worn parapets, roof hatches and shade cloth.
+- Tundra: timber shingles, irregular snow banks and snow-capped towers.
+- Tropical: fired-clay hip roofs, timber vents and covered galleries.
+- Coastal: weathered shingles, timber ridge caps and loading dormers.
+
+Roof primitives are authored in `scripts/art/medieval-housing.mjs` and the four
+`medieval-<biome>.mjs` modules. Each of the four basic housing families has eight
+deterministic appearances per biome, saved as `housing-variants.json` and compiled
+into browser-safe runtime data. They reuse existing skin slots.
+
+Housing roof planes are lit opposite the theme's `shadowOffset`, accounting for
+each placement's rotation and ridge axis. Inherited SVG paints keep the detailed
+glyph shared across rotations and work in raster exports; ground shadows retain
+their existing displacement. Custom replacement glyphs keep their own artwork.
+Commercial buildings are authored in `scripts/art/medieval-commerce.mjs` using
+the same roof drawing primitives. Each wing or raised roof has its own lighting
+section, so perpendicular wings share a world light direction. Their surveyed
+footprints, courtyard voids, building identities and skin slots are retained.
+Regional roof callbacks use the same family layouts. `roof-sections.mjs` flattens
+their independently lit hip faces, snow layers and raised details into ordered
+sections. Desert terraces remain matte while their upright parapets receive
+directional light. Tundra snow uses `--sm-snow` and the optional shadow colour
+`--sm-city-tundra-snow-shade`; changing a roof material does not recolour snow.
+The remaining street forms are authored in `scripts/art/medieval-urban.mjs`:
+adjoining terrace bays, connected courtyard wings, forge stacks, timber roof
+vents and an open market arcade. They share the roof primitives and independent
+wing lighting, with details and shadows contained in the existing footprints.
+Landmarks are authored in `scripts/art/medieval-landmarks.mjs`. Crossing roofs,
+hipped caps and conical towers have independently lit faces, including towers
+attached to generated city walls. Oblique cone faces account for non-uniform
+placement scale. Courtyards and gate passages remain unpainted; curtain-wall
+pieces retain their exact repeating endpoints.
+
+```sh
+node scripts/build-city-symbols.mjs
+npm run build:art
+npm run build
+node scripts/review-medieval-housing.mjs after
+node scripts/review-medieval-commerce.mjs
+node scripts/review-medieval-urban.mjs
+node scripts/review-medieval-landmarks.mjs
+node scripts/review-medieval-biomes.mjs
+```
+
+The review writes a full city, a 480-metre centre view and a fixed 120-metre
+residential view under `output/medieval-housing/`. Run the same script with
+`before` on the previous build to preserve a comparison. Both maps use
+population 10,000 and seed 2.
+The commerce review writes isolated buildings at two rotations under
+`output/medieval-commerce/`, using the runtime SVG renderer.
+The street-building review writes the remaining seven forms at two rotations
+and a contact sheet under `output/medieval-urban/`.
+The landmark review writes the complete kit and three palace/castle assemblies
+under `output/medieval-landmarks/`, also using the runtime renderer so every
+rotated component shares the same light direction.
+The biome review writes all 136 regional city forms, eight housing variations,
+palace/castle assemblies and generated city/street views under
+`output/medieval-biomes/`. It accepts optional biome names to rebuild selected
+galleries, for example `node scripts/review-medieval-biomes.mjs tundra coastal`.

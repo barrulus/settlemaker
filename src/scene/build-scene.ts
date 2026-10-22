@@ -1,3 +1,5 @@
+import { cityUrbanity } from '../generator/city-character.js';
+import { gateOpeningHalfWidth } from './gate-opening.js';
 import { cityLocalStreets } from '../generator/city-streets.js';
 import { MAIN_STREET } from '../wards/ward.js';
 import { edgeInsetScale } from '../generator/generation-params.js';
@@ -64,6 +66,7 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
       symbols: model.symbols.map(s => ({
         id: resolveGlyphFor(model.params.biome ?? 'temperate', s.id),
         ...(s.materialVariant?{materialVariant:s.materialVariant}:{}),
+        ...(s.artworkVariant!==undefined?{artworkVariant:s.artworkVariant}:{}),
         at: sc(s.at), scale: s.scale, rotationDeg: s.rotationDeg, zBand: s.zBand,
         ...(s.scaleY !== undefined ? { scaleY: s.scaleY } : {}),
         ...(s.building && ids.has(s.building) ? { buildingId: ids.get(s.building) } : {}),
@@ -117,7 +120,9 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
       }
       continue; // groves are greens, not buildings
     }
-    for(const garden of ward.gardens)scene.layers.greens.push({purpose: 'private',ring:ring(garden.ring.vertices),paths:garden.access.length?[ring(garden.access)]:[],pathWidth:.3});
+    if(model.usesCityLayout && ward.type!==WardType.Farm && ward.geometry.length && cityUrbanity(model,patch)>=.75)
+      (scene.layers.ground??=[]).push({surface:'paved',ring:ring(patch.shape.vertices)});
+    for(const garden of ward.gardens)scene.layers.greens.push({purpose: 'private',...(garden.surface?{surface:garden.surface}:{}),ring:ring(garden.ring.vertices),paths:garden.access.length?[ring(garden.access)]:[],pathWidth:.3});
     for(const compound of ward.compounds)for(const court of compound.courts)
       scene.layers.greens.push({purpose:'private',surface:'paved',ring:ring(court.vertices)});
     if(ward.publicSpace)scene.layers.greens.push({purpose:'civic',surface:'paved',ring:ring(ward.publicSpace.vertices)});
@@ -150,10 +155,10 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
   }
 
   if (model.wall !== null) {
-    scene.layers.walls.push(wallFeature(model.wall, false, sc, model));
+    scene.layers.walls.push(wallFeature(model.wall, false, sc, model, scene.layers.roads));
   }
   if (model.citadel !== null && model.citadel.ward instanceof Castle) {
-    scene.layers.walls.push(wallFeature(model.citadel.ward.wall, true, sc, model));
+    scene.layers.walls.push(wallFeature(model.citadel.ward.wall, true, sc, model, scene.layers.roads));
   }
 
   // Church mark: identifies the cathedral's principal building. Anchored to
@@ -195,10 +200,13 @@ function wallFeature(
   large: boolean,
   sc: (p: { x: number; y: number }) => ScenePoint,
   model: Model,
+  roads: RoadFeature[],
 ): WallFeature {
   const gates: WallGate[] = wall.gates.map(gate => {
     const dir = wall.shape.next(gate).subtract(wall.shape.prev(gate));
-    dir.normalize(GATE_BAR_HALF);
+    const half = model.usesCityLayout ? gateOpeningHalfWidth(sc(gate),
+      [sc(wall.shape.prev(gate)),sc(wall.shape.next(gate))], roads, cityMetersPerUnit(model), large) : GATE_BAR_HALF;
+    dir.normalize(half);
     const meta = model.border?.gateMeta.get(gate);
     return {
       p1: sc(gate.subtract(dir)),

@@ -70,6 +70,7 @@ export function exportSettlement(model: SettlementModel): SettlementGeoJson {
       district_id: account?.districtId ?? null, ...(account?.settlementRole ? {settlement_role:account.settlementRole} : {}), inside_walls: account?.insideWalls ?? false, urbanity: account?.urbanity ?? null });
   }
   for (const [i, r] of L.roads.entries()) line(r.id ?? `street:${i}`, r.path, { layer: 'street', street_id: r.id ?? `street:${i}`, streetType: r.kind, ...(r.role ? {role:r.role} : {}), width: r.width ?? 3, ...(r.taper ? { taper_widths_m: r.taper } : {}), ...(r.access ? { access: true } : {}), route_ids: r.routeIds ?? [] });
+  for (const [i, g] of (L.ground??[]).entries()) polygon(`ground:${i}`,g.ring,{layer:'ground',surface:g.surface});
   for (const [i, f] of L.fields.entries()) polygon(`field:${i}`, f.ring, { layer: 'field', glyph: f.glyph, bearing_deg: f.angleDeg });
   for (const [i, g] of L.greens.entries()) { polygon(`green:${i}`, g.ring, { layer: 'green', ...(g.purpose ? {purpose:g.purpose} : {}), ...(g.surface ? {surface:g.surface} : {}) }); for (const [j, p] of (g.paths ?? []).entries()) line(`green:${i}:path:${j}`, p, { layer: 'path', width: g.pathWidth }); }
   for (const [i, v] of L.vegetation.entries()) point(`vegetation:${i}`, v.at, { layer: 'vegetation', glyph: v.kind, width_m: v.scale, bearing_deg: v.rotationDeg });
