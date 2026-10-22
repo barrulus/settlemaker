@@ -212,8 +212,10 @@ describe('fidelity round 4: probe path', () => {
     // replace the old suburban art and oversized gaps. Reviewed and repeatable.
     // Full-length open timber doors now follow each entrance road.
     // Suburban dwellings now use varied plans and the same roof contours as cities.
+    // Detached coverage and a compact fallback recover previously blank roofs.
+    // Explicitly unsuitable sites retain geometry but no painted block or shadow.
     expect(generateFromBurg(aldford(1400), {seed:9}).svg).toBe(svg);
-    expect(sha256(svg)).toBe('3da892f81debc1d1a972ab8d91142da591b0e78beacd6c8f51954d3d3dab9493');
+    expect(sha256(svg)).toBe('e8ce89b85d52d517fafb361675485446b1f9dfc7c112b0929e3d81d4a06002db');
   });
 
   it('pins direct legacy generateFromBurg output at pop 800 (not the village engine)', () => {

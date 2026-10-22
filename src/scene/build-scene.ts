@@ -133,7 +133,8 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
         kind: String(ward.type),
         landmark: LANDMARK_TYPES.has(ward.type) && !(ward.type === WardType.Market && ward.publicSpace)
           && (ward.type !== WardType.Cathedral || !ward.principalBuilding || poly === ward.principalBuilding),
-        ...(model.glyphBackedBuildings.has(poly) ? { glyphBacked: true as const } : {}),
+        ...(model.usesCityLayout || model.glyphBackedBuildings.has(poly)
+          ? { glyphBacked: model.glyphBackedBuildings.has(poly) } : {}),
       } as BuildingFeature);
     }
     if (ward instanceof Harbour) {

@@ -7,7 +7,7 @@ import { Point } from '../src/types/point.js';
 import type { OriginShift } from '../src/generator/origin-shift.js';
 import { Model } from '../src/generator/model.js';
 import { mapToGenerationParams } from '../src/input/azgaar-input.js';
-import { type AzgaarBurgInput, SCHEMATIC_SET } from '../src/index.js';
+import { type AzgaarBurgInput, SCHEMATIC_SET, generateSettlement } from '../src/index.js';
 
 // Canonical test-model helper (pattern from tests/degraded-generation.test.ts).
 function mk(population: number, seed: number, overrides: Partial<AzgaarBurgInput> = {}): Model {
@@ -138,7 +138,7 @@ describe('glyph-backed buildings', () => {
     const scene = sceneWith([HOUSE_SYM]);
     scene.layers.buildings.push(HOUSE_RECT);
     const svg = assembleSvg(scene);
-    expect(svg).toContain('href="#glyph-sm-house"');
+    expect(svg).toMatch(/href="#glyph-sm-house(?:-roof-\d+)?"/);
     expect(svg).not.toMatch(/<g id="buildings">[\s\S]*M0\.00,0\.00/);
     expect(svg).not.toMatch(/<g id="shadows"[^>]*>[\s\S]*M0\.00,0\.00/);
   });
@@ -162,6 +162,34 @@ describe('glyph-backed buildings', () => {
       const fallback=assembleSvg(scene,options);
       for(const id of ids)expect(fallback).toContain(`<path class="craftsmen" data-building-id="${id}"`);
     }
+  });
+
+  it.each(['city','village'] as const)('hides an unsuitable building in %s output without changing its data', engine => {
+    const {model}=generateSettlement({name:'Hidden footprint',engine,population:engine==='city'?2500:180,walls:engine==='city'},{seed:2});
+    const scene=structuredClone(model.scene), home=scene.layers.buildings.find(b=>b.glyphBacked&&model.buildings.some(h=>h.id===b.id))!;
+    expect(home).toBeDefined();
+    scene.layers.symbols=scene.layers.symbols.filter(s=>s.buildingId!==home.id&&!s.buildingIds?.includes(home.id!));
+    home.glyphBacked=false;
+    const before=JSON.stringify(scene);
+    const svg=assembleSvg(scene);
+    expect(svg).not.toContain(`data-building-id="${home.id}"`);
+    expect(svg).toContain('id="symbols"');
+    expect(JSON.stringify(scene)).toBe(before);
+    expect(model.buildings.some(b=>b.id===home.id)).toBe(true);
+    expect(model.residents.unassigned).toBe(0);
+  });
+
+  it.each([false,true])('hides unsuitable footprint art and shadows (landmark: %s)', landmark => {
+    const scene=sceneWith([]);
+    scene.layers.buildings.push({...HOUSE_RECT,landmark,glyphBacked:false});
+    const before=JSON.stringify(scene);
+    for(const options of [{},{pixelsPerUnit:.01}]) {
+      expect(assembleSvg(scene,options)).not.toContain('data-building-id="b0"');
+    }
+    for(const options of [{symbols:false},{assetSet:SCHEMATIC_SET}]) {
+      expect(assembleSvg(scene,options)).toContain('data-building-id="b0"');
+    }
+    expect(JSON.stringify(scene)).toBe(before);
   });
 
   it('non-glyphBacked buildings are unaffected either way', () => {

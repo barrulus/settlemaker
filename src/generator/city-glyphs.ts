@@ -278,14 +278,19 @@ export function placeCityGlyphs(model: Model): void {
       // The intended architecture must fit its site at a useful real size.
       // A corner house is only for a corner; its failure must not turn an
       // entire wealthy neighbourhood into anonymous polygon roofs.
-      const forms = ordinary ? [...new Set([id, ...(dense ? [architecture.dense] : []), detached ? ruralHome : architecture.home])] : [id];
+      const forms = ordinary ? [...new Set([id, ...(dense ? [architecture.dense] : []), ...(detached ? [ruralHome, architecture.home] : [architecture.home])])] : [id];
       // First preserve the existing centred family selection. Only a lot
       // with no successful replacement gets the translated recovery pass.
       for (const translate of [false, true]) {
         for (const form of forms) {
+          // Detached cottages leave space around wings and porches. Applying
+          // the continuous urban-roof coverage floor rejects these useful-sized
+          // drawings and exposes plain footprint polygons throughout suburbs.
+          // Keep containment, physical scale and front-door access unchanged.
+          const detachedForm = ordinary && detached && form === ruralHome;
           for (const frontage of candidates) {
             const candidate = fitCityGlyph(building, form, metersPerUnit, frontage,
-              building === temple ? 0 : use || building === keep || building === palacePrincipal ? .25 : .5,
+              building === temple ? 0 : use || building === keep || building === palacePrincipal || detachedForm ? .25 : .5,
               building === temple ? templeMaxScale : (model.params.development && !use && building !== keep && building !== palacePrincipal)
                 || (ordinary && (form === architecture.dense || form === architecture.court)) ? 1.35 : Infinity,
               model.params.development ? 1.25 : 1.5, translate ? translatedEntranceClear : entranceClear, translate);
