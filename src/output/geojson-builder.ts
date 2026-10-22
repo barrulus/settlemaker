@@ -1,3 +1,5 @@
+import { WardType } from '../types/interfaces.js';
+import { cityUrbanity } from '../generator/city-character.js';
 import { cityLocalStreets } from '../generator/city-streets.js';
 import { VILLAGE_POP_CEILING } from '../input/settlement-engine.js';
 import type { Feature, FeatureCollection, Polygon as GeoPolygon } from 'geojson';
@@ -97,8 +99,10 @@ export function generateGeoJson(model: Model, options: GenerateGeoJsonOptions = 
       });
     }
 
+    if(model.usesCityLayout && ![WardType.Park,WardType.Farm].includes(patch.ward.type) && patch.ward.geometry.length && cityUrbanity(model,patch)>=.75)
+      features.push({type:'Feature',properties:{layer:'ground',surface:'paved'},geometry:polygonToGeoJson(patch.shape,shift)});
     for(const garden of patch.ward.gardens){
-      features.push({type:'Feature',properties:{layer:'green',kind:'garden',wardType:patch.ward.type},geometry:polygonToGeoJson(garden.ring,shift)});
+      features.push({type:'Feature',properties:{layer:'green',kind:garden.surface?'court':'garden',...(garden.surface?{surface:garden.surface}:{}),wardType:patch.ward.type},geometry:polygonToGeoJson(garden.ring,shift)});
     }
     for(const compound of patch.ward.compounds)for(const court of compound.courts)
       features.push({type:'Feature',properties:{layer:'green',kind:'court',purpose:'private',surface:'paved',wardType:patch.ward.type},geometry:polygonToGeoJson(court,shift)});

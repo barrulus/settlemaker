@@ -92,6 +92,7 @@ function prepareSceneQuery(scene: Scene, indexed: boolean): SceneIndex {
     return glyph?union([glyph,expand(pointsBounds([v.at]),v.scale*.32)]):null;
   });
   const fields=index(L.fields,f=>pointsBounds(f.ring));
+  const ground=index(L.ground??[],g=>pointsBounds(g.ring));
   const greens=index(L.greens,g=>expand(pointsBounds([...g.ring,...(g.paths??[]).flat()]),(g.pathWidth??.7)/2));
   const roads=index(L.roads,r=>expand(pointsBounds(r.path),(r.width??0)/2));
   const piers=index(L.piers,p=>pointsBounds(p.ring));
@@ -111,6 +112,7 @@ function prepareSceneQuery(scene: Scene, indexed: boolean): SceneIndex {
     const view=expand(bounds,padding);
     return {...scene,bounds,layers:{...L,buildings:buildings(view),symbols:symbols(view),vegetation:vegetation(view),
       fields:fields(view),greens:greens(view),roads:roads(view),piers:piers(view),bridges:bridges(view),
+      ...(L.ground ? { ground: ground(view) } : {}),
       ...(L.harbours ? { harbours: harbours(view) } : {})}};
   }};
 }

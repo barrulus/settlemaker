@@ -22,12 +22,23 @@ code when creating a skin.
   within the footprint, keeping its scale, coverage and street-access checks.
   It uses the same contained-rectangle helper as corner-site planning; it never
   expands across a concave boundary or stretches artwork to match a wedge.
-  Central housing mixes one seeded row-house family with substantial tenements;
+  Temperate row houses, shop houses and tenements have eight saved artwork
+  variations per slot: staggered clay-tile, shingle and slate detail, tapered
+  eaves, offset ridges, small dormers and stepped rear additions. Their shadows
+  follow the same contours. The shared fitting envelope covers every variation;
+  custom skin overrides replace the entire slot without inheriting these shapes.
+  Central housing mixes row houses with substantial tenements;
   selected wealthy blocks reserve full-sized courtyard compounds.
   The physical planner reserves wider tenement sites among narrow attached street
   houses, keeping real frontage access and the same capacity per building.
-  Ordinary houses keep their usual depth with rear gardens; only the wider
-  tenement sites need deeper footprints. Dense
+  Ordinary dense houses retain their surveyed footprints with reserved rear
+  yards; wider tenement sites retain their deeper footprints. The artwork
+  varies eaves and ridges inside each placement envelope. Most
+  dense rear yards are paved courts, with a small seeded share retained as
+  gardens. Dense districts have an underlying paved surface, while parks and
+  suburban gardens retain their planting. Inner-city streets and alleys use
+  their full reserved surface width without outlines; their lighter surface
+  distinguishes them from the surrounding paving. Dense
   art is never shrunk to a tiny cluster to fit a cottage plot: tenements require
   a nominal canvas of at least 10.4 metres (about eight metres of painted frontage),
   while compound wings are sized to the surrounding house frontage. A corner house needs an actual street corner;
@@ -138,3 +149,27 @@ coherence, seams/footprints through the existing asset checks, a closing-vertex
 wall gate, village wall exports, bounded river crossings and henge selection.
 Existing population, street, collision, deterministic scene and GeoJSON tests
 remain part of the regression suite.
+
+## Medieval housing review
+
+The first housing pass updates the four ordinary temperate city slots; other
+biomes and landmark drawing styles retain their existing artwork. Variations
+are authored in `scripts/art/medieval-housing.mjs`, saved with the city collection
+as `housing-variants.json`, and compiled into browser-safe runtime data. They
+reuse existing skin slots rather than extending the skin catalogue.
+
+Housing roof planes are lit opposite the theme's `shadowOffset`, accounting for
+each placement's rotation and ridge axis. Inherited SVG paints keep the detailed
+glyph shared across rotations and work in raster exports; ground shadows retain
+their existing displacement. Custom replacement glyphs keep their own artwork.
+
+```sh
+node scripts/build-city-symbols.mjs
+npm run build:art
+npm run build
+node scripts/review-medieval-housing.mjs after
+```
+
+The review writes a full city and a fixed 120-metre residential view under
+`output/medieval-housing/`. Run the same script with `before` on the previous
+build to preserve a comparison. Both maps use population 10,000 and seed 2.

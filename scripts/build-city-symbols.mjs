@@ -4,13 +4,14 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { medievalHousing, housingForms, housingVariantCount } from './art/medieval-housing.mjs';
 import { architecture } from './art/architecture.mjs';
 import { landmarkFamilies, drawLandmark, compoundLayouts, writeCompounds } from './art/city-landmarks.mjs';
 
 const out = fileURLToPath(new URL('../symbols/city/', import.meta.url));
 mkdirSync(`${out}/individual`, { recursive: true });
 const biomes = {
-  temperate: { roof: '#858e9f', light: '#aab2bd', wall: '#d6d5d0', accent: '#a16c70', ground: '#a3c98d', description: 'Slate roofs, pale masonry and chimney stacks' },
+  temperate: { roof: '#858e9f', light: '#aab2bd', wall: '#d6d5d0', accent: '#a16c70', ground: '#c4b597', description: 'Clay tile, slate and shingle housing; softened eaves, varied ridges and chimney stacks' },
   desert: { roof: '#d8cbb6', light: '#f0e6d4', wall: '#b5aaa0', accent: '#6c9c9e', ground: '#d9c48f', description: 'Limewashed roof terraces, parapets, cisterns and shade screens' },
   tundra: { roof: '#718397', light: '#95a8b6', wall: '#bfc8ce', accent: '#777589', ground: '#e6ecef', description: 'Snow-covered roof planes, lower-eave remnants and buildup against roof obstructions' },
   tropical: { roof: '#937982', light: '#b49b9d', wall: '#d4d9cf', accent: '#648f88', ground: '#6d9e5c', description: 'Hipped fired-tile roofs, raised ridge vents and covered galleries' },
@@ -38,6 +39,7 @@ const families = [
 const { ink, fmt, path, rect, token, points, roof } = architecture(biomes);
 
 function glyph(f,biome) {
+  if(biome==='temperate' && housingForms.has(f.key))return medievalHousing(f);
   if (f.category) return drawLandmark(f, biome, { ink, path, rect, token, points, roof });
   const cover=['row-house-b','guildhall','market-hall'].includes(f.key)?'full'
     :['row-house-a','warehouse','courtyard-u','inn'].includes(f.key)?'plane':'eaves';
@@ -92,10 +94,11 @@ function glyph(f,biome) {
   return {body:`<g stroke-linejoin="round" stroke-linecap="round">${body}</g>`,sil:`<g stroke-linejoin="round">${sil}</g>`};
 }
 
-const assets={}, symbols={};
+const assets={}, symbols={}, housingVariants={};
 for(const biome of Object.keys(biomes)) for(const f of families) {
   const id=`sm-city-${f.key}${biome==='temperate'?'':`--${biome}`}`;
   assets[id]=glyph(f,biome);
+  if(biome==='temperate' && housingForms.has(f.key))housingVariants[id]=Array.from({length:housingVariantCount},(_,i)=>medievalHousing(f,i));
   const [x0,y0,x1,y1]=f.bounds;
   symbols[id]={cls:'fixed',viewBox:[0,0,64,64],anchor:[32,32],zBand:'structure',rotation:'free',
     biome,family:f.key,category:f.category??'urban',tags:f.tags,inkBounds:f.bounds,footprintPolygons:f.panels.map(([a,b,c,d])=>[[a,b],[c,b],[c,d],[a,d]]),
@@ -105,6 +108,7 @@ for(const biome of Object.keys(biomes)) for(const f of families) {
     requires:{adjacency:['road']},silhouette:`${id}-sil`,
   };
 }
+writeFileSync(`${out}/housing-variants.json`,JSON.stringify(housingVariants)+'\n');
 const wrap=(body,attrs='')=>`<svg xmlns="http://www.w3.org/2000/svg" ${attrs}>${body}</svg>\n`;
 const defs=Object.entries(assets).map(([id,a])=>`<symbol id="${id}" viewBox="0 0 64 64">${a.body}</symbol>\n<symbol id="${id}-sil" viewBox="0 0 64 64">${a.sil}</symbol>`).join('\n');
 writeFileSync(`${out}/symbols.svg`,wrap(defs,'width="0" height="0" aria-hidden="true"'));
@@ -114,7 +118,7 @@ for(const [id,a] of Object.entries(assets)) {
 }
 writeFileSync(`${out}/symbols.json`,JSON.stringify({format:'settlemaker-city-symbols-v1',units:'SVG art units; physical size is supplied by the placer',
   shadow:{offset:[2.6,3.6],opacity:.2,color:'#46303c'},biomes,
-  tokens:Object.fromEntries(Object.entries(biomes).flatMap(([b,p])=>['roof','light','wall','accent'].map(k=>[`--sm-city-${b}-${k}`,p[k]]))),symbols},null,2)+'\n');
+  tokens:{'--sm-city-roof-ink':'#68574b',...Object.fromEntries(Object.entries(biomes).flatMap(([b,p])=>['roof','light','wall','accent'].map(k=>[`--sm-city-${b}-${k}`,p[k]])))},symbols},null,2)+'\n');
 
 const use=(key,b,x,y,s=1,rotation=0,shadow=false)=>{
   const id=`sm-city-${key}${b==='temperate'?'':`--${b}`}${shadow?'-sil':''}`;
@@ -168,6 +172,6 @@ writeFileSync(`${out}/assemblies.svg`,wrap(blocks,'viewBox="0 0 1180 1510" width
 const data=JSON.stringify({assets,symbols,biomes,families,compoundLayouts});
 writeFileSync(`${out}/index.html`,`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Settlemaker city glyphs</title>
 <style>*{box-sizing:border-box}body{margin:0;background:#f5f2ea;color:#33262e;font:15px system-ui,sans-serif}main{max-width:1280px;margin:auto;padding:36px}h1{font:36px Georgia,serif;margin:8px 0 12px}p{max-width:850px;line-height:1.6}nav{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin:24px 0}a{color:#425f70}select,input,button{font:inherit}select{padding:8px;border:1px solid #b7b0a9;border-radius:4px;background:white}#grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}.card{border:1px solid #d2ccc4;border-radius:6px;overflow:hidden;background:#fffdf8}.art{display:grid;place-items:center;height:172px}.art svg{width:144px;height:144px}.caption{padding:16px}.caption strong{display:block;margin-bottom:8px}.caption a{font-size:12px}.small{color:#685e67;font-size:13px}#assembly{width:100%;height:auto}#count{margin-left:auto}</style>
-<main><div class="small">SETTLEMAKER / VECTOR LIBRARY</div><h1>Architecture for a crowded city.</h1><p>Slate and tile roofs, recessed entrances, party-wall houses and open courts. ${families.length} building forms in five biome families, drawn with the refined library’s ink and roof hatching.</p><nav><label>Biome <select id="biome">${Object.keys(biomes).map(b=>`<option>${b}</option>`).join('')}</select></label><label>Group <select id="category"><option value="all">All buildings</option><option value="urban">Homes and commerce</option><option value="faith">Religious buildings</option><option value="palace">Palace pieces</option><option value="castle">Castle pieces</option></select></label><label><input type="checkbox" id="shadow" checked> Shadows</label><label><input type="checkbox" id="ground" checked> Biome ground</label><span id="count">${families.length*5} glyphs + ${families.length*5} silhouettes</span></nav><p id="description" class="small"></p><div id="grid"></div><h2>Assembled frontages and courts</h2><p class="small">Each row house advances by its exact 32-unit painted width. Courtyard holes reveal the ground underneath. The inn has a ten-unit entrance passage.</p><img id="assembly" src="assemblies.svg" alt="City glyphs assembled into street rows and courtyard blocks across five biomes"><h2>Palaces and castles</h2><p>Complete compounds assembled from the same pieces, with open courts and entrance passages.</p><img style="width:100%" src="compounds.svg" alt="Palace and castle compounds across five biomes"><nav id="compound-downloads"></nav><nav><a href="compounds.json">Component placement recipes</a><a href="../village/index.html">Village building gallery</a><a href="catalogue.svg">Full SVG catalogue</a><a href="assemblies.svg">Street studies</a><a href="religious.svg">Religious buildings</a><a href="palace-kit.svg">Palace pieces</a><a href="castle-kit.svg">Castle pieces</a><a href="compounds.svg">Palace and castle assemblies</a><a href="symbols.svg">Symbol sprite</a><a href="../infrastructure/index.html">Walls, bridges and henges</a><a href="../landscape/index.html">Flora and farms</a><a href="symbols.json">Placement manifest</a><a href="integration.md">Integration notes</a></nav></main>
+<main><div class="small">SETTLEMAKER / VECTOR LIBRARY</div><h1>Architecture for a crowded city.</h1><p>Slate and tile roofs, recessed entrances, party-wall houses and open courts. ${families.length} building forms in five biome families, with softer temperate housing contours and staggered roof courses.</p><nav><label>Biome <select id="biome">${Object.keys(biomes).map(b=>`<option>${b}</option>`).join('')}</select></label><label>Group <select id="category"><option value="all">All buildings</option><option value="urban">Homes and commerce</option><option value="faith">Religious buildings</option><option value="palace">Palace pieces</option><option value="castle">Castle pieces</option></select></label><label><input type="checkbox" id="shadow" checked> Shadows</label><label><input type="checkbox" id="ground" checked> Biome ground</label><span id="count">${families.length*5} glyphs + ${families.length*5} silhouettes</span></nav><p id="description" class="small"></p><div id="grid"></div><h2>Assembled frontages and courts</h2><p class="small">Each row house advances by its exact 32-unit painted width. Courtyard holes reveal the ground underneath. The inn has a ten-unit entrance passage.</p><img id="assembly" src="assemblies.svg" alt="City glyphs assembled into street rows and courtyard blocks across five biomes"><h2>Palaces and castles</h2><p>Complete compounds assembled from the same pieces, with open courts and entrance passages.</p><img style="width:100%" src="compounds.svg" alt="Palace and castle compounds across five biomes"><nav id="compound-downloads"></nav><nav><a href="compounds.json">Component placement recipes</a><a href="../village/index.html">Village building gallery</a><a href="catalogue.svg">Full SVG catalogue</a><a href="assemblies.svg">Street studies</a><a href="religious.svg">Religious buildings</a><a href="palace-kit.svg">Palace pieces</a><a href="castle-kit.svg">Castle pieces</a><a href="compounds.svg">Palace and castle assemblies</a><a href="symbols.svg">Symbol sprite</a><a href="../infrastructure/index.html">Walls, bridges and henges</a><a href="../landscape/index.html">Flora and farms</a><a href="symbols.json">Placement manifest</a><a href="integration.md">Integration notes</a></nav></main>
 <script>const data=${data};function render(){const biome=document.querySelector('#biome').value,p=data.biomes[biome];document.querySelector('#compound-downloads').innerHTML=data.compoundLayouts.map(c=>'<a href="compounds/sm-city-'+c.key+(biome==='temperate'?'':'--'+biome)+'.svg" download>'+c.label+' / '+biome+' SVG</a>').join('');document.querySelector('#description').textContent=p.description;document.querySelector('#grid').innerHTML=data.families.filter(f=>document.querySelector('#category').value==='all'||(f.category??'urban')===document.querySelector('#category').value).map(f=>{const id='sm-city-'+f.key+(biome==='temperate'?'':'--'+biome),a=data.assets[id];return '<article class="card"><div class="art" style="background:'+(document.querySelector('#ground').checked?p.ground:'#eee9df')+'"><svg viewBox="0 0 72 72"><g transform="translate(4,4)">'+(document.querySelector('#shadow').checked?'<g transform="translate(2.6,3.6)" opacity=".2" color="#46303c">'+a.sil+'</g>':'')+a.body+'</g></svg></div><div class="caption"><strong>'+f.label+'</strong><a href="individual/'+id+'.svg" download>Download SVG</a> · <a href="individual/'+id+'-sil.svg" download>Silhouette</a></div></article>'}).join('')}document.querySelectorAll('select,input').forEach(el=>el.addEventListener('change',render));render();</script></html>\n`);
 console.log(`Wrote ${Object.keys(assets).length} city glyphs, matching silhouettes, manifest and visual catalogue to ${out}`);

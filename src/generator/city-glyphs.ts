@@ -1,3 +1,4 @@
+import { HOUSING_VARIANTS } from '../assets/housing-data.js';
 import { cityUrbanity } from './city-character.js';
 import { landscapeHash } from '../assets/landscape-placement.js';
 import { buildingIds, IdAllocator } from '../output/id-allocator.js';
@@ -313,7 +314,12 @@ export function placeCityGlyphs(model: Model): void {
       // A fallback footprint remains in tight corners; never turn the front
       // door away from its access just to increase the number of glyphs.
       if (!best) continue;
-      model.symbols.push({ ...best, wardType: ward.type, materialVariant:roll<.45?0:1+Math.floor((roll-.45)/.55*4) });
+      const variants=HOUSING_VARIANTS[best.id];
+      const artworkVariant=variants ? Math.floor(landscapeHash(Math.round(building.centroid.x*10),Math.round(building.centroid.y*10),model.params.seed^0x524f4f46)*variants.length) : undefined;
+      // Clay, timber and slate colours follow the roof material; shape has its
+      // own stable hash, independent of population accounting and planner RNG.
+      const materialVariant=artworkVariant===undefined ? (roll<.45?0:1+Math.floor((roll-.45)/.55*4)) : [4,2,1][artworkVariant%3];
+      model.symbols.push({ ...best, wardType: ward.type, materialVariant, ...(artworkVariant!==undefined?{artworkVariant}:{}) });
       model.glyphBackedBuildings.add(building);
     }
   }

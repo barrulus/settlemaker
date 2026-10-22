@@ -55,7 +55,7 @@ export class Ward {
   /** Reserved square or temple court within a developed civic block. */
   publicSpace: Polygon | null = null;
   /** Explicit unbuilt portions of occupied residential or civic parcels. */
-  gardens: Array<{ring:Polygon;access:Point[]}> = [];
+  gardens: Array<{ring:Polygon;access:Point[];surface?:'paved'}> = [];
   compounds: CityCompound[] = [];
   type: WardType = WardType.Empty;
 

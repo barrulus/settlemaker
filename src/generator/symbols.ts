@@ -5,6 +5,8 @@ import type { CityFrontage } from './city-frontage.js';
 
 export interface PlacedSymbol {
   materialVariant?: number;
+  /** Seeded default housing appearance; custom skins retain their own artwork. */
+  artworkVariant?: number;
   id: string;
   at: Point;
   scale: number;        // world units, glyph box size

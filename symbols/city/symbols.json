@@ -15,8 +15,8 @@
       "light": "#aab2bd",
       "wall": "#d6d5d0",
       "accent": "#a16c70",
-      "ground": "#a3c98d",
-      "description": "Slate roofs, pale masonry and chimney stacks"
+      "ground": "#c4b597",
+      "description": "Clay tile, slate and shingle housing; softened eaves, varied ridges and chimney stacks"
     },
     "desert": {
       "roof": "#d8cbb6",
@@ -52,6 +52,7 @@
     }
   },
   "tokens": {
+    "--sm-city-roof-ink": "#68574b",
     "--sm-city-temperate-roof": "#858e9f",
     "--sm-city-temperate-light": "#aab2bd",
     "--sm-city-temperate-wall": "#d6d5d0",

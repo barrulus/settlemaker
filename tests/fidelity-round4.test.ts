@@ -203,7 +203,10 @@ describe('fidelity round 4: probe path', () => {
     // Reviewed final visuals; mesh and ordinary census remain unchanged.
     // Shared road surface styles and visible gate jambs update the SVG.
     // Housing, paths, census and generator RNG retain their geometry.
-    expect(sha256(svg)).toBe('f9460c9041a62158bf88c3e6fe1845e3a14e573f60a22e66f8e82638ecf16de8');
+    // Medieval roof variants, paved urban ground and unoutlined inner streets.
+    // Reviewed the rendered comparison and checked exact repeatability.
+    // Rounded roof contours and matching silhouettes retain world-space lighting.
+    expect(sha256(svg)).toBe('b2c69a02ff0f336e99da75bf2a89f05f9cbe6fd9685d809945bf4e5eb60b39bc');
   });
 
   it('pins direct legacy generateFromBurg output at pop 800 (not the village engine)', () => {
@@ -311,7 +314,8 @@ describe('fidelity round 4: probe path', () => {
     // Shared biome ground with paved city roads; urban street corridors and lane mouths are visible.
     // Reviewed both Aldford fixtures and verified exact repeatability before repinning.
     // Shared road surface styles and visible gate jambs update the SVG.
-    expect(sha256(svg)).toBe('70ee2b0142c2d9ed4261ad3faea8c8f2f079c56febc4f1752a38380e62213238');
+    // The shared renderer also gains the softer outline and paving definitions.
+    expect(sha256(svg)).toBe('8c378f67b09ce80be8bd6a6610895375a3acc6f4ecfca04dedbab5a61ed9f4a3');
   });
 });
 

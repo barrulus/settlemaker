@@ -1,7 +1,7 @@
 import { artworkBiome } from './artwork.js';
 
 const ROOFS:Record<string,string[]>={
-  temperate:['#7f8c9b','#938c80','#a97968','#a4a7a1','#78857a'],
+  temperate:['#7f8c9b','#938c80','#a97968','#a4a7a1','#747d83'],
   desert:['#d5c3a3','#c5b090','#ddc8ac','#bbaa91','#cbbda7'],
   tundra:['#8196a2','#98a4a7','#909994','#74888f','#a5a8a6'],
   tropical:['#b87c64','#9d735f','#bc946f','#8f8070','#c78b76'],

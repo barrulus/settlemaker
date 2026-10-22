@@ -110,7 +110,11 @@ export class CommonWard extends Ward {
         const metres = this.model.params.development?.metresPerUnit;
         regularizeCityFootprints(plan, area, metres ? 3/metres : undefined, metres ? 16/metres**2 : undefined);
         retainUsefulCompoundNeighbours(plan,area);
-        for (const garden of plan.gardens ?? []) this.gardens.push({ ring: garden, access: [] });
+        for (const garden of plan.gardens ?? []) {
+          const c=garden.centroid;
+          const paved=compact && landscapeHash(Math.round(c.x*10),Math.round(c.y*10),this.model.params.seed^0x59415244)<.88;
+          this.gardens.push({ring:garden,access:[],...(paved?{surface:'paved' as const}:{})});
+        }
         // Physical density changes the frontage spacing above, never house size.
         const roofScale=this.model.params.development ? 1 : .65+.35*Math.min(1,urbanity*1.35);
         const compoundWings=new Set(plan.compounds?.flatMap(c=>c.buildings));

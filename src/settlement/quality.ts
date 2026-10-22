@@ -10,7 +10,7 @@ import type { SettlementModel } from './model.js';
 
 /** Precedence makes ground accounting disjoint. Building area is a reserved
  * footprint, not a claim to have measured painted roof ink. */
-const categories = ['water','courtyard','buildingFootprint','road','wall','publicGreen','privateGarden','naturalGreen','civic','unclassifiedGreen'] as const;
+const categories = ['water','courtyard','buildingFootprint','road','wall','publicGreen','privateGarden','naturalGreen','civic','unclassifiedGreen','pavedGround'] as const;
 type Category = typeof categories[number];
 type Areas = Record<Category | 'residual', number>;
 const emptyAreas = (): Areas => Object.fromEntries([...categories,'residual'].map(k=>[k,0])) as Areas;
@@ -68,7 +68,8 @@ export function reviewSettlementGround(model: Pick<SettlementModel,'scene'|'dist
   }
   for(const r of L.roads)for(let i=1;i<r.path.length;i++)add('road',geometry(roadCorridor(r.path[i-1],r.path[i],r.width??3).vertices));
   for(const w of L.walls)for(const r of w.polylines)for(let i=1;i<r.length;i++)add('wall',geometry(roadCorridor(r[i-1],r[i],3).vertices));
-  for(const g of L.greens)add(g.purpose==='public'?'publicGreen':g.purpose==='private'?'privateGarden':g.purpose==='natural'?'naturalGreen':g.purpose==='civic'?'civic':'unclassifiedGreen',geometry(g.ring));
+  for(const g of L.ground??[])add('pavedGround',geometry(g.ring));
+  for(const g of L.greens)add(g.surface==='paved'&&g.purpose==='private'?'courtyard':g.purpose==='public'?'publicGreen':g.purpose==='private'?'privateGarden':g.purpose==='natural'?'naturalGreen':g.purpose==='civic'?'civic':'unclassifiedGreen',geometry(g.ring));
   const index=createBoundsIndex(entries);
   const districts:DistrictGroundReview[]=model.districts.filter(d=>d.settlementRole!=='rural').map(d=> {
     const boundary=d.boundary.map(p=>new Point(p.x,p.y));
@@ -110,7 +111,7 @@ export function reviewSettlementGround(model: Pick<SettlementModel,'scene'|'dist
     }
     return {id:d.id,insideWalls:d.insideWalls,groundAreaM2,estimatedAreasM2,
       estimatedGrossFootprintCoverage:groundAreaM2?estimatedAreasM2.buildingFootprint/groundAreaM2:0,
-      estimatedNetFootprintCoverage:estimatedAreasM2.buildingFootprint/(estimatedAreasM2.buildingFootprint+estimatedAreasM2.residual)||0,
+      estimatedNetFootprintCoverage:estimatedAreasM2.buildingFootprint/(estimatedAreasM2.buildingFootprint+estimatedAreasM2.residual+estimatedAreasM2.pavedGround)||0,
       failedPlacementAreaM2:null,sampleCount,sampleSpacingM:{x:dx,y:dy},estimatedResidualComponents,
       estimatedLargestResidualAreaM2:sampleCount?largest:groundAreaM2};
   });

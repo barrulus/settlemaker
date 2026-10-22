@@ -68,6 +68,7 @@ export function resolveAppearance(
       tokens[`--sm-infra-${b}-water`] = city.water ?? 'none';
     }
   }
+  if(palette || explicit.smInk!==undefined)tokens['--sm-city-roof-ink']=city.smInk;
   tokens['--sm-shadow-color'] = city.shadowColor;
   tokens['--sm-shadow-opacity'] = city.shadowOpacity;
   const village: BiomeTheme = { ...(skin?.village ?? regional), tokens };

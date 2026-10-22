@@ -1,3 +1,4 @@
+import { HOUSING_VARIANTS } from '../assets/housing-data.js';
 import { roundedRingPath } from './rounded-ring.js';
 import { roadSurfaceRing } from '../village/road-surface.js';
 import { Point } from '../types/point.js';
@@ -11,8 +12,8 @@ import { ARTWORK_MANIFEST, ART_TOKENS, artworkBiome, cityGlyph } from '../assets
 import type { Palette } from '../types/interfaces.js';
 import type { BuildingFeature, Scene, ScenePoint, SymbolInstance } from '../scene/scene.js';
 import type { AssetSet } from '../assets/asset-sets.js';
-import { assetSetFor } from '../assets/asset-sets.js';
-import type { RenderTheme } from './render-theme.js';
+import { assetSetFor, SETTLEMENT_SET } from '../assets/asset-sets.js';
+import { blend, cssHex, type RenderTheme } from './render-theme.js';
 import { REFINED_MANIFEST } from '../assets/refined-manifest.js';
 import { refinedStyle, resolveVarFallbacks } from '../assets/refined-style.js';
 import { linkedBuildingIds } from '../scene/symbol-buildings.js';
@@ -21,6 +22,7 @@ import { artworkPaintRadius } from '../assets/artwork-bounds.js';
 import { waterInView } from '../scene/water-view.js';
 import { harbourArtwork } from './harbour-artwork.js';
 import { harbourSolidRings } from '../scene/harbours.js';
+import { prepareRoofLighting } from './roof-lighting.js';
 
 const NORMAL_STROKE = 0.15;
 const THICK_STROKE = 1.8;
@@ -143,6 +145,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     const b=artworkBiome(scene.biome);
     if(!options.theme?.buildingFill && !skin?.city.buildingFill)theme.buildingFill=String(ART_TOKENS[`--sm-city-${b}-roof`]);
     if(!options.theme?.landmarkFill && !skin?.city.landmarkFill)theme.landmarkFill=String(ART_TOKENS[`--sm-city-${b}-light`]);
+    if(!options.theme?.buildingStroke && !skin?.city.buildingStroke)theme.buildingStroke=String(tokens['--sm-city-roof-ink']);
   }
   const clipId = (options.clipId ?? 'frame-clip').replace(/[^A-Za-z0-9_-]/g, '-');
   const showSymbols = options.symbols !== false;
@@ -187,18 +190,36 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     return t.x+radius>=b.min_x&&t.x-radius<=b.max_x&&t.y+radius>=b.min_y&&t.y-radius<=b.max_y;
   });
   if(L.walls.some(w=>!options.cullOffscreenArtwork||visibleTowers(w).length) && assets.glyphs?.[towerId]) glyphIds.add(towerId);
-  const materialId = (s: typeof visibleSymbols[number]) => `glyph-${s.id}${assets.name === 'settlement' && !skin?.overrides.has(s.id) && s.materialVariant ? `-tone-${s.materialVariant}` : ''}`;
+  const defaultArt = (s: SymbolInstance) => assets.name === 'settlement' && !skin?.overrides.has(s.id);
+  const nativeHousing = (s: { id: string }) => assets.name === 'settlement' && !skin?.overrides.has(s.id) && (!options.assetSet || options.assetSet===SETTLEMENT_SET);
+  const housing = (s: SymbolInstance) => nativeHousing(s) && Number.isInteger(s.artworkVariant)
+    ? HOUSING_VARIANTS[s.id]?.[s.artworkVariant!] : undefined;
+  const materialId = (s: SymbolInstance) => `glyph-${s.id}${housing(s) ? `-shape-${s.artworkVariant}` : ''}${defaultArt(s) && s.materialVariant ? `-tone-${s.materialVariant}` : ''}`;
+  const shadowId = (s: SymbolInstance) => housing(s) ? `${materialId(s)}-sil` : `glyph-${s.id}-sil`;
   const fixedRoof = options.theme?.buildingFill !== undefined
     || (!options.palette && (skin?.city.buildingFill !== undefined
       || skin?.tokens[`--sm-city-${artworkBiome(scene.biome)}-roof`] !== undefined));
-  const materialDefs = [...new Map(visibleSymbols.filter(s => assets.name === 'settlement' && !skin?.overrides.has(s.id) && s.materialVariant).map(s => [materialId(s), s])).entries()]
-    .map(([id, s]) => `<g id="${id}">${fixedRoof ? assets.glyphs![s.id].body : recolourRoof(assets.glyphs![s.id].body, scene.biome, s.materialVariant!)}</g>`).join('');
+  const roofLighting = new Map<string, NonNullable<ReturnType<typeof prepareRoofLighting>>>();
+  const lightRoof = (id: string, body: string, native: boolean): string => {
+    const lighting = native ? prepareRoofLighting(body, paint => paint.replace(/var\((--[\w-]+),\s*([^)]*)\)/g,
+      (_, token: string, fallback: string) => String(tokens[token] ?? (options.palette ? themedMaterial(fallback, options.palette) : fallback)))) : undefined;
+    if (!lighting) return body;
+    roofLighting.set(id, lighting);
+    return lighting.body;
+  };
+  const roofAttributes = (s: SymbolInstance) => roofLighting.get(materialId(s))?.attributes(s.rotationDeg, theme.shadowOffset) ?? '';
+  const materialDefs = [...new Map(visibleSymbols.filter(s => defaultArt(s) && (s.materialVariant || housing(s))).map(s => [materialId(s), s])).entries()]
+    .map(([id, s]) => {
+      const art = housing(s) ?? assets.glyphs![s.id];
+      return `<g id="${id}">${lightRoof(id, fixedRoof ? art.body : recolourRoof(art.body, scene.biome, s.materialVariant ?? 0), nativeHousing(s))}</g>`
+        + (housing(s)?.sil ? `<g id="${id}-sil">${art.sil}</g>` : '');
+    }).join('');
   const glyphDefs = [...glyphIds].map(id => {
     const g = assets.glyphs![id];
     // Plain groups have no viewport: the instance transform alone sets size.
     // Width/height on <symbol> is insufficient in renderers whose <use>
     // defaults to the enclosing viewport. This is the village renderer's rule.
-    return `<g id="glyph-${id}">${g.body}</g>`
+    return `<g id="glyph-${id}">${lightRoof(`glyph-${id}`, g.body, nativeHousing({ id }))}</g>`
       + (g.sil ? `<g id="glyph-${id}-sil">${g.sil}</g>` : '');
   }).join('');
 
@@ -219,9 +240,16 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     const g=assets.glyphs![f.glyph!], pitch=16/(scene.metersPerUnit??1), k=pitch/g.viewBox[2];
     return `<pattern id="${nativePatternId(f)}" patternUnits="userSpaceOnUse" width="${fmt4(pitch)}" height="${fmt4(pitch)}" patternTransform="rotate(${bucketOf(f.angleDeg)})"><use href="#glyph-${f.glyph}" transform="scale(${fmt4(k)})"/></pattern>`;
   }).join('');
+  // Reuse road materials so themed/skin cities retain their palette. No lawn
+  // under dense housing; explicit gardens remain separate overlays.
+  const yardFill = /^#[0-9a-f]{6}$/i.test(theme.roadCore) && /^#[0-9a-f]{6}$/i.test(theme.roadCasing)
+    ? cssHex(blend(parseInt(theme.roadCore.slice(1),16),parseInt(theme.roadCasing.slice(1),16),.22)) : theme.roadCore;
+  const pavingId = `${clipId}-paving`;
+  const pavingPitch = 1/(scene.metersPerUnit??1);
+  const paving = `<pattern id="${pavingId}" patternUnits="userSpaceOnUse" width="${11*pavingPitch}" height="${9*pavingPitch}" patternTransform="scale(1)"><g transform="scale(${pavingPitch})" fill="none" stroke="${theme.roadCasing}" stroke-width=".07" opacity=".18"><path d="M1,1.2l1.8,-.1 .15,1.1 M6.5,3.4l2,.2 -.1,1.1 M3.5,6.4l1.6,-.15 M8.7,7.3l-.1,1.2 -1.5,.1"/></g></pattern>`;
   const parts: string[] = [];
   parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${frame(b.min_x)} ${frame(b.min_y)} ${frame(w)} ${frame(h)}">`);
-  parts.push(`<defs><clipPath id="${clipId}"><rect x="${frame(b.min_x)}" y="${frame(b.min_y)}" width="${frame(w)}" height="${frame(h)}"/></clipPath>${patternDefs}${nativePatterns}${symbolDefs}${glyphDefs}${materialDefs}</defs>`);
+  parts.push(`<defs><clipPath id="${clipId}"><rect x="${frame(b.min_x)}" y="${frame(b.min_y)}" width="${frame(w)}" height="${frame(h)}"/></clipPath>${patternDefs}${nativePatterns}${symbolDefs}${glyphDefs}${materialDefs}${paving}</defs>`);
   parts.push(`<style>\n${themeToCss(theme, assets.refined)}\n${assets.refined ? refinedStyle(tokens) : ''}\n</style>`);
   // data-bg contract with cropSvgToTile: attribute markup + inline fill.
   parts.push(`<rect data-bg="paper" x="${frame(b.min_x)}" y="${frame(b.min_y)}" width="${frame(w)}" height="${frame(h)}" fill="${theme.paper}"/>`);
@@ -249,6 +277,15 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
         }
         if (fieldPattern) parts.push(`<path class="hatch" d="${ringPath(f.ring)}" fill="url(#${clipId}-field-a${bucket})"/>`);
       }
+    }
+    parts.push('</g>');
+  }
+
+  if (L.ground?.length || L.greens.some(g=>g.surface==='paved'&&g.purpose==='private')) {
+    parts.push('<g id="urban-ground">');
+    for(const g of [...L.ground??[],...L.greens.filter(g=>g.surface==='paved'&&g.purpose==='private')]) {
+      parts.push(`<path data-surface="paved" d="${ringPath(g.ring)}" fill="${yardFill}" stroke="none"/>`);
+      if(pixels===undefined || pixels*pavingPitch>=2)parts.push(`<path d="${ringPath(g.ring)}" fill="url(#${pavingId})" stroke="none"/>`);
     }
     parts.push('</g>');
   }
@@ -303,20 +340,24 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
         paintedWidth, taper[0], taper[1], inset)) : undefined;
       return {
         surface,
+        // Surveyed inner-city routes read against the paved block ground.
+        // Paint their whole reserved width without an outlined border.
+        outlined: r.width===undefined || !r.role || r.role==='approach',
         path: linePath(r.path),
         width: Math.max(width, minimum),
         reserved: r.width !== undefined && explicitWidth === undefined,
       };
     });
     for (const lane of lanes) {
+      if (!lane.outlined) continue;
       if (lane.surface) { parts.push(`<path class="surface-casing" d="${lane.surface(0)}"/>`); continue; }
       parts.push(`<path class="casing" d="${lane.path}" stroke-width="${fmt(lane.reserved ? lane.width : lane.width + theme.casingDelta * 2)}"/>`);
     }
     for (const lane of lanes) {
-      if (lane.surface) { parts.push(`<path class="surface-core" d="${lane.surface(theme.casingDelta)}"/>`); continue; }
-      parts.push(`<path class="core" d="${lane.path}" stroke-width="${fmt(lane.reserved ? Math.max(lane.width * .7, lane.width - theme.casingDelta * 2) : lane.width)}"/>`);
+      if (lane.surface) { parts.push(`<path class="surface-core" d="${lane.surface(lane.outlined ? theme.casingDelta : 0)}"/>`); continue; }
+      parts.push(`<path class="core" d="${lane.path}" stroke-width="${fmt(lane.outlined && lane.reserved ? Math.max(lane.width * .7, lane.width - theme.casingDelta * 2) : lane.width)}"/>`);
     }
-    for (const g of L.greens.filter(g => g.surface === 'paved')) {
+    for (const g of L.greens.filter(g => g.surface === 'paved' && g.purpose !== 'private')) {
       parts.push(`<path class="surface-core" data-surface="paved" d="${roundedRingPath(g.ring)}"/>`);
       // The same-colour rounded edge covers road casings at the join.
       parts.push(`<path class="core" d="${roundedRingPath(g.ring)}" stroke-width="${fmt(theme.casingDelta * 2)}"/>`);
@@ -337,7 +378,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     for (const bld of shadowable) parts.push(`<path${buildingAttribute(bld.id)} d="${ringPath(bld.ring)}"/>`);
     for (const s of structureSymbols) {
       if (!assets.glyphs![s.id].sil) continue;
-      parts.push(`<use href="#glyph-${s.id}-sil"${buildingAttribute(s.buildingId, s.buildingIds)} transform="${propShadowCorrection(s, theme.shadowOffset)}${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor, s.scaleY)}"/>`);
+      parts.push(`<use href="#${shadowId(s)}"${buildingAttribute(s.buildingId, s.buildingIds)} transform="${propShadowCorrection(s, theme.shadowOffset)}${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor, s.scaleY)}"/>`);
     }
     parts.push('</g>');
   }
@@ -365,7 +406,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   if (structureSymbols.length > 0) {
     parts.push('<g id="symbols">');
     for (const s of [...structureSymbols].sort((a, b) => a.at.y - b.at.y)) {
-      parts.push(`<use href="#${materialId(s)}"${buildingAttribute(s.buildingId, s.buildingIds)} transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor, s.scaleY)}"/>`);
+      parts.push(`<use href="#${materialId(s)}"${buildingAttribute(s.buildingId, s.buildingIds)}${roofAttributes(s)} transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor, s.scaleY)}"/>`);
     }
     parts.push('</g>');
   }
@@ -418,7 +459,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   if (markSymbols.length > 0) {
     parts.push('<g id="marks">');
     for (const s of [...markSymbols].sort((a, b) => a.at.y - b.at.y)) {
-      parts.push(`<use href="#${materialId(s)}"${buildingAttribute(s.buildingId, s.buildingIds)} transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor, s.scaleY)}"/>`);
+      parts.push(`<use href="#${materialId(s)}"${buildingAttribute(s.buildingId, s.buildingIds)}${roofAttributes(s)} transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor, s.scaleY)}"/>`);
     }
     parts.push('</g>');
   }

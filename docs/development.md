@@ -51,6 +51,7 @@ For artwork or geometry changes, use the public-API review tools:
 npm run review:art
 npm run review:roads
 npm run review:cities
+node scripts/review-medieval-housing.mjs after
 ```
 
 They write local galleries and measurements under ignored `output/` directories.

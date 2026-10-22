@@ -13,7 +13,10 @@ slots used by the generator and by portable skins.
 | Greens | 60 | Biome-specific green and ground variants | [symbols.json](../symbols/greens/symbols.json) |
 | Markers | 36 | Map markers, separate from automatic settlement placement | [markers.json](../symbols/markers/markers.json) |
 
-Counts exclude structure silhouettes and combined sprites. Every drawing has a
+Counts exclude structure silhouettes and combined sprites. The four ordinary
+temperate housing slots also carry eight saved appearances each in
+`symbols/city/housing-variants.json`; these reuse the same slots and are not
+additional standalone catalogue SVGs. Every drawing has a
 standalone SVG: markers sit directly in their collection directory; the other
 collections use `individual/`. View boxes vary; preserve their aspect ratios.
 A drawing's presence in a download does not promise the engine automatically
