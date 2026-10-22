@@ -104,6 +104,8 @@ export interface EdgeStamp {
 }
 
 export interface Building {
+  /** Deterministic native drawing; absent in older saved models. */
+  artworkVariant?: number;
   id: string;
   lotId: string;
   glyph: string;

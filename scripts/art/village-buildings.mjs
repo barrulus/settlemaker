@@ -14,7 +14,10 @@ export const villageBiomes = {
   coastal:{roof:'#899b98',light:'#b2bdb5',wall:'#dedbca',accent:'#8b90a4',wood:'#9a9181',ground:'#cfd6b0',description:'Weathered shingles, pale walls, thatched huts and sheltered seaward roofs'},
 };
 
-export function drawVillage(id) {
+export const ruralHousingForms = new Set(['sm-house','sm-house-tiled','sm-house-large-tiled','sm-longhouse','sm-boathouse']);
+export const ruralVariantCount = 8;
+
+export function drawVillage(id, variant = 0) {
   const [base,suffix]=id.split('--'),biome=suffix??'temperate',p=villageBiomes[biome];
   const ink='var(--sm-village-ink, #68574b)',snow='var(--sm-snow, #f2f6f8)',voidFill='var(--sm-void, #6b5460)';
   const t=role=>`var(--sm-village-${biome}-${role}, ${p[role]})`;
@@ -40,15 +43,15 @@ export function drawVillage(id) {
     body+=`<circle cx="${n(x)}" cy="${n(y)}" r="${n(r)}" fill="${fill}" stroke="${ink}" stroke-width="${n(sw*.42)}"/>`;
     if(casts)sil+=`<circle cx="${n(x)}" cy="${n(y)}" r="${n(r)}" fill="currentColor" stroke="currentColor" stroke-width="${n(sw*.42)}"/>`;
   };
-  function roof(x,y,w,h,{kind='local',porch=false}={}) {
+  function roof(x,y,w,h,{kind='local',porch=false,form=variant,handmade=false}={}) {
     const thatched=kind==='thatch'||biome==='tropical'||(biome==='temperate'&&kind==='local');
     const main=kind==='tile'?tile:kind==='slate'?slate:kind==='thatch'&&biome==='coastal'?material('coastal-thatch','#b8ab8b'):t('roof');
     const light=kind==='tile'?tileLight:kind==='slate'?slateLight:kind==='thatch'&&biome==='coastal'?material('coastal-thatch-light','#d4c7a6'):t('light');
-    const draw=biome==='desert'?desertRoof:biome==='tundra'?tundraRoof:thatched?tropicalRoof:biome==='coastal'?coastalRoof:medievalHousing;
+    const draw=biome==='desert'?desertRoof:biome==='tundra'?tundraRoof:thatched?(handmade&&biome!=='tropical'?medievalHousing:tropicalRoof):biome==='coastal'?coastalRoof:medievalHousing;
     // The ridge follows the long dimension. Native panel coordinates avoid a
     // transpose that would also transpose the lighting normal at render time.
     const panels=[[x,y,x+w,y+h,...(w>=h?['x']:[])]];
-    const art=draw({key:'rural-roof',panels},Math.round(x+y+w)%8,
+    const art=draw({key:'rural-roof',panels},(form+Math.round(x+y+w))%8,
       {material:thatched?'thatch':kind==='slate'?'slate':'tile',detailScale:porch?.4:.85,features:biome==='desert'&&!porch});
     body+=art.body.replace(/var\(--sm-city-roof-ink,[^)]+\)/g,ink)
       .replace(/var\(--sm-city-[a-z]+-(roof|light|wall|accent),[^)]+\)/g,(_,role)=>role==='roof'?main:role==='light'?light:t(role))
@@ -131,17 +134,56 @@ export function drawVillage(id) {
     }
     body=body.slice(0,start)+`<g stroke-linecap="butt">${body.slice(start)}</g>`;
   }
-  if(base==='sm-house')house(12,15,40,31);
-  else if(base==='sm-house-tiled')house(11,15,42,31,{kind:'tile'});
-  else if(base==='sm-house-large-tiled') {
-    house(8,13,48,33,{kind:'slate'});roof(9,34,13,14,{kind:'tile',porch:true});
+  function cottage(x,y,w,h,kind='local',boat=false) {
+    const q=variant%8;
+    // Each plan fits the same surveyed slot. Wings have their own roof axes;
+    // shortening a main range makes room for an addition instead of stacking
+    // identical rectangular porches on every house.
+    const plans=[
+      [[0,.02,1,.86],[.04,.59,.34,.42]],
+      [[.07,.02,.83,.96]],
+      [[0,.03,.77,.94],[.65,.4,.35,.55]],
+      [[0,.01,1,.7],[.57,.48,.4,.53]],
+      [[.16,0,.68,1],[.01,.14,.32,.65]],
+      [[.02,.04,.96,.8],[.1,.62,.44,.38]],
+      [[.04,0,.73,1],[.65,.06,.35,.55]],
+      [[.02,.04,.96,.71],[.36,.48,.48,.52]],
+    ];
+    const panels=plans[q].map(([u,v,a,b])=>[x+u*w,y+v*h,w*a,h*b]);
+    // Low, uneven plaster glimpses, not a white rectangular foundation slab.
+    for(const [X,Y,W,H] of panels)shape(poly([[X+1.5,Y+1],[X+W-2,Y+1.7],
+      [X+W-1.8,Y+H+1.1],[X+W*.58,Y+H+1.7],[X+2,Y+H+.7]]),t('wall'),.65);
+    if(biome==='tropical')for(const[X,Y,W,H]of panels)for(const u of [.14,.81])rect(X+u*W,Y+H-.5,1.3,3,t('wood'),.45,true);
+    const px=x+w*.5-4+(q%3-1)*1.5;
+    if(!boat) {
+      // The doorway remains near the nominal south entrance for access paths.
+      shape(poly([[px+.4,y+h-5],[px+7,y+h-5.5],[px+7.2,y+h+4.5],[px+1,y+h+4.8]]),t('wall'),.65);
+      roof(px-1,y+h-6,10+(q%2),9,{kind,porch:true,handmade:true,form:q+2});
+    }
+    for(const [i,[X,Y,W,H]]of panels.entries())roof(X,Y,W,H,{kind,handmade:true,form:q+i*3});
+    // Some houses have an off-centre cross-gable, others a low lean-to.
+    if(q===1||q===4)roof(px-1,y+h-9,10,12,{kind,porch:true,handmade:true,form:q+1});
+    if(!boat)rect(px+3,y+h+3,2.4,1.5,voidFill,.35);
+    if(q%3!==1) {
+      const [X,Y,W,H]=panels[0];
+      rect(X+W*.19,Y+H+.2,2.4,1,t('wood'),.3);
+    }
+    if(biome!=='tropical'&&biome!=='desert') {
+      const [X,Y,W,H]=panels[0],cx=X+W*[.22,.72,.38,.68,.52,.78,.27,.63][q],cy=Y+H*(.25+(q%3)*.12);
+      shapeChimney(cx,cy,2.4+(q%2)*.5);
+    }
+    if(boat){rect(18,43,28,3,voidFill,.8);line('M16,45V47M25,45V47M39,45V47M48,45V47',.6);}
   }
-  else if(base==='sm-longhouse')house(6,20,52,23,{});
-  else if(base==='sm-boathouse') {
-    // Open mouth faces south/water. Roof above, weathered slip timbers below.
-    rect(10,24,44,24,t('wood'),1.2,true);house(7,20,50,22,{entry:false});
-    rect(18,43,28,3,voidFill,.8);line('M16,45V47M25,45V47M39,45V47M48,45V47',.6);
+  function shapeChimney(x,y,w) {
+    // Slightly skewed masonry, sized to the dwelling rather than the old slab.
+    body+=path(poly([[x,y],[x+w,y+.25],[x+w-.2,y+3.6],[x-.3,y+3.3]]),t('wall'),.7);
+    body+=path(poly([[x+.4,y+.6],[x+w-.5,y+.75],[x+w-.6,y+1.6],[x+.3,y+1.4]]),voidFill,0);
   }
+  if(base==='sm-house')cottage(12,15,40,31);
+  else if(base==='sm-house-tiled')cottage(11,15,42,31,'tile');
+  else if(base==='sm-house-large-tiled')cottage(8,13,48,33,'slate');
+  else if(base==='sm-longhouse')cottage(6,20,52,23);
+  else if(base==='sm-boathouse')cottage(7,20,50,22,'local',true);
   else if(base.startsWith('sm-hut'))hut(base==='sm-hut-mud'?'mud':'thatch',base==='sm-hut-round');
   else if(base==='sm-inn') {
     // A rural lodging house with an open stable yard, not an urban perimeter block.

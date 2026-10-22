@@ -4,7 +4,7 @@ import {fileURLToPath} from 'node:url';
 import sharp from 'sharp';
 const root=fileURLToPath(new URL('../',import.meta.url));
 const meta={},glyphs={},ink={},tokens={};
-const housing=JSON.parse(readFileSync(`${root}symbols/city/housing-variants.json`,'utf8'));
+const housing=Object.assign({},...['city','village'].map(group=>JSON.parse(readFileSync(`${root}symbols/${group}/housing-variants.json`,'utf8'))));
 const body=f=>readFileSync(f,'utf8').replace(/^.*?<svg[^>]*>/s,'').replace(/<\/svg>\s*$/,'').replace(/<title>[\s\S]*?<\/title>/g,'').trim();
 for(const group of ['village','city','landscape','infrastructure']){
   const data=JSON.parse(readFileSync(`${root}symbols/${group}/symbols.json`));

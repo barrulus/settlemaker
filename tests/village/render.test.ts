@@ -32,7 +32,7 @@ describe('renderVillage', () => {
 
   it('lights rotated village roofs from the same direction as their ground shadows', async () => {
     for(const rotation of [0,90,180,270])for(const direction of [-1,1]) {
-      const fixture={...model,buildings:[{...model.buildings[0],glyph:'sm-house-tiled',position:new Point(0,0),
+      const fixture={...model,buildings:[{...model.buildings[0],glyph:'sm-house-tiled',artworkVariant:0,position:new Point(0,0),
         bearingDeg:rotation,footprint:[64,64] as [number,number]}],pois:[],vegetation:[],fields:[],lanes:[],wall:undefined,
         frame:{minX:-64,minY:-64,maxX:64,maxY:64}};
       const shadow={dx:.4*direction,dy:.6*direction};
@@ -186,7 +186,7 @@ describe('renderVillage', () => {
   // --- R17: standalone output ---
 
   it('embeds a <defs> block with a <g id> for every glyph actually used, plus its -sil twin', () => {
-    const usedGlyphs = Array.from(new Set(model.buildings.map((b) => b.glyph)));
+    const usedGlyphs = Array.from(new Set(model.buildings.map((b) => b.artworkVariant===undefined?b.glyph:`${b.glyph}-shape-${b.artworkVariant}`)));
     expect(usedGlyphs.length).toBeGreaterThan(0);
     const defsMatch = svg.match(/<defs>([\s\S]*?)<\/defs>/);
     expect(defsMatch).not.toBeNull();
@@ -220,7 +220,7 @@ describe('renderVillage', () => {
     ]);
     for (const id of defIds) {
       // Lit roofs share ordered section definitions belonging to the used glyph.
-      const base = id.replace(/(?:-sil|-roof-\d+)$/, '');
+      const base = id.replace(/(?:-sil|-roof-\d+)$/, '').replace(/-shape-\d+$/, '');
       // every def id must trace back either to a used glyph above or the green fallback glyph
       if (base !== `${model.green.shape}-${model.green.variant}`) {
         expect(usedGlyphs.has(base)).toBe(true);
@@ -291,7 +291,7 @@ describe('renderVillage', () => {
     const styleMatch = svg.match(/<style>([\s\S]*?)<\/style>/);
     const style = styleMatch![1];
     expect(style).not.toContain('.sm-sil');
-    for (const glyph of Array.from(new Set(model.buildings.map((b) => b.glyph)))) {
+    for (const glyph of Array.from(new Set(model.buildings.map((b) => b.artworkVariant===undefined?b.glyph:`${b.glyph}-shape-${b.artworkVariant}`)))) {
       const silMatch = svg.match(new RegExp(`<g id="${escapeRegExp(glyph)}-sil">([\\s\\S]*?)</g>`));
       expect(silMatch).not.toBeNull();
       expect(silMatch![1]).toContain('fill="currentColor"');

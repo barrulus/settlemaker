@@ -33,7 +33,11 @@ PNG rendering uses default colour-token fallbacks; SVGs retain their CSS tokens.
 
 ## Rural character and materials
 
-Buildings retain their own front wall and projecting porch. Inns have an open
+Houses and longhouses have eight distinct plans per family: narrow ranges,
+side wings, projecting gables and smaller entries. They share the city roof
+contours, with broken straw fibres for thatch. Wall glimpses and chimney
+positions vary with the plan; they no longer repeat a rectangular wall slab
+and paired windows. Inns have an open
 stable yard; they are not urban perimeter blocks. Roof edges are slightly
 irregular and thatch has restrained fine hatching. Side sheds, exposed wall
 bands and timber supports give freestanding buildings detail at close zoom.
@@ -54,7 +58,7 @@ Snow covers roof hatching underneath, follows a slope or the lower eaves, and
 wraps chimney bases. It has no dark outline of its own. Porches can be fully
 snowed over while an adjoining main roof has partially melted.
 
-Ink uses `--sm-ink`, with shared `--sm-snow` and `--sm-void`. Rural materials use
+Ink uses `--sm-village-ink`, with shared `--sm-snow` and `--sm-void`. Rural materials use
 `--sm-village-{biome}-{roof,light,wall,accent,wood}`. Special temperate tile,
 slate, mud and reed materials and coastal thatch have their own named fallback
 tokens in the drawing. Old global timber/stone tokens cannot accidentally
@@ -80,6 +84,16 @@ wall-shadow convention.
 The shared runtime registry now embeds these bodies and refreshes measured
 geometry with `npm run build:art`. Rural fitting and collision use the measured
 roof and porch extents. Rerun placement tests after changing the artwork.
+
+`housing-variants.json` holds 96 drawings across the 12 rural dwelling IDs.
+`npm run build:art` merges these with the city variants into the shared runtime
+registry and measures the union of every plan's body and silhouette for fitting.
+Village models and public scenes save a deterministic `artworkVariant` without
+consuming planner randomness. Native custom glyph overrides take precedence;
+older models without a variant still render the base drawing.
+
+Run `node scripts/review-rural-forms.mjs` after building to review every plan in
+all five biomes, plus a generated village and the city–suburb boundary.
 
 ## Shared walls, bridges and henges
 

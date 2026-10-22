@@ -250,7 +250,7 @@ export function frontageLayout(input: AzgaarBurgInput, seed: number, profile: De
   for (const access of buildingAccessPaths(village)) L.roads.push({
     id: `access:${access.buildingId}`, path: access.points.map(p => ({...p})), kind: 'alley', role: 'service', width: .8, access: true,
   });
-  for (const b of village.buildings) L.symbols.push({ id: b.glyph, at: { ...b.position }, scale: b.footprint[0], scaleY: b.footprint[1], rotationDeg: b.bearingDeg, zBand: 'structure', buildingId: b.id });
+  for (const b of village.buildings) L.symbols.push({ artworkVariant:b.artworkVariant, id: b.glyph, at: { ...b.position }, scale: b.footprint[0], scaleY: b.footprint[1], rotationDeg: b.bearingDeg, zBand: 'structure', buildingId: b.id });
   for (const b of village.buildings) {
     const ink = inkExtent(b.glyph, b.footprint);
     const hw = ink.width / 2, hd = ink.depth / 2;
