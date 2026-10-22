@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { generateSettlement } from './helpers/layout-output.js';
 import { buildScene } from '../src/scene/build-scene.js';
 import { generateGeoJson } from '../src/output/geojson-builder.js';
-import { Point, Polygon } from '../src/index.js';
+import { Point, Polygon, generateSettlement as generatePublicSettlement } from '../src/index.js';
 import type { AzgaarBurgInput } from '../src/index.js';
 import { placeCityGlyphs, fitCityGlyph } from '../src/generator/city-glyphs.js';
 import { ARTWORK_INK as REFINED_INK, ARTWORK_MANIFEST as REFINED_MANIFEST } from '../src/assets/artwork.js';
@@ -26,6 +26,37 @@ function city(overrides: Partial<AzgaarBurgInput> = {}) {
 }
 
 describe('city artwork integration', () => {
+  it.each(['temperate', 'desert', 'tundra', 'tropical', 'coastal'])(
+    'renders suburban dwellings as glyphs instead of footprint blocks in %s', biome => {
+      for (const seed of [2,7]) {
+        const {model}=generatePublicSettlement({...cityInput,engine:'city',biome},{seed});
+        const homes=model.buildings.filter(b=>b.urbanity<.6);
+        const symbols=model.scene.layers.symbols;
+        const backed=new Set(symbols.flatMap(s=>s.buildingIds??(s.buildingId?[s.buildingId]:[])));
+        expect(homes.length).toBeGreaterThan(100);
+        // These suburbs previously left most homes as flat coloured polygons.
+        // Only genuinely unfittable corners or inaccessible sites may remain.
+        expect(homes.filter(b=>backed.has(b.id)).length/homes.length).toBeGreaterThan(.94);
+        const cottages=symbols.filter(s=>s.id.startsWith('sm-house'));
+        expect(cottages.length).toBeGreaterThan(40);
+        expect(new Set(cottages.map(s=>s.artworkVariant)).size).toBe(8);
+        for(const house of cottages) {
+          const meta=REFINED_MANIFEST[house.id], [w,h]=meta.footprint!;
+          expect(Math.max(house.scale/w,(house.scaleY??house.scale)/h)).toBeLessThanOrEqual(1.35+1e-7);
+          const building=model.scene.layers.buildings.find(b=>b.id===house.buildingId)!;
+          const polygon=new Polygon(building.ring.map(p=>new Point(p.x,p.y)));
+          const [x0,y0,x1,y1]=REFINED_INK[house.id].bounds, a=house.rotationDeg*Math.PI/180;
+          for(const [x,y] of [[x0,y0],[x1,y0],[x1,y1],[x0,y1]]) {
+            const dx=(x-meta.anchor[0])*house.scale/64,dy=(y-meta.anchor[1])*(house.scaleY??house.scale)/64;
+            const at=new Point(house.at.x+dx*Math.cos(a)-dy*Math.sin(a),house.at.y+dx*Math.sin(a)+dy*Math.cos(a));
+            polygon.forEdge((p,q)=>expect(((q.x-p.x)*(at.y-p.y)-(q.y-p.y)*(at.x-p.x))*Math.sign(polygon.square)).toBeGreaterThanOrEqual(-1e-7));
+          }
+        }
+        expect(model.residents.unassigned).toBe(0);
+      }
+    },
+  );
+
   it('keeps the Achermers temple within its physical size limit on the web generation path', () => {
     const result=generateSettlement(achermers.burg as AzgaarBurgInput,{seed:achermers.seed});
     if(result.kind!=='settlement')throw new Error('expected legacy city');
