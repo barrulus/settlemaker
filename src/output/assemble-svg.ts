@@ -377,8 +377,11 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
 
   if(L.bridges?.length){parts.push('<g id="bridges">');for(const crossing of L.bridges)parts.push(`<g data-bridge="${crossing.id}">${bridgeArtwork(crossing.path,crossing.width,scene.biome,true)}</g>`);parts.push('</g>');}
 
+  // An explicitly unsuccessful fit retains semantic geometry, not a coloured
+  // placeholder or its shadow. Polygon-only exports still show every footprint.
   const hideBacked = (b: BuildingFeature): boolean =>
-    b.glyphBacked === true && b.id !== undefined && renderedBuildings.has(b.id);
+    (b.glyphBacked === false && showSymbols && assets.glyphs !== undefined)
+    || (b.glyphBacked === true && b.id !== undefined && renderedBuildings.has(b.id));
 
   const shadowable = L.buildings.filter(b => !hideBacked(b));
   if (shadowable.length > 0 || structureSymbols.length > 0) {

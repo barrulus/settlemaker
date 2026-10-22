@@ -213,8 +213,9 @@ describe('fidelity round 4: probe path', () => {
     // Full-length open timber doors now follow each entrance road.
     // Suburban dwellings now use varied plans and the same roof contours as cities.
     // Detached coverage and a compact fallback recover previously blank roofs.
+    // Explicitly unsuitable sites retain geometry but no painted block or shadow.
     expect(generateFromBurg(aldford(1400), {seed:9}).svg).toBe(svg);
-    expect(sha256(svg)).toBe('98008b16350b1e24c2b36e6c7a57d315a0817264ed782f2cae1a02480c8824ad');
+    expect(sha256(svg)).toBe('e8ce89b85d52d517fafb361675485446b1f9dfc7c112b0929e3d81d4a06002db');
   });
 
   it('pins direct legacy generateFromBurg output at pop 800 (not the village engine)', () => {

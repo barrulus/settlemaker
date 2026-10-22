@@ -96,7 +96,9 @@ export interface BuildingFeature {
   /** Ward type string (WardType value) — semantic, drives styling/symbols. */
   kind: string;
   landmark: boolean;
-  glyphBacked?: true;
+  /** True: placed glyph; false: no suitable artwork, hide its footprint in
+   * illustrated output. Omitted: legacy polygon artwork. Geometry is retained. */
+  glyphBacked?: boolean;
 }
 
 export interface PierFeature { ring: ScenePoint[]; harbourId?: string }

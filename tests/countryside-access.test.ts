@@ -75,6 +75,6 @@ describe('farmland access across water', () => {
     expect(layout.scene.layers.buildings.map(b=>b.id)).toEqual(['b0','b1']);
     expect(layout.districts.map(d=>d.id)).toEqual(['d0','d1']);
     expect(layout.scene.layers.symbols).toEqual([]);
-    expect(layout.scene.layers.buildings[1].glyphBacked).toBeUndefined();
+    expect(layout.scene.layers.buildings[1].glyphBacked).toBe(false);
   });
 });

@@ -91,8 +91,8 @@ export function pruneUnreachableRural(layout: Layout, seed: number): void {
     return false;
   });
   // Shared compound artwork can cover several roofs. If one inaccessible
-  // roof invalidates it, surviving roofs retain their ordinary footprint art.
-  for (const building of layers.buildings) if (building.id && lostGlyphs.has(building.id)) delete building.glyphBacked;
+  // roof invalidates it, retain surviving geometry without painting fallback blocks.
+  for (const building of layers.buildings) if (building.id && lostGlyphs.has(building.id)) building.glyphBacked = false;
   layout.districts = layout.districts.filter(district => {
     if (district.settlementRole !== 'rural') return true;
     const members = layout.buildings.filter(b => b.districtId === district.id);

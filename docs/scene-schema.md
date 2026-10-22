@@ -77,6 +77,12 @@ and downloadable authoring assets can use other dimensions. There is no universa
 temperate housing slots), including its shadow. Omitted or unsupported values
 use the base glyph. Custom skin glyph overrides take precedence over variants.
 
+`glyphBacked: false` marks a building with no suitable artwork. City and village
+illustrated output omit both its polygon fill and shadow, while retaining its
+geometry, identity and population data. `symbols: false` and glyph-less asset
+sets still render these footprints for schematic output. Omitted flags retain
+legacy polygon rendering; `true` continues to identify placed glyphs.
+
 ## Appearance and artwork
 
 `renderSettlement(model, options)` accepts shared assembly appearance options,
