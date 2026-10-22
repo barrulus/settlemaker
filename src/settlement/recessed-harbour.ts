@@ -75,7 +75,14 @@ export function recessedHarbour(params: GenerationParams, site: Site, metresPerU
     const workingBank = [at(offset - half + 2, -depth), at(offset + half - 2, -depth)];
     if (pointInPolygon(new Point(0, 0), cut) || workingBank.some(wet)) continue;
     const candidateWater = [...site.water, cut];
-    prepareWaterBoundary(candidateWater, site.surveyRadiusM ?? Infinity);
+    try { prepareWaterBoundary(candidateWater, site.surveyRadiusM ?? Infinity); }
+    catch (error) {
+      // The original water has already been validated. A failed union here
+      // rejects this optional excavation, not the source survey or settlement.
+      if (error instanceof WaterContextError
+        && error.waterContextResult.issues.every(issue => issue.code === 'water-context-invalid')) continue;
+      throw error;
+    }
     const banks = waterBoundaryPaths(candidateWater);
     const coastalBanks = belongingBanks(banks, [...site.shorelines ?? originalBanks, cut]);
     const candidate: GenerationParams = { ...params,
