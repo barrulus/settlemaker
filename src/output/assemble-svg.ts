@@ -159,7 +159,11 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   const fieldDetail = pixels === undefined || 16 / (scene.metersPerUnit ?? 1) * pixels >= 12;
 
   const visibleSymbols = (showSymbols ? L.symbols : []).filter(s => {
-    if (pixels !== undefined && Math.min(s.scale, s.scaleY ?? s.scale) * pixels < 12) return false;
+    // Placed buildings keep their actual roof and silhouette at every zoom.
+    // Culling them as small decorations restores the entire lot polygon, so
+    // mixed-size suburbs turn into coloured blocks in automatic-detail tiles.
+    const building = s.zBand === 'structure' && linkedBuildingIds(s).length > 0;
+    if (!building && pixels !== undefined && Math.min(s.scale, s.scaleY ?? s.scale) * pixels < 12) return false;
     const meta = (assets.manifest ?? REFINED_MANIFEST)[s.id];
     if (!meta) return false;
     if (!assets.glyphs?.[s.id]) return false;            // no glyph asset for this id
