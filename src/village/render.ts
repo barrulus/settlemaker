@@ -1,8 +1,9 @@
+import { roundedRingPath } from '../output/rounded-ring.js';
 import { resolveAppearance, themedMaterial } from '../appearance/resolve.js';
 import type { Palette } from '../types/interfaces.js';
 import type { RenderTheme } from '../output/render-theme.js';
 import { resolveSkin, type SettlementSkin } from '../assets/skins.js';
-import { greenGround } from '../assets/greens-art.js';
+import { buildingAccessPaths } from './access-paths.js';
 import { bridgeArtwork, farmDetails, wallArtwork } from '../output/artwork.js';
 import { ARTWORK_GLYPHS as REFINED_GLYPHS, ARTWORK_MANIFEST, ART_TOKENS } from '../assets/artwork.js';
 import { waterFillRings, waterBoundaryPaths } from './water-boundary.js';
@@ -67,10 +68,8 @@ function fieldPatternId(glyph: string, furrowBearingDeg: number): string {
 }
 
 /**
- * Minimal renderer: enough for a render gate to judge the skeleton, the
- * green and the fabric. Band order (§8.2 + gate 2, after pass 5): parcel
- * field ring -> route -> parcel green (over the routes) ->
- * structure (buildings + POIs) -> canopy (trees).
+ * Standalone village renderer. Band order: fields -> roads -> paved
+ * common -> house access paths -> structures (buildings + POIs) -> canopy.
  *
  * The output is standalone (ruling R17): a <defs> block carries a plain
  * <g id="..."> for every glyph the model actually uses (plus its -sil
@@ -172,7 +171,7 @@ export function renderVillage(
       defs.push(defBlock(greenGlyphId, glyphs[greenGlyphId].body));
     } else {
       const d=REFINED_GLYPHS[greenGlyphId].body.match(/<path[^>]* d="([^"]+)"/)?.[1];
-      if(d)defs.push(defBlock(greenGlyphId, greenGround(d,model.site.biome,{id:greenGlyphId,seed:'abc'.indexOf(model.green.variant)})));
+      if (d) defs.push(defBlock(greenGlyphId, `<path d="${d}" fill="${roadColor}" stroke="none"/>`));
     }
   }
 
@@ -334,12 +333,9 @@ export function renderVillage(
   }
   out.push('</g>');
 
-  // Gate 2 band order: "roads should go under the green rather than next
-  // to it". Lanes paint FIRST — widest class at the bottom so narrow paths
-  // sit over broad roads at junctions — and the green paints over them, so
-  // every lane visibly disappears beneath the turf (their geometry runs to
-  // GREEN_UNDERLAP_RATIO x radius inside it). The field ring painted above
-  // goes UNDER the routes; only the green rides above them.
+  // Paint casings before surfaces so intersections have no internal seams.
+  // Tapers are filled ribbons: clipping a constant-width core erases the
+  // casing at exactly the edges that need to show the changing width.
   // Road paint is land only. Water remains visible even where a road's
   // shoulder overlaps a bank; the separate bridge deck carries the crossing.
   const waterPaths = waterPolys.map(poly => polygonPath(poly, X, Y));
@@ -349,24 +345,18 @@ export function renderVillage(
   out.push(`<g data-band="route" ${waterPaths.length ? `mask="url(#${landMask})" ` : ''}fill="none" stroke="${roadCasing}" stroke-linecap="round" stroke-linejoin="round">`);
   const roadCores: string[] = [];
   const surfaceClips = roadSurfaceClips(model.lanes);
+  const coreClips = roadSurfaceClips(model.lanes, .3);
   const byWidth = [...model.lanes].sort((a, b) => (b.widthM - a.widthM) || a.id.localeCompare(b.id));
-  for (const [index, lane] of byWidth.entries()) {
+  for (const lane of byWidth) {
     const clip = surfaceClips.get(lane.id);
-    const clipPoints = clip?.map(p => `${n(X(p.x))},${n(Y(p.y))}`).join(' ') ?? '';
-    const clipHash = [...clipPoints].reduce((hash, c) => (Math.imul(hash, 31) + c.charCodeAt(0)) | 0, 0) >>> 0;
-    const clipId = `road-surface-${index}-${clipHash.toString(36)}`;
-    if (clip) out.push(`<defs><clipPath id="${clipId}"><polygon points="${clipPoints}"/></clipPath></defs>`);
-    const d = lane.points
-      .map((p, i) => `${i === 0 ? 'M' : 'L'}${n(X(p.x))},${n(Y(p.y))}`)
-      .join(' ');
-    out.push(
-      `<path data-lane="${lane.id}" d="${d}" ${clip ? `clip-path="url(#${clipId})" ` : ''}`
-      + `stroke-width="${n(roadCrossSection(lane).surfaceM * pxPerMetre)}"/>`,
-    );
-    // Keep the physical road footprint; the casing is painted inside it.
+    const d = lane.points.map((p, i) => `${i ? 'L' : 'M'}${n(X(p.x))},${n(Y(p.y))}`).join(' ');
     const surface = roadCrossSection(lane).surfaceM;
-    roadCores.push(`<path data-road-core="${lane.id}" d="${d}" ${clip ? `clip-path="url(#${clipId})" ` : ''}`
-      + `stroke="${roadColor}" stroke-width="${n(Math.max(surface * .6, surface - .6) * pxPerMetre)}"/>`);
+    out.push(`<path data-lane="${lane.id}" d="${clip ? polygonPath(clip, X, Y) : d}" `
+      + `${clip ? `fill="${roadCasing}" stroke="none" ` : ''}stroke-width="${n(surface * pxPerMetre)}"/>`);
+    const core = coreClips.get(lane.id);
+    roadCores.push(`<path data-road-core="${lane.id}" d="${core ? polygonPath(core, X, Y) : d}" `
+      + (core ? `fill="${roadColor}" stroke="none"/>`
+        : `stroke="${roadColor}" stroke-width="${n(Math.max(surface * .6, surface - .6) * pxPerMetre)}"/>`));
   }
   out.push(...roadCores);
   out.push('</g>');
@@ -382,14 +372,13 @@ export function renderVillage(
     out.push('</g>');
   }
 
-  // parcel band — the green's ground, over the roads that run beneath it
-  out.push('<g data-band="parcel">');
+  // The common is paved in the road material, without a separate border.
+  out.push(`<g data-band="parcel" ${waterPaths.length ? `mask="url(#${landMask})"` : ''}>`);
   const r = (model.green.diameter / 2) * pxPerMetre;
   if (model.green.outline && model.green.shape === 'sm-green-triangle') {
     const points=model.green.outline.map(p=>({x:X(p.x),y:Y(p.y)}));
-    const xs=points.map(p=>p.x),ys=points.map(p=>p.y);
-    const d=points.map((p,i)=>`${i?'L':'M'}${n(p.x)},${n(p.y)}`).join(' ')+'Z';
-    out.push(`<g data-green="junction">${greenGround(d,model.site.biome,{unit:pxPerMetre*.6,id:'junction',bounds:[Math.min(...xs),Math.min(...ys),Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys)]})}</g>`);
+    const d = roundedRingPath(points, 1.5 * pxPerMetre);
+    out.push(`<path data-green="junction" d="${d}" fill="${roadColor}" stroke="${roadColor}" stroke-width="${n(.6 * pxPerMetre)}" stroke-linejoin="round"/>`);
   } else if (greenGlyphAvailable) {
     out.push(
       `<use href="#${greenGlyphId}" ` +
@@ -401,6 +390,16 @@ export function renderVillage(
   // exists in the refined manifest, so greenGlyphAvailable is always true
   // in practice. Left as a guard (rather than asserted) so an id this
   // engine has never produced fails silently-absent rather than throwing.
+  out.push('</g>');
+
+  // Connect occupied frontages to their assigned street (or paved common).
+  // Draw above the road casing and beneath roofs, so both ends disappear
+  // into the surfaces they serve.
+  out.push(`<g data-band="access" fill="none" stroke="${roadColor}" stroke-width="${n(.8 * pxPerMetre)}" stroke-linecap="round" stroke-linejoin="round" ${waterPaths.length ? `mask="url(#${landMask})"` : ''}>`);
+  for (const access of buildingAccessPaths(model)) {
+    const d = access.points.map((p, i) => `${i ? 'L' : 'M'}${n(X(p.x))},${n(Y(p.y))}`).join(' ');
+    out.push(`<path data-access="${access.buildingId}" d="${d}"/>`);
+  }
   out.push('</g>');
 
   // structure band — every shadow, then every ink; buildings and POIs

@@ -1,3 +1,5 @@
+import { buildingAccessPaths } from '../village/access-paths.js';
+import { roadJoinWidths } from '../village/road-surface.js';
 import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import { mapToGenerationParams, MAX_PATCHES } from '../input/azgaar-input.js';
 import { Model } from '../generator/model.js';
@@ -59,7 +61,7 @@ function scaleScene(scene: Scene, k: number): void {
     harbour.fixtures.forEach(f => point(f.at));
     harbour.navigationWidth *= k;
   }
-  for (const r of L.roads) { ring(r.path); if (r.width !== undefined) r.width *= k; }
+  for (const r of L.roads) { ring(r.path); if (r.width !== undefined) r.width *= k; if (r.taper) r.taper = [r.taper[0]*k, r.taper[1]*k]; }
   for (const s of L.symbols) { point(s.at); s.scale *= k; if (s.scaleY !== undefined) s.scaleY *= k; }
   for (const v of L.vegetation) { point(v.at); v.scale *= k; }
   for (const w of L.walls) { w.polylines.forEach(ring); w.towers.forEach(point); for (const g of w.gates) { point(g.p1); point(g.p2); } }
@@ -234,9 +236,19 @@ export function frontageLayout(input: AzgaarBurgInput, seed: number, profile: De
     layers: { water: { rings: village.site.water.map(r => r.map(p => ({ ...p }))), synthetic: input.oceanBearing !== undefined && !input.coastlineGeometry?.length },
       fields: [], furrows: [], greens: [], vegetation: [], symbols: [], roads: [], buildings: [], piers: [], walls: [] } };
   const L = scene.layers;
-  for (const lane of village.lanes) L.roads.push({ path: lane.points.map(p => ({ ...p })), kind: lane.routeRole === 'approach' ? 'road' : 'alley', width: roadCrossSection(lane).surfaceM, routeIds: lane.sourceRouteIds });
+  for (const lane of village.lanes) L.roads.push({ id: lane.id, path: lane.points.map(p => ({ ...p })), kind: lane.routeRole === 'approach' ? 'road' : 'alley', width: roadCrossSection(lane).surfaceM, routeIds: lane.sourceRouteIds });
   // Water-routed approaches already encode their bank/bridge constraints.
   if (!village.site.water.length) L.roads = shapeVillageApproaches(L.roads,seed);
+  const surfaceLanes = L.roads.map((r, i) => ({ id: String(i), type: 'local' as const,
+    widthM: r.width!, surfaceWidthM: r.width!, sourceRouteIds: r.routeIds, points: r.path.map(p => new Point(p.x, p.y)) }));
+  const tapers = roadJoinWidths(surfaceLanes);
+  for (const [i, road] of L.roads.entries()) {
+    const widths = tapers.get(String(i));
+    if (widths) road.taper = widths;
+  }
+  for (const access of buildingAccessPaths(village)) L.roads.push({
+    id: `access:${access.buildingId}`, path: access.points.map(p => ({...p})), kind: 'alley', role: 'service', width: .8, access: true,
+  });
   for (const b of village.buildings) L.symbols.push({ id: b.glyph, at: { ...b.position }, scale: b.footprint[0], scaleY: b.footprint[1], rotationDeg: b.bearingDeg, zBand: 'structure', buildingId: b.id });
   for (const b of village.buildings) {
     const ink = inkExtent(b.glyph, b.footprint);
@@ -249,7 +261,7 @@ export function frontageLayout(input: AzgaarBurgInput, seed: number, profile: De
   }
   const green = village.green;
   const outline = green.outline ?? Array.from({ length: 32 }, (_, i) => new Point(green.centre.x + Math.cos(i * Math.PI / 16) * green.diameter / 2, green.centre.y + Math.sin(i * Math.PI / 16) * green.diameter / 2));
-  L.greens.push({ ring: outline.map(p => ({ ...p })) });
+  L.greens.push({ ring: outline.map(p => ({ ...p })), purpose: 'civic', surface: 'paved' });
   let boundary: Point[] = [];
   if (input.walls) {
     const ordered = [...village.buildings].sort((a, b) => a.position.length - b.position.length || a.id.localeCompare(b.id));
@@ -260,7 +272,7 @@ export function frontageLayout(input: AzgaarBurgInput, seed: number, profile: De
       return true;
     });
     boundary = villageWallBoundary(enclosed, [], outline);
-    L.walls.push(villageWall(boundary, village.lanes, village.site.water, village.site.biome));
+    L.walls.push(villageWall(boundary, surfaceLanes, village.site.water, village.site.biome));
   }
   L.bridges = village.bridges.filter(b => b.centreline && b.narrow).map(b => ({ id: b.id, path: b.centreline!, width: roadCrossSection(village.lanes.find(l => l.id === b.laneId)!).surfaceM }));
   const footprints = new Map(L.buildings.map(b => [b.id, b.ring]));

@@ -1,3 +1,6 @@
+import { roundedRingPath } from './rounded-ring.js';
+import { roadSurfaceRing } from '../village/road-surface.js';
+import { Point } from '../types/point.js';
 import { resolveAppearance, themedMaterial } from '../appearance/resolve.js';
 import { resolveSkin, type SettlementSkin } from '../assets/skins.js';
 import { landscapeHash } from '../assets/landscape-placement.js';
@@ -102,6 +105,8 @@ export function themeToCss(theme: RenderTheme, refined = false): string {
     `#roads path{fill:none;stroke-linecap:round;stroke-linejoin:round}`,
     `#roads .casing{stroke:${theme.roadCasing}}`,
     `#roads .core{stroke:${theme.roadCore}}`,
+    `#roads .surface-casing{fill:${theme.roadCasing};stroke:none}`,
+    `#roads .surface-core{fill:${theme.roadCore};stroke:none}`,
     `#shadows{fill:${theme.shadowColor};opacity:${fmt(theme.shadowOpacity)};color:${theme.shadowColor}}`,
     `.sm-stone{fill:${theme.smStone};stroke:${theme.smInk};stroke-width:2;stroke-linejoin:round;stroke-linecap:round}`,
     `.sm-timber{fill:${theme.smTimber};stroke:${theme.smInk};stroke-width:2;stroke-linejoin:round;stroke-linecap:round}`,
@@ -251,10 +256,10 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   if (L.greens.length > 0 || L.vegetation.length > 0) {
     parts.push('<g id="greens">');
     for (const [greenIndex, g] of L.greens.entries()) {
+      if (g.surface === 'paved') continue; // joins road cores after their casings
       const xs=g.ring.map(p=>p.x),ys=g.ring.map(p=>p.y);
       const width = Math.max(...xs)-Math.min(...xs), height = Math.max(...ys)-Math.min(...ys);
-      if (g.surface === 'paved') parts.push(`<path data-surface="paved" style="fill:${theme.roadCore}" d="${ringPath(g.ring)}"/>`);
-      else if (pixels !== undefined && Math.min(width, height) * pixels < 48) parts.push(`<path d="${ringPath(g.ring)}"/>`);
+      if (pixels !== undefined && Math.min(width, height) * pixels < 48) parts.push(`<path d="${ringPath(g.ring)}"/>`);
       else parts.push(greenGround(ringPath(g.ring),scene.biome,{unit:.6,id:`${clipId}-${greenIndex}`,bounds:[Math.min(...xs),Math.min(...ys),width,height]}));
       for (const path of g.paths ?? []) parts.push(`<path class="park-path" d="${linePath(path)}" stroke-width="${fmt(g.pathWidth ?? 0.7)}"/>`);
     }
@@ -278,7 +283,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
 
   if (harbours.length) parts.push(`<g id="harbour-ground" clip-path="url(#${clipId})">${harbours.map(h=>h.ground).join('')}</g>`);
 
-  if (L.roads.length > 0) {
+  if (L.roads.length > 0 || L.greens.some(g => g.surface === 'paved')) {
     // Roads/arteries/streets no longer expand computeLocalBounds (they're
     // allowed to run off the settlement's frame), so they need an explicit
     // clip — don't rely on the outermost <svg>'s UA-default overflow:hidden,
@@ -286,24 +291,37 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     const landMask=`${clipId}-road-land`;
     if(L.water.rings.length)parts.push(`<defs><mask id="${landMask}" maskUnits="userSpaceOnUse" x="${b.min_x}" y="${b.min_y}" width="${w}" height="${h}"><rect x="${b.min_x}" y="${b.min_y}" width="${w}" height="${h}" fill="white"/><path d="${L.water.rings.map(ringPath).join(' ')}" fill="black" fill-rule="evenodd"/>${harbourSolidRings(L.harbours).map(r=>`<path d="${ringPath(r)}" fill="white"/>`).join('')}</mask></defs>`);
     parts.push(`<g id="roads" clip-path="url(#${clipId})"${L.water.rings.length?` mask="url(#${landMask})"`:''}>`);
-    const lanes = L.roads.map(r => {
+    const lanes = L.roads.filter(r => !r.access).map(r => {
       const key = r.kind === 'artery' ? 'arteryWidth' : r.kind === 'road' ? 'roadWidth' : undefined;
       const explicitWidth = key ? options.theme?.[key] ?? (!options.palette ? skin?.city[key] : undefined) : undefined;
       const width = explicitWidth ?? r.width ?? (r.kind === 'artery' ? theme.arteryWidth : theme.roadWidth);
       const important = r.role === 'trunk' || r.role === 'approach' || (!r.role && r.kind !== 'alley');
       const minimum = important && pixels && options.overviewRoadMinPixels ? options.overviewRoadMinPixels / pixels : 0;
+      const paintedWidth = Math.max(width, minimum);
+      const taper = r.taper?.map(w => w < (r.width ?? width) ? Math.min(w, paintedWidth) : paintedWidth);
+      const surface = taper ? (inset: number) => ringPath(roadSurfaceRing(r.path.map(p => new Point(p.x, p.y)),
+        paintedWidth, taper[0], taper[1], inset)) : undefined;
       return {
+        surface,
         path: linePath(r.path),
         width: Math.max(width, minimum),
         reserved: r.width !== undefined && explicitWidth === undefined,
       };
     });
     for (const lane of lanes) {
+      if (lane.surface) { parts.push(`<path class="surface-casing" d="${lane.surface(0)}"/>`); continue; }
       parts.push(`<path class="casing" d="${lane.path}" stroke-width="${fmt(lane.reserved ? lane.width : lane.width + theme.casingDelta * 2)}"/>`);
     }
     for (const lane of lanes) {
+      if (lane.surface) { parts.push(`<path class="surface-core" d="${lane.surface(theme.casingDelta)}"/>`); continue; }
       parts.push(`<path class="core" d="${lane.path}" stroke-width="${fmt(lane.reserved ? Math.max(lane.width * .7, lane.width - theme.casingDelta * 2) : lane.width)}"/>`);
     }
+    for (const g of L.greens.filter(g => g.surface === 'paved')) {
+      parts.push(`<path class="surface-core" data-surface="paved" d="${roundedRingPath(g.ring)}"/>`);
+      // The same-colour rounded edge covers road casings at the join.
+      parts.push(`<path class="core" d="${roundedRingPath(g.ring)}" stroke-width="${fmt(theme.casingDelta * 2)}"/>`);
+    }
+    for (const r of L.roads.filter(r => r.access)) parts.push(`<path class="core" data-access="${(r.id ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`)}" d="${linePath(r.path)}" stroke-width="${fmt(r.width ?? .8)}"/>`);
     parts.push('</g>');
   }
 

@@ -71,6 +71,10 @@ export interface SymbolInstance {
 }
 
 export interface RoadFeature {
+  /** Surface widths at joined endpoints; interior retains width. */
+  taper?: [number, number];
+  /** Short paved frontage connection, rendered without a road casing. */
+  access?: boolean;
   /** Optional generated street identity, distinct from supplied external route IDs. */
   id?: string;
   /** Semantic hierarchy; width remains the reserved physical corridor. */

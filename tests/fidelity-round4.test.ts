@@ -201,9 +201,9 @@ describe('fidelity round 4: probe path', () => {
     // Enclosed neighbourhoods retain urban roof grain; temple and military
     // precincts now reserve explicit courts amid occupied street fronts.
     // Reviewed final visuals; mesh and ordinary census remain unchanged.
-    // Reviewed managed canopy groves and clean green ground. Housing,
-    // paths, census and generator RNG match the previous fixture exactly.
-    expect(sha256(svg)).toBe('aa7d4fbb56c7d1e9eb0e4a98cabcf9ced88e43a682e3ec667aa425ed54e8fb86');
+    // Shared road surface styles and visible gate jambs update the SVG.
+    // Housing, paths, census and generator RNG retain their geometry.
+    expect(sha256(svg)).toBe('f9460c9041a62158bf88c3e6fe1845e3a14e573f60a22e66f8e82638ecf16de8');
   });
 
   it('pins direct legacy generateFromBurg output at pop 800 (not the village engine)', () => {
@@ -310,9 +310,8 @@ describe('fidelity round 4: probe path', () => {
     expect(svg.length).toBeGreaterThan(1000);
     // Shared biome ground with paved city roads; urban street corridors and lane mouths are visible.
     // Reviewed both Aldford fixtures and verified exact repeatability before repinning.
-    // Only well-shadow offsets changed here; removing the corrective transform
-    // restores byte identity with the preceding reviewed SVG.
-    expect(sha256(svg)).toBe('163185665983d82cb21f0c3cb09a47a0ab83bbaf9f1cf1c5b6422625e4424c3d');
+    // Shared road surface styles and visible gate jambs update the SVG.
+    expect(sha256(svg)).toBe('70ee2b0142c2d9ed4261ad3faea8c8f2f079c56febc4f1752a38380e62213238');
   });
 });
 
