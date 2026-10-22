@@ -15,6 +15,7 @@ const input={name:'Housing',population:2000,biome:'temperate',engine:'city' as c
 
 describe('medieval housing and urban ground',()=>{
   it('contains every roof and its shadow inside the shared measured fitting envelope',async()=>{
+    expect(Object.keys(HOUSING_VARIANTS)).toHaveLength(20);
     for(const [id,variants] of Object.entries(HOUSING_VARIANTS)) {
       expect(variants).toHaveLength(8);
       expect(new Set(variants.map(v=>v.body)).size).toBe(8);
@@ -30,6 +31,16 @@ describe('medieval housing and urban ground',()=>{
         expect(painted).toBeGreaterThan(1000);
       }
     }
+  });
+
+  it.each(['desert','tundra','tropical','coastal'])('saves repeatable housing variations in %s city scenes',biome=>{
+    const first=generateSettlement({...input,biome},{seed:2});
+    const homes=first.model.scene.layers.symbols.filter(s=>s.artworkVariant!==undefined);
+    expect(homes.length).toBeGreaterThan(40);
+    expect(new Set(homes.map(s=>s.artworkVariant)).size).toBe(8);
+    expect(homes.every(s=>s.id.endsWith(`--${biome}`))).toBe(true);
+    expect(first.model.residents.unassigned).toBe(0);
+    expect(generateSettlement({...input,biome},{seed:2}).model.scene).toEqual(first.model.scene);
   });
 
   it('saves repeatable variations, uses mostly paved dense yards, and exports the same ground',()=>{

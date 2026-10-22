@@ -4,10 +4,11 @@ import { assembleSvg } from '../src/output/assemble-svg.js';
 import type { Scene, SymbolInstance } from '../src/scene/scene.js';
 import { ART_GLYPHS, ART_META } from '../src/assets/artwork-data.js';
 import { wallTowerCanvas } from '../src/assets/fortification-dimensions.js';
+import { prepareRoofLighting } from '../src/output/roof-lighting.js';
 
 function fixture(id: string, rotationDeg: number): Scene {
   return {
-    version: 2, seed: 1, population: 0, biome: 'temperate',
+    version: 2, seed: 1, population: 0, biome: id.split('--')[1]??'temperate',
     bounds: { min_x: -64, min_y: -64, max_x: 64, max_y: 64 },
     layers: {
       water: { rings: [], synthetic: false }, fields: [], furrows: [], greens: [],
@@ -38,26 +39,34 @@ describe('roof lighting in world space', () => {
     { id:'sm-city-temple-hall', cross:false, samples:[[23,32],[40,32]] },
     { id:'sm-city-palace-pavilion', cross:false, samples:[[14,32],[50,32]] },
     { id:'sm-city-palace-pavilion', cross:true, samples:[[32,14],[32,50]] },
-  ])('lights the sunward face of rotated and stretched $id (cross ridge: $cross)', async ({id,cross,samples}) => {
+    { id:'sm-city-row-house-a--coastal', cross:false, samples:[[24,35],[40,35]] },
+    { id:'sm-city-corner--coastal', cross:true, samples:[[35,11],[35,21]] },
+    { id:'sm-city-row-house-a--tropical', cross:false, samples:[[24,32],[41,32]] },
+    { id:'sm-city-row-house-a--tropical', cross:true, samples:[[29.5,15],[33.5,49.5]] },
+    { id:'sm-city-corner--tropical', cross:true, samples:[[35,11],[35,21]] },
+    { id:'sm-city-row-house-a--tundra', cross:false, samples:[[22,23],[43,23]] },
+    { id:'sm-city-row-house-a--tundra', cross:false, samples:[[27,35],[34,35]] },
+    { id:'sm-city-row-house-a--desert', cross:false, samples:[[18.73,32],[45.25,32]], resolution:2048, sampleRadius:2 },
+  ])('lights the sunward face of rotated and stretched $id (cross ridge: $cross)', async ({id,cross,samples,resolution=512,sampleRadius=3}) => {
     for (const rotation of [0, 90, 180, 270, 37, 127]) for (const direction of [1, -1]) {
       const scene = fixture(id, rotation);
       const shadowOffset = { dx: .4 * direction, dy: .6 * direction };
       const svg = assembleSvg(scene, { theme: { shadowOffset } });
       expect(svg).toContain(`<g id="shadows" transform="translate(${shadowOffset.dx.toFixed(2)},${shadowOffset.dy.toFixed(2)})">`);
       const { data, info } = await sharp(Buffer.from(svg.replace(/var\(--[^,]+,\s*([^\)]+)\)/g, '$1')))
-        .resize(512, 512).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+        .resize(resolution, resolution).removeAlpha().raw().toBuffer({ resolveWithObject: true });
       const angle = rotation * Math.PI / 180;
       // Sample well inside each actual roof plane, away from stacks and ridges.
       const brightness = (x: number, y: number) => {
         const lx = x - 32, ly = (y - 32) * 1.5;
-        const px = Math.round((64 + lx * Math.cos(angle) - ly * Math.sin(angle)) * 4);
-        const py = Math.round((64 + lx * Math.sin(angle) + ly * Math.cos(angle)) * 4);
+        const px = Math.round((64 + lx * Math.cos(angle) - ly * Math.sin(angle)) * resolution/128);
+        const py = Math.round((64 + lx * Math.sin(angle) + ly * Math.cos(angle)) * resolution/128);
         let sum = 0;
-        for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
+        for (let dy = -sampleRadius; dy <= sampleRadius; dy++) for (let dx = -sampleRadius; dx <= sampleRadius; dx++) {
           const i = ((py + dy) * info.width + px + dx) * info.channels;
           sum += (data[i] + data[i + 1] + data[i + 2]) / 3;
         }
-        return sum / 49;
+        return sum / (2*sampleRadius+1)**2;
       };
       const negative = brightness(samples[0][0],samples[0][1]);
       const positive = brightness(samples[1][0],samples[1][1]);
@@ -67,9 +76,20 @@ describe('roof lighting in world space', () => {
     }
   });
 
-  it('keeps the entire temperate city kit inside surveyed wings, leaving courts and passages clear', async () => {
-    const city=Object.entries(ART_META).filter(([id,m])=>id.startsWith('sm-city-') && m.biome==='temperate').map(([id])=>id);
-    expect(city).toHaveLength(34);
+  it('keeps a flat desert terrace matte when the sun changes direction', async () => {
+    const colours=[];
+    for(const rotation of [0,37,90])for(const direction of [-1,1]) {
+      const svg=assembleSvg(fixture('sm-city-row-house-a--desert',rotation),{theme:{shadowOffset:{dx:.4*direction,dy:.6*direction}}});
+      const {data,info}=await sharp(Buffer.from(svg.replace(/var\(--[^,]+,\s*([^\)]+)\)/g,'$1'))).resize(256,256).removeAlpha().raw().toBuffer({resolveWithObject:true});
+      const centre=(128*info.width+128)*info.channels;
+      colours.push([...data.subarray(centre,centre+3)]);
+    }
+    for(const colour of colours)expect(colour).toEqual(colours[0]);
+  });
+
+  it('keeps all five city kits inside surveyed wings, leaving courts and passages clear', async () => {
+    const city=Object.keys(ART_META).filter(id=>id.startsWith('sm-city-'));
+    expect(city).toHaveLength(170);
     for(const id of city) {
       const art=ART_GLYPHS[id], panels=ART_META[id].footprintPolygons!;
       for(const markup of [art.body,art.sil]) {
@@ -84,6 +104,19 @@ describe('roof lighting in world space', () => {
         }
         expect(painted).toBeGreaterThan(1000);
       }
+    }
+  });
+
+  it('preserves every authored shape when preparing regional roofs, snow and raised details for lighting', () => {
+    const city=Object.entries(ART_GLYPHS).filter(([id])=>id.startsWith('sm-city-'));
+    for(const [id,{body}] of city) {
+      if(!body.startsWith('<g data-roof-sections="true">'))continue;
+      const lighting=prepareRoofLighting(body,paint=>paint.replace(/var\(--[^,]+,\s*([^\)]+)\)/g,'$1'),id)!;
+      expect(lighting,id).toBeDefined();
+      const shapes=(markup:string)=>markup.match(/<(?:path|circle|rect|ellipse|polygon|polyline)\b/g)??[];
+      expect(shapes(lighting.body),id).toEqual(shapes(body));
+      const sections=body.match(/data-roof-section="\d+"/g)??[];
+      expect(lighting.uses!(37,{dx:.4,dy:.6},1.5).match(/<use /g),id).toHaveLength(sections.length);
     }
   });
 

@@ -1,9 +1,11 @@
 import { medievalHousing } from './medieval-housing.mjs';
+import { appendRoofSection } from './roof-sections.mjs';
 
 export const commerceForms = new Set(['inn', 'warehouse', 'guildhall']);
 
 /** Existing surveyed panels and courtyard voids, with house-scale roof detail. */
-export function medievalCommerce(family) {
+export function medievalCommerce(family, options = {}) {
+  const drawRoof=options.roof??medievalHousing;
   const ink='var(--sm-city-roof-ink, #68574b)';
   const wall='var(--sm-city-temperate-wall, #d6c7ad)';
   const timber='var(--sm-city-temperate-accent, #9f8c6c)';
@@ -11,10 +13,10 @@ export function medievalCommerce(family) {
   const path=(d,fill,sw=.45)=>`<path d="${d}" fill="${fill}" stroke="${ink}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`;
   const sections=[];
   let sil='';
-  const section=(body)=>sections.push(body.replace('<g ',`<g data-roof-section="${sections.length}" `));
+  const section=body=>appendRoofSection(sections,body);
   const detail=(body)=>section(`<g stroke-linejoin="round">${body}</g>`);
   const panel=(bounds,variant,scale,material)=>{
-    const art=medievalHousing({key:family.key,panels:[bounds]},variant,{detailScale:scale,material,features:false});
+    const art=drawRoof({key:family.key,panels:[bounds]},variant,{detailScale:scale,material,features:false});
     section(art.body);
     return art.sil;
   };

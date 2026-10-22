@@ -152,16 +152,21 @@ remain part of the regression suite.
 
 ## Medieval architecture review
 
-The housing pass updates the four ordinary temperate city slots. Temperate
-inns, warehouses and guildhalls now share that roof treatment, with connected
-inn wings, timber loading dormers and a guildhall lantern. All twenty temperate
-faith, palace and castle slots also use textured roofs, softened stonework and
-rounded details. Terraces, corner houses, both courtyard forms, workshops,
-bathhouses and market halls complete the treatment across all 34 temperate
-city families. Other biomes retain their existing artwork. Housing variations
-are authored in `scripts/art/medieval-housing.mjs`, saved with the city collection
-as `housing-variants.json`, and compiled into browser-safe runtime data. They
-reuse existing skin slots rather than extending the skin catalogue.
+All 34 city families in each of the five biomes use softly irregular outlines,
+rounded details and restrained ink. Shared forms retain connected inn wings,
+loading dormers, guildhall lanterns, open courts and the faith/palace/castle kits.
+Each biome keeps its own construction materials:
+
+- Temperate: clay tile, slate and shingles.
+- Desert: limewashed terraces, worn parapets, roof hatches and shade cloth.
+- Tundra: timber shingles, irregular snow banks and snow-capped towers.
+- Tropical: fired-clay hip roofs, timber vents and covered galleries.
+- Coastal: weathered shingles, timber ridge caps and loading dormers.
+
+Roof primitives are authored in `scripts/art/medieval-housing.mjs` and the four
+`medieval-<biome>.mjs` modules. Each of the four basic housing families has eight
+deterministic appearances per biome, saved as `housing-variants.json` and compiled
+into browser-safe runtime data. They reuse existing skin slots.
 
 Housing roof planes are lit opposite the theme's `shadowOffset`, accounting for
 each placement's rotation and ridge axis. Inherited SVG paints keep the detailed
@@ -171,6 +176,11 @@ Commercial buildings are authored in `scripts/art/medieval-commerce.mjs` using
 the same roof drawing primitives. Each wing or raised roof has its own lighting
 section, so perpendicular wings share a world light direction. Their surveyed
 footprints, courtyard voids, building identities and skin slots are retained.
+Regional roof callbacks use the same family layouts. `roof-sections.mjs` flattens
+their independently lit hip faces, snow layers and raised details into ordered
+sections. Desert terraces remain matte while their upright parapets receive
+directional light. Tundra snow uses `--sm-snow` and the optional shadow colour
+`--sm-city-tundra-snow-shade`; changing a roof material does not recolour snow.
 The remaining street forms are authored in `scripts/art/medieval-urban.mjs`:
 adjoining terrace bays, connected courtyard wings, forge stacks, timber roof
 vents and an open market arcade. They share the roof primitives and independent
@@ -189,11 +199,13 @@ node scripts/review-medieval-housing.mjs after
 node scripts/review-medieval-commerce.mjs
 node scripts/review-medieval-urban.mjs
 node scripts/review-medieval-landmarks.mjs
+node scripts/review-medieval-biomes.mjs
 ```
 
 The review writes a full city, a 480-metre centre view and a fixed 120-metre
-residential view under `output/medieval-housing/`. Run the same script with `before` on the previous
-build to preserve a comparison. Both maps use population 10,000 and seed 2.
+residential view under `output/medieval-housing/`. Run the same script with
+`before` on the previous build to preserve a comparison. Both maps use
+population 10,000 and seed 2.
 The commerce review writes isolated buildings at two rotations under
 `output/medieval-commerce/`, using the runtime SVG renderer.
 The street-building review writes the remaining seven forms at two rotations
@@ -201,3 +213,7 @@ and a contact sheet under `output/medieval-urban/`.
 The landmark review writes the complete kit and three palace/castle assemblies
 under `output/medieval-landmarks/`, also using the runtime renderer so every
 rotated component shares the same light direction.
+The biome review writes all 136 regional city forms, eight housing variations,
+palace/castle assemblies and generated city/street views under
+`output/medieval-biomes/`. It accepts optional biome names to rebuild selected
+galleries, for example `node scripts/review-medieval-biomes.mjs tundra coastal`.

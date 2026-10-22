@@ -55,6 +55,7 @@ node scripts/review-medieval-housing.mjs after
 node scripts/review-medieval-commerce.mjs
 node scripts/review-medieval-urban.mjs
 node scripts/review-medieval-landmarks.mjs
+node scripts/review-medieval-biomes.mjs
 ```
 
 They write local galleries and measurements under ignored `output/` directories.

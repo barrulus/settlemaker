@@ -1,9 +1,11 @@
 import { medievalHousing } from './medieval-housing.mjs';
+import { appendRoofSection } from './roof-sections.mjs';
 
 export const urbanForms = new Set(['terrace','corner','courtyard-u','courtyard','workshop','bathhouse','market-hall']);
 
 /** Remaining temperate street buildings, within their surveyed roof panels. */
-export function medievalUrban(family) {
+export function medievalUrban(family, options = {}) {
+  const drawRoof=options.roof??medievalHousing;
   const ink='var(--sm-city-roof-ink, #68574b)';
   const wall='var(--sm-city-temperate-wall, #d6c7ad)';
   const timber='var(--sm-city-temperate-accent, #9f8c6c)';
@@ -11,10 +13,10 @@ export function medievalUrban(family) {
   const path=(d,fill='none',width=.35,extra='')=>`<path d="${d}" fill="${fill}" stroke="${ink}" stroke-width="${width}" ${extra}/>`;
   const sections=[];
   let sil='';
-  const section=body=>sections.push(body.replace('<g ',`<g data-roof-section="${sections.length}" `));
+  const section=body=>appendRoofSection(sections,body);
   const detail=body=>section(`<g stroke-linejoin="round" stroke-linecap="round">${body}</g>`);
   const panel=(bounds,variant,scale,material,features=false)=>{
-    const art=medievalHousing({key:family.key,panels:[bounds]},variant,{detailScale:scale,material,features});
+    const art=drawRoof({key:family.key,panels:[bounds]},variant,{detailScale:scale,material,features});
     section(art.body);
     return art.sil;
   };

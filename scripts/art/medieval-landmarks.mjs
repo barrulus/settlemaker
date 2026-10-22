@@ -1,7 +1,9 @@
 import { medievalHousing } from './medieval-housing.mjs';
+import { appendRoofSection } from './roof-sections.mjs';
 
 /** Temperate landmark kit. Every detail stays on an existing surveyed panel. */
-export function medievalLandmark(family) {
+export function medievalLandmark(family, options = {}) {
+  const drawRoof=options.roof??medievalHousing;
   const ink='var(--sm-city-roof-ink, #68574b)';
   const stone='var(--sm-city-temperate-wall, #d6c7ad)';
   const roof='var(--sm-city-temperate-roof, #858e9f)';
@@ -15,7 +17,7 @@ export function medievalLandmark(family) {
   const circle=(x,y,r,fill,width=.45)=>`<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}" stroke="${ink}" stroke-width="${width}"/>`;
   const sections=[];
   let sil='';
-  const section=body=>sections.push(body.replace('<g ',`<g data-roof-section="${sections.length}" `));
+  const section=body=>appendRoofSection(sections,body);
   const detail=body=>section(`<g stroke-linejoin="round" stroke-linecap="round">${body}</g>`);
   const foundation=(x,y,X,Y)=>{
     const d=round(x+.4,y+.4,X-x-.8,Y-y-.8,1.1);
@@ -26,7 +28,7 @@ export function medievalLandmark(family) {
     sil+=`<path d="${d}" fill="currentColor" stroke="currentColor" stroke-width=".35"/>`;
   };
   const panel=(bounds,variant=0,scale=.65)=>{
-    const art=medievalHousing({key:family.key,panels:[bounds]},variant,{detailScale:scale,material:family.category==='palace'?'tile':'slate',features:false});
+    const art=drawRoof({key:family.key,panels:[bounds]},variant,{detailScale:scale,material:family.category==='palace'?'tile':'slate',features:false});
     section(art.body);
   };
   const steps=(x,y,w)=>detail(rect(x,y,w,3.8,stone,.35,.45)

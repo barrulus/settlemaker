@@ -27,32 +27,33 @@
       "description": "Limewashed roof terraces, parapets, cisterns and shade screens"
     },
     "tundra": {
-      "roof": "#718397",
-      "light": "#95a8b6",
-      "wall": "#bfc8ce",
-      "accent": "#777589",
+      "roof": "#7d8589",
+      "light": "#a4adb0",
+      "wall": "#c5c4b9",
+      "accent": "#91806d",
       "ground": "#e6ecef",
-      "description": "Snow-covered roof planes, lower-eave remnants and buildup against roof obstructions"
+      "description": "Timber shingles, irregular snow banks and snow-capped towers with shared sunlight"
     },
     "tropical": {
-      "roof": "#937982",
-      "light": "#b49b9d",
+      "roof": "#a26d57",
+      "light": "#c89474",
       "wall": "#d4d9cf",
       "accent": "#648f88",
       "ground": "#6d9e5c",
       "description": "Hipped fired-tile roofs, raised ridge vents and covered galleries"
     },
     "coastal": {
-      "roof": "#779795",
-      "light": "#9db5af",
-      "wall": "#d5dcda",
-      "accent": "#8f8da5",
+      "roof": "#84918d",
+      "light": "#b2b9ad",
+      "wall": "#d0c8b5",
+      "accent": "#99866d",
       "ground": "#cfd6b0",
-      "description": "Salt-grey shingles, capped ridges and roof lights"
+      "description": "Weathered shingles, timber ridge caps and modest loading dormers"
     }
   },
   "tokens": {
     "--sm-city-roof-ink": "#68574b",
+    "--sm-city-tundra-snow-shade": "#d6e1e6",
     "--sm-city-temperate-roof": "#858e9f",
     "--sm-city-temperate-light": "#aab2bd",
     "--sm-city-temperate-wall": "#d6d5d0",
@@ -61,18 +62,18 @@
     "--sm-city-desert-light": "#f0e6d4",
     "--sm-city-desert-wall": "#b5aaa0",
     "--sm-city-desert-accent": "#6c9c9e",
-    "--sm-city-tundra-roof": "#718397",
-    "--sm-city-tundra-light": "#95a8b6",
-    "--sm-city-tundra-wall": "#bfc8ce",
-    "--sm-city-tundra-accent": "#777589",
-    "--sm-city-tropical-roof": "#937982",
-    "--sm-city-tropical-light": "#b49b9d",
+    "--sm-city-tundra-roof": "#7d8589",
+    "--sm-city-tundra-light": "#a4adb0",
+    "--sm-city-tundra-wall": "#c5c4b9",
+    "--sm-city-tundra-accent": "#91806d",
+    "--sm-city-tropical-roof": "#a26d57",
+    "--sm-city-tropical-light": "#c89474",
     "--sm-city-tropical-wall": "#d4d9cf",
     "--sm-city-tropical-accent": "#648f88",
-    "--sm-city-coastal-roof": "#779795",
-    "--sm-city-coastal-light": "#9db5af",
-    "--sm-city-coastal-wall": "#d5dcda",
-    "--sm-city-coastal-accent": "#8f8da5"
+    "--sm-city-coastal-roof": "#84918d",
+    "--sm-city-coastal-light": "#b2b9ad",
+    "--sm-city-coastal-wall": "#d0c8b5",
+    "--sm-city-coastal-accent": "#99866d"
   },
   "symbols": {
     "sm-city-row-house-a": {

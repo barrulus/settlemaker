@@ -208,7 +208,9 @@ describe('fidelity round 4: probe path', () => {
     // Housing, commerce and landmark roofs retain world-space lighting per face.
     // The remaining seven temperate street forms now share that treatment;
     // reviewed the rendered fixture and verified identical repeated output.
-    expect(sha256(svg)).toBe('d3ce5cf9c5eae470a2094d6a277044ea55941123c3e3a90ed978e5b716b1cef5');
+    // Regional palette declarations changed; restoring the old token map
+    // reproduces the previous output exactly. Temperate artwork is unchanged.
+    expect(sha256(svg)).toBe('046efa60642ba6413ea7985f58e32a674732219df7b1996f8c36c765203a9a10');
   });
 
   it('pins direct legacy generateFromBurg output at pop 800 (not the village engine)', () => {
@@ -317,7 +319,9 @@ describe('fidelity round 4: probe path', () => {
     // Reviewed both Aldford fixtures and verified exact repeatability before repinning.
     // Shared road surface styles and visible gate jambs update the SVG.
     // The shared renderer also gains softer outlines, paving and lit wall towers.
-    expect(sha256(svg)).toBe('bd4681e63f3cd0ee0e2ed6b16c085130bb6ac48cfe631f20918ea2e002a6b3a4');
+    // Only the shared regional token declarations change this fixture;
+    // restoring the prior token map reproduces its previous bytes exactly.
+    expect(sha256(svg)).toBe('9fe005c93c4a9751ac77c8cc9366ba4b94439ee53a241708171036aa74014993');
   });
 });
 
