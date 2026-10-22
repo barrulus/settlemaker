@@ -158,7 +158,10 @@ describe('glyph-backed buildings', () => {
     const painted=assembleSvg(scene);
     expect(painted).toContain('data-building-id="wing-a" data-building-ids="wing-a wing-b wing-c"');
     for(const id of ids)expect(painted).not.toContain(`<path class="craftsmen" data-building-id="${id}"`);
-    for(const options of [{symbols:false},{assetSet:SCHEMATIC_SET},{pixelsPerUnit:.01}]) {
+    const overview=assembleSvg(scene,{pixelsPerUnit:.01});
+    expect(overview).toContain('glyph-sm-city-courtyard-u');
+    for(const id of ids)expect(overview).not.toContain(`<path class="craftsmen" data-building-id="${id}"`);
+    for(const options of [{symbols:false},{assetSet:SCHEMATIC_SET}]) {
       const fallback=assembleSvg(scene,options);
       for(const id of ids)expect(fallback).toContain(`<path class="craftsmen" data-building-id="${id}"`);
     }

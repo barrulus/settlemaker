@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 beforeEach(() => { vi.useFakeTimers({toFake:['Date']}); vi.setSystemTime(new Date('2026-10-15T00:00:00Z')); });
 afterEach(() => vi.useRealTimers());
-import { createSettlementSession, generateSettlement, createSettlementModel, renderSettlement, BUILD_INFO, type AzgaarBurgInput } from '../src/index.js';
+import { createSettlementSession, parseSettlementUrl, generateSettlement, createSettlementModel, renderSettlement, BUILD_INFO, type AzgaarBurgInput } from '../src/index.js';
 import { createBoundsIndex, createSceneIndex, scanSceneInView } from '../src/scene/spatial-index.js';
 import type { Scene } from '../src/scene/scene.js';
 import { assembleSvg } from '../src/output/assemble-svg.js';
@@ -17,6 +17,23 @@ function fixture():Scene {
 }
 
 describe('retained rendering sessions',()=>{
+  it('keeps Aldford building glyphs in the automatic-detail path used by the live FMG viewer',async()=>{
+    const parsed=await parseSettlementUrl(new URLSearchParams('name=Aldford&pop=13000&seed=560656&walls=1&plaza=1&roads=353%3Aroyal%2C140%3Atrail%2C283%3Atrail'));
+    const session=createSettlementSession(parsed.burg,{seed:parsed.seedOverride});
+    const before=JSON.stringify(session.scene);
+    for(const svg of [session.renderFull(),session.renderView({width:1200}),
+      session.renderView({bounds:{min_x:80,min_y:100,max_x:200,max_y:240},width:240})]) {
+      expect(svg).toContain('id="symbols"');
+      expect([...svg.matchAll(/<path[^>]*data-building-id="[^"]+"/g)]).toHaveLength(0);
+    }
+    expect(JSON.stringify(session.scene)).toBe(before);
+  });
+  it('keeps village homes visible below the decoration detail threshold',()=>{
+    const session=createSettlementSession({...input,engine:'village'},{seed:2});
+    const svg=session.renderView({width:300});
+    expect(svg).toContain('id="symbols"');
+    expect([...svg.matchAll(/<path[^>]*data-building-id="[^"]+"/g)]).toHaveLength(0);
+  });
   it('publishes measured coverage for viewport limits without treating legacy coasts as surveyed',()=>{
     const measured=createSettlementSession({...input,engine:'city',waterContext:{version:1,status:'measured',
       coordinateSpace:'burg-local-metres',surveyRadiusM:3000,geometryErrorM:0,bodies:[]}}, {seed:2});
