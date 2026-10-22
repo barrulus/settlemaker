@@ -5,6 +5,9 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { medievalHousing, housingForms, housingVariantCount } from './art/medieval-housing.mjs';
+import { medievalCommerce, commerceForms } from './art/medieval-commerce.mjs';
+import { medievalUrban, urbanForms } from './art/medieval-urban.mjs';
+import { medievalLandmark } from './art/medieval-landmarks.mjs';
 import { architecture } from './art/architecture.mjs';
 import { landmarkFamilies, drawLandmark, compoundLayouts, writeCompounds } from './art/city-landmarks.mjs';
 
@@ -40,6 +43,9 @@ const { ink, fmt, path, rect, token, points, roof } = architecture(biomes);
 
 function glyph(f,biome) {
   if(biome==='temperate' && housingForms.has(f.key))return medievalHousing(f);
+  if(biome==='temperate' && commerceForms.has(f.key))return medievalCommerce(f);
+  if(biome==='temperate' && urbanForms.has(f.key))return medievalUrban(f);
+  if(biome==='temperate' && f.category)return medievalLandmark(f);
   if (f.category) return drawLandmark(f, biome, { ink, path, rect, token, points, roof });
   const cover=['row-house-b','guildhall','market-hall'].includes(f.key)?'full'
     :['row-house-a','warehouse','courtyard-u','inn'].includes(f.key)?'plane':'eaves';

@@ -205,8 +205,10 @@ describe('fidelity round 4: probe path', () => {
     // Housing, paths, census and generator RNG retain their geometry.
     // Medieval roof variants, paved urban ground and unoutlined inner streets.
     // Reviewed the rendered comparison and checked exact repeatability.
-    // Rounded roof contours and matching silhouettes retain world-space lighting.
-    expect(sha256(svg)).toBe('b2c69a02ff0f336e99da75bf2a89f05f9cbe6fd9685d809945bf4e5eb60b39bc');
+    // Housing, commerce and landmark roofs retain world-space lighting per face.
+    // The remaining seven temperate street forms now share that treatment;
+    // reviewed the rendered fixture and verified identical repeated output.
+    expect(sha256(svg)).toBe('d3ce5cf9c5eae470a2094d6a277044ea55941123c3e3a90ed978e5b716b1cef5');
   });
 
   it('pins direct legacy generateFromBurg output at pop 800 (not the village engine)', () => {
@@ -314,8 +316,8 @@ describe('fidelity round 4: probe path', () => {
     // Shared biome ground with paved city roads; urban street corridors and lane mouths are visible.
     // Reviewed both Aldford fixtures and verified exact repeatability before repinning.
     // Shared road surface styles and visible gate jambs update the SVG.
-    // The shared renderer also gains the softer outline and paving definitions.
-    expect(sha256(svg)).toBe('8c378f67b09ce80be8bd6a6610895375a3acc6f4ecfca04dedbab5a61ed9f4a3');
+    // The shared renderer also gains softer outlines, paving and lit wall towers.
+    expect(sha256(svg)).toBe('bd4681e63f3cd0ee0e2ed6b16c085130bb6ac48cfe631f20918ea2e002a6b3a4');
   });
 });
 

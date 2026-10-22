@@ -15,7 +15,8 @@ const result = generateSettlement(input, {seed:2});
 const scene = result.model.scene;
 // Fixed world coordinates keep both comparisons honest even when parcels change.
 const close = assembleSvg({...scene, bounds:{min_x:-60,min_y:-60,max_x:60,max_y:60}}, {pixelsPerUnit:8});
-for (const [name,svg,width] of [['city',result.svg,1600], ['block',close,1200]]) {
+const centre = assembleSvg({...scene, bounds:{min_x:-240,min_y:-240,max_x:240,max_y:240}}, {pixelsPerUnit:4});
+for (const [name,svg,width] of [['city',result.svg,1600], ['centre',centre,1600], ['block',close,1200]]) {
   writeFileSync(new URL(`${stage}-${name}.svg`,out),svg);
   await sharp(Buffer.from(svg.replace(/var\(--[^,]+,\s*([^\)]+)\)/g,'$1'))).resize({width}).png().toFile(new URL(`${stage}-${name}.png`,out).pathname);
 }
@@ -27,5 +28,5 @@ const stages=['before','after'].filter(s=>existsSync(new URL(`${s}-block.png`,ou
 writeFileSync(new URL('index.html',out),`<!doctype html><meta charset="utf-8"><title>Medieval housing study</title>
 <style>body{margin:32px;background:#eee8dd;color:#453c32;font:16px system-ui}h1{font:32px Georgia}main{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:24px}img{width:100%}a{color:#68513a}</style>
 <h1>Medieval housing study</h1><p>Population 10,000 · seed 2 · identical 120-metre view. Click for full vector detail.</p>
-<main>${stages.map(s=>`<article><h2>${s}</h2><a href="${s}-block.svg"><img src="${s}-block.png" alt="${s} residential block"></a><p><a href="${s}-city.svg">Whole city SVG</a> · <a href="${s}-summary.json">Generation counts</a></p><img src="${s}-city.png" alt="${s} whole city"></article>`).join('')}</main>`);
+<main>${stages.map(s=>`<article><h2>${s}</h2><a href="${s}-block.svg"><img src="${s}-block.png" alt="${s} residential block"></a>${existsSync(new URL(`${s}-centre.png`,out))?`<h3>City centre</h3><a href="${s}-centre.svg"><img src="${s}-centre.png" alt="${s} city centre"></a>`:''}<p><a href="${s}-city.svg">Whole city SVG</a> · <a href="${s}-summary.json">Generation counts</a></p><img src="${s}-city.png" alt="${s} whole city"></article>`).join('')}</main>`);
 console.log(`Review: ${out.pathname}index.html`);

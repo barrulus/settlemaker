@@ -150,10 +150,15 @@ wall gate, village wall exports, bounded river crossings and henge selection.
 Existing population, street, collision, deterministic scene and GeoJSON tests
 remain part of the regression suite.
 
-## Medieval housing review
+## Medieval architecture review
 
-The first housing pass updates the four ordinary temperate city slots; other
-biomes and landmark drawing styles retain their existing artwork. Variations
+The housing pass updates the four ordinary temperate city slots. Temperate
+inns, warehouses and guildhalls now share that roof treatment, with connected
+inn wings, timber loading dormers and a guildhall lantern. All twenty temperate
+faith, palace and castle slots also use textured roofs, softened stonework and
+rounded details. Terraces, corner houses, both courtyard forms, workshops,
+bathhouses and market halls complete the treatment across all 34 temperate
+city families. Other biomes retain their existing artwork. Housing variations
 are authored in `scripts/art/medieval-housing.mjs`, saved with the city collection
 as `housing-variants.json`, and compiled into browser-safe runtime data. They
 reuse existing skin slots rather than extending the skin catalogue.
@@ -162,14 +167,37 @@ Housing roof planes are lit opposite the theme's `shadowOffset`, accounting for
 each placement's rotation and ridge axis. Inherited SVG paints keep the detailed
 glyph shared across rotations and work in raster exports; ground shadows retain
 their existing displacement. Custom replacement glyphs keep their own artwork.
+Commercial buildings are authored in `scripts/art/medieval-commerce.mjs` using
+the same roof drawing primitives. Each wing or raised roof has its own lighting
+section, so perpendicular wings share a world light direction. Their surveyed
+footprints, courtyard voids, building identities and skin slots are retained.
+The remaining street forms are authored in `scripts/art/medieval-urban.mjs`:
+adjoining terrace bays, connected courtyard wings, forge stacks, timber roof
+vents and an open market arcade. They share the roof primitives and independent
+wing lighting, with details and shadows contained in the existing footprints.
+Landmarks are authored in `scripts/art/medieval-landmarks.mjs`. Crossing roofs,
+hipped caps and conical towers have independently lit faces, including towers
+attached to generated city walls. Oblique cone faces account for non-uniform
+placement scale. Courtyards and gate passages remain unpainted; curtain-wall
+pieces retain their exact repeating endpoints.
 
 ```sh
 node scripts/build-city-symbols.mjs
 npm run build:art
 npm run build
 node scripts/review-medieval-housing.mjs after
+node scripts/review-medieval-commerce.mjs
+node scripts/review-medieval-urban.mjs
+node scripts/review-medieval-landmarks.mjs
 ```
 
-The review writes a full city and a fixed 120-metre residential view under
-`output/medieval-housing/`. Run the same script with `before` on the previous
+The review writes a full city, a 480-metre centre view and a fixed 120-metre
+residential view under `output/medieval-housing/`. Run the same script with `before` on the previous
 build to preserve a comparison. Both maps use population 10,000 and seed 2.
+The commerce review writes isolated buildings at two rotations under
+`output/medieval-commerce/`, using the runtime SVG renderer.
+The street-building review writes the remaining seven forms at two rotations
+and a contact sheet under `output/medieval-urban/`.
+The landmark review writes the complete kit and three palace/castle assemblies
+under `output/medieval-landmarks/`, also using the runtime renderer so every
+rotated component shares the same light direction.

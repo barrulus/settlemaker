@@ -191,8 +191,8 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   });
   if(L.walls.some(w=>!options.cullOffscreenArtwork||visibleTowers(w).length) && assets.glyphs?.[towerId]) glyphIds.add(towerId);
   const defaultArt = (s: SymbolInstance) => assets.name === 'settlement' && !skin?.overrides.has(s.id);
-  const nativeHousing = (s: { id: string }) => assets.name === 'settlement' && !skin?.overrides.has(s.id) && (!options.assetSet || options.assetSet===SETTLEMENT_SET);
-  const housing = (s: SymbolInstance) => nativeHousing(s) && Number.isInteger(s.artworkVariant)
+  const nativeArtwork = (s: { id: string }) => assets.name === 'settlement' && !skin?.overrides.has(s.id) && (!options.assetSet || options.assetSet===SETTLEMENT_SET);
+  const housing = (s: SymbolInstance) => nativeArtwork(s) && Number.isInteger(s.artworkVariant)
     ? HOUSING_VARIANTS[s.id]?.[s.artworkVariant!] : undefined;
   const materialId = (s: SymbolInstance) => `glyph-${s.id}${housing(s) ? `-shape-${s.artworkVariant}` : ''}${defaultArt(s) && s.materialVariant ? `-tone-${s.materialVariant}` : ''}`;
   const shadowId = (s: SymbolInstance) => housing(s) ? `${materialId(s)}-sil` : `glyph-${s.id}-sil`;
@@ -202,16 +202,25 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   const roofLighting = new Map<string, NonNullable<ReturnType<typeof prepareRoofLighting>>>();
   const lightRoof = (id: string, body: string, native: boolean): string => {
     const lighting = native ? prepareRoofLighting(body, paint => paint.replace(/var\((--[\w-]+),\s*([^)]*)\)/g,
-      (_, token: string, fallback: string) => String(tokens[token] ?? (options.palette ? themedMaterial(fallback, options.palette) : fallback)))) : undefined;
+      (_, token: string, fallback: string) => String(tokens[token] ?? (options.palette ? themedMaterial(fallback, options.palette) : fallback))), id) : undefined;
     if (!lighting) return body;
     roofLighting.set(id, lighting);
     return lighting.body;
   };
-  const roofAttributes = (s: SymbolInstance) => roofLighting.get(materialId(s))?.attributes(s.rotationDeg, theme.shadowOffset) ?? '';
+  const symbolMarkup = (s: SymbolInstance) => {
+    const id = materialId(s), lighting = roofLighting.get(id);
+    const linked = buildingAttribute(s.buildingId, s.buildingIds);
+    const glyph = assets.glyphs![s.id];
+    const transform = glyphTransform(s.at, s.scale, s.rotationDeg, glyph.viewBox, glyph.anchor, s.scaleY);
+    const stretch = ((s.scaleY ?? s.scale) / glyph.viewBox[3]) / (s.scale / glyph.viewBox[2]);
+    return lighting?.uses
+      ? `<g${linked} transform="${transform}">${lighting.uses(s.rotationDeg, theme.shadowOffset, stretch)}</g>`
+      : `<use href="#${id}"${linked}${lighting?.attributes(s.rotationDeg, theme.shadowOffset, stretch) ?? ''} transform="${transform}"/>`;
+  };
   const materialDefs = [...new Map(visibleSymbols.filter(s => defaultArt(s) && (s.materialVariant || housing(s))).map(s => [materialId(s), s])).entries()]
     .map(([id, s]) => {
       const art = housing(s) ?? assets.glyphs![s.id];
-      return `<g id="${id}">${lightRoof(id, fixedRoof ? art.body : recolourRoof(art.body, scene.biome, s.materialVariant ?? 0), nativeHousing(s))}</g>`
+      return `<g id="${id}">${lightRoof(id, fixedRoof ? art.body : recolourRoof(art.body, scene.biome, s.materialVariant ?? 0), nativeArtwork(s))}</g>`
         + (housing(s)?.sil ? `<g id="${id}-sil">${art.sil}</g>` : '');
     }).join('');
   const glyphDefs = [...glyphIds].map(id => {
@@ -219,7 +228,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     // Plain groups have no viewport: the instance transform alone sets size.
     // Width/height on <symbol> is insufficient in renderers whose <use>
     // defaults to the enclosing viewport. This is the village renderer's rule.
-    return `<g id="glyph-${id}">${lightRoof(`glyph-${id}`, g.body, nativeHousing({ id }))}</g>`
+    return `<g id="glyph-${id}">${lightRoof(`glyph-${id}`, g.body, nativeArtwork({ id }))}</g>`
       + (g.sil ? `<g id="glyph-${id}-sil">${g.sil}</g>` : '');
   }).join('');
 
@@ -405,8 +414,11 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
 
   if (structureSymbols.length > 0) {
     parts.push('<g id="symbols">');
-    for (const s of [...structureSymbols].sort((a, b) => a.at.y - b.at.y)) {
-      parts.push(`<use href="#${materialId(s)}"${buildingAttribute(s.buildingId, s.buildingIds)}${roofAttributes(s)} transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor, s.scaleY)}"/>`);
+    // Curtain-wall kit pieces run underneath the taller towers they join,
+    // including when a wall's centre lies farther south than its tower.
+    const structureOrder = (s: SymbolInstance) => ARTWORK_MANIFEST[s.id]?.family === 'castle-wall' ? 0 : 1;
+    for (const s of [...structureSymbols].sort((a, b) => structureOrder(a) - structureOrder(b) || a.at.y - b.at.y)) {
+      parts.push(symbolMarkup(s));
     }
     parts.push('</g>');
   }
@@ -421,7 +433,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
         const g=assets.glyphs?.[towerId];
         if(g)for(const t of visibleTowers(wallF)){
           // Leave real gate openings clear, even where a legacy tower coincides with a gate vertex.
-          parts.push(`<use href="#glyph-${towerId}" transform="${glyphTransform(t,wallTowerCanvas(wallF.large),0,g.viewBox,g.anchor)}"/>`);
+          parts.push(symbolMarkup({id:towerId,at:t,scale:wallTowerCanvas(wallF.large),rotationDeg:0,zBand:'structure'}));
         }
         continue;
       }
@@ -459,7 +471,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
   if (markSymbols.length > 0) {
     parts.push('<g id="marks">');
     for (const s of [...markSymbols].sort((a, b) => a.at.y - b.at.y)) {
-      parts.push(`<use href="#${materialId(s)}"${buildingAttribute(s.buildingId, s.buildingIds)}${roofAttributes(s)} transform="${glyphTransform(s.at, s.scale, s.rotationDeg, assets.glyphs![s.id].viewBox, assets.glyphs![s.id].anchor, s.scaleY)}"/>`);
+      parts.push(symbolMarkup(s));
     }
     parts.push('</g>');
   }

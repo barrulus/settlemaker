@@ -4,9 +4,10 @@
 export const housingForms = new Set(['row-house-a','row-house-b','shop-house','tenement']);
 export const housingVariantCount = 8;
 
-export function medievalHousing(family, variant = 0) {
+export function medievalHousing(family, variant = 0, options = {}) {
   const n = variant % housingVariantCount;
-  const material = ['slate','tile','shingle'][n % 3];
+  const material = options.material ?? ['slate','tile','shingle'][n % 3];
+  const detailScale = options.detailScale ?? 1;
   const ink = 'var(--sm-city-roof-ink, #68574b)';
   const roof = 'var(--sm-city-temperate-roof, #967d68)';
   const light = 'var(--sm-city-temperate-light, #b09a80)';
@@ -26,12 +27,13 @@ export function medievalHousing(family, variant = 0) {
   const line = (points, width=.3, opacity=.4) => `<path d="${d(points)}" fill="none" stroke="${ink}" stroke-width="${width}" opacity="${opacity}"/>`;
   let body = '', sil = '';
   for (const [panelIndex,panel] of family.panels.entries()) {
-    const [x0,y0,x1,y1,axis] = panel;
+    const [x0,y0,x1,y1] = panel.slice(0,4).map(v=>v/detailScale);
+    const axis=panel[4];
     const rotated = axis === 'x';
     const w = (rotated ? y1-y0 : x1-x0)-1.6, h = (rotated ? x1-x0 : y1-y0)-1.6;
-    const local = ([u,v]) => rotated ? [x0+.8+v,y0+.8+u] : [x0+.8+u,y0+.8+v];
-    const shape = (points,fill,width=.55,extra='',radius=0) => polygon(points.map(local),fill,width,extra,radius);
-    const stroke = (points,width,opacity) => line(points.map(local),width,opacity);
+    const local = ([u,v]) => (rotated ? [x0+.8+v,y0+.8+u] : [x0+.8+u,y0+.8+v]).map(v=>v*detailScale);
+    const shape = (points,fill,width=.55,extra='',radius=0) => polygon(points.map(local),fill,width*detailScale,extra,Array.isArray(radius)?radius.map(r=>r*detailScale):radius*detailScale);
+    const stroke = (points,width,opacity) => line(points.map(local),width*detailScale,opacity);
     const q = (n+panelIndex*3)%8;
     const taper = [.3,1.3,.7,1.7,.5,1.1,1.5,.8][q];
     const ridge = w*[.46,.53,.43,.5,.55,.45,.52,.48][q];
@@ -43,7 +45,7 @@ export function medievalHousing(family, variant = 0) {
     // Small, varied curves soften the eaves without losing the irregular plan.
     const corner=1.6+(q%3)*.2;
     body += shape(outline,roof,.7,'',corner);
-    sil += `<path d="${rounded(outline.map(local),corner)}" fill="currentColor" stroke="currentColor" stroke-width=".7"/>`;
+    sil += `<path d="${rounded(outline.map(local),corner*detailScale)}" fill="currentColor" stroke="currentColor" stroke-width="${detailScale===1?'.7':.7*detailScale}"/>`;
     const rt=[ridge,top+.5], rb=[ridge+(q%2?.8:-.6),bottom-.1];
     // Keep both planes explicit: the renderer lights them in world space.
     // These default fills also keep the standalone artwork catalogue readable.
@@ -65,7 +67,9 @@ export function medievalHousing(family, variant = 0) {
           const bend=Math.sin(j*2+course+q)*.22;
           body+=stroke([[x,y],[x+bend,(y+end)/2],[x+.1,end]],material==='tile'?.32:.26,.34);
           if((j+q)%3!==0)body+=stroke([[x,y],[x+side*Math.min(pitch-.5,span-u),y+.2]],.25,.28);
-          if((j*3+course+q)%13===0)body+=shape([[x,y+.4],[x+side*(pitch-.6),y+.6],[x+side*(pitch-.7),end-.4],[x,end-.5]],light,0,'opacity=".22"');
+          // The last course may be narrower than a full tile, especially on
+          // cathedral aisles. Keep its highlight inside the available slope.
+          if((j*3+course+q)%13===0)body+=shape([[x,y+.4],[x+side*Math.min(pitch-.6,span-u),y+.6],[x+side*Math.min(pitch-.7,span-u),end-.4],[x,end-.5]],light,0,'opacity=".22"');
         }
       }
     }
@@ -76,8 +80,9 @@ export function medievalHousing(family, variant = 0) {
     if(step) {
       const addition=[[w-4,1],[w-1,1.3],[w-.6,6],[w-4,5.4]];
       body+=shape(addition,roof,.45,'data-roof-face="positive"',.65);
-      sil+=`<path d="${rounded(addition.map(local),.65)}" fill="currentColor" stroke="currentColor" stroke-width=".45"/>`;
+      sil+=`<path d="${rounded(addition.map(local),.65*detailScale)}" fill="currentColor" stroke="currentColor" stroke-width="${detailScale===1?'.45':.45*detailScale}"/>`;
     }
+    if(options.features===false)continue;
     // Stacks differ in location and angle but remain fully within the roof.
     const cx=q%2?Math.max(4,ridge-5):Math.min(w-5,ridge+5), cy=7+(q%3)*6;
     body+=shape([[cx,cy],[cx+2.7,cy+.2],[cx+2.5,cy+4],[cx-.2,cy+3.8]],wall,.45);
