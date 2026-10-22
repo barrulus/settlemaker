@@ -211,7 +211,9 @@ describe('fidelity round 4: probe path', () => {
     // Medieval rural roofs, soft wall ink and road-sized gate towers now
     // replace the old suburban art and oversized gaps. Reviewed and repeatable.
     // Full-length open timber doors now follow each entrance road.
-    expect(sha256(svg)).toBe('576c37a721d5144965d9725df45f7f237cf6557b8502ef3813aed6256a24ef86');
+    // Suburban dwellings now use varied plans and the same roof contours as cities.
+    expect(generateFromBurg(aldford(1400), {seed:9}).svg).toBe(svg);
+    expect(sha256(svg)).toBe('3da892f81debc1d1a972ab8d91142da591b0e78beacd6c8f51954d3d3dab9493');
   });
 
   it('pins direct legacy generateFromBurg output at pop 800 (not the village engine)', () => {

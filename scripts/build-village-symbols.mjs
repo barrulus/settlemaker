@@ -2,7 +2,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
-import { drawVillage, villageBiomes as biomes } from './art/village-buildings.mjs';
+import { drawVillage, ruralHousingForms, ruralVariantCount, villageBiomes as biomes } from './art/village-buildings.mjs';
 
 const out=fileURLToPath(new URL('../symbols/village/',import.meta.url));
 mkdirSync(`${out}/individual`,{recursive:true});
@@ -10,12 +10,15 @@ const original=JSON.parse(readFileSync(new URL('./art/village-footprints.json',i
 const ids=Object.keys(original.symbols);
 const wrap=(body,attrs='')=>`<svg xmlns="http://www.w3.org/2000/svg" ${attrs}>${body}</svg>\n`;
 const fallback=svg=>svg.replace(/var\(--[^,]+,\s*([^\)]+)\)/g,'$1');
-const assets={},symbols={};
+const assets={},symbols={},variants={};
 for(const id of ids) {
   const a=drawVillage(id);assets[id]=a;
+  if(ruralHousingForms.has(a.family))variants[id]=Array.from({length:ruralVariantCount},(_,i)=>{
+    const {body,sil}=drawVillage(id,i);return {body,sil};
+  });
   // Measure the full body + shadow support with a padded viewport, so tile
   // overhangs and projecting rural porches cannot be hidden by SVG clipping.
-  const s=wrap(`<g>${a.body}${a.sil}</g>`,'viewBox="-8 -8 80 80" width="320" height="320"');
+  const s=wrap(`<g>${(variants[id]??[a]).map(v=>v.body+v.sil).join('')}</g>`,'viewBox="-8 -8 80 80" width="320" height="320"');
   const pixels=await sharp(Buffer.from(fallback(s))).ensureAlpha().raw().toBuffer();
   let x0=320,y0=320,x1=0,y1=0;
   for(let y=0;y<320;y++)for(let x=0;x<320;x++)if(pixels[(y*320+x)*4+3]>0){x0=Math.min(x0,x);y0=Math.min(y0,y);x1=Math.max(x1,x+1);y1=Math.max(y1,y+1);}
@@ -28,6 +31,7 @@ for(const id of ids) {
   writeFileSync(`${out}/individual/${id}.svg`,wrap(`<title>${id}</title>${a.body}`,'viewBox="0 0 64 64" width="64" height="64" overflow="visible"'));
   writeFileSync(`${out}/individual/${id}-sil.svg`,wrap(a.sil,'viewBox="0 0 64 64" width="64" height="64" overflow="visible"'));
 }
+writeFileSync(`${out}/housing-variants.json`,JSON.stringify(variants)+'\n');
 const defs=Object.entries(assets).map(([id,a])=>`<symbol id="${id}" viewBox="0 0 64 64" overflow="visible">${a.body}</symbol><symbol id="${id}-sil" viewBox="0 0 64 64" overflow="visible">${a.sil}</symbol>`).join('');
 writeFileSync(`${out}/symbols.svg`,wrap(defs,'width="0" height="0" aria-hidden="true"'));
 writeFileSync(`${out}/symbols.json`,JSON.stringify({format:'settlemaker-village-buildings-v1',biomes,

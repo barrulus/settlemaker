@@ -15,10 +15,12 @@ const input={name:'Housing',population:2000,biome:'temperate',engine:'city' as c
 
 describe('medieval housing and urban ground',()=>{
   it('contains every roof and its shadow inside the shared measured fitting envelope',async()=>{
-    expect(Object.keys(HOUSING_VARIANTS)).toHaveLength(20);
+    expect(Object.keys(HOUSING_VARIANTS).filter(id=>id.startsWith('sm-city-'))).toHaveLength(20);
+    expect(Object.keys(HOUSING_VARIANTS).filter(id=>!id.startsWith('sm-city-'))).toHaveLength(12);
     for(const [id,variants] of Object.entries(HOUSING_VARIANTS)) {
       expect(variants).toHaveLength(8);
       expect(new Set(variants.map(v=>v.body)).size).toBe(8);
+      expect(new Set(variants.map(v=>v.sil)).size).toBe(8);
       const [x0,y0,x1,y1]=ARTWORK_INK[id].bounds;
       for(const variant of variants) {
         const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 64 64">${variant.body}${variant.sil}</svg>`;
@@ -41,6 +43,23 @@ describe('medieval housing and urban ground',()=>{
     expect(homes.every(s=>s.id.endsWith(`--${biome}`))).toBe(true);
     expect(first.model.residents.unassigned).toBe(0);
     expect(generateSettlement({...input,biome},{seed:2}).model.scene).toEqual(first.model.scene);
+  });
+
+  it.each(['temperate','desert','tundra','tropical','coastal'])('varies rural houses in %s villages and preserves custom skins',biome=>{
+    const first=generateSettlement({...input,biome,engine:'village',population:180,walls:false},{seed:2});
+    const scene=first.model.scene;
+    const homes=scene.layers.symbols.filter(s=>HOUSING_VARIANTS[s.id]&&!s.id.startsWith('sm-city-'));
+    expect(homes.length).toBeGreaterThan(10);
+    expect(homes.every(s=>s.artworkVariant!==undefined)).toBe(true);
+    expect(new Set(homes.map(s=>s.artworkVariant)).size).toBeGreaterThan(4);
+    expect(generateSettlement({...input,biome,engine:'village',population:180,walls:false},{seed:2}).model.scene).toEqual(scene);
+    const home=homes[0], isolated={...scene,layers:{...scene.layers,symbols:[home]}};
+    expect(assembleSvg(isolated)).toContain(`glyph-${home.id}-shape-${home.artworkVariant}-sil`);
+    const body='<path d="M12 12H52V52H12Z" fill="#abcdef"/>';
+    const skin=createSkin({version:1,id:'rural-test',name:'Rural override',glyphs:{[home.id]:{body,sil:body}}});
+    const custom=assembleSvg(isolated,{skin});
+    expect(custom).toContain(body);
+    expect(custom).not.toContain(`glyph-${home.id}-shape-`);
   });
 
   it('saves repeatable variations, uses mostly paved dense yards, and exports the same ground',()=>{

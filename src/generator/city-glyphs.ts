@@ -318,7 +318,8 @@ export function placeCityGlyphs(model: Model): void {
       const artworkVariant=variants ? Math.floor(landscapeHash(Math.round(building.centroid.x*10),Math.round(building.centroid.y*10),model.params.seed^0x524f4f46)*variants.length) : undefined;
       // Clay, timber and slate colours follow the roof material; shape has its
       // own stable hash, independent of population accounting and planner RNG.
-      const materialVariant=artworkVariant===undefined ? (roll<.45?0:1+Math.floor((roll-.45)/.55*4)) : [4,2,1][artworkVariant%3];
+      // Rural thatch/adobe/snow keep their authored regional materials.
+      const materialVariant=variants&&!best.id.startsWith('sm-city-') ? 0 : artworkVariant===undefined ? (roll<.45?0:1+Math.floor((roll-.45)/.55*4)) : [4,2,1][artworkVariant%3];
       model.symbols.push({ ...best, wardType: ward.type, materialVariant, ...(artworkVariant!==undefined?{artworkVariant}:{}) });
       model.glyphBackedBuildings.add(building);
     }

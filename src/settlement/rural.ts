@@ -1,3 +1,4 @@
+import { housingVariation } from '../assets/housing-variation.js';
 import { countrysidePlan } from './countryside.js';
 import { roadCorridor } from '../geom/road-corridor.js';
 import { Point } from '../types/point.js';
@@ -138,7 +139,7 @@ export function addRuralHousing(layout: Layout, profile: DevelopmentProfile, see
       const symbol=fitCityGlyph(footprint,glyph,1,frontage,.35,1.35,1.25);
       const id=`building:rural:${ordinal}:${i}`;
       L.buildings.push({id,ring:footprint.vertices,kind:'farm',landmark:false,...(symbol?{glyphBacked:true as const}:{})});
-      if(symbol)L.symbols.push({id:symbol.id,at:symbol.at,scale:symbol.scale,scaleY:symbol.scaleY,rotationDeg:symbol.rotationDeg,zBand:'structure',buildingId:id});
+      if(symbol)L.symbols.push({artworkVariant:housingVariation(symbol.id,symbol.at,seed),id:symbol.id,at:symbol.at,scale:symbol.scale,scaleY:symbol.scaleY,rotationDeg:symbol.rotationDeg,zBand:'structure',buildingId:id});
       layout.buildings.push({id,districtId,footprint:footprint.vertices,capacity:profile.edgeOccupancy,residents:0,insideWalls:false,urbanity:0,settlementRole:'rural'});
       claimed.insert(placementBounds(footprint.vertices,1),footprint);
       placed.push(footprint);capacity+=profile.edgeOccupancy;

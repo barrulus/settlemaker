@@ -1,3 +1,4 @@
+import { housingVariation } from '../assets/housing-variation.js';
 import { coverageExceeded } from '../input/water-context.js';
 import type { AzgaarBurgInput } from '../input/azgaar-input.js';
 import { Point } from '../types/point.js';
@@ -396,7 +397,7 @@ export function generateVillage(
   }
 
   return {
-    site, green, lanes: framedLanes, lots: survivingLots, buildings: spend.buildings,
+    site, green, lanes: framedLanes, lots: survivingLots, buildings: spend.buildings.map(b => ({...b, artworkVariant:housingVariation(b.glyph,b.position,seed)})),
     edgeStyle: dressing.edgeStyle, crofts: dressing.crofts, fields: dressing.fields,
     fieldEdges: dressing.fieldEdges, vegetation: dressing.vegetation, pois: dressing.pois,
     diagnostics, ...(dressing.wall ? {wall:dressing.wall} : {}),

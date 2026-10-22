@@ -1,3 +1,4 @@
+import { HOUSING_VARIANTS } from '../assets/housing-data.js';
 import { roundedRingPath } from '../output/rounded-ring.js';
 import { prepareRoofLighting } from '../output/roof-lighting.js';
 import { resolveAppearance, themedMaterial } from '../appearance/resolve.js';
@@ -96,7 +97,12 @@ export function renderVillage(
   model: VillageModel, pxPerMetre = 4, theme?: VillageTheme, options: VillageRenderOptions = {},
 ): string {
   const skin = options.skin ? resolveSkin(options.skin, options.skinBiome ?? model.site.biome) : undefined;
-  const glyphs = skin?.assets.glyphs ?? REFINED_GLYPHS;
+  const glyphs = {...(skin?.assets.glyphs ?? REFINED_GLYPHS)};
+  const variantGlyph = (id:string, variant:number|undefined):string => {
+    const markup = variant===undefined || skin?.overrides.has(id) ? undefined : HOUSING_VARIANTS[id]?.[variant];
+    if(!markup)return id;
+    const key=`${id}-shape-${variant}`;glyphs[key]=markup;return key;
+  };
   const appearance = resolveAppearance(model.site.biome, options.palette, options.style, skin ? { ...skin, city: {} } : undefined);
   theme = theme ? { ...appearance.village, ...theme, tokens: { ...appearance.tokens, ...theme.tokens } } : appearance.village;
   const roadColor = options.palette || options.style?.roadCore !== undefined ? appearance.city.roadCore : '#8a6f4a';
@@ -132,7 +138,7 @@ export function renderVillage(
   }
   const structureItems: StructureItem[] = [
     ...model.buildings.map((b): StructureItem => (
-      { id: b.id, glyph: b.glyph, position: b.position, bearingDeg: b.bearingDeg, footprint: b.footprint, kind: 'building' }
+      { id: b.id, glyph: variantGlyph(b.glyph,b.artworkVariant), position: b.position, bearingDeg: b.bearingDeg, footprint: b.footprint, kind: 'building' }
     )),
     ...model.pois.map((p): StructureItem => (
       { id: p.id, glyph: p.glyph, position: p.position, bearingDeg: p.bearingDeg, footprint: nominalFootprint(p.glyph), kind: 'poi' }

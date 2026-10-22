@@ -54,7 +54,19 @@ export function medievalHousing(family, variant = 0, options = {}) {
     body += shape([rt,...outline.slice(1,-2),rb],roof,0,'data-roof-face="positive"',[0,...outline.slice(1,-2).map(()=>corner),0]);
     // Courses run parallel to the ridge. Short staggered joints and occasional
     // missing marks suggest tiles/shingles without the old cross-roof stripes.
-    for (const side of [-1,1]) {
+    if(material==='thatch') {
+      // Broken fibres follow the fall of the roof, not ruled tile courses.
+      for(const side of [-1,1])for(let row=0,v=3;v<h-3;v+=3.8,row++) {
+        const span=side<0?ridge-2:w-ridge-2;
+        for(let j=0,u=2+(row%2)*1.7;u<span-1;u+=4.1,j++) {
+          const x=ridge+side*u, y=v+Math.sin(row*2.3+j+q)*.6;
+          if(step&&x>w-5&&y<7)continue;
+          if((row+j+q)%6===0)continue;
+          const end=x+side*Math.min(2.1,span-u);
+          body+=stroke([[x,y],[end,y+.35+Math.sin(j+q)*.25]],.28,.3);
+        }
+      }
+    } else for (const side of [-1,1]) {
       const span = side<0 ? ridge-2 : w-ridge-2;
       const pitch = material==='tile'?3.1:material==='slate'?3.7:2.8;
       for(let course=0,u=2;u<span;u+=pitch,course++) {

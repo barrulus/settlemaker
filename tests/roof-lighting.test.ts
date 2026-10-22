@@ -6,7 +6,7 @@ import { ART_GLYPHS, ART_META } from '../src/assets/artwork-data.js';
 import { wallTowerCanvas } from '../src/assets/fortification-dimensions.js';
 import { prepareRoofLighting } from '../src/output/roof-lighting.js';
 
-function fixture(id: string, rotationDeg: number): Scene {
+function fixture(id: string, rotationDeg: number, artworkVariant = 0): Scene {
   return {
     version: 2, seed: 1, population: 0, biome: id.split('--')[1]??'temperate',
     bounds: { min_x: -64, min_y: -64, max_x: 64, max_y: 64 },
@@ -14,7 +14,7 @@ function fixture(id: string, rotationDeg: number): Scene {
       water: { rings: [], synthetic: false }, fields: [], furrows: [], greens: [],
       vegetation: [], roads: [], buildings: [], piers: [], walls: [],
       symbols: [{ id, rotationDeg, at: { x: 0, y: 0 }, scale: 64, scaleY: 96,
-        zBand: 'structure', artworkVariant: 0, materialVariant: 4 }],
+        zBand: 'structure', artworkVariant, materialVariant: 4 }],
     },
   };
 }
@@ -23,9 +23,12 @@ describe('roof lighting in world space', () => {
   it.each([
     { id:'sm-house', cross:true, samples:[[32,22],[32,39]] },
     { id:'sm-house-tiled', cross:true, samples:[[32,22],[32,39]] },
+    // One L-shaped cottage has perpendicular main and extension ridges.
+    { id:'sm-house-tiled', variant:2, cross:true, samples:[[27,23],[27,38]] },
+    { id:'sm-house-tiled', variant:2, cross:false, samples:[[41,37],[49,37]] },
     { id:'sm-house--coastal', cross:true, samples:[[32,22],[32,39]] },
     { id:'sm-house--tropical', cross:true, samples:[[32,22],[32,39]] },
-    { id:'sm-house--tundra', cross:true, samples:[[37,27.6],[37,33.4]] },
+    { id:'sm-house--tundra', cross:true, samples:[[35,22],[35,37]] },
     { id:'sm-hut-straw', cross:false, samples:[[22,31],[42,31]] },
     { id:'sm-chapel', cross:false, samples:[[27,30],[37,30]], sampleRadius:1 },
     { id:'sm-city-row-house-a', cross:false, samples:[[24,35],[40,35]] },
@@ -54,9 +57,9 @@ describe('roof lighting in world space', () => {
     { id:'sm-city-row-house-a--tundra', cross:false, samples:[[22,23],[43,23]] },
     { id:'sm-city-row-house-a--tundra', cross:false, samples:[[27,35],[34,35]] },
     { id:'sm-city-row-house-a--desert', cross:false, samples:[[18.73,32],[45.25,32]], resolution:2048, sampleRadius:2 },
-  ])('lights the sunward face of rotated and stretched $id (cross ridge: $cross)', async ({id,cross,samples,resolution=512,sampleRadius=3}) => {
+  ])('lights the sunward face of rotated and stretched $id (cross ridge: $cross)', async ({id,cross,samples,variant=0,resolution=512,sampleRadius=3}) => {
     for (const rotation of [0, 90, 180, 270, 37, 127]) for (const direction of [1, -1]) {
-      const scene = fixture(id, rotation);
+      const scene = fixture(id, rotation, variant);
       const shadowOffset = { dx: .4 * direction, dy: .6 * direction };
       const svg = assembleSvg(scene, { theme: { shadowOffset } });
       expect(svg).toContain(`<g id="shadows" transform="translate(${shadowOffset.dx.toFixed(2)},${shadowOffset.dy.toFixed(2)})">`);
