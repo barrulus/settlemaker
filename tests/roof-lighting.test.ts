@@ -21,6 +21,13 @@ function fixture(id: string, rotationDeg: number): Scene {
 
 describe('roof lighting in world space', () => {
   it.each([
+    { id:'sm-house', cross:true, samples:[[32,22],[32,39]] },
+    { id:'sm-house-tiled', cross:true, samples:[[32,22],[32,39]] },
+    { id:'sm-house--coastal', cross:true, samples:[[32,22],[32,39]] },
+    { id:'sm-house--tropical', cross:true, samples:[[32,22],[32,39]] },
+    { id:'sm-house--tundra', cross:true, samples:[[37,27.6],[37,33.4]] },
+    { id:'sm-hut-straw', cross:false, samples:[[22,31],[42,31]] },
+    { id:'sm-chapel', cross:false, samples:[[27,30],[37,30]], sampleRadius:1 },
     { id:'sm-city-row-house-a', cross:false, samples:[[24,35],[40,35]] },
     { id:'sm-city-row-house-b', cross:true, samples:[[32,20],[32,44]] },
     { id:'sm-city-inn', cross:true, samples:[[32,6],[32,16]] },

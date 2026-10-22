@@ -1,3 +1,10 @@
+import { medievalHousing } from './medieval-housing.mjs';
+import { desertRoof } from './medieval-desert.mjs';
+import { tundraRoof } from './medieval-tundra.mjs';
+import { coastalRoof } from './medieval-coastal.mjs';
+import { tropicalRoof } from './medieval-tropical.mjs';
+import { flattenRoofSections } from './roof-sections.mjs';
+
 /** Rural building drawings: detached roofs, porches, local materials. */
 export const villageBiomes = {
   temperate:{roof:'#b49b72',light:'#dac59d',wall:'#ded4be',accent:'#a5786e',wood:'#95816b',ground:'#a3c98d',description:'Thatch, warm plaster, timber porches and occasional tile or slate'},
@@ -9,7 +16,7 @@ export const villageBiomes = {
 
 export function drawVillage(id) {
   const [base,suffix]=id.split('--'),biome=suffix??'temperate',p=villageBiomes[biome];
-  const ink='var(--sm-ink, #33262e)',snow='var(--sm-snow, #f2f6f8)',voidFill='var(--sm-void, #6b5460)';
+  const ink='var(--sm-village-ink, #68574b)',snow='var(--sm-snow, #f2f6f8)',voidFill='var(--sm-void, #6b5460)';
   const t=role=>`var(--sm-village-${biome}-${role}, ${p[role]})`;
   const material=(name,value)=>`var(--sm-village-${name}, ${value})`;
   const tile=material('tile','#b78977'),tileLight=material('tile-light','#d3aa91');
@@ -17,73 +24,47 @@ export function drawVillage(id) {
   let body='',sil='';
   const n=v=>Number(v.toFixed(2));
   const poly=pts=>pts.map(([x,y],i)=>`${i?'L':'M'}${n(x)},${n(y)}`).join(' ')+'Z';
-  const path=(d,fill='none',sw=.6,extra='')=>`<path d="${d}" fill="${fill}" stroke="${ink}" stroke-width="${sw}" ${extra}/>`;
+  const path=(d,fill='none',sw=.6,extra='')=>`<path d="${d}" fill="${fill}" stroke="${ink}" stroke-width="${n(sw*.42)}" ${extra}/>`;
   const shape=(d,fill,sw=1.9)=>{
     body+=path(d,fill,sw);
-    sil+=`<path d="${d}" fill="currentColor" stroke="currentColor" stroke-width="${sw}"/>`;
+    sil+=`<path d="${d}" fill="currentColor" stroke="currentColor" stroke-width="${n(sw*.42)}"/>`;
   };
   const rectPath=(x,y,w,h)=>`M${n(x)},${n(y)}h${n(w)}v${n(h)}h${n(-w)}Z`;
-  const rect=(x,y,w,h,fill,sw=.8,casts=false)=>casts?shape(rectPath(x,y,w,h),fill,sw):body+=path(rectPath(x,y,w,h),fill,sw);
+  const softRect=(x,y,w,h)=>{
+    const r=Math.min(.8,w*.15,h*.15);
+    return `M${n(x+r)},${n(y)}H${n(x+w-r)}Q${n(x+w)},${n(y)} ${n(x+w)},${n(y+r)}V${n(y+h-r)}Q${n(x+w)},${n(y+h)} ${n(x+w-r)},${n(y+h)}H${n(x+r)}Q${n(x)},${n(y+h)} ${n(x)},${n(y+h-r)}V${n(y+r)}Q${n(x)},${n(y)} ${n(x+r)},${n(y)}Z`;
+  };
+  const rect=(x,y,w,h,fill,sw=.8,casts=false)=>casts?shape(softRect(x,y,w,h),fill,sw):body+=path(softRect(x,y,w,h),fill,sw);
   const line=(d,sw=.6,opacity=1)=>body+=path(d,'none',sw,`opacity="${opacity}"`);
   const circle=(x,y,r,fill,sw=.8,casts=false)=>{
-    body+=`<circle cx="${n(x)}" cy="${n(y)}" r="${n(r)}" fill="${fill}" stroke="${ink}" stroke-width="${sw}"/>`;
-    if(casts)sil+=`<circle cx="${n(x)}" cy="${n(y)}" r="${n(r)}" fill="currentColor" stroke="currentColor" stroke-width="${sw}"/>`;
+    body+=`<circle cx="${n(x)}" cy="${n(y)}" r="${n(r)}" fill="${fill}" stroke="${ink}" stroke-width="${n(sw*.42)}"/>`;
+    if(casts)sil+=`<circle cx="${n(x)}" cy="${n(y)}" r="${n(r)}" fill="currentColor" stroke="currentColor" stroke-width="${n(sw*.42)}"/>`;
   };
-  function roof(x,y,w,h,{cover='plane',kind='local',porch=false,axisLocked=false}={}) {
-    // Long naves and taller annexes need a ridge along their long dimension.
-    // Transpose only the roof; their south-facing porch stays with the house.
-    if(!axisLocked&&h>w*1.1) {
-      const previousBody=body,previousSil=sil;body='';sil='';
-      roof(y,x,h,w,{cover,kind,porch,axisLocked:true});
-      body=previousBody+`<g transform="matrix(0 1 1 0 0 0)">${body}</g>`;
-      sil=previousSil+`<g transform="matrix(0 1 1 0 0 0)">${sil}</g>`;
-      return;
-    }
-    const flat=biome==='desert',thatched=kind==='thatch'||biome==='tropical'||(biome==='temperate'&&kind==='local');
+  function roof(x,y,w,h,{kind='local',porch=false}={}) {
+    const thatched=kind==='thatch'||biome==='tropical'||(biome==='temperate'&&kind==='local');
     const main=kind==='tile'?tile:kind==='slate'?slate:kind==='thatch'&&biome==='coastal'?material('coastal-thatch','#b8ab8b'):t('roof');
     const light=kind==='tile'?tileLight:kind==='slate'?slateLight:kind==='thatch'&&biome==='coastal'?material('coastal-thatch-light','#d4c7a6'):t('light');
-    const hip=porch?2:biome==='tropical'?Math.min(8,w*.19):Math.min(5,w*.14),ry=y+h*.48;
-    // Modest irregularity distinguishes hand-built eaves from party-wall modules.
-    const outline=poly([[x+.4,y+.3],[x+w-.5,y],[x+w,y+h-.6],[x+w*.65,y+h],[x+.1,y+h-.3]]);
-    shape(outline,main,porch?1.3:2);
-    if(flat) {
-      rect(x+2.4,y+2.4,w-4.8,h-4.8,light,.8);
-      for(let yy=y+6;yy<y+h-3;yy+=4.5)line(`M${n(x+4)},${n(yy)}L${n(x+w-4)},${n(yy+.12)}`,.42,.4);
-      if(w>24&&h>18){rect(x+w-10,y+h-8,5,4,t('wood'),.7);circle(x+6,y+6,1.5,t('accent'),.65);}
-      return;
-    }
-    body+=path(poly([[x+1.4,y+1.3],[x+w-1.5,y+1],[x+w-hip,ry],[x+hip,ry]]),light,0);
-    for(let xx=x+3.5;xx<x+w-2;xx+=thatched?2.6:3.3){
-      const f=(xx-x)/w,edge=Math.min(f,1-f),stop=ry-Math.max(0,hip-edge*w)*.45;
-      line(`M${n(xx)},${n(y+2.3)}L${n(xx+.18*Math.sin(xx))},${n(stop-1)}`,.5,.7);
-      line(`M${n(xx+.1)},${n(ry+1.2)}L${n(xx-.2*Math.sin(xx))},${n(y+h-2.3)}`,.5,.7);
-      if(!thatched&&!porch)line(`M${n(xx)},${n(y+h*.74)}h1.1`,.4,.6);
-    }
-    if(biome==='tundra') {
-      if(cover==='full')body+=path(poly([[x+1.3,y+1.3],[x+w-1.5,y+1.2],[x+w-1.3,y+h-1.4],[x+1.3,y+h-1.5]]),snow,0);
-      else {
-        if(cover==='plane')body+=path(poly([[x+1.3,y+1.4],[x+w-1.4,y+1.2],[x+w-hip,ry-.15],[x+hip,ry-.15]]),snow,0);
-        const depth=Math.min(4,h*.22);
-        const edge=[[x+1.3,y+h-1.5],[x+1.4,y+h-depth],[x+w*.24,y+h-depth*.85],[x+w*.43,y+h-depth*1.15],[x+w*.62,y+h-depth*.75],[x+w*.81,y+h-depth],[x+w-1.4,y+h-depth*.9],[x+w-1.4,y+h-1.5]];
-        body+=path(poly(edge),snow,0);
-        if(cover==='eaves')body+=path(poly(edge.map(([X,Y])=>[X,y+h-(Y-y)])),snow,0);
-      }
-    }
-    const buried=biome==='tundra'&&cover==='full';
-    line(`M${n(x+hip)},${n(ry)}L${n(x+w-hip)},${n(ry+.1)}`,buried?.5:1.1,buried?.3:1);
-    line(`M${n(x+1.4)},${n(y+1.3)}L${n(x+hip)},${n(ry)}L${n(x+1.4)},${n(y+h-1.5)}M${n(x+w-1.5)},${n(y+1.3)}L${n(x+w-hip)},${n(ry)}L${n(x+w-1.5)},${n(y+h-1.5)}`,.55,buried?.25:.8);
-    if(thatched&&!porch)line(`M${n(x+hip+1)},${n(ry-1)}L${n(x+w-hip-1)},${n(ry-.8)}`,.45,.7);
+    const draw=biome==='desert'?desertRoof:biome==='tundra'?tundraRoof:thatched?tropicalRoof:biome==='coastal'?coastalRoof:medievalHousing;
+    // The ridge follows the long dimension. Native panel coordinates avoid a
+    // transpose that would also transpose the lighting normal at render time.
+    const panels=[[x,y,x+w,y+h,...(w>=h?['x']:[])]];
+    const art=draw({key:'rural-roof',panels},Math.round(x+y+w)%8,
+      {material:thatched?'thatch':kind==='slate'?'slate':'tile',detailScale:porch?.4:.85,features:biome==='desert'&&!porch});
+    body+=art.body.replace(/var\(--sm-city-roof-ink,[^)]+\)/g,ink)
+      .replace(/var\(--sm-city-[a-z]+-(roof|light|wall|accent),[^)]+\)/g,(_,role)=>role==='roof'?main:role==='light'?light:t(role))
+      .replace(/--sm-city-tundra-snow-shade/g,'--sm-village-tundra-snow-shade');
+    sil+=art.sil;
   }
-  function house(x,y,w,h,{kind='local',cover='plane',entry=true}={}) {
+  function house(x,y,w,h,{kind='local',entry=true}={}) {
     // Visible wall band and a small entry belong to a detached rural house.
     rect(x+2,y+2,w-4,h+2,t('wall'),1.4,true);
     if(biome==='tropical')for(const X of [x+3,x+w-5])for(const Y of [y+3,y+h])rect(X,Y,2,5,t('wood'),.75,true);
-    roof(x,y,w,h,{kind,cover});
+    roof(x,y,w,h,{kind});
     for(const X of [x+5,x+w-9])rect(X,y+h+.8,4,1.4,t('wood'),.45);
     if(entry) {
       const px=x+w*.5-4;
       rect(px+.8,y+h-1,6.4,7,t('wood'),.9,true);
-      roof(px,y+h-2,8,6,{kind,cover:'full',porch:true});
+      roof(px,y+h-2,8,6,{kind,porch:true});
       rect(px+2.7,y+h+4,2.6,1.5,voidFill,.5);
     }
     if(w>30&&h>21&&biome!=='tropical'&&biome!=='desert') {
@@ -93,32 +74,40 @@ export function drawVillage(id) {
     }
   }
   function hut(kind='thatch',round=false) {
-    const cx=32,cy=31,r=18.5;
+    const cx=32,cy=31;
     rect(28,46,8,7,t('wood'),1,true);
     const d='M50.4,30.5C51.1,41.5 43.8,49.3 32.2,49.7C20.5,49.4 12.3,42 13.2,31.3C12.8,20.8 21.2,12.4 32.3,12.4C43,12.1 50.1,20.8 50.4,30.5Z';
     const hutRoof=kind==='mud'?material('mud','#c3a080'):round?material('reed','#a99c83'):biome==='coastal'?material('coastal-thatch','#b8ab8b'):t('roof');
     const hutLight=kind==='mud'?material('mud-light','#ddbc98'):round?material('reed-light','#c9bea4'):biome==='coastal'?material('coastal-thatch-light','#d4c7a6'):t('light');
     shape(d,biome==='desert'?t('wall'):hutRoof,2);
-    if(biome==='desert'||kind==='mud') {
-      body+=path('M16,30C15.7,21.5 24,14.7 32,15C42,14.5 47.4,22 47.5,30C41,25.8 23,25.8 16,30Z',hutLight,0);
-      line('M18,37Q32,44 46,36',.55,.55);circle(33,27,2.4,t('accent'),.8);
+    // Paired cone facets share the same sun as pitched roofs, even when a
+    // hut turns. Small broken fibres replace long, ruler-straight spokes.
+    const mud=biome==='desert'||kind==='mud';
+    const dark=biome==='tundra'?material('tundra-snow-shade','#d6e1e6'):hutRoof;
+    const bright=biome==='tundra'?snow:hutLight;
+    const sector=angle=>{
+      const a=(angle-22.5)*Math.PI/180,b=(angle+22.5)*Math.PI/180,R=17.3;
+      return `M${cx},${cy}L${n(cx+R*Math.cos(a))},${n(cy+R*Math.sin(a))}A${R},${R} 0 0 1 ${n(cx+R*Math.cos(b))},${n(cy+R*Math.sin(b))}Z`;
+    };
+    for(let angle=0;angle<180;angle+=45)body+=`<g data-roof-axis="${angle}">${path(sector(angle+180),bright,0,'data-roof-face="negative"')}${path(sector(angle),dark,0,'data-roof-face="positive"')}</g>`;
+    if(mud) {
+      line('M18,37Q23,40 27,40M35,41Q42,40 46,36',.45,.35);
+      circle(33,27,2.4,t('accent'),.65);
     } else {
-      body+=path('M15.5,30.4C15.5,21 24,14.8 32.2,14.8C41.5,14.6 48.1,22.4 48,30L32,29Z',hutLight,0);
-      for(let i=0;i<28;i++) {
-        const a=i*Math.PI/14,inner=4.5,outer=r-2.1+Math.sin(i*1.7)*.5;
-        line(`M${n(cx+Math.cos(a)*inner)},${n(cy+Math.sin(a)*inner)}L${n(cx+Math.cos(a)*outer)},${n(cy+Math.sin(a)*outer)}`,.5,.7);
+      for(let i=0;i<48;i++)for(let ring=0;ring<3;ring++) {
+        if((i+ring)%5===0)continue;
+        const a=i*Math.PI/24+ring*.07,inner=5+ring*4+Math.sin(i*1.7)*.6,outer=inner+2.7;
+        line(`M${n(cx+Math.cos(a)*inner)},${n(cy+Math.sin(a)*inner)}Q${n(cx+Math.cos(a+.015)*(inner+1.4))},${n(cy+Math.sin(a+.015)*(inner+1.4))} ${n(cx+Math.cos(a)*outer)},${n(cy+Math.sin(a)*outer)}`,.45,.38);
       }
-      if(round)circle(32,31,10.5,'none',.45);
-      if(biome==='tundra')body+=path('M15.7,30.4C15.8,21.6 23,14.6 32.3,14.6C41.4,14.4 48,22 48,30.3L43,31.2L38,30.1L33,31.3L27,30.5L22,31.5Z',snow,0);
-      circle(32,30,3.3,t('wood'),.9);circle(32,30,1.3,voidFill,.4);
+      if(round)circle(32,31,10.5,'none',.4);
+      circle(32,30,3.3,t('wood'),.7);circle(32,30,1.3,voidFill,.4);
     }
-    roof(27.5,45,9,6,{kind,cover:'full',porch:true});
+    roof(27.5,45,9,6,{kind,porch:true});
     rect(30.5,51,3,1.7,voidFill,.45);
   }
   function belfry(x,y,s=10) {
     rect(x,y,s,s,t('wall'),1.2,true);
-    body+=path(poly([[x,y],[x+s/2,y+s/2],[x+s,y],[x+s/2,y+1]]),biome==='tundra'?snow:t('accent'),.7);
-    line(`M${x},${y+s}L${x+s/2},${y+s/2}L${x+s},${y+s}M${x},${y}L${x+s/2},${y+s/2}L${x+s},${y}`, .7);
+    roof(x,y,s,s,{kind:'slate',porch:true});
   }
   function wallPart(x=0,y=26,w=64,h=12) {
     const start=body.length;
@@ -147,7 +136,7 @@ export function drawVillage(id) {
   else if(base==='sm-house-large-tiled') {
     house(8,13,48,33,{kind:'slate'});roof(9,34,13,14,{kind:'tile',porch:true});
   }
-  else if(base==='sm-longhouse')house(6,20,52,23,{cover:'eaves'});
+  else if(base==='sm-longhouse')house(6,20,52,23,{});
   else if(base==='sm-boathouse') {
     // Open mouth faces south/water. Roof above, weathered slip timbers below.
     rect(10,24,44,24,t('wood'),1.2,true);house(7,20,50,22,{entry:false});
@@ -156,10 +145,10 @@ export function drawVillage(id) {
   else if(base.startsWith('sm-hut'))hut(base==='sm-hut-mud'?'mud':'thatch',base==='sm-hut-round');
   else if(base==='sm-inn') {
     // A rural lodging house with an open stable yard, not an urban perimeter block.
-    house(7,11,50,24,{kind:biome==='temperate'?'tile':'local',cover:'plane',entry:false});
-    house(7,34,14,17,{cover:'eaves',entry:false});
-    house(43,34,14,17,{cover:'full',entry:false});
-    roof(26,31,12,7,{kind:'local',porch:true,cover:'full'});
+    house(7,11,50,24,{kind:biome==='temperate'?'tile':'local',entry:false});
+    house(7,34,14,17,{entry:false});
+    house(43,34,14,17,{entry:false});
+    roof(26,31,12,7,{kind:'local',porch:true});
     rect(29,37,6,2,voidFill,.55);
     rect(47,45,6,3,t('accent'),.65);
   }
@@ -177,7 +166,7 @@ export function drawVillage(id) {
   }
   else if(base==='sm-chapel') {
     shape('M22,15V12Q22,3 32,3Q42,3 42,12V15Z',biome==='tundra'?snow:biome==='temperate'?slate:t('roof'),1.8);
-    house(22,8,20,40,{kind:biome==='temperate'?'slate':'local',cover:'full'});belfry(26,40,12);
+    house(22,8,20,40,{kind:biome==='temperate'?'slate':'local'});belfry(26,40,12);
   }
   else if(base==='sm-cathedral') {
     shape('M22,14V11Q22,3 32,3Q42,3 42,11V14Z',slate,1.8);
@@ -200,7 +189,7 @@ export function drawVillage(id) {
   else if(base==='sm-kit-gate') {
     wallPart();rect(23,23,18,18,t('wood'),1.1,true);
     if(biome==='tundra'||biome==='tropical'){
-      roof(17,23,30,18,{cover:'full',porch:true});line('M22,29V38M42,29V38',1.6);
+      roof(17,23,30,18,{porch:true});line('M22,29V38M42,29V38',1.6);
     } else {
       house(10,18,14,26,{entry:false});house(40,18,14,26,{entry:false});
       rect(25,26,14,12,voidFill,.65);for(let x=27;x<39;x+=3)line(`M${x},27V37`,.7);
@@ -221,9 +210,9 @@ export function drawVillage(id) {
   else if(base==='sm-kit-tower-square'||base==='sm-kit-tower') {
     if(biome==='tropical'||biome==='tundra') {
       for(const[x,y]of [[18,18],[43,18],[18,43],[43,43]])rect(x,y,3,5,t('wood'),.85,true);
-      rect(20,45,24,3,t('wood'),.8,true);roof(16,17,32,29,{cover:'full'});line('M21,47H43',.7);
+      rect(20,45,24,3,t('wood'),.8,true);roof(16,17,32,29,{});line('M21,47H43',.7);
     } else {
-      rect(16,16,32,32,t('wall'),1.9,true);roof(21,21,22,22,{kind:'slate',cover:'full'});
+      rect(16,16,32,32,t('wall'),1.9,true);roof(21,21,22,22,{kind:'slate'});
       for(const[x,y]of [[18,18],[42,18],[18,42],[42,42]])rect(x,y,4,4,t('light'),.7);
     }
   }
@@ -231,6 +220,6 @@ export function drawVillage(id) {
   // Match the original apse vectors: cathedral east; these chapels south.
   const angle=base==='sm-cathedral'?90:base==='sm-chapel'&&!['desert','tropical'].includes(biome)?180:0;
   if(angle){body=`<g transform="rotate(${angle},32,32)">${body}</g>`;sil=`<g transform="rotate(${angle},32,32)">${sil}</g>`;}
-  return {body:`<g stroke-linejoin="round" stroke-linecap="round">${body}</g>`,sil:`<g stroke-linejoin="round" stroke-linecap="round">${sil}</g>`,biome,
+  return {body:flattenRoofSections(`<g stroke-linejoin="round" stroke-linecap="round">${body}</g>`),sil:`<g stroke-linejoin="round" stroke-linecap="round">${sil}</g>`,biome,
     family:base,category:base.includes('kit-')?'fortification':/chapel|cathedral|temple/.test(base)?'faith':'dwelling'};
 }

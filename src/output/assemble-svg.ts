@@ -429,7 +429,7 @@ export function assembleSvg(scene: Scene, options: AssembleOptions = {}): string
     parts.push('<g id="walls">');
     for (const wallF of L.walls) {
       if(assets.name==='settlement'){
-        parts.push(wallArtwork(wallF,scene.biome,options.cullOffscreenArtwork?b:undefined));
+        parts.push(wallArtwork(wallF,scene.biome,options.cullOffscreenArtwork?b:undefined,L.roads));
         const g=assets.glyphs?.[towerId];
         if(g)for(const t of visibleTowers(wallF)){
           // Leave real gate openings clear, even where a legacy tower coincides with a gate vertex.

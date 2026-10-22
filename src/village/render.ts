@@ -1,4 +1,5 @@
 import { roundedRingPath } from '../output/rounded-ring.js';
+import { prepareRoofLighting } from '../output/roof-lighting.js';
 import { resolveAppearance, themedMaterial } from '../appearance/resolve.js';
 import type { Palette } from '../types/interfaces.js';
 import type { RenderTheme } from '../output/render-theme.js';
@@ -158,9 +159,19 @@ export function renderVillage(
     && Object.prototype.hasOwnProperty.call(glyphs, greenGlyphId);
 
   const defs: string[] = [];
+  const roofLights = new Map<string, NonNullable<ReturnType<typeof prepareRoofLighting>>>();
+  const paintTokens = { ...SM_TOKENS, ...ART_TOKENS, ...sanitizeVillageTokens(theme.tokens) };
+  const resolvePaint = (paint: string): string => paint.replace(/var\((--[\w-]+),\s*([^)]*)\)/g,
+    (_, token: string, fallback: string) => String(paintTokens[token] ?? (options.palette ? themedMaterial(fallback, options.palette) : fallback)));
   for (const glyph of usedGlyphs) {
     const markup = glyphs[glyph];
     if (markup) {
+      const lighting = skin?.overrides.has(glyph) ? undefined : prepareRoofLighting(markup.body, resolvePaint, glyph);
+      if (lighting) {
+        roofLights.set(glyph, lighting);
+        if (lighting.uses) defs.push(lighting.body);
+      }
+      // Keep the ordinary definition for patterns and unlit non-structure uses.
       defs.push(defBlock(glyph, markup.body));
       if (silGlyphs.includes(glyph) && markup.sil) defs.push(defBlock(`${glyph}-sil`, markup.sil));
     }
@@ -421,6 +432,11 @@ export function renderVillage(
   for (const item of structureItems) {
     if (!glyphs[item.glyph]) continue;
     const k = (item.footprint[0] * pxPerMetre) / 64;
+    const lighting = roofLights.get(item.glyph);
+    if (lighting?.uses) {
+      out.push(`<g data-ink="1" data-kind="${item.kind}" data-id="${item.id}" transform="translate(${n(X(item.position.x))},${n(Y(item.position.y))}) rotate(${n(item.bearingDeg)}) scale(${n(k)}) translate(-32,-32)">${lighting.uses(item.bearingDeg, {dx:shadowOffset[0],dy:shadowOffset[1]})}</g>`);
+      continue;
+    }
     out.push(
       `<use data-ink="1" data-kind="${item.kind}" data-id="${item.id}" href="#${item.glyph}" transform="translate(${n(X(item.position.x))},` +
       `${n(Y(item.position.y))}) rotate(${n(item.bearingDeg)}) scale(${n(k)}) translate(-32,-32)"/>`,
@@ -428,7 +444,7 @@ export function renderVillage(
   }
   out.push('</g>');
 
-  if(model.wall) out.push(`<g data-band="walls" transform="translate(${n(X(0))},${n(Y(0))}) scale(${n(pxPerMetre)})">${wallArtwork(model.wall,model.site.biome)}</g>`);
+  if(model.wall) out.push(`<g data-band="walls" transform="translate(${n(X(0))},${n(Y(0))}) scale(${n(pxPerMetre)})">${wallArtwork(model.wall,model.site.biome,undefined,model.lanes.map(l=>({path:l.points,kind:'road',width:roadCrossSection(l).surfaceM})))}</g>`);
 
   // Flora uses its own footprint and scale jitter. Reviewed plants have no
   // cast shadows; legacy scene glyphs can still supply a silhouette.

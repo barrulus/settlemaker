@@ -4,6 +4,7 @@
  */
 export function tropicalRoof(family, variant = 0, options = {}) {
   const scale = options.detailScale ?? 1;
+  const thatch = options.material === 'thatch';
   const ink = 'var(--sm-city-roof-ink, #68574b)';
   const roof = 'var(--sm-city-tropical-roof, #a26d57)';
   const light = 'var(--sm-city-tropical-light, #c89474)';
@@ -78,10 +79,11 @@ export function tropicalRoof(family, variant = 0, options = {}) {
       for (let course = 0, u = lowX + 1.8; u < highX - .7; u += 2.8, course++) {
         for (let tile = 0, v = lowY + 1 + (course % 2) * 2; v < highY - .7; v += 4.1, tile++) {
           if ((course + tile + n) % 9 === 0) continue;
-          const mark = [[u, v], [u + .13, v + 1.7], [u, v + 3.6]];
+          const mark = thatch ? [[u, v], [u + 1.1, v + .1], [u + 2.2, v - .15]]
+            : [[u, v], [u + .13, v + 1.7], [u, v + 3.6]];
           if (mark.every(p => inside(p, facet))) texture += line(mark.map(convert), .25, .29);
           const joint = [[u, v], [u + 2.25, v + .12]];
-          if ((tile + n) % 4 !== 0 && joint.every(p => inside(p, facet))) texture += line(joint.map(convert), .22, .26);
+          if (!thatch && (tile + n) % 4 !== 0 && joint.every(p => inside(p, facet))) texture += line(joint.map(convert), .22, .26);
         }
       }
     }

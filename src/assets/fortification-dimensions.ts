@@ -6,3 +6,5 @@ export const WALL_GATE_CLEARANCE = 4;
 export const wallArtWidth = (large: boolean): number => large ? 14 : 12;
 export const wallPaintWidth = (large: boolean): number => wallArtWidth(large) * WALL_ART_SCALE;
 export const wallTowerCanvas = (large: boolean): number => large ? 6 : 4.8;
+/** Gate towers project further across the boundary than the curtain wall. */
+export const wallGateReach = (large: boolean): number => wallPaintWidth(large) * 1.15;

@@ -26,6 +26,8 @@ describe('viewport wall artwork',()=>{
       {min_x:20,min_y:-2,max_x:26,max_y:4}, // adjacent tiles, fixed motif phase
       {min_x:26,min_y:-2,max_x:32,max_y:4},
       {min_x:30,min_y:1.1,max_x:36,max_y:7.1}, // only outer shadow enters frame
+      {min_x:43,min_y:2.4,max_x:49,max_y:8.4}, // gate tower shadow, beyond the wall envelope
+      {min_x:46,min_y:-3,max_x:48,max_y:1}, // open timber door along the passage edge
     ];
     for(const biome of ['temperate','tundra'])for(const bounds of crops){
       const scene=fixture(material,biome,bounds),before=JSON.stringify(scene);

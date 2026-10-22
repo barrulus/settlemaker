@@ -208,9 +208,10 @@ describe('fidelity round 4: probe path', () => {
     // Housing, commerce and landmark roofs retain world-space lighting per face.
     // The remaining seven temperate street forms now share that treatment;
     // reviewed the rendered fixture and verified identical repeated output.
-    // Regional palette declarations changed; restoring the old token map
-    // reproduces the previous output exactly. Temperate artwork is unchanged.
-    expect(sha256(svg)).toBe('046efa60642ba6413ea7985f58e32a674732219df7b1996f8c36c765203a9a10');
+    // Medieval rural roofs, soft wall ink and road-sized gate towers now
+    // replace the old suburban art and oversized gaps. Reviewed and repeatable.
+    // Full-length open timber doors now follow each entrance road.
+    expect(sha256(svg)).toBe('576c37a721d5144965d9725df45f7f237cf6557b8502ef3813aed6256a24ef86');
   });
 
   it('pins direct legacy generateFromBurg output at pop 800 (not the village engine)', () => {
@@ -319,9 +320,10 @@ describe('fidelity round 4: probe path', () => {
     // Reviewed both Aldford fixtures and verified exact repeatability before repinning.
     // Shared road surface styles and visible gate jambs update the SVG.
     // The shared renderer also gains softer outlines, paving and lit wall towers.
-    // Only the shared regional token declarations change this fixture;
-    // restoring the prior token map reproduces its previous bytes exactly.
-    expect(sha256(svg)).toBe('9fe005c93c4a9751ac77c8cc9366ba4b94439ee53a241708171036aa74014993');
+    // Medieval rural roofs, soft wall ink and substantial gate towers update
+    // artwork; reviewed both fixtures and verified exact repeatability.
+    // Full-length open timber doors now follow each entrance road.
+    expect(sha256(svg)).toBe('ee00450edd2da6eff16983091804b5ea8e55b308cf41bb2ae81834166541b9fe');
   });
 });
 
