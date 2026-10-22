@@ -61,7 +61,7 @@ export function addRuralHousing(layout: Layout, profile: DevelopmentProfile, see
   // as far as the SAME field plan, then sample the entire accepted path.
   const regionReach=Math.max(...countryside.plan.region.map(p=>Point.distance(p,layout.green.centre)));
   for(const [route,road] of approaches.entries()) {
-    if(Point.distance(road.path[0] as Point,layout.green.centre)>Point.distance(road.path.at(-1)! as Point,layout.green.centre))road.path.reverse();
+    if(Point.distance(road.path[0] as Point,layout.green.centre)>Point.distance(road.path.at(-1)! as Point,layout.green.centre)){ road.path.reverse(); if (road.taper) road.taper.reverse(); }
     const extension=growApronPath({id:`rural:${seed}:${route}`,type:'local',widthM:road.width??3,points:road.path.map(p=>new Point(p.x,p.y))},
       Math.max(0,regionReach-Point.distance(road.path.at(-1)! as Point,layout.green.centre)));
     for(let i=1;i<extension.length;i++) {

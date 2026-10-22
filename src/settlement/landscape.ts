@@ -48,7 +48,7 @@ export function dressSettlement(layout: Layout, seed: number): void {
   // Extend external approaches before fields reserve ground; their final cut
   // happens after the landscape establishes the drawing boundary.
   for (const road of L.roads) if (road.kind === 'road' && road.path.length >= 2) {
-    if (Point.distance(road.path[0] as Point, green.centre) > Point.distance(road.path.at(-1)! as Point, green.centre)) road.path.reverse();
+    if (Point.distance(road.path[0] as Point, green.centre) > Point.distance(road.path.at(-1)! as Point, green.centre)) { road.path.reverse(); if (road.taper) road.taper.reverse(); }
   }
   // The final apron must honour the same occupied/protected ground as rural
   // placement, including a road which rural growth previously stopped.

@@ -92,9 +92,30 @@ export function wall(input,{biome='temperate',kind='curtain',width=12,gates=[],d
     }
     if(biome==='tundra')p.detail(points([loc(-1.6,-half+1.2),loc(1.6,-half+1.2),loc(1.1,-half+2.5),loc(-1.8,-half+2.2)])+'Z',snow,0);
   }
+  // Gate jambs and open timber leaves make an entrance legible from above.
+  // Use the ends of the surviving wall runs, so overlapping gate cuts have
+  // just two jambs and gates crossing the closing vertex stay open.
+  const gatePen=pen();
+  for(const [a,b] of intervals)for(const [at,solid] of [[a,1],[b,-1]]){
+    if((at===0||at===m.length)&&!closed)continue;
+    if((at===0||at===m.length)&&!blocked.some(([x,y])=>x===0||y===m.length))continue;
+    if(!blocked.length)continue;
+    const sample=m.at(at>m.length?at-m.length:at),size=width*.8;
+    const loc=(u,v)=>oriented(sample.p,sample.t,u,v);
+    const post=points([loc(0,-size/2),loc(solid*size,-size/2),loc(solid*size,size/2),loc(0,size/2)])+'Z';
+    gatePen.raw('<g data-gate="jamb">');
+    gatePen.shape(post,token(biome,kind==='palisade'?'woodLight':'light'),1);
+    // Fold the leaf along the side of the passage, clear of the travelled lane.
+    const leaf=points([loc(solid*size*.25,0),loc(solid*size*.25,width*.72)]);
+    gatePen.shape(leaf, 'none', 2.6);
+    gatePen.detail(leaf,'none',1.2);
+    gatePen.raw('</g>');
+  }
+  const gateArt=gatePen.result();
   const result=p.result();
+  result.body+=gateArt.body;
   result.sil=wrap(intervals.map(([a,b])=>[width,width-2,kind==='curtain'?width*.34:width*.5]
-    .map(w=>path(section(a,b),'none',w,'currentColor','stroke-linecap="butt"')).join('')).join(''));
+    .map(w=>path(section(a,b),'none',w,'currentColor','stroke-linecap="butt"')).join('')).join(''))+gateArt.sil;
   const xs=input.map(p=>p[0]),ys=input.map(p=>p[1]),x0=Math.min(...xs)-half-4,y0=Math.min(...ys)-half-4,
     x1=Math.max(...xs)+half+4,y1=Math.max(...ys)+half+4;
   return {...result,viewBox:[x0,y0,x1-x0,y1-y0],anchor:[(x0+x1)/2,(y0+y1)/2],category:'wall',biome,kind,
