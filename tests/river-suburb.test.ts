@@ -7,7 +7,8 @@ import { roadCorridor } from '../src/geom/road-corridor.js';
 import { buildSite } from '../src/village/site.js';
 import { waterFillRings, waterBoundarySegments } from '../src/village/water-boundary.js';
 import { inAnyWater } from '../src/village/geometry.js';
-import { planRiverSuburb } from '../src/generator/river-suburb.js';
+import { planRiverSuburb, riverCrossingTarget } from '../src/generator/river-suburb.js';
+import { exportSettlement } from '../src/settlement/output.js';
 import type { Model } from '../src/generator/model.js';
 import silahla from './fixtures/silahla-smooth-river.json';
 
@@ -68,6 +69,74 @@ describe('connected opposite-bank river suburbs', () => {
     expect(planRiverSuburb({ params: { development: {}, harbourWaterKind: 'lake', harbourSize: 'small' } } as unknown as Model, 4)).toBeNull();
     expect(planRiverSuburb({ params: { development: {}, harbourWaterKind: 'river' } } as unknown as Model, 4)).toBeNull();
   });
+});
+
+describe('population and area dependent river crossings', () => {
+  const town: AzgaarBurgInput = { name: 'River town', population: 20000, port: false, walls: true,
+    rivers: [{ id: 'river', centreline: [{ x: 80, y: -10000 }, { x: 80, y: 10000 }], widthM: 40, meander: false }] };
+  let large: SettlementModel;
+  beforeAll(() => { large = createSettlementModel(town, { seed: 3 }); }, 30000);
+
+  it('adds demand for either more residents or a larger developed footprint, with a bounded target', () => {
+    const compact = riverCrossingTarget(2000, 40000);
+    expect(compact).toBe(1);
+    expect(riverCrossingTarget(20000, 40000)).toBeGreaterThan(compact);
+    expect(riverCrossingTarget(2000, 640000)).toBeGreaterThan(compact);
+    expect(riverCrossingTarget(1000000, 100000000)).toBeLessThanOrEqual(6);
+  });
+
+  it('gives a larger non-port river city more crossings than a small town', () => {
+    const small = createSettlementModel({ ...town, population: 2000 }, { seed: 3 });
+    expect(small.scene.layers.bridges).toHaveLength(1);
+    expect(large.scene.layers.bridges!.length).toBeGreaterThan(small.scene.layers.bridges!.length);
+    expect(large.scene.layers.bridges!.length).toBeLessThanOrEqual(6);
+    expect(large.residents.assigned).toBe(town.population);
+    expect(large.residents.unassigned).toBe(0);
+  }, 30000);
+
+  it('adds crossings for a more extensive city at the same population when the banks permit them', () => {
+    const input = { ...town, population: 4000 };
+    const compact = createSettlementModel(input, { seed: 3 });
+    const extensive = createSettlementModel(input, { seed: 3,
+      development: { preset: 'city', centreOccupancy: 1, edgeOccupancy: 1 } });
+    const urbanArea = (model: SettlementModel) => model.districts.reduce((sum, d) =>
+      sum + (d.settlementRole === 'urban' ? d.areaM2 ?? 0 : 0), 0);
+    expect(urbanArea(extensive)).toBeGreaterThan(urbanArea(compact) * 2);
+    expect(extensive.scene.layers.bridges!.length).toBeGreaterThan(compact.scene.layers.bridges!.length);
+    expect(extensive.residents.assigned).toBe(input.population);
+  }, 30000);
+
+  it('exports separated, straight spans with dry landings and building-free approaches', () => {
+    const water = large.scene.layers.water.rings;
+    const wet = (p: Point) => drySegments(p, p.add(new Point(.001, 0)), water.map(r => r.map(point))).length === 0;
+    const bridges = large.scene.layers.bridges!, exported = exportSettlement(large);
+    for (const bridge of bridges) {
+      expect(bridge.path).toHaveLength(2);
+      const [a, b] = bridge.path.map(point);
+      expect(wet(a)).toBe(false); expect(wet(b)).toBe(false);
+      expect(wet(a.add(b).scale(.5))).toBe(true);
+      expect(Point.distance(a, b)).toBeLessThan(46);
+      for (const other of bridges) if (bridge !== other) {
+        const mid = point(other.path[0]).add(point(other.path[1])).scale(.5);
+        expect(Point.distance(a.add(b).scale(.5), mid)).toBeGreaterThanOrEqual(80);
+      }
+      const road = large.scene.layers.roads.find(r => r.kind === 'road' && [a, b].every(p =>
+        r.path.slice(1).some((end, i) => Point.distance(p, nearestOnSegment(p, point(r.path[i]), point(end))) < 1e-5)));
+      expect(road).toBeDefined();
+      for (let i = 1; i < road!.path.length; i++) {
+        const corridor = roadCorridor(road!.path[i - 1], road!.path[i], bridge.width * .9);
+        for (const building of large.scene.layers.buildings)
+          expect(polygonsOverlap(corridor, new Polygon(building.ring.map(point)))).toBe(false);
+      }
+      expect(exported.features.find(f => f.id === bridge.id)?.geometry).toEqual({
+        type: 'LineString', coordinates: bridge.path.map(p => [p.x, p.y]),
+      });
+    }
+  });
+
+  it('chooses the same crossings for the same seed', () => {
+    expect(createSettlementModel(town, { seed: 3 }).scene.layers.bridges).toEqual(large.scene.layers.bridges);
+  }, 30000);
 });
 
 it.each([

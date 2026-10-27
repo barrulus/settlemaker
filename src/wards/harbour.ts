@@ -5,6 +5,7 @@ import { Ward, createAlleys } from './ward.js';
 import type { Model } from '../generator/model.js';
 import type { Patch } from '../generator/patch.js';
 import { planHarbour, type HarbourPlan } from './harbour-plan.js';
+import { harbourAccessWidthM, harbourProvision } from './harbour-scale.js';
 import { nearestOnSegment } from '../generator/city-frontage.js';
 
 /**
@@ -97,7 +98,7 @@ export class Harbour extends Ward {
     this.type = WardType.Harbour;
     this.large = large;
     if (model.params.development) this.plan = planHarbour({
-      patch: patch.shape, water: model.getWaterRings(), shorelines: model.getWaterShorelines(),
+      population: model.params.population, patch: patch.shape, water: model.getWaterRings(), shorelines: model.getWaterShorelines(),
       berthingShorelines: model.params.harbourShorelines,
       gate: model.border?.shape.vertices.find(v => patch.shape.contains(v)), large,
       waterKind: model.params.harbourWaterKind, metresPerUnit: model.params.development.metresPerUnit,
@@ -111,14 +112,14 @@ export class Harbour extends Ward {
       this.geometry = this.plan?.warehouses ?? [];
       this.piers = this.plan?.berths ?? [];
       this.lanes = this.plan?.access.flatMap(path => path.slice(1).map((b, i) => ({
-        a: path[i], b, width: 3.5 / this.model.params.development!.metresPerUnit,
+        a: path[i], b, width: harbourAccessWidthM(this.model.params.population) / this.model.params.development!.metresPerUnit,
       }))) ?? [];
       this.buildingFrontages.clear();
       const quay = this.plan?.access[0] ?? [];
       for (const building of this.geometry) {
         const front = building.vertices[2].add(building.vertices[3]).scale(.5);
         const candidates = quay.slice(1).map((b, i) => ({ a: quay[i], b, at: nearestOnSegment(front, quay[i], b),
-          width: 3.5 / this.model.params.development!.metresPerUnit, kind: 'alley' as const }));
+          width: harbourAccessWidthM(this.model.params.population) / this.model.params.development!.metresPerUnit, kind: 'alley' as const }));
         candidates.sort((a,b) => Point.distance(a.at,front)-Point.distance(b.at,front));
         if(candidates[0])this.buildingFrontages.set(building,candidates[0]);
       }
@@ -129,6 +130,8 @@ export class Harbour extends Ward {
   }
 
   private createWarehouses(): void {
+    this.geometry = [];
+    if (harbourProvision(this.model.params.population) !== 'port') return;
     const block = this.getCityBlock();
     // Warehouse-tuned params: orderly grid, moderate building size
     const rng = this.rng;
@@ -150,6 +153,8 @@ export class Harbour extends Ward {
 
   private createPiers(): void {
     this.piers = [];
+    const provision = harbourProvision(this.model.params.population);
+    if (provision === 'beach') return;
 
     // Find shared edges between harbour patch and water patches. Prefer
     // edges that also cross the painted shoreline (one wet vertex, one dry)
@@ -205,17 +210,17 @@ export class Harbour extends Ward {
     // total is sized per pier from its own beach run (see below), because a
     // single constant cannot clear a beach band whose width varies by an
     // order of magnitude between anchors on one harbour.
-    const pierCount = this.large
+    const pierCount = provision === 'jetty' ? 1 : this.large
       ? 3 + this.rng.int(0, 2)   // 3-5
       : 2 + this.rng.int(0, 1);  // 2-3
-    const penetration = this.large
+    const penetration = provision === 'jetty' ? 3 : this.large
       ? 8 + this.rng.float() * 12   // 8-20 into the water
       : 5 + this.rng.float() * 6;   // 5-11 into the water
-    const pierWidth = this.large
+    const pierWidth = provision === 'jetty' ? .8 : this.large
       ? 2.0 + this.rng.float() * 1.0  // 2.0-3.0
       : 1.5 + this.rng.float() * 0.5; // 1.5-2.0
     const maxLandRun = penetration * 1.2;
-    const searchDist = penetration * 8;
+    const searchDist = Math.max(5, penetration) * 8;
 
     // Distribute piers evenly along waterfront
     const spacing = totalLength / (pierCount + 1);

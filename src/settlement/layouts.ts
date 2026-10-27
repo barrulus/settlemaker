@@ -1,3 +1,4 @@
+import { harbourProvision } from '../wards/harbour-scale.js';
 import { buildingAccessPaths } from '../village/access-paths.js';
 import { roadJoinWidths } from '../village/road-surface.js';
 import type { AzgaarBurgInput } from '../input/azgaar-input.js';
@@ -18,6 +19,7 @@ import { generateVillage } from '../village/village-model.js';
 import { inkExtent } from '../village/glyphs.js';
 import { roadCrossSection } from '../village/cross-section.js';
 import { villageWall, villageWallBoundary } from '../village/walls.js';
+import { riverPolygons } from '../village/rivers.js';
 import { buildSite } from '../village/site.js';
 import { pointInPolygon } from '../geom/point-in-polygon.js';
 import type { Green, Site } from '../village/types.js';
@@ -55,6 +57,7 @@ function scaleScene(scene: Scene, k: number): void {
   for (const p of L.piers) ring(p.ring);
   for (const harbour of L.harbours ?? []) {
     ring(harbour.basin); ring(harbour.entrance); ring(harbour.approach);
+    if (harbour.beach) ring(harbour.beach);
     for (const q of harbour.quays) { ring(q.ring); ring(q.edge); }
     for (const b of harbour.breakwaters) { ring(b.ring); ring(b.path); b.width *= k; }
     for (const b of harbour.berths) ring(b.ring);
@@ -142,7 +145,10 @@ export function blockLayout(input: AzgaarBurgInput, seed: number, profile: Devel
   // candidate berthing edges by the caller's explicit body associations.
   const owned = bodies.filter(b => b.kind === params.harbourWaterKind).flatMap(b => b.polygonIndices ?? []);
   const riverBanks = portRiverBanks(input, seed);
-  if (riverBanks) params.riverShorelines = belongingBanks(waterBoundaryPaths(site.water), riverBanks)
+  // Crossings also serve river towns with no port designation. An explicit
+  // river association (including a missing one) still takes precedence.
+  const crossingBanks = riverBanks ?? riverPolygons(input, seed);
+  if (crossingBanks.length) params.riverShorelines = belongingBanks(waterBoundaryPaths(site.water), crossingBanks)
     .map(path => path.map(p => p.scale(1 / k)));
   const portBanks = owned.length ? owned.map(i => site.water[i]) : params.harbourWaterKind === 'river' ? riverBanks : undefined;
   if (portBanks) params.harbourShorelines = belongingBanks(waterBoundaryPaths(site.water), portBanks)
@@ -163,7 +169,7 @@ export function blockLayout(input: AzgaarBurgInput, seed: number, profile: Devel
       params.waterSurveyOriginOffsetM = offset.length;
     }
   }
-  const canRecess = input.port && input.harbourSize === 'large' && params.harbourWaterKind === 'ocean'
+  const canRecess = harbourProvision(input.population) === 'port' && input.port && input.harbourSize === 'large' && params.harbourWaterKind === 'ocean'
     && (site.syntheticCoast !== undefined || input.waterfront?.shoreKind === 'ocean');
   let model = canRecess ? recessedHarbour(params, site, k, onStageTiming) : null;
   const recessed = model !== null;
@@ -220,7 +226,7 @@ export function blockLayout(input: AzgaarBurgInput, seed: number, profile: Devel
       diagnostics.push('Harbour requested, but no accessible waterfront with room for a quay could be placed.');
       if (site.waterContextResult && !site.waterContextResult.issues.some(i => i.code === 'water-harbour-unavailable'))
         site.waterContextResult.issues.push({ code: 'water-harbour-unavailable' });
-    } else if (input.harbourSize === 'large' && harbour.kind === 'landing') {
+    } else if (harbourProvision(input.population) === 'port' && input.harbourSize === 'large' && harbour.kind === 'landing') {
       diagnostics.push('The available waterfront fits a landing, but not a navigable harbour basin.');
     }
   }

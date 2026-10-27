@@ -106,6 +106,8 @@ export interface PierFeature { ring: ScenePoint[]; harbourId?: string }
 /** Built infrastructure over an unchanged natural coast. Basin and approach
  * reserve navigable water; quays/breakwaters/berths are solid footprints. */
 export interface HarbourFeature {
+  /** Sandy beach footprint, reserved on existing dry ground. */
+  beach?: ScenePoint[];
   id: string;
   kind: 'protected' | 'natural' | 'river' | 'lake' | 'landing';
   basin: ScenePoint[];

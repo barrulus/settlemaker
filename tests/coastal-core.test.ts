@@ -121,6 +121,23 @@ describe('coastal wall is a closed shoreline circuit', () => {
 describe('piers root on land and jut past the waterline', () => {
   const midpoint = (a: Point, b: Point) => new Point((a.x + b.x) / 2, (a.y + b.y) / 2);
 
+  test.each([16, 149, 150, 999, 1000])('scales legacy harbour piers for population %i', population => {
+    const params = { ...portBurg(3), population };
+    const m = new Model(params).generate();
+    expect(m.harbour).not.toBeNull();
+    const piers = (m.harbour!.ward as unknown as { piers: { vertices: Point[] }[] }).piers;
+    if (population < 1000) expect(m.harbour!.ward!.geometry).toHaveLength(0);
+    if (population < 150) expect(piers).toHaveLength(0);
+    else if (population < 1000) {
+      expect(piers).toHaveLength(1);
+      const v = piers[0].vertices;
+      expect(Point.distance(v[0], v[1])).toBeCloseTo(.8);
+      expect(Point.distance(midpoint(v[0], v[1]), midpoint(v[2], v[3]))).toBeLessThanOrEqual(6.61);
+      expect(m.isWaterAt(midpoint(v[0], v[1]))).toBe(false);
+      expect(m.isWaterAt(midpoint(v[2], v[3]))).toBe(true);
+    } else expect(piers.length).toBeGreaterThanOrEqual(3);
+  });
+
   test('every pier has a dry root and a wet tip, all seeds, both harbour sizes', () => {
     for (const seed of [1, 2, 3, 5, 8]) {
       for (const [label, params] of [

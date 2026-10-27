@@ -83,9 +83,16 @@ export function riverCrossingLimitM(population: number): number {
   return Math.min(400, Math.max(80, Math.sqrt(population) * 1.1));
 }
 
-/** Reserve one river bridge and a connected outer neighbourhood before
+/** Demand responds to planned urban area as well as population. Sparse,
+ * extensive towns need crossings for walking distance; dense cities for load.
+ * Geometry and minimum spacing can still reduce this target. */
+export function riverCrossingTarget(population: number, urbanAreaM2: number): number {
+  return Math.min(6, Math.max(1, Math.ceil(population / 8000), Math.ceil(Math.sqrt(urbanAreaM2) / 400)));
+}
+
+/** Reserve river bridges and a connected outer neighbourhood before
  * drawing its houses. The walled core remains on its original dry bank. */
-export function planRiverSuburb(model: Model, budget: number): { road: Polygon; patches: Patch[] } | null {
+export function planRiverSuburb(model: Model, budget: number): { roads: Polygon[]; patches: Patch[] } | null {
   const banks = model.params.riverShorelines ?? (model.params.harbourWaterKind === 'river'
     && model.params.harbourSize ? model.params.harbourShorelines ?? model.getWaterShorelines?.() : undefined);
   if (!model.params.development || !banks?.length || !model.topology || !model.border || budget < 2) return null;
@@ -103,11 +110,18 @@ export function planRiverSuburb(model: Model, budget: number): { road: Polygon; 
       ...model.harbour.ward.plan.breakwaters.map(b => new Polygon(b.ring)),
       new Polygon(model.harbour.ward.plan.basin)] : [];
   const count = Math.min(budget, Math.max(2, Math.ceil(budget * .7)));
-  for (const patch of across.slice(0, 16)) {
+  let selected: Patch[] = [];
+  let target = 1;
+  const candidates: Array<{ road: Polygon; run: WetRun }> = [];
+  const roads: Polygon[] = [], spans: WetRun[] = [];
+  const spacing = 80 / k;
+  for (const patch of across.slice(0, 48)) {
+    // Every extra crossing serves the same connected, budgeted neighbourhood.
+    if (selected.length && !selected.includes(patch)) continue;
     const gates = model.gates.slice().sort((a, b) => Point.distance(a, patch.shape.center) - Point.distance(b, patch.shape.center));
     for (const gate of gates) {
       const ends = patch.shape.vertices.slice().sort((a, b) => Point.distance(a, gate) - Point.distance(b, gate));
-      for (const end of ends.slice(0, 2)) {
+      for (const end of ends) {
         let path = model.topology.buildPath(end, gate, model.topology.inner);
         if (!path || path.length < 2) continue;
         let run = crossing(path, water);
@@ -116,16 +130,41 @@ export function planRiverSuburb(model: Model, budget: number): { road: Polygon; 
         if (!path) continue;
         run = crossing(path, water);
         if (!run || run.length > wetLimit) continue;
-        const selected = [patch], eligible = new Set(across);
+        if (spans.some(s => Math.min(Point.distance(s.start, run!.start), Point.distance(s.start, run!.end),
+          Point.distance(s.end, run!.start), Point.distance(s.end, run!.end)) < spacing)) continue;
+        if (selected.length) {
+          candidates.push({ road: new Polygon(path), run });
+          continue;
+        }
+        selected = [patch];
+        const eligible = new Set(across);
         for (let i = 0; i < selected.length && selected.length < count; i++) {
           const neighbours = model.getNeighbours(selected[i]).filter(p => eligible.has(p) && !selected.includes(p))
             .sort((a, b) => Point.distance(a.shape.center, patch.shape.center) - Point.distance(b.shape.center, patch.shape.center));
           selected.push(...neighbours.slice(0, count - selected.length));
         }
-        if (selected.length < 2) continue;
-        return { road: new Polygon(path), patches: selected };
+        if (selected.length < 2) { selected = []; continue; }
+        const areaM2 = [...model.inner, ...selected].reduce((sum, p) => sum + Math.abs(p.shape.square) * k * k, 0);
+        target = riverCrossingTarget(model.params.population, areaM2);
+        roads.push(new Polygon(path)); spans.push(run);
+        if (target === 1) return { roads, patches: selected };
       }
     }
   }
-  return null;
+  // Spread crossings over the neighbourhood instead of accepting adjacent
+  // mesh paths that all converge on the first bridge's landings.
+  const separation = (run: WetRun) => Math.min(...spans.flatMap(s => [
+    Point.distance(s.start, run.start), Point.distance(s.start, run.end),
+    Point.distance(s.end, run.start), Point.distance(s.end, run.end),
+  ]));
+  while (roads.length < target && candidates.length) {
+    candidates.sort((a, b) => separation(b.run) - separation(a.run) || a.run.length - b.run.length);
+    const next = candidates.shift()!;
+    if (separation(next.run) < spacing) break;
+    // Non-overlapping landings alone are insufficient on winding rivers.
+    if (spans.some(s => polygonsOverlap(roadCorridor(s.start, s.end, 6 / k),
+      roadCorridor(next.run.start, next.run.end, 6 / k)))) continue;
+    roads.push(next.road); spans.push(next.run);
+  }
+  return roads.length ? { roads, patches: selected } : null;
 }

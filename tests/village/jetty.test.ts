@@ -31,10 +31,17 @@ const boathouseOf = (input: AzgaarBurgInput, seed: number) => {
 };
 
 describe('boathouse and jetty', () => {
+  it.each([16, 75, 149])('omits jetties for a population of %i', population => {
+    const { model } = boathouseOf(coastal({ population, harbourSize: 'large' }), 881);
+    expect(model.pois.some(p => p.jetty)).toBe(false);
+  });
+
   it('places a boathouse with a jetty on a coastal village', () => {
     const { poi } = boathouseOf(coastal(), 881);
     expect(poi).toBeDefined();
     expect(poi!.jetty).toBeDefined();
+    expect(Point.distance(poi!.jetty!.from, poi!.jetty!.to)).toBeLessThanOrEqual(6);
+    expect(poi!.jetty!.widthM).toBeLessThanOrEqual(1.2);
   });
 
   it('runs the jetty from the boathouse out into the water', () => {

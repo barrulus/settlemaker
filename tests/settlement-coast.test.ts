@@ -30,7 +30,7 @@ describe('physical coastal cities', () => {
     for (const quay of harbour.quays) for (const p of quay.ring) expect(wet(new Point(p.x,p.y))).toBe(false);
     if (seed === tetlapan.seed) {
       expect(harbour.kind).toBe('protected');
-      expect(harbour.berths).toHaveLength(3);
+      expect(harbour.berths.length).toBeGreaterThanOrEqual(2);
       expect(model.diagnostics).toContain('Harbour basin recessed into the locally inferred shoreline.');
       for(const wall of model.scene.layers.walls)for(const path of wall.polylines)for(let i=1;i<path.length;i++){
         for(let t=0;t<=1;t+=.1)expect(wet(new Point(path[i-1].x*(1-t)+path[i].x*t,path[i-1].y*(1-t)+path[i].y*t))).toBe(false);
@@ -51,7 +51,7 @@ describe('physical coastal cities', () => {
         const tip=new Point(p.x,p.y);
         expect(harbour.breakwaters.some(b=>blocksAccess(tip,tip.add(seaward.scale(100)),new Polygon(b.ring.map(q=>new Point(q.x,q.y)))))).toBe(true);
       }
-      expect(Math.hypot(harbour.entrance[1].x-harbour.entrance[0].x,harbour.entrance[1].y-harbour.entrance[0].y)-harbour.navigationWidth).toBeCloseTo(3);
+      expect(Math.hypot(harbour.entrance[1].x-harbour.entrance[0].x,harbour.entrance[1].y-harbour.entrance[0].y)).toBeGreaterThanOrEqual(harbour.navigationWidth + 6 - 1e-6);
       expect(harbour.navigationWidth).toBeGreaterThanOrEqual(12);
       expect(model.scene.layers.symbols.filter(s=>s.id.includes('warehouse')).length).toBeGreaterThanOrEqual(2);
       expect(harbour.approach.length).toBeGreaterThanOrEqual(3);

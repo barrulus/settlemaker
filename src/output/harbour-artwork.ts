@@ -62,6 +62,13 @@ export function harbourArtwork(harbour: HarbourFeature, theme: RenderTheme, pixe
   const clip = (id: string, ring: ScenePoint[], content: string): string =>
     `<defs><clipPath id="${id}"><path d="${path(ring, true)}"/></clipPath></defs><g clip-path="url(#${id})">${content}</g>`;
 
+  if (harbour.beach?.length) {
+    const d = path(harbour.beach, true);
+    // Sand meets grass without the masonry coping of a constructed quay.
+    ground.push(`<path data-harbour-surface="beach" d="${d}" fill="${theme.roadCore}"/>`
+      + `<path d="${d}" fill="${timber}" opacity=".12"/>`);
+  }
+
   for (const [i, quay] of harbour.quays.entries()) {
     const d = path(quay.ring, true), edge = path(quay.edge);
     let art = `<path data-harbour-surface="quay" d="${d}" fill="${theme.roadCore}" stroke="${ink}" stroke-width=".3"/>`;

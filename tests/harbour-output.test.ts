@@ -7,6 +7,9 @@ import type { HarbourFeature, Scene } from '../src/scene/scene.js';
 import type { AzgaarBurgInput } from '../src/input/azgaar-input.js';
 import { PALETTE_BLUEPRINT } from '../src/output/palette.js';
 import tetlapan from './fixtures/tetlapan-coast.json';
+import { Point } from '../src/types/point.js';
+import { Polygon } from '../src/geom/polygon.js';
+import { polygonsOverlap } from '../src/generator/city-frontage.js';
 
 const rect = (x: number, y: number, w: number, h: number) =>
   [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }];
@@ -32,6 +35,29 @@ async function pixels(svg: string) {
 }
 
 describe('harbour rendering and export contracts', () => {
+  it('retains the sandy semicircle in metre-space output, cropped views and ground reservations', () => {
+    const session = createSettlementSession({ name: 'Landing', population: 75, port: true,
+      harbourSize: 'large', oceanBearing: 90, walls: false } as AzgaarBurgInput, { seed: 1, engine: 'city' });
+    const harbour = session.scene.layers.harbours![0], beach = harbour.beach!;
+    expect(beach).toBeDefined();
+    const point = (p: {x: number; y: number}) => new Point(p.x, p.y);
+    const diameterM = Point.distance(point(beach[0]), point(beach.at(-1)!));
+    expect(diameterM).toBeGreaterThanOrEqual(6 - 1e-6);
+    expect(diameterM).toBeLessThanOrEqual(12 + 1e-6);
+    expect(session.renderFull()).toContain('data-harbour-surface="beach"');
+    const centre = point(beach[0]).add(point(beach.at(-1)!)).scale(.5);
+    const bounds = {min_x: centre.x - 8, min_y: centre.y - 8, max_x: centre.x + 8, max_y: centre.y + 8};
+    expect(createSceneIndex(session.scene).query(bounds).layers.harbours![0].beach).toEqual(beach);
+    expect(session.renderView({bounds})).toContain('data-harbour-surface="beach"');
+    const exported = session.exportGeoJson().features.find(f => f.id === `${harbour.id}:beach`)!;
+    expect(exported.properties).toMatchObject({ layer: 'beach', surface: 'sand' });
+    expect(exported.geometry).toEqual({ type: 'Polygon', coordinates: [[...beach, beach[0]].map(p => [p.x, p.y])] });
+    const reserved = new Polygon(beach.map(point));
+    for (const feature of [...session.scene.layers.buildings, ...session.scene.layers.fields])
+      expect(polygonsOverlap(reserved, new Polygon(feature.ring.map(point)))).toBe(false);
+  });
+
+
   it('retains fixture ink and deck detail through cropped scene queries without duplicate pier painting', async () => {
     const scene = fixture(), before = JSON.stringify(scene), index = createSceneIndex(scene);
     for (const bounds of [
