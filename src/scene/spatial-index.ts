@@ -87,10 +87,7 @@ function prepareSceneQuery(scene: Scene, indexed: boolean): SceneIndex {
   };
   const buildings=index(L.buildings,b=>union([pointsBounds(b.ring),...(b.id?linked.get(b.id)??[]:[])]));
   const symbols=index(L.symbols,(_,i)=>symbolBoxes[i]);
-  const vegetation=index(L.vegetation,v=>{
-    const glyph=glyphBounds(v.kind,v.at,v.scale,v.rotationDeg);
-    return glyph?union([glyph,expand(pointsBounds([v.at]),v.scale*.32)]):null;
-  });
+  const vegetation=index(L.vegetation,v=>glyphBounds(v.kind,v.at,v.scale,v.rotationDeg));
   const fields=index(L.fields,f=>pointsBounds(f.ring));
   const ground=index(L.ground??[],g=>pointsBounds(g.ring));
   const greens=index(L.greens,g=>expand(pointsBounds([...g.ring,...(g.paths??[]).flat()]),(g.pathWidth??.7)/2));

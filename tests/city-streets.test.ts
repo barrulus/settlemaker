@@ -121,7 +121,14 @@ describe('small city streets', () => {
     expect(casingWidths.length).toBeGreaterThan(0);
     expect(Math.max(...casingWidths)).toBeCloseTo(width, 2);
     const custom = generateSvg(result.model, { theme: { arteryWidth: 5 } });
-    expect(custom.includes('stroke-width="5.60"')).toBe(true);
+    const arteries = scene.layers.roads.filter(r => r.kind === 'artery' && r.role === 'trunk');
+    expect(arteries.length).toBeGreaterThan(0);
+    for (const road of arteries) {
+      const d = road.path.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join('');
+      expect(result.svg).toContain(`<path class="core" d="${d}" stroke-width="${width.toFixed(2)}"/>`);
+      expect(custom).toContain(`<path class="core" d="${d}" stroke-width="5.00"/>`);
+      expect(custom).not.toContain(`<path class="casing" d="${d}"`);
+    }
   });
 
   it.each([300, 600])('keeps population %i on urban plots instead of invoking legacy village rows', population => {
