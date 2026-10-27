@@ -78,6 +78,7 @@ export function exportSettlement(model: SettlementModel): SettlementGeoJson {
   for (const [i, p] of L.piers.entries()) polygon(`pier:${i}`, p.ring, { layer: 'pier', ...(p.harbourId ? { harbour_id: p.harbourId } : {}) });
   for (const harbour of L.harbours ?? []) {
     const props = { harbour_id: harbour.id, harbour_kind: harbour.kind };
+    if (harbour.beach) polygon(`${harbour.id}:beach`, harbour.beach, { ...props, layer: 'beach', surface: 'sand' });
     polygon(`${harbour.id}:basin`, harbour.basin, { ...props, layer: 'harbour-basin', navigation_width_m: harbour.navigationWidth });
     line(`${harbour.id}:entrance`, harbour.entrance, { ...props, layer: 'harbour-entrance' });
     line(`${harbour.id}:approach`, harbour.approach, { ...props, layer: 'harbour-approach', width: harbour.navigationWidth });

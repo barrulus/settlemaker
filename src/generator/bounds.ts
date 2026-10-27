@@ -67,7 +67,7 @@ export function computeLocalBounds(model: Model, padding = 20, shift?: OriginShi
       }
     }
     if (harbour) {
-      for (const p of [...harbour.quays.flatMap(q => q.ring), ...harbour.breakwaters.flatMap(b => b.ring)]) expand(p);
+      for (const p of [...(harbour.beach ?? []), ...harbour.quays.flatMap(q => q.ring), ...harbour.breakwaters.flatMap(b => b.ring)]) expand(p);
       for (const f of harbour.fixtures) expand(f.at);
     }
   }

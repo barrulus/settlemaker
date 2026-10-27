@@ -98,7 +98,7 @@ function prepareSceneQuery(scene: Scene, indexed: boolean): SceneIndex {
   const piers=index(L.piers,p=>pointsBounds(p.ring));
   const bridges=index(L.bridges??[],b=>expand(pointsBounds(b.path),b.width*2));
   const harbours=index(L.harbours??[],h=>expand(pointsBounds([
-    ...h.basin, ...h.quays.flatMap(q=>q.ring), ...h.breakwaters.flatMap(b=>b.ring),
+    ...h.basin, ...(h.beach ?? []), ...h.quays.flatMap(q=>q.ring), ...h.breakwaters.flatMap(b=>b.ring),
     ...h.berths.flatMap(b=>b.ring), ...h.fixtures.map(f=>f.at),
   ]),12));
   return {query(bounds,options={}) {

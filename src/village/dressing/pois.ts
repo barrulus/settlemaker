@@ -1,3 +1,4 @@
+import { harbourProvision, VILLAGE_JETTY_LENGTH_M, VILLAGE_JETTY_WIDTH_M } from '../../wards/harbour-scale.js';
 import { artworkBiome } from '../../assets/artwork.js';
 import { waterBoundaryPaths, assertWaterQuery, assertWaterRingQuery } from '../water-boundary.js';
 import { Point } from '../../types/point.js';
@@ -330,7 +331,9 @@ export function placeBoathouse(
     // length can span the whole channel and land the far end on the opposite
     // bank, which reads as a bridge, not a jetty. Walk out in short steps and
     // keep the last point that is still wet.
-    const nominal = d * JETTY_LENGTH_SHARE;
+    const provision = harbourProvision(site.population);
+    const nominal = provision === 'beach' ? 0 : provision === 'jetty'
+      ? Math.min(VILLAGE_JETTY_LENGTH_M, d * JETTY_LENGTH_SHARE) : d * JETTY_LENGTH_SHARE;
     // How far the water actually runs ahead of the face. Probed BEYOND the
     // nominal length so a jetty in open sea is distinguishable from one in a
     // channel barely wider than itself.
@@ -366,7 +369,7 @@ export function placeBoathouse(
       jetty: {
         from: new Point(faceX, faceY),
         to: new Point(faceX + seaward.x * jettyLength, faceY + seaward.y * jettyLength),
-        widthM: w * JETTY_WIDTH_SHARE,
+        widthM: provision === 'jetty' ? Math.min(VILLAGE_JETTY_WIDTH_M, w * JETTY_WIDTH_SHARE) : w * JETTY_WIDTH_SHARE,
       },
     };
   }

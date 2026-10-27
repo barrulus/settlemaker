@@ -86,7 +86,7 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
     scene.layers.roads.push({ path: ring(road.vertices), kind: 'road', role: 'approach',
       ...(model.usesCityLayout ? { width: MAIN_STREET * edgeInsetScale(model.params.development?.texturePopulation ?? model.params.population) } : {}),
     } as RoadFeature);
-    if (road === model.riverSuburbRoad) plannedCrossings.add(scene.layers.roads.at(-1)!);
+    if (model.riverSuburbRoads.includes(road)) plannedCrossings.add(scene.layers.roads.at(-1)!);
   }
 
   for (const street of cityLocalStreets(model)) {
@@ -142,7 +142,7 @@ export function buildScene(model: Model, options: BuildSceneOptions = {}): Scene
       if (ward.plan) {
         const p = ward.plan;
         (scene.layers.harbours ??= []).push({ id: harbourId!, kind: p.kind,
-          basin: ring(p.basin), entrance: [sc(p.entrance[0]), sc(p.entrance[1])], approach: ring(p.approach),
+          basin: ring(p.basin), ...(p.beach ? { beach: ring(p.beach) } : {}), entrance: [sc(p.entrance[0]), sc(p.entrance[1])], approach: ring(p.approach),
           quays: p.quays.map(q => ({ ring: ring(q.ring), edge: ring(q.edge) })),
           breakwaters: p.breakwaters.map(b => ({ ring: ring(b.ring), path: ring(b.path), width: b.width })),
           berths: p.berths.map(b => ({ ring: ring(b.vertices) })), access: p.access.map(ring),

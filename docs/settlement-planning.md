@@ -113,6 +113,26 @@ does not keep the shorter sides dense.
 Village approaches join their existing continuations and bend gently through
 dry farmland; road junctions and water-routed approaches retain their anchors.
 
+Waterfront structures scale with population even when `harbourSize` is explicitly
+`large`: below 150 residents there are no piers, and from 150 through 999 there
+is at most one short, narrow jetty. Physical jetties extend at most 6 m into the
+water and are at most 1.2 m wide. Neither category has warehouses, a basin or
+breakwaters. Beach landings have a semicircular sandy beach, up to 12 m across, with a footpath ending on it; village jetties
+have a compact quay at most 24 m long. Towns of 1,000 or more retain commercial
+harbour buildings. Ocean breakwater entrances scale with frontage, up to 24 m
+for small harbours and 32 m for large harbours. Even on narrow sites, the opening
+must exceed the navigable lane by at least 6 m, leaving clearance around both
+beacon heads. Berths fit the remaining sheltered frontage.
+
+River cities can reserve several bridges to a connected opposite-bank
+neighbourhood, including cities without a port designation. The crossing target
+is the larger of one per 8,000 residents or one per 400 m of the square root of
+planned urban area, rounded up and capped at six. Candidate landings must be at
+least 80 m apart. This is a target, not a guarantee: surveyed banks, dry connected
+approaches, the population-dependent span limit and available outer housing
+land can reduce the number built. Added approaches reserve ground before houses
+are placed, and the same bridge geometry is used in the scene and GeoJSON.
+
 City squares are paved, and parks contain small shade groves with clear paths
 and central lawns. Trees are planted after the final housing geometry and scale
 are known, without changing housing supply or consuming generation randomness.

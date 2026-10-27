@@ -183,10 +183,12 @@ export class Model {
 
   /** Adjacency-hop depth of the farm belt; scales with population. */
   farmRingDepth: number = 1;
-  /** Dry outer wards reached by the explicitly planned river bridge. */
+  /** Dry outer wards reached by explicitly planned river bridges. */
   riverSuburbPatches: Patch[] = [];
-  /** The validated cross-river road; only this road may export a long bridge. */
-  riverSuburbRoad: Polygon | null = null;
+  /** Validated cross-river roads; only these roads may export long bridges. */
+  riverSuburbRoads: Polygon[] = [];
+  /** First crossing, retained for callers inspecting the original connection. */
+  get riverSuburbRoad(): Polygon | null { return this.riverSuburbRoads[0] ?? null; }
   private harbourRoad: Polygon | null = null;
   gates: Point[] = [];
   readonly degradedFlags: Set<DegradedFlag> = new Set();
@@ -393,7 +395,7 @@ export class Model {
     this.patches = [];
     this.inner = [];
     this.riverSuburbPatches = [];
-    this.riverSuburbRoad = null;
+    this.riverSuburbRoads = [];
     this.harbourRoad = null;
     this.waterbody = [];
     this.citadel = null;
@@ -440,8 +442,8 @@ export class Model {
       const crossing = planRiverSuburb(this, Math.max(0, this.nPatches - this.inner.length - (this.citadel ? 1 : 0)));
       if (crossing) {
         this.riverSuburbPatches = crossing.patches;
-        this.riverSuburbRoad = crossing.road;
-        this.roads.push(crossing.road);
+        this.riverSuburbRoads = crossing.roads;
+        this.roads.push(...crossing.roads);
         this.tidyUpRoads();
       }
     });
@@ -2011,7 +2013,7 @@ export class Model {
   /** Concave block setbacks can leave a roof corner across a reserved access
    * road. Remove those lots before counting capacity or placing their art. */
   private reserveWaterfrontRoadGeometry(): void {
-    const routes = [this.harbourRoad,this.riverSuburbRoad].filter((p): p is Polygon => p !== null);
+    const routes = [this.harbourRoad,...this.riverSuburbRoads].filter((p): p is Polygon => p !== null);
     if (!routes.length) return;
     const index = new PlacementIndex<Polygon>();
     const width = MAIN_STREET * edgeInsetScale(this.params.development?.texturePopulation ?? this.params.population);

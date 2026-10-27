@@ -69,14 +69,21 @@ it('connects a large non-port river city across a surveyed 270 metre channel', (
     waterContext:{version:1,status:'measured',coordinateSpace:'burg-local-metres',surveyRadiusM:10000,geometryErrorM:.5,bodies:[]}};
   const model=createSettlementModel(river,{seed:2}),L=model.scene.layers;
   expect(L.harbours??[]).toHaveLength(0);
-  expect(L.bridges).toHaveLength(1);
-  const bridge=L.bridges![0];
-  expect(bridge.path).toHaveLength(2);
-  const [a,b]=bridge.path.map(point);
-  // Local bends can rotate the crossing; its span and dry landings remain
-  // constrained by the actual channel rather than the source line's axis.
-  expect(Point.distance(a,b)).toBeGreaterThan(270);
-  expect(Point.distance(a,b)).toBeLessThan(280);
+  expect(L.bridges!.length).toBeGreaterThan(1);
+  expect(L.bridges!.length).toBeLessThanOrEqual(6);
+  for (const bridge of L.bridges!) {
+    expect(bridge.path).toHaveLength(2);
+    const [a,b]=bridge.path.map(point);
+    // Local bends can rotate the crossing; its span and dry landings remain
+    // constrained by the actual channel rather than the source line's axis.
+    expect(Point.distance(a,b)).toBeGreaterThan(270);
+    expect(Point.distance(a,b)).toBeLessThan(280);
+    const water=L.water.rings.map(r=>r.map(point));
+    const dry=drySegments(a,b,water);
+    expect(dry).toHaveLength(2);
+    expect(Point.distance(...dry[0])).toBeGreaterThan(1);
+    expect(Point.distance(...dry[1])).toBeGreaterThan(1);
+  }
   const course=inferWaterfront(river,model.development,2).input.rivers![0].centreline.map(point);
   const bankSide=(p:Point)=>{
     let nearest=Infinity,side=0;
@@ -93,11 +100,6 @@ it('connects a large non-port river city across a surveyed 270 metre channel', (
   // vary with the inferred bends rather than fixing a straight-river census.
   expect(far.reduce((sum,building)=>sum+building.residents,0)).toBeGreaterThan(river.population*.09);
   expect(model.residents.assigned).toBe(river.population);
-  const water=L.water.rings.map(r=>r.map(point));
-  const dry=drySegments(a,b,water);
-  expect(dry).toHaveLength(2);
-  expect(Point.distance(...dry[0])).toBeGreaterThan(1);
-  expect(Point.distance(...dry[1])).toBeGreaterThan(1);
 },30000);
 
 it('does not turn an arbitrary long road through water into an approved bridge', () => {
