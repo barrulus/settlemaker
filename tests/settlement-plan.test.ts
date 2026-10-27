@@ -167,14 +167,13 @@ describe('physical settlement planning', () => {
     expect(r.model.buildings.every(b=>b.residents<=b.capacity)).toBe(true);
     expect(Math.min(...r.model.buildings.map(b=>b.urbanity))).toBeLessThan(.1);
     expect(r.model.scene.layers.vegetation.length).toBeLessThan(100000);
-    // An overview must not expand thousands of subpixel glyphs, but every
-    // building must still be represented by its real footprint and identity.
-    // Bound detail per building/parcel, allowing the physical amount of
-    // housing and farmland to grow without relaxing the rendering constraint.
+    // Artwork is retained at every scale. Reuse glyph definitions instead of
+    // expanding each tree/building, and bound SVG growth per planned feature.
     const L = r.model.scene.layers;
-    expect(Buffer.byteLength(r.svg)/(L.buildings.length+L.fields.length)).toBeLessThan(500);
-    const drawn = new Set([...r.svg.matchAll(/data-building-id="([^"]+)"/g)].map(m=>m[1]));
-    expect(r.model.scene.layers.buildings.every(b=>drawn.has(b.id!))).toBe(true);
+    expect(Buffer.byteLength(r.svg)/(L.buildings.length+L.fields.length)).toBeLessThan(1000);
+    const drawn = new Set([...r.svg.matchAll(/data-building-ids?="([^"]+)"/g)].flatMap(m=>m[1].split(' ')));
+    expect(L.buildings.filter(b=>b.glyphBacked!==false).every(b=>drawn.has(b.id!))).toBe(true);
+    expect(L.buildings.filter(b=>b.glyphBacked===false).every(b=>!drawn.has(b.id!))).toBe(true);
     const districts = r.model.districts.filter(d=>d.urbanity>.05);
     const hull = convexHull(districts.flatMap(d=>d.boundary.map(p=>new Point(p.x,p.y))));
     expect(districts.reduce((s,d)=>s+area(d.boundary),0)/area(hull)).toBeGreaterThan(.8);
@@ -196,24 +195,23 @@ describe('physical settlement planning', () => {
     const farmArea = L.fields.reduce((s,f)=>s+area(f.ring),0), bounds = r.model.scene.bounds;
     expect(farmArea/(200000*150)).toBeGreaterThan(.8);
     expect(farmArea/((bounds.max_x-bounds.min_x)*(bounds.max_y-bounds.min_y))).toBeGreaterThan(.4);
-    const fieldColours = new Set([...r.svg.matchAll(/class="plot" style="fill:([^;]+);/g)].map(m=>m[1]));
-    expect(fieldColours.size).toBeGreaterThanOrEqual(3);
-    expect(fieldColours.has('var(--sm-landscape-temperate-soil, #b69c77)')).toBe(true);
+    // Native field materials survive even the largest settlement overview.
+    for (const glyph of new Set(L.fields.map(f=>f.glyph).filter(Boolean)))
+      expect(r.svg).toContain(`data-field-glyph="${glyph}"`);
     // The shared landscape must retain trees already placed inside city parks.
     const parks = L.greens.filter(g=>g.surface!=='paved').map(g=>g.ring.map(p=>new Point(p.x,p.y)));
     expect(L.vegetation.some(v=>parks.some(ring=>pointInPolygon(new Point(v.at.x,v.at.y),ring)))).toBe(true);
   }, 30000);
 
-  it('restores artwork on zoom without changing the model or its full export', () => {
+  it('retains artwork on zoom without changing the model or its full export', () => {
     const model = createSettlementModel(base, {seed:2,development:{preset:'city'}});
     const before = JSON.stringify(model), geo = exportSettlement(model);
     const bounds = {min_x:-60,min_y:-60,max_x:60,max_y:60};
     const overview = renderSettlement(model, {width:1});
     const closeup = renderSettlement(model, {bounds,width:900});
     const full = renderSettlement(model, {detail:'full'});
-    expect(overview).toContain('id="canopy-overview"');
-    expect(full).not.toContain('id="canopy-overview"');
-    expect(overview.length).toBeLessThan(full.length);
+    expect(overview).toBe(full);
+    expect(overview).toContain('id="canopy"');
     expect(closeup).toContain('viewBox="-60.0 -60.0 120.0 120.0"');
     expect(closeup).toContain('<use href="#glyph-');
     expect(JSON.stringify(model)).toBe(before);

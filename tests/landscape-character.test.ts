@@ -68,8 +68,10 @@ describe('biome landscape character',()=>{
     expect(river.svg).not.toContain('data-irrigation-source="well"');
   });
 
-  it('fits village walls to occupied roofs with a small walkable clearance',()=>{
-    const r=generateSettlement(roadFixture(150,{walls:true,temple:false}),{seed:2});
+  it.each([{bearings:[225]}, {bearings:[45,225]}])('fits village walls to occupied roofs and gates each approach ($bearings)',({bearings})=>{
+    const r=generateSettlement(roadFixture(150,{walls:true,temple:false,
+      roadBearings:bearings.map(bearing_deg=>({bearing_deg,kind:'road',route_id:`route-${bearing_deg}`})),
+    }),{seed:2});
     if(r.kind!=='village')throw Error('expected village');
     const boundary=villageWallBoundary(r.model.buildings,r.model.pois,[]);
     const distances:number[]=[];
@@ -82,7 +84,8 @@ describe('biome landscape character',()=>{
       }
     }
     expect(Math.min(...distances)).toBeCloseTo(3.5,4);
-    expect(r.model.wall?.gates.length).toBeGreaterThanOrEqual(2);
+    expect(r.model.wall?.gates).toHaveLength(bearings.length);
+    expect(r.model.wall!.gates.flatMap(g=>g.routeIds).sort()).toEqual(bearings.map(b=>`route-${b}`).sort());
   });
 
   it('packs city centres and opens the outskirts into gardens and varied rural homes',()=>{

@@ -57,6 +57,15 @@ describe('harbour rendering and export contracts', () => {
       expect(polygonsOverlap(reserved, new Polygon(feature.ring.map(point)))).toBe(false);
   });
 
+  it('keeps the same harbour surfaces and working equipment at every zoom', () => {
+    const scene = fixture();
+    scene.layers.harbours![0].fixtures.push(
+      {kind:'boat', at:{x:30,y:12}, angle:20},
+      {kind:'bollard', at:{x:16,y:-2}, angle:0});
+    const reference = assembleSvg(scene);
+    for (const pixelsPerUnit of [.01,.29,.3,.64,.65,1,4])
+      expect(assembleSvg(scene, {pixelsPerUnit})).toBe(reference);
+  });
 
   it('retains fixture ink and deck detail through cropped scene queries without duplicate pier painting', async () => {
     const scene = fixture(), before = JSON.stringify(scene), index = createSceneIndex(scene);

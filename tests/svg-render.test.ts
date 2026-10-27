@@ -22,6 +22,12 @@ function makeBurg(overrides: Partial<AzgaarBurgInput> = {}): AzgaarBurgInput {
   };
 }
 
+function buildingGroups(svg: string): number[] {
+  const groups = [...svg.matchAll(/<g id="(?:buildings|landmarks|symbols)"/g)].map(m => m.index!);
+  expect(groups.length).toBeGreaterThan(0);
+  return groups;
+}
+
 describe('svg render: fields and water', () => {
   it('renders farm subplots with the natural temperate field wash', () => {
     const { model } = generateFromBurg(makeBurg({ population: 12000 }), { seed: 42 });
@@ -68,7 +74,7 @@ describe('svg render: fields and water', () => {
     );
     const bg = svg.indexOf('data-bg="paper"');
     const water = svg.indexOf('<g id="water"');
-    const building = svg.indexOf('<g id="buildings"');
+    const building = Math.min(...buildingGroups(svg));
     expect(bg).toBeGreaterThan(-1);
     expect(water).toBeGreaterThan(bg);
     expect(building).toBeGreaterThan(water);
@@ -119,13 +125,15 @@ describe('svg render: shadows, buildings, landmarks', () => {
   it('emits one shadow group before buildings, after roads', () => {
     const { svg } = generateFromBurg(makeBurg({ population: 12000 }), { seed: 42 });
     const shadow = svg.indexOf('<g id="shadows" transform="translate(0.40,0.60)">');
-    const lastRoadCore = svg.lastIndexOf('stroke-width="1.60"');
-    const firstBuilding = svg.indexOf('<g id="buildings"');
+    const lastRoadCore = svg.lastIndexOf('class="core"');
+    const firstBuilding = Math.min(...buildingGroups(svg));
+    expect(lastRoadCore).toBeGreaterThan(-1);
+    expect(svg.match(/<g id="shadows"/g)).toHaveLength(1);
     expect(shadow).toBeGreaterThan(lastRoadCore);
     expect(firstBuilding).toBeGreaterThan(shadow);
   });
 
-  it('shadows represent every building exactly once, including compound wings', () => {
+  it('shadows represent every visible building exactly once, including compound wings', () => {
     const { model, svg } = generateFromBurg(makeBurg({ population: 12000 }), { seed: 42 });
     const shadowGroup = svg.match(/<g id="shadows"[^>]*>([\s\S]*?)<\/g>/)![1];
     const shadowIds = [...shadowGroup.matchAll(/<(?:path|use)\b[^>]*>/g)].flatMap(([tag]) => {
@@ -136,7 +144,8 @@ describe('svg render: shadows, buildings, landmarks', () => {
     // A compound has one silhouette but several real wing footprints. Parks
     // are absent from the scene's buildings and must not acquire shadows.
     expect(new Set(shadowIds).size).toBe(shadowIds.length);
-    expect(shadowIds.sort()).toEqual(buildScene(model).layers.buildings.map(b => b.id).sort());
+    expect(shadowIds.sort()).toEqual(buildScene(model).layers.buildings
+      .filter(b => b.glyphBacked !== false).map(b => b.id).sort());
   });
 
   it('keeps well shadows attached at legacy and metre scales without changing building shadows', () => {
@@ -233,7 +242,7 @@ describe('svg render: overrides + determinism', () => {
 
   it('walls paint after buildings', () => {
     const { svg } = generateFromBurg(makeBurg({ walls: true }), { seed: 42 });
-    const lastBuilding = svg.lastIndexOf('<g id="buildings"');
+    const lastBuilding = Math.max(...buildingGroups(svg));
     const wall = svg.lastIndexOf('<g id="walls"');
     expect(wall).toBeGreaterThan(lastBuilding);
   });

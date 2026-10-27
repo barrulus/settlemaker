@@ -17,7 +17,7 @@ export interface SettlementRenderOptions extends Omit<AssembleOptions, 'pixelsPe
   width?: number;
   /** Physical viewport. Zoom by changing bounds and rendering again. */
   bounds?: LocalBounds;
-  /** Auto omits detail too small to see. Full retains all in-view artwork. */
+  /** Both modes retain native artwork at every display size. */
   detail?: 'auto' | 'full';
 }
 

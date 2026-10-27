@@ -45,18 +45,18 @@ describe('physical harbour artwork', () => {
     for (const [x, y] of [[5, -5], [40, -5], [-3, 30], [17, 10]]) expect(alpha(x, y)).toBe(255);
   });
 
-  it('retains all infrastructure at overview scale without dense plank or masonry marks', () => {
-    const art = harbourArtwork(example(), themeFrom(PALETTE_PARCHMENT), .1);
+  it('retains every working fixture alongside the built surfaces', () => {
+    const art = harbourArtwork(example(), themeFrom(PALETTE_PARCHMENT));
     expect(art.ground.match(/data-harbour-surface=/g)).toHaveLength(4);
-    expect(art.ground).not.toContain('data-harbour-detail');
+    expect(art.ground).toContain('data-harbour-detail');
     expect(art.fixtures).toContain('data-harbour-fixture="boat"');
-    expect(art.fixtures).not.toContain('data-harbour-fixture="bollard"');
+    expect(art.fixtures).toContain('data-harbour-fixture="bollard"');
   });
 
   it('keeps motifs stable across views and uses the selected palette for every material', () => {
     const harbour = example(), theme = themeFrom(PALETTE_BLUEPRINT);
-    const art = harbourArtwork(harbour, theme, 2);
-    expect(harbourArtwork(harbour, theme, 4)).toEqual(art);
+    const art = harbourArtwork(harbour, theme);
+    expect(harbourArtwork(harbour, theme)).toEqual(art);
     expect(art.ground).toContain(`fill="${theme.smTimber}"`);
     expect(art.ground).toContain(`fill="${theme.smStone}"`);
     expect(art.fixtures).toContain(`stroke="${theme.smInk}"`);

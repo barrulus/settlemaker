@@ -264,12 +264,12 @@ SVG assembly and GeoJSON export. Generate once, then reuse that model for change
 to framing or appearance. Generation and rendering are synchronous APIs; run them
 in a Web Worker in an interactive browser application.
 
-`renderSettlement` defaults to an overview for a display width of 1,200 pixels.
-It draws building footprints and simple canopy shapes when their detailed artwork
-would be too small to see, and omits objects outside the viewport. These are display
-choices: the model, resident counts and exported GeoJSON remain complete.
-Overview fields retain their regional crop colours when furrows are too small
-to draw, so farmland remains distinguishable from grass.
+`renderSettlement` defaults to a display width of 1,200 pixels. All zoom levels
+retain the same native artwork: roof shapes, plot borders and fills, tree species,
+field materials, paving and harbour equipment. Glyph definitions are shared and
+objects wholly outside the viewport are omitted; visible objects are never
+replaced with different shapes or colours. The model, resident counts and exported
+GeoJSON remain complete.
 
 ```js
 // A 900-pixel-wide view of a 120-metre square around the centre.
@@ -284,10 +284,10 @@ const detailedSvg = renderSettlement(capital.model, {
 });
 ```
 
-Zoom by changing `bounds` and rendering again: native artwork returns as its
-displayed size increases. Magnifying an already exported overview SVG cannot
-restore omitted detail. `detail: 'full'` retains every visible glyph regardless
-of display size; using it for an entire large city produces a much heavier SVG.
+Zoom by changing `bounds` and rendering again. Both `auto` and `full` preserve
+artwork at every display size. Retained sessions can emphasize approach roads in
+`auto` mode; set `overviewRoadMinPixels: 0` for exact physical road widths, or use
+`detail: 'full'`. Full SVG exports can also be magnified without losing artwork.
 
 Input coastline polygons and rivers also use metres for both presets. Measured
 water uses the shared site reader and survey-coverage checks. A supplied coastline

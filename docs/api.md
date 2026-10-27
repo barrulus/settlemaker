@@ -32,6 +32,8 @@ console.log(session.metadata, BUILD_INFO);
 `width`, and `detail: 'auto' | 'full'`. Appearance changes apply to that call;
 `theme: null` restores natural biome colours. `overviewRoadMinPixels: 0` disables
 the default 1.5-display-pixel road minimum. Full exports retain physical widths.
+Both detail modes preserve the same artwork, materials and outlines at every
+zoom; offscreen artwork is culled using its painted bounds.
 
 `renderFull(appearance?)` exports all artwork at the original bounds. GeoJSON
 always covers the complete model, independent of the camera. Treat `session.scene`

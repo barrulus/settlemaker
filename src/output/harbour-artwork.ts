@@ -53,11 +53,9 @@ export interface HarbourArtwork { ground: string; fixtures: string }
 /** Native vector harbour art in physical metres. The planner owns every apron,
  * mole, berth and fixture; rendering adds masonry, deck grain and working gear.
  * Ground follows water and precedes roads. Fixtures belong above structures. */
-export function harbourArtwork(harbour: HarbourFeature, theme: RenderTheme, pixelsPerUnit?: number): HarbourArtwork {
+export function harbourArtwork(harbour: HarbourFeature, theme: RenderTheme): HarbourArtwork {
   const ground: string[] = [], fixtures: string[] = [];
   const prefix = `harbour-${harbour.id.replace(/[^A-Za-z0-9_-]/g, '-')}`;
-  const detailed = pixelsPerUnit === undefined || pixelsPerUnit >= .65;
-  const fixtureDetail = pixelsPerUnit === undefined || pixelsPerUnit >= .3;
   const ink = theme.smInk, stone = theme.smStone, timber = theme.smTimber;
   const clip = (id: string, ring: ScenePoint[], content: string): string =>
     `<defs><clipPath id="${id}"><path d="${path(ring, true)}"/></clipPath></defs><g clip-path="url(#${id})">${content}</g>`;
@@ -77,20 +75,18 @@ export function harbourArtwork(harbour: HarbourFeature, theme: RenderTheme, pixe
     if (edge) {
       art += `<path d="${edge}" fill="none" stroke="${ink}" stroke-width="2.6" stroke-linejoin="round"/>`
         + `<path d="${edge}" fill="none" stroke="${stone}" stroke-width="2.05" stroke-linejoin="round"/>`;
-      if (detailed) {
-        const joints = stations(quay.edge, 1.9).map(s => crossbar(s, 1.25)).join(' ');
-        art += `<path data-harbour-detail="capstones" d="${joints}" fill="none" stroke="${ink}" stroke-width=".14" opacity=".65"/>`;
-        // Sparse irregular paving joints keep the apron readable as open yard.
-        const paving = stations(quay.edge, 5.7, 2.85).map((s, j) => {
-          const t = s.tangent, n = { x: -t.y, y: t.x }, p = s.point;
-          const a = { x: p.x + n.x * 3 + t.x * (j % 2), y: p.y + n.y * 3 + t.y * (j % 2) };
-          const b = { x: a.x + n.x * 8, y: a.y + n.y * 8 };
-          const c = { x: p.x - n.x * 3, y: p.y - n.y * 3 };
-          const e = { x: c.x - n.x * 8, y: c.y - n.y * 8 };
-          return `${line(a, b)} ${line(c, e)}`;
-        }).join(' ');
-        art += `<path d="${paving}" fill="none" stroke="${ink}" stroke-width=".1" opacity=".13"/>`;
-      }
+      const joints = stations(quay.edge, 1.9).map(s => crossbar(s, 1.25)).join(' ');
+      art += `<path data-harbour-detail="capstones" d="${joints}" fill="none" stroke="${ink}" stroke-width=".14" opacity=".65"/>`;
+      // Sparse irregular paving joints keep the apron readable as open yard.
+      const paving = stations(quay.edge, 5.7, 2.85).map((s, j) => {
+        const t = s.tangent, n = { x: -t.y, y: t.x }, p = s.point;
+        const a = { x: p.x + n.x * 3 + t.x * (j % 2), y: p.y + n.y * 3 + t.y * (j % 2) };
+        const b = { x: a.x + n.x * 8, y: a.y + n.y * 8 };
+        const c = { x: p.x - n.x * 3, y: p.y - n.y * 3 };
+        const e = { x: c.x - n.x * 8, y: c.y - n.y * 8 };
+        return `${line(a, b)} ${line(c, e)}`;
+      }).join(' ');
+      art += `<path d="${paving}" fill="none" stroke="${ink}" stroke-width=".1" opacity=".13"/>`;
     }
     ground.push(clip(`${prefix}-quay-${i}`, quay.ring, art));
   }
@@ -100,27 +96,25 @@ export function harbourArtwork(harbour: HarbourFeature, theme: RenderTheme, pixe
     let art = `<path data-harbour-surface="breakwater" d="${d}" fill="${stone}" stroke="${ink}" stroke-width=".65" stroke-linejoin="round"/>`
       + `<path d="${d}" fill="none" stroke="${ink}" stroke-width="1.7" opacity=".32"/>`
       + `<path d="${path(mole.path)}" fill="none" stroke="${theme.roadCore}" stroke-width="${number(Math.max(.4, mole.width - 2.5))}" stroke-linejoin="round" opacity=".52"/>`;
-    if (detailed) {
-      const joints = stations(mole.path, 2.1).map(s => crossbar(s, mole.width / 2 + .2)).join(' ');
-      art += `<path data-harbour-detail="masonry" d="${joints}" fill="none" stroke="${ink}" stroke-width=".13" opacity=".44"/>`;
-      // Two inset rows of coping, plus alternating short joints in the walk.
-      const rows: string[] = [];
-      for (const s of stations(mole.path, 4.2)) {
-        const p = s.point, t = s.tangent, r = Math.max(.2, mole.width / 2 - 1.05);
-        for (const side of [-1, 1]) {
-          const c = { x: p.x - t.y * r * side, y: p.y + t.x * r * side };
-          rows.push(line({ x: c.x - t.x * 2.1, y: c.y - t.y * 2.1 }, { x: c.x + t.x * 2.1, y: c.y + t.y * 2.1 }));
-        }
+    const joints = stations(mole.path, 2.1).map(s => crossbar(s, mole.width / 2 + .2)).join(' ');
+    art += `<path data-harbour-detail="masonry" d="${joints}" fill="none" stroke="${ink}" stroke-width=".13" opacity=".44"/>`;
+    // Two inset rows of coping, plus alternating short joints in the walk.
+    const rows: string[] = [];
+    for (const s of stations(mole.path, 4.2)) {
+      const p = s.point, t = s.tangent, r = Math.max(.2, mole.width / 2 - 1.05);
+      for (const side of [-1, 1]) {
+        const c = { x: p.x - t.y * r * side, y: p.y + t.x * r * side };
+        rows.push(line({ x: c.x - t.x * 2.1, y: c.y - t.y * 2.1 }, { x: c.x + t.x * 2.1, y: c.y + t.y * 2.1 }));
       }
-      art += `<path d="${rows.join(' ')}" fill="none" stroke="${ink}" stroke-width=".16" opacity=".5"/>`;
     }
+    art += `<path d="${rows.join(' ')}" fill="none" stroke="${ink}" stroke-width=".16" opacity=".5"/>`;
     ground.push(clip(`${prefix}-mole-${i}`, mole.ring, art));
   }
 
   for (const [i, berth] of harbour.berths.entries()) {
     const d = path(berth.ring, true), frame = berthFrame(berth.ring);
     let art = `<path data-harbour-surface="berth" d="${d}" fill="${timber}" stroke="${ink}" stroke-width=".3"/>`;
-    if (frame && (pixelsPerUnit === undefined || frame.width * pixelsPerUnit >= 3)) {
+    if (frame) {
       const points = [frame.start, frame.end];
       const planks = stations(points, .65).map(s => crossbar(s, frame.width / 2)).join(' ');
       art += `<path data-harbour-detail="planks" d="${planks}" fill="none" stroke="${ink}" stroke-width=".11" opacity=".62"/>`;
@@ -142,7 +136,6 @@ export function harbourArtwork(harbour: HarbourFeature, theme: RenderTheme, pixe
   }
 
   for (const fixture of harbour.fixtures) {
-    if (!fixtureDetail && fixture.kind !== 'boat') continue;
     const transform = `translate(${number(fixture.at.x)},${number(fixture.at.y)}) rotate(${number(fixture.angle)})`;
     let art = '';
     if (fixture.kind === 'bollard') {
@@ -166,7 +159,7 @@ export function harbourArtwork(harbour: HarbourFeature, theme: RenderTheme, pixe
     } else if (fixture.kind === 'boat') {
       art = `<path d="M4.2,0Q2.6,-1.65-2.7,-1.1L-3.8,-.7V.7L-2.7,1.1Q2.6,1.65,4.2,0Z" fill="${timber}" stroke="${ink}" stroke-width=".18"/>`
         + `<path d="M3.3,0Q1.7,-1.05-2.7,-.7V.7Q1.7,1.05,3.3,0Z" fill="${theme.roadCore}" opacity=".68"/>`;
-      if (fixtureDetail) art += `<path d="M-1.5,-.9V.9M1.25,-.8V.8M-2.9,0H3.1" fill="none" stroke="${ink}" stroke-width=".12"/>`
+      art += `<path d="M-1.5,-.9V.9M1.25,-.8V.8M-2.9,0H3.1" fill="none" stroke="${ink}" stroke-width=".12"/>`
         + `<path d="M-.2,-.7H1V.7H-.2Z" fill="${timber}" stroke="${ink}" stroke-width=".1"/>`;
     }
     fixtures.push(`<g data-harbour-fixture="${fixture.kind}" transform="${transform}">${art}</g>`);
